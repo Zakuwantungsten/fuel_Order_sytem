@@ -389,9 +389,8 @@ table {
   overflow: hidden;
 }
 
+/* Base th styles - typography only, let Tailwind handle colors */
 th {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  color: var(--text-primary);
   font-weight: 600;
   text-transform: uppercase;
   font-size: 0.75rem;
@@ -458,11 +457,6 @@ html.dark table {
 html.dark th,
 html.dark td {
   border-color: var(--border-color);
-}
-
-html.dark th {
-  background-color: var(--button-secondary-bg);
-  color: var(--text-primary);
 }
 
 html.dark tr:hover {
