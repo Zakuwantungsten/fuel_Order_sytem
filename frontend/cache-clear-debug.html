@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Cache & Debug Theme</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .section {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            border-left: 4px solid #007acc;
+        }
+        .code {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        .button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #005a9e;
+        }
+        .warning {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+            color: #856404;
+        }
+        .success {
+            background: #d4edda;
+            border-left-color: #28a745;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>🛠️ Fuel Order Theme Debug & Cache Clear</h1>
+
+    <div class="section warning">
+        <h3>⚠️ Before You Start</h3>
+        <p>This page will help you clear browser cache and localStorage, and debug theme issues.</p>
+    </div>
+
+    <div class="section">
+        <h3>1️⃣ Clear Browser Cache & localStorage</h3>
+        <p>Click these buttons to clear cached data:</p>
+        <button class="button" onclick="clearLocalStorage()">Clear localStorage</button>
+        <button class="button" onclick="clearSessionStorage()">Clear sessionStorage</button>
+        <button class="button" onclick="clearAllCaches()">Clear All Caches</button>
+        <button class="button" onclick="hardRefresh()">Hard Refresh Page</button>
+        <div id="clearStatus"></div>
+    </div>
+
+    <div class="section">
+        <h3>2️⃣ Manual Cache Clear Instructions</h3>
+        <p><strong>Chrome/Edge:</strong></p>
+        <div class="code">
+1. Press F12 (open DevTools)
+2. Right-click the refresh button
+3. Select "Empty Cache and Hard Reload"
+
+OR
+
+1. Press Ctrl+Shift+I (DevTools)
+2. Go to Application tab
+3. Click "Storage" → "Clear site data"
+        </div>
+        
+        <p><strong>Firefox:</strong></p>
+        <div class="code">
+1. Press Ctrl+Shift+R (hard refresh)
+2. Or F12 → Storage tab → clear everything
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>3️⃣ Terminal Commands (Clear npm/Vite cache)</h3>
+        <div class="code">
+# Stop your dev server first (Ctrl+C)
+
+# Clear npm cache
+npm cache clean --force
+
+# Remove node_modules and reinstall
+rm -rf node_modules package-lock.json
+npm install
+
+# Clear Vite cache
+rm -rf node_modules/.vite
+rm -rf dist
+
+# Restart dev server
+npm run dev
+        </div>
+        <button class="button" onclick="copyToClipboard('npm cache clean --force')">Copy npm cache clear</button>
+    </div>
+
+    <div class="section">
+        <h3>4️⃣ Theme Debug Test</h3>
+        <p>Current localStorage data:</p>
+        <pre id="localStorageData"></pre>
+        <button class="button" onclick="debugTheme()">Debug Theme</button>
+        <button class="button" onclick="testThemeToggle()">Test Theme Toggle</button>
+        <div id="debugOutput"></div>
+    </div>
+
+    <div class="section">
+        <h3>5️⃣ Reset Theme to Default</h3>
+        <button class="button" onclick="resetTheme()">Reset Theme to Light</button>
+        <button class="button" onclick="setDarkTheme()">Force Dark Theme</button>
+    </div>
+
+    <div class="section success">
+        <h3>6️⃣ After Clearing Cache</h3>
+        <ol>
+            <li>Close all browser tabs for your app</li>
+            <li>Restart your dev server: <code>npm run dev</code></li>
+            <li>Open your app in a new browser tab</li>
+            <li>Test the theme toggle</li>
+        </ol>
+    </div>
+
+    <script>
+        function clearLocalStorage() {
+            try {
+                const keys = Object.keys(localStorage);
+                localStorage.clear();
+                document.getElementById('clearStatus').innerHTML = 
+                    `<div style="color: green; margin-top: 10px;">✅ LocalStorage cleared! Removed ${keys.length} items.</div>`;
+                updateLocalStorageDisplay();
+            } catch (e) {
+                document.getElementById('clearStatus').innerHTML = 
+                    `<div style="color: red; margin-top: 10px;">❌ Error: ${e.message}</div>`;
+            }
+        }
+
+        function clearSessionStorage() {
+            try {
+                const keys = Object.keys(sessionStorage);
+                sessionStorage.clear();
+                document.getElementById('clearStatus').innerHTML += 
+                    `<div style="color: green; margin-top: 10px;">✅ SessionStorage cleared! Removed ${keys.length} items.</div>`;
+            } catch (e) {
+                document.getElementById('clearStatus').innerHTML += 
+                    `<div style="color: red; margin-top: 10px;">❌ Error: ${e.message}</div>`;
+            }
+        }
+
+        async function clearAllCaches() {
+            try {
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(
+                        cacheNames.map(cacheName => caches.delete(cacheName))
+                    );
+                    document.getElementById('clearStatus').innerHTML += 
+                        `<div style="color: green; margin-top: 10px;">✅ Browser caches cleared! Removed ${cacheNames.length} caches.</div>`;
+                } else {
+                    document.getElementById('clearStatus').innerHTML += 
+                        `<div style="color: orange; margin-top: 10px;">⚠️ Cache API not supported in this browser.</div>`;
+                }
+            } catch (e) {
+                document.getElementById('clearStatus').innerHTML += 
+                    `<div style="color: red; margin-top: 10px;">❌ Cache clear error: ${e.message}</div>`;
+            }
+        }
+
+        function hardRefresh() {
+            // Clear everything and reload
+            clearLocalStorage();
+            clearSessionStorage();
+            clearAllCaches();
+            setTimeout(() => {
+                location.reload(true);
+            }, 1000);
+        }
+
+        function updateLocalStorageDisplay() {
+            const data = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                data[key] = localStorage.getItem(key);
+            }
+            document.getElementById('localStorageData').textContent = JSON.stringify(data, null, 2);
+        }
+
+        function debugTheme() {
+            const output = document.getElementById('debugOutput');
+            const debug = {
+                'localStorage theme': localStorage.getItem('fuel_order_theme'),
+                'HTML classes': document.documentElement.className || 'none',
+                'Body background': getComputedStyle(document.body).backgroundColor,
+                'Body color': getComputedStyle(document.body).color,
+                'Dark mode active': document.documentElement.classList.contains('dark')
+            };
+            
+            output.innerHTML = `<pre style="background: #f0f0f0; padding: 10px; margin-top: 10px;">${JSON.stringify(debug, null, 2)}</pre>`;
+        }
+
+        function testThemeToggle() {
+            const html = document.documentElement;
+            const wasDark = html.classList.contains('dark');
+            
+            // Toggle
+            html.classList.toggle('dark');
+            
+            const isNowDark = html.classList.contains('dark');
+            
+            document.getElementById('debugOutput').innerHTML += 
+                `<div style="margin-top: 10px; padding: 10px; background: #e8f4f8;">
+                    <strong>Theme Toggle Test:</strong><br>
+                    Was dark: ${wasDark}<br>
+                    Now dark: ${isNowDark}<br>
+                    Toggle ${isNowDark !== wasDark ? '✅ SUCCESS' : '❌ FAILED'}
+                </div>`;
+        }
+
+        function resetTheme() {
+            localStorage.setItem('fuel_order_theme', 'light');
+            document.documentElement.classList.remove('dark');
+            document.getElementById('debugOutput').innerHTML = 
+                `<div style="color: green; margin-top: 10px;">✅ Theme reset to light mode!</div>`;
+        }
+
+        function setDarkTheme() {
+            localStorage.setItem('fuel_order_theme', 'dark');
+            document.documentElement.classList.add('dark');
+            document.getElementById('debugOutput').innerHTML = 
+                `<div style="color: green; margin-top: 10px;">✅ Theme set to dark mode!</div>`;
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Initialize display
+        updateLocalStorageDisplay();
+    </script>
+</body>
+</html>

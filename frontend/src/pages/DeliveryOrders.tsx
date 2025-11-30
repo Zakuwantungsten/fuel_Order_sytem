@@ -1,0 +1,521 @@
+import { useState, useEffect } from 'react';
+import { Search, Filter, Plus, Download, Eye, Edit, Trash2, Printer } from 'lucide-react';
+import { DeliveryOrder } from '../types';
+import { fuelRecordsAPI, deliveryOrdersAPI } from '../services/api';
+import fuelRecordService from '../services/fuelRecordService';
+import FuelConfigService from '../services/fuelConfigService';
+import DODetailModal from '../components/DODetailModal';
+import DOForm from '../components/DOForm';
+import BulkDOForm from '../components/BulkDOForm';
+import MonthlySummary from '../components/MonthlySummary';
+import BatchDOPrint from '../components/BatchDOPrint';
+import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup';
+
+const DeliveryOrders = () => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [orders, setOrders] = useState<DeliveryOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState('ALL');
+  const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isBulkFormOpen, setIsBulkFormOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
+  const [activeTab, setActiveTab] = useState<'list' | 'summary'>('list');
+  const [selectedOrders, setSelectedOrders] = useState<(string | number)[]>([]);
+  const [batchPrintOrders, setBatchPrintOrders] = useState<DeliveryOrder[]>([]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [filterType]);
+
+  const loadOrders = async () => {
+    setLoading(true);
+    try {
+      const data = await deliveryOrdersAPI.getAll({
+        importOrExport: filterType,
+      });
+      // Ensure data is always an array and clean any corrupted data
+      const rawOrders = Array.isArray(data) ? data : [];
+      
+      // Clean corrupted data and log any issues found
+      const cleanedOrders = cleanDeliveryOrders(rawOrders);
+      const corruptedCount = rawOrders.filter(order => isCorruptedDriverName(order.driverName)).length;
+      
+      if (corruptedCount > 0) {
+        console.warn(`Found and cleaned ${corruptedCount} delivery orders with corrupted driver names`);
+      }
+      
+      setOrders(cleanedOrders);
+    } catch (error) {
+      console.error('Failed to load delivery orders:', error);
+      setOrders([]); // Set empty array on error
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredOrders = Array.isArray(orders) ? orders.filter(order =>
+    order.doNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.truckNo.toLowerCase().includes(searchTerm.toLowerCase())
+  ) : [];
+
+  const handleViewOrder = (order: DeliveryOrder) => {
+    setSelectedOrder(order);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedOrder(null);
+  };
+
+  const handlePrintOrder = () => {
+    window.print();
+  };
+
+  const handleNewDO = () => {
+    setEditingOrder(null);
+    setIsFormOpen(true);
+  };
+
+  const handleEditOrder = (order: DeliveryOrder) => {
+    setEditingOrder(order);
+    setIsFormOpen(true);
+  };
+
+  const handleSaveOrder = async (orderData: Partial<DeliveryOrder>): Promise<DeliveryOrder | void> => {
+    try {
+      console.log('Saving order:', orderData);
+      
+      // Save the DO first
+      let savedOrder: DeliveryOrder;
+      if (editingOrder?.id) {
+        // Update existing DO
+        savedOrder = await deliveryOrdersAPI.update(editingOrder.id, orderData);
+      } else {
+        // Create new DO
+        savedOrder = await deliveryOrdersAPI.create(orderData);
+      }
+      
+      // Handle fuel record creation/update based on import/export
+      if (savedOrder.importOrExport === 'IMPORT') {
+        // IMPORT = Going journey = Create new fuel record
+        await handleCreateFuelRecordForImport(savedOrder);
+      } else if (savedOrder.importOrExport === 'EXPORT') {
+        // EXPORT = Return journey = Update existing fuel record
+        await handleUpdateFuelRecordForExport(savedOrder);
+      }
+      
+      loadOrders();
+      return savedOrder;
+    } catch (error) {
+      console.error('Failed to save order:', error);
+      alert('Failed to save delivery order');
+    }
+  };
+
+  const handleCreateFuelRecordForImport = async (deliveryOrder: DeliveryOrder) => {
+    try {
+      console.log('  → Generating fuel record for DO:', deliveryOrder.doNumber);
+      
+      // Check if truck already has an open fuel record (without returnDo)
+      // This validation only applies to IMPORT DOs (going journey)
+      const allRecords = await fuelRecordsAPI.getAll();
+      const existingOpenRecord = allRecords.find(
+        (record: any) => record.truckNo === deliveryOrder.truckNo && !record.returnDo
+      );
+      
+      if (existingOpenRecord) {
+        const message = `Truck ${deliveryOrder.truckNo} already has an open fuel record (Going DO: ${existingOpenRecord.goingDo}). Please complete the return journey (Export DO) first before creating a new IMPORT fuel record.`;
+        console.warn('  ✗', message);
+        alert(message);
+        throw new Error(message);
+      }
+      
+      // Get total liters based on destination
+      const totalLiters = FuelConfigService.getTotalLitersByDestination(deliveryOrder.destination);
+      console.log(`  → Destination: ${deliveryOrder.destination}, Total Liters: ${totalLiters}`);
+      
+      // For now, use default loading point. Later, this can come from a configuration dialog
+      const loadingPoint: 'DAR_YARD' | 'KISARAWE' | 'DAR_STATION' = 'DAR_YARD';
+      console.log('  → Loading point:', loadingPoint);
+      
+      // Generate fuel record (checkpoints will be empty until LPOs are created)
+      const { fuelRecord, lposToGenerate } = fuelRecordService.createFuelRecordFromDO(
+        deliveryOrder,
+        loadingPoint,
+        totalLiters
+      );
+      
+      console.log('  → Fuel record to create:', JSON.stringify(fuelRecord, null, 2));
+      console.log('  → LPOs to generate:', lposToGenerate.length);
+      
+      // Create the fuel record
+      const createdRecord = await fuelRecordsAPI.create(fuelRecord);
+      console.log('  ✓ Created fuel record with ID:', createdRecord.id);
+      
+      // Note: LPOs will be created manually as fuel is ordered, not automatically
+      if (lposToGenerate.length > 0) {
+        console.log(`  → ${lposToGenerate.length} LPOs can be generated when fuel is ordered`);
+      } else {
+        console.log('  → Fuel record created with empty checkpoints (ready for fuel orders)');
+      }
+      
+      console.log(`  ✓✓ Fuel record created successfully for DO-${deliveryOrder.doNumber}`);
+    } catch (error: any) {
+      console.error('  ✗ Failed to create fuel record:', error);
+      console.error('  ✗ Error details:', error.response?.data);
+      throw error; // Re-throw to be caught by parent
+    }
+  };
+
+  const handleUpdateFuelRecordForExport = async (deliveryOrder: DeliveryOrder) => {
+    try {
+      // Find the matching going record for this truck
+      const allRecords = await fuelRecordsAPI.getAll();
+      const matchingRecord = fuelRecordService.findMatchingGoingRecord(
+        deliveryOrder.truckNo,
+        allRecords
+      );
+      
+      if (!matchingRecord) {
+        console.warn('No matching going record found for truck:', deliveryOrder.truckNo);
+        alert(`Warning: No fuel record found for truck ${deliveryOrder.truckNo}. Return DO saved, but fuel record not updated.`);
+        return;
+      }
+      
+      // Use the service function to properly update returnDo, from, and to fields
+      const { updatedRecord } = fuelRecordService.updateFuelRecordWithReturnDO(
+        matchingRecord,
+        deliveryOrder
+      );
+      
+      // Update the fuel record with proper from/to reversal
+      // MongoDB returns _id but we need to check for both id and _id
+      const recordId = matchingRecord.id || (matchingRecord as any)._id;
+      
+      if (!recordId) {
+        console.error('❌ No ID found on fuel record:', matchingRecord);
+        throw new Error('Fuel record has no ID');
+      }
+      
+      console.log('→ Updating fuel record ID:', recordId);
+      await fuelRecordsAPI.update(recordId, updatedRecord);
+      console.log('✓ Updated fuel record with return DO:', deliveryOrder.doNumber);
+      console.log('  - Updated from:', updatedRecord.from);
+      console.log('  - Updated to:', updatedRecord.to);
+      console.log('  - Return DO:', updatedRecord.returnDo);
+      
+      alert(`Fuel record updated with return DO-${deliveryOrder.doNumber}`);
+    } catch (error) {
+      console.error('❌ Failed to update fuel record:', error);
+      alert('Delivery order saved, but fuel record update failed. Please update manually.');
+    }
+  };
+
+  const handleSaveBulkOrders = async (orders: Partial<DeliveryOrder>[]): Promise<boolean> => {
+    try {
+      console.log('=== Starting Bulk DO Creation ===');
+      console.log(`Total orders to create: ${orders.length}`);
+      const createdOrders: DeliveryOrder[] = [];
+      
+      for (let i = 0; i < orders.length; i++) {
+        const order = orders[i];
+        console.log(`\n[${i + 1}/${orders.length}] Creating DO:`, order.doNumber, order.importOrExport);
+        
+        const savedOrder = await deliveryOrdersAPI.create(order);
+        console.log(`✓ DO ${savedOrder.doNumber} saved successfully with ID:`, savedOrder.id);
+        createdOrders.push(savedOrder);
+        
+        // Handle fuel record creation/update based on import/export
+        if (savedOrder.importOrExport === 'IMPORT') {
+          console.log(`→ Creating fuel record for IMPORT DO ${savedOrder.doNumber}`);
+          await handleCreateFuelRecordForImport(savedOrder);
+          console.log(`✓ Fuel record created for DO ${savedOrder.doNumber}`);
+        } else if (savedOrder.importOrExport === 'EXPORT') {
+          console.log(`→ Updating fuel record for EXPORT DO ${savedOrder.doNumber}`);
+          await handleUpdateFuelRecordForExport(savedOrder);
+          console.log(`✓ Fuel record updated for DO ${savedOrder.doNumber}`);
+        }
+      }
+      
+      console.log('\n=== Reloading orders list ===');
+      await loadOrders();
+      console.log(`\n✓✓✓ Successfully created ${createdOrders.length} delivery orders`);
+      return true;
+    } catch (error: any) {
+      console.error('✗✗✗ Failed to save bulk orders:', error);
+      console.error('Error details:', error.response?.data);
+      const errorMessage = error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'Failed to create some delivery orders';
+      alert(errorMessage);
+      return false;
+    }
+  };
+
+  const handleSelectOrder = (orderId: string | number) => {
+    setSelectedOrders(prev => 
+      prev.includes(orderId) 
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedOrders.length === filteredOrders.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(filteredOrders.map(o => o.id).filter((id): id is string | number => id !== undefined));
+    }
+  };
+
+  const handleBatchPrint = () => {
+    const ordersToPrint = orders.filter(o => o.id && selectedOrders.includes(o.id));
+    setBatchPrintOrders(ordersToPrint);
+    setTimeout(() => {
+      window.print();
+      setBatchPrintOrders([]);
+    }, 100);
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Delivery Orders</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Manage all delivery orders and transportation records
+          </p>
+        </div>
+        <div className="mt-4 sm:mt-0 flex space-x-3">
+          {selectedOrders.length > 0 && (
+            <button 
+              onClick={handleBatchPrint}
+              className="inline-flex items-center px-4 py-2 border border-primary-600 dark:border-primary-500 rounded-md shadow-sm text-sm font-medium text-primary-600 dark:text-primary-400 bg-white dark:bg-gray-800 hover:bg-primary-50 dark:hover:bg-gray-700"
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              Print {selectedOrders.length} DO{selectedOrders.length > 1 ? 's' : ''}
+            </button>
+          )}
+          <button className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </button>
+          <button 
+            onClick={() => setIsBulkFormOpen(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Bulk Create
+          </button>
+          <button 
+            onClick={handleNewDO}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New DO
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('list')}
+            className={`${
+              activeTab === 'list'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            All Orders
+          </button>
+          <button
+            onClick={() => setActiveTab('summary')}
+            className={`${
+              activeTab === 'summary'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            Monthly Summary
+          </button>
+        </nav>
+      </div>
+
+      {/* Conditional Content */}
+      {activeTab === 'list' ? (
+        <>
+          {/* Filters */}
+          <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-4 mb-6 transition-colors">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search by DO#, Truck, Client..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                />
+              </div>
+              <select 
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              >
+                <option value="ALL">All Types</option>
+                <option value="IMPORT">Import</option>
+                <option value="EXPORT">Export</option>
+              </select>
+              <input
+                type="date"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+              <button className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                <Filter className="w-4 h-4 mr-2" />
+                More Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg overflow-hidden transition-colors">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-800">
+                  <tr>
+                    <th className="px-6 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
+                        onChange={handleSelectAll}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
+                      />
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO Number</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Destination</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tonnage</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {loading ? (
+                    <tr key="loading-row">
+                      <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Loading data...
+                      </td>
+                    </tr>
+                  ) : filteredOrders.length === 0 ? (
+                    <tr key="empty-row">
+                      <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No delivery orders found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredOrders.map((order) => (
+                      <tr key={order.id || `order-${order.doNumber}`} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={order.id ? selectedOrders.includes(order.id) : false}
+                            onChange={() => order.id && handleSelectOrder(order.id)}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {order.doNumber}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.date}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            order.importOrExport === 'IMPORT' 
+                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' 
+                              : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                          }`}>
+                            {order.importOrExport}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.clientName}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.truckNo}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.destination}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.tonnages} tons</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button 
+                            onClick={() => handleViewOrder(order)}
+                            className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300 mr-3"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleEditOrder(order)}
+                            className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-3" 
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300" title="Delete">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <MonthlySummary orders={orders} />
+      )}
+
+      {/* DO Detail Modal */}
+      {selectedOrder && (
+        <DODetailModal
+          order={selectedOrder}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          onEdit={() => {
+            handleCloseModal();
+            handleEditOrder(selectedOrder);
+          }}
+          onPrint={handlePrintOrder}
+        />
+      )}
+
+      {/* Batch DO Print */}
+      {batchPrintOrders.length > 0 && (
+        <BatchDOPrint 
+          orders={batchPrintOrders}
+          clientName={batchPrintOrders[0]?.clientName}
+        />
+      )}
+
+      {/* DO Form for Create/Edit */}
+      <DOForm
+        order={editingOrder || undefined}
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        onSave={handleSaveOrder}
+      />
+
+      {/* Bulk DO Form */}
+      <BulkDOForm
+        isOpen={isBulkFormOpen}
+        onClose={() => setIsBulkFormOpen(false)}
+        onSave={handleSaveBulkOrders}
+      />
+    </div>
+  );
+};
+
+export default DeliveryOrders;

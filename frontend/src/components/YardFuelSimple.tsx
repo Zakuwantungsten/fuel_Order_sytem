@@ -1,0 +1,268 @@
+import React, { useState, useEffect } from 'react';
+import { yardFuelService } from '../services/yardFuelService';
+
+interface YardFuelSimpleProps {
+  user: any;
+}
+
+export function YardFuelSimple({ user }: YardFuelSimpleProps) {
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [recentEntries, setRecentEntries] = useState<any[]>([]);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  const [formData, setFormData] = useState({
+    truckNo: '',
+    liters: 0,
+    date: new Date().toISOString().split('T')[0],
+    notes: '',
+  });
+
+  const getYardName = () => {
+    const yardMap: Record<string, string> = {
+      dar_yard: 'DAR ES SALAAM',
+      tanga_yard: 'TANGA',
+      mmsa_yard: 'MMSA',
+    };
+    return yardMap[user.role] || '';
+  };
+
+  useEffect(() => {
+    fetchRecentEntries();
+  }, []);
+
+  const fetchRecentEntries = async () => {
+    try {
+      setLoading(true);
+      const response = await yardFuelService.getAll({ page: 1, limit: 5, sort: 'timestamp', order: 'desc' });
+      setRecentEntries(response.items || []);
+    } catch (error: any) {
+      console.error('Failed to fetch recent entries:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'liters' ? parseFloat(value) || 0 : value.toUpperCase(),
+    }));
+  };
+
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 4000);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.truckNo.trim()) {
+      showMessage('error', 'Truck number is required');
+      return;
+    }
+    
+    if (formData.liters <= 0) {
+      showMessage('error', 'Liters must be greater than 0');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const response = await yardFuelService.create({
+        ...formData,
+        truckNo: formData.truckNo.trim().toUpperCase(),
+      });
+      
+      // Check if it was linked to a fuel record
+      const wasLinked = (response as any)?.linkedInfo?.linked;
+      const doNumber = (response as any)?.linkedInfo?.doNumber;
+      
+      if (wasLinked && doNumber) {
+        showMessage('success', `✓ Fuel recorded and linked to DO ${doNumber}!`);
+      } else {
+        showMessage('success', '✓ Fuel recorded! Will be linked when fuel record is created.');
+      }
+      
+      // Reset form
+      setFormData({
+        truckNo: '',
+        liters: 0,
+        date: new Date().toISOString().split('T')[0],
+        notes: '',
+      });
+      
+      // Refresh recent entries
+      fetchRecentEntries();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to record fuel dispense';
+      showMessage('error', errorMsg);
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="h-full bg-gray-50 overflow-auto">
+      {/* Header */}
+      <div className="bg-blue-600 text-white p-6 shadow-md sticky top-0 z-10">
+        <h1 className="text-2xl font-bold">{getYardName()} YARD</h1>
+        <p className="text-sm opacity-90 mt-1">Fuel Dispense Entry</p>
+        <p className="text-xs opacity-75 mt-1">Logged in as: {user?.username}</p>
+      </div>
+
+      {/* Message Banner */}
+      {message && (
+        <div className={`mx-4 mt-4 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+          {message.text}
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="p-4 max-w-4xl mx-auto">
+        {/* Entry Form */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6 transition-colors">
+          <h2 className="text-xl font-semibold mb-4 text-gray-800">Record Fuel Dispense</h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Truck Number */}
+            <div>
+              <label htmlFor="truckNo" className="block text-sm font-medium text-gray-700 mb-2">
+                Truck Number *
+              </label>
+              <input
+                type="text"
+                id="truckNo"
+                name="truckNo"
+                value={formData.truckNo}
+                onChange={handleInputChange}
+                placeholder="e.g., T123ABC"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg uppercase font-semibold"
+                required
+                autoComplete="off"
+              />
+            </div>
+
+            {/* Liters */}
+            <div>
+              <label htmlFor="liters" className="block text-sm font-medium text-gray-700 mb-2">
+                Liters *
+              </label>
+              <input
+                type="number"
+                id="liters"
+                name="liters"
+                value={formData.liters || ''}
+                onChange={handleInputChange}
+                placeholder="0"
+                step="0.01"
+                min="0"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-semibold"
+                required
+              />
+            </div>
+
+            {/* Date */}
+            <div>
+              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
+                Date *
+              </label>
+              <input
+                type="date"
+                id="date"
+                name="date"
+                value={formData.date}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                required
+              />
+            </div>
+
+            {/* Notes (Optional) */}
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+                Notes (Optional)
+              </label>
+              <textarea
+                id="notes"
+                name="notes"
+                value={formData.notes}
+                onChange={handleInputChange}
+                placeholder="Any additional notes..."
+                rows={3}
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-lg active:scale-95 transform"
+            >
+              {submitting ? 'Recording...' : 'RECORD FUEL DISPENSE'}
+            </button>
+          </form>
+        </div>
+
+        {/* Recent Entries */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-colors">
+          <h2 className="text-xl font-semibold mb-4 text-gray-800">Recent Entries</h2>
+          
+          {loading ? (
+            <div className="text-center py-12 text-gray-500">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p>Loading...</p>
+            </div>
+          ) : recentEntries.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-lg">No recent entries</p>
+              <p className="text-sm mt-2">Your fuel dispense records will appear here</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentEntries.map((entry, index) => (
+                <div 
+                  key={entry._id || index} 
+                  className="border-2 border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-bold text-xl text-gray-800">{entry.truckNo}</p>
+                      <p className="text-sm text-gray-600">{entry.date}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-blue-600">{entry.liters}L</p>
+                      <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
+                        entry.status === 'linked' 
+                          ? 'bg-green-100 text-green-800' 
+                          : entry.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {entry.status}
+                      </span>
+                    </div>
+                  </div>
+                  {entry.notes && (
+                    <p className="text-sm text-gray-600 mt-2 italic">Note: {entry.notes}</p>
+                  )}
+                  <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-200">
+                    <span className="font-medium">by {entry.enteredBy}</span>
+                    <span className="mx-2">•</span>
+                    <span>{new Date(entry.timestamp).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default YardFuelSimple;

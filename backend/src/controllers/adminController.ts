@@ -1,0 +1,762 @@
+import { Response } from 'express';
+import { SystemConfig, User, DeliveryOrder, LPOEntry, FuelRecord, YardFuelDispense } from '../models';
+import { ApiError } from '../middleware/errorHandler';
+import { AuthRequest } from '../middleware/auth';
+import { logger } from '../utils';
+
+// Default configurations
+const DEFAULT_FUEL_STATIONS = [
+  { id: 'lake_ndola', name: 'LAKE NDOLA', location: 'Zambia', pricePerLiter: 1450, isActive: true },
+  { id: 'lake_kapiri', name: 'LAKE KAPIRI', location: 'Zambia', pricePerLiter: 1450, isActive: true },
+  { id: 'lake_chilabombwe', name: 'LAKE CHILABOMBWE', location: 'Zambia', pricePerLiter: 1450, isActive: true },
+  { id: 'cash', name: 'CASH', location: 'Zambia', pricePerLiter: 1450, isActive: true },
+  { id: 'tcc', name: 'TCC', location: 'Zambia', pricePerLiter: 1450, isActive: true },
+  { id: 'zhanfei', name: 'ZHANFEI', location: 'Zambia', pricePerLiter: 1450, isActive: true },
+  { id: 'kamoa', name: 'KAMOA', location: 'Zambia', pricePerLiter: 1450, isActive: true },
+  { id: 'comika', name: 'COMIKA', location: 'Zambia', pricePerLiter: 1450, isActive: true },
+  { id: 'tunduma_station', name: 'TUNDUMA STATION', location: 'Tanzania', pricePerLiter: 1450, isActive: true },
+  { id: 'mbeya_station', name: 'MBEYA STATION', location: 'Tanzania', pricePerLiter: 1450, isActive: true },
+  { id: 'moro_station', name: 'MORO STATION', location: 'Tanzania', pricePerLiter: 1450, isActive: true },
+  { id: 'tanga_station', name: 'TANGA STATION', location: 'Tanzania', pricePerLiter: 1450, isActive: true },
+  { id: 'dar_station', name: 'DAR STATION', location: 'Dar es Salaam', pricePerLiter: 1450, isActive: true },
+];
+
+const DEFAULT_ROUTES = [
+  { destination: 'LUBUMBASHI', totalLiters: 2100, isActive: true },
+  { destination: 'LIKASI', totalLiters: 2200, isActive: true },
+  { destination: 'KAMBOVE', totalLiters: 2220, isActive: true },
+  { destination: 'FUNGURUME', totalLiters: 2300, isActive: true },
+  { destination: 'KINSANFU', totalLiters: 2360, isActive: true },
+  { destination: 'LAMIKAL', totalLiters: 2360, isActive: true },
+  { destination: 'KOLWEZI', totalLiters: 2400, isActive: true },
+  { destination: 'KAMOA', totalLiters: 2440, isActive: true },
+  { destination: 'KALONGWE', totalLiters: 2440, isActive: true },
+  { destination: 'LUSAKA', totalLiters: 1900, isActive: true },
+];
+
+const DEFAULT_TRUCK_BATCHES = {
+  batch_100: [
+    { truckSuffix: 'dnh', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dny', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dpn', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dre', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'drf', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dnw', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dxy', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'eaf', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dtb', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
+  ],
+  batch_80: [
+    { truckSuffix: 'dvk', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dvl', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dwk', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
+  ],
+  batch_60: [
+    { truckSuffix: 'dyy', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'dzy', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'eag', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'ecq', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'edd', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'egj', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'ehj', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'ehe', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'ely', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'elv', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'eeq', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'eng', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'efp', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'efn', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'ekt', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+    { truckSuffix: 'eks', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
+  ],
+};
+
+const DEFAULT_STANDARD_ALLOCATIONS = {
+  tangaYardToDar: 100,
+  darYardStandard: 550,
+  darYardKisarawe: 580,
+  mbeyaGoing: 450,
+  tundumaReturn: 100,
+  mbeyaReturn: 400,
+  moroReturnToMombasa: 100,
+  tangaReturnToMombasa: 70,
+};
+
+/**
+ * Get admin dashboard statistics
+ */
+export const getAdminStats = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const [
+      totalUsers,
+      activeUsers,
+      totalDOs,
+      totalLPOs,
+      totalFuelRecords,
+      totalYardDispenses,
+      recentUsers,
+    ] = await Promise.all([
+      User.countDocuments({ isDeleted: false }),
+      User.countDocuments({ isDeleted: false, isActive: true }),
+      DeliveryOrder.countDocuments({ isDeleted: false }),
+      LPOEntry.countDocuments({ isDeleted: false }),
+      FuelRecord.countDocuments({ isDeleted: false }),
+      YardFuelDispense.countDocuments({ isDeleted: false }),
+      User.find({ isDeleted: false })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('-password -refreshToken')
+        .lean(),
+    ]);
+
+    // Get user role distribution
+    const roleDistribution = await User.aggregate([
+      { $match: { isDeleted: false } },
+      { $group: { _id: '$role', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Admin statistics retrieved successfully',
+      data: {
+        users: {
+          total: totalUsers,
+          active: activeUsers,
+          inactive: totalUsers - activeUsers,
+        },
+        records: {
+          deliveryOrders: totalDOs,
+          lpos: totalLPOs,
+          fuelRecords: totalFuelRecords,
+          yardDispenses: totalYardDispenses,
+        },
+        roleDistribution: roleDistribution.map(r => ({
+          role: r._id,
+          count: r.count,
+        })),
+        recentUsers,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get all fuel stations configuration
+ */
+export const getFuelStations = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'fuel_stations',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      // Create default config
+      config = await SystemConfig.create({
+        configType: 'fuel_stations',
+        fuelStations: DEFAULT_FUEL_STATIONS,
+        lastUpdatedBy: 'system',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Fuel stations retrieved successfully',
+      data: config.fuelStations,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Update fuel station
+ */
+export const updateFuelStation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { stationId } = req.params;
+    const { pricePerLiter, isActive, name, location } = req.body;
+
+    let config = await SystemConfig.findOne({
+      configType: 'fuel_stations',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'fuel_stations',
+        fuelStations: DEFAULT_FUEL_STATIONS,
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    const stationIndex = config.fuelStations?.findIndex(s => s.id === stationId);
+    
+    if (stationIndex === undefined || stationIndex === -1) {
+      throw new ApiError(404, 'Station not found');
+    }
+
+    // Update station fields
+    if (config.fuelStations) {
+      if (pricePerLiter !== undefined) config.fuelStations[stationIndex].pricePerLiter = pricePerLiter;
+      if (isActive !== undefined) config.fuelStations[stationIndex].isActive = isActive;
+      if (name !== undefined) config.fuelStations[stationIndex].name = name;
+      if (location !== undefined) config.fuelStations[stationIndex].location = location;
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Fuel station ${stationId} updated by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Fuel station updated successfully',
+      data: config.fuelStations?.[stationIndex],
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Add new fuel station
+ */
+export const addFuelStation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id, name, location, pricePerLiter, isActive = true } = req.body;
+
+    if (!id || !name || !location || pricePerLiter === undefined) {
+      throw new ApiError(400, 'Missing required fields: id, name, location, pricePerLiter');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'fuel_stations',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'fuel_stations',
+        fuelStations: [],
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    // Check if station already exists
+    const existingStation = config.fuelStations?.find(s => s.id === id);
+    if (existingStation) {
+      throw new ApiError(400, 'Station with this ID already exists');
+    }
+
+    const newStation = { id, name, location, pricePerLiter, isActive };
+    config.fuelStations?.push(newStation);
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`New fuel station ${name} added by ${req.user?.username}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Fuel station added successfully',
+      data: newStation,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Bulk update fuel station rates
+ */
+export const bulkUpdateStationRates = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { updates } = req.body; // Array of { stationId, pricePerLiter }
+
+    if (!Array.isArray(updates) || updates.length === 0) {
+      throw new ApiError(400, 'Updates array is required');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'fuel_stations',
+      isDeleted: false,
+    });
+
+    if (!config || !config.fuelStations) {
+      throw new ApiError(404, 'Fuel stations configuration not found');
+    }
+
+    let updatedCount = 0;
+    for (const update of updates) {
+      const stationIndex = config.fuelStations.findIndex(s => s.id === update.stationId);
+      if (stationIndex !== -1) {
+        config.fuelStations[stationIndex].pricePerLiter = update.pricePerLiter;
+        updatedCount++;
+      }
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Bulk update: ${updatedCount} fuel stations updated by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: `${updatedCount} fuel stations updated successfully`,
+      data: config.fuelStations,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get all route configurations
+ */
+export const getRoutes = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'routes',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'routes',
+        routes: DEFAULT_ROUTES,
+        lastUpdatedBy: 'system',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Routes retrieved successfully',
+      data: config.routes,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Update route configuration
+ */
+export const updateRoute = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { destination } = req.params;
+    const { totalLiters, isActive } = req.body;
+
+    let config = await SystemConfig.findOne({
+      configType: 'routes',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'routes',
+        routes: DEFAULT_ROUTES,
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    const routeIndex = config.routes?.findIndex(
+      r => r.destination.toUpperCase() === destination.toUpperCase()
+    );
+
+    if (routeIndex === undefined || routeIndex === -1) {
+      throw new ApiError(404, 'Route not found');
+    }
+
+    if (config.routes) {
+      if (totalLiters !== undefined) config.routes[routeIndex].totalLiters = totalLiters;
+      if (isActive !== undefined) config.routes[routeIndex].isActive = isActive;
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Route ${destination} updated by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Route updated successfully',
+      data: config.routes?.[routeIndex],
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Add new route
+ */
+export const addRoute = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { destination, totalLiters, isActive = true } = req.body;
+
+    if (!destination || totalLiters === undefined) {
+      throw new ApiError(400, 'Missing required fields: destination, totalLiters');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'routes',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'routes',
+        routes: [],
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    // Check if route already exists
+    const existingRoute = config.routes?.find(
+      r => r.destination.toUpperCase() === destination.toUpperCase()
+    );
+    if (existingRoute) {
+      throw new ApiError(400, 'Route to this destination already exists');
+    }
+
+    const newRoute = { destination: destination.toUpperCase(), totalLiters, isActive };
+    config.routes?.push(newRoute);
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`New route to ${destination} added by ${req.user?.username}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Route added successfully',
+      data: newRoute,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Delete route
+ */
+export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { destination } = req.params;
+
+    let config = await SystemConfig.findOne({
+      configType: 'routes',
+      isDeleted: false,
+    });
+
+    if (!config || !config.routes) {
+      throw new ApiError(404, 'Routes configuration not found');
+    }
+
+    const routeIndex = config.routes.findIndex(
+      r => r.destination.toUpperCase() === destination.toUpperCase()
+    );
+
+    if (routeIndex === -1) {
+      throw new ApiError(404, 'Route not found');
+    }
+
+    config.routes.splice(routeIndex, 1);
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Route ${destination} deleted by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Route deleted successfully',
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get truck batches configuration
+ */
+export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'truck_batches',
+        truckBatches: DEFAULT_TRUCK_BATCHES,
+        lastUpdatedBy: 'system',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Truck batches retrieved successfully',
+      data: config.truckBatches,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Add truck to a batch
+ */
+export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckSuffix, extraLiters, truckNumber } = req.body;
+
+    if (!truckSuffix || !extraLiters) {
+      throw new ApiError(400, 'Missing required fields: truckSuffix, extraLiters');
+    }
+
+    if (![60, 80, 100].includes(extraLiters)) {
+      throw new ApiError(400, 'extraLiters must be 60, 80, or 100');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'truck_batches',
+        truckBatches: { batch_100: [], batch_80: [], batch_60: [] },
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    const suffix = truckSuffix.toLowerCase();
+
+    // Remove from all batches first (in case of moving)
+    if (config.truckBatches) {
+      config.truckBatches.batch_100 = config.truckBatches.batch_100.filter(t => t.truckSuffix !== suffix);
+      config.truckBatches.batch_80 = config.truckBatches.batch_80.filter(t => t.truckSuffix !== suffix);
+      config.truckBatches.batch_60 = config.truckBatches.batch_60.filter(t => t.truckSuffix !== suffix);
+
+      // Add to appropriate batch
+      const newTruck = {
+        truckSuffix: suffix,
+        extraLiters,
+        truckNumber,
+        addedBy: req.user?.username || 'system',
+        addedAt: new Date(),
+      };
+
+      if (extraLiters === 100) {
+        config.truckBatches.batch_100.push(newTruck);
+      } else if (extraLiters === 80) {
+        config.truckBatches.batch_80.push(newTruck);
+      } else {
+        config.truckBatches.batch_60.push(newTruck);
+      }
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Truck ${truckSuffix} added to batch ${extraLiters} by ${req.user?.username}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Truck added to ${extraLiters}L batch successfully`,
+      data: config.truckBatches,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Remove truck from batches
+ */
+export const removeTruckFromBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckSuffix } = req.params;
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config || !config.truckBatches) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const suffix = truckSuffix.toLowerCase();
+    let found = false;
+
+    // Remove from all batches
+    const originalLen100 = config.truckBatches.batch_100.length;
+    const originalLen80 = config.truckBatches.batch_80.length;
+    const originalLen60 = config.truckBatches.batch_60.length;
+
+    config.truckBatches.batch_100 = config.truckBatches.batch_100.filter(t => t.truckSuffix !== suffix);
+    config.truckBatches.batch_80 = config.truckBatches.batch_80.filter(t => t.truckSuffix !== suffix);
+    config.truckBatches.batch_60 = config.truckBatches.batch_60.filter(t => t.truckSuffix !== suffix);
+
+    found = (
+      config.truckBatches.batch_100.length < originalLen100 ||
+      config.truckBatches.batch_80.length < originalLen80 ||
+      config.truckBatches.batch_60.length < originalLen60
+    );
+
+    if (!found) {
+      throw new ApiError(404, 'Truck not found in any batch');
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Truck ${truckSuffix} removed from batches by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Truck removed from batch successfully',
+      data: config.truckBatches,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get standard allocations
+ */
+export const getStandardAllocations = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'standard_allocations',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'standard_allocations',
+        standardAllocations: DEFAULT_STANDARD_ALLOCATIONS,
+        lastUpdatedBy: 'system',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Standard allocations retrieved successfully',
+      data: config.standardAllocations,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Update standard allocations
+ */
+export const updateStandardAllocations = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const updates = req.body;
+
+    let config = await SystemConfig.findOne({
+      configType: 'standard_allocations',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'standard_allocations',
+        standardAllocations: DEFAULT_STANDARD_ALLOCATIONS,
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    // Update only provided fields
+    if (config.standardAllocations) {
+      Object.keys(updates).forEach(key => {
+        if (key in config.standardAllocations! && typeof updates[key] === 'number') {
+          (config.standardAllocations as any)[key] = updates[key];
+        }
+      });
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Standard allocations updated by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Standard allocations updated successfully',
+      data: config.standardAllocations,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get all configuration (combined)
+ */
+export const getAllConfig = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const [fuelStationsConfig, routesConfig, truckBatchesConfig, allocationsConfig] = await Promise.all([
+      SystemConfig.findOne({ configType: 'fuel_stations', isDeleted: false }),
+      SystemConfig.findOne({ configType: 'routes', isDeleted: false }),
+      SystemConfig.findOne({ configType: 'truck_batches', isDeleted: false }),
+      SystemConfig.findOne({ configType: 'standard_allocations', isDeleted: false }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: 'All configurations retrieved successfully',
+      data: {
+        fuelStations: fuelStationsConfig?.fuelStations || DEFAULT_FUEL_STATIONS,
+        routes: routesConfig?.routes || DEFAULT_ROUTES,
+        truckBatches: truckBatchesConfig?.truckBatches || DEFAULT_TRUCK_BATCHES,
+        standardAllocations: allocationsConfig?.standardAllocations || DEFAULT_STANDARD_ALLOCATIONS,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Reset configuration to defaults
+ */
+export const resetConfig = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { configType } = req.params;
+
+    if (!['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'all'].includes(configType)) {
+      throw new ApiError(400, 'Invalid configuration type');
+    }
+
+    if (configType === 'all') {
+      await SystemConfig.updateMany(
+        { isDeleted: false },
+        { isDeleted: true, deletedAt: new Date() }
+      );
+    } else {
+      await SystemConfig.updateOne(
+        { configType, isDeleted: false },
+        { isDeleted: true, deletedAt: new Date() }
+      );
+    }
+
+    logger.info(`Configuration ${configType} reset to defaults by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Configuration reset to defaults successfully`,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};

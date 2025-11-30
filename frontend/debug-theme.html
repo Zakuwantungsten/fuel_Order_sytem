@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theme Toggle Debug</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        }
+    </script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors min-h-screen">
+    <div class="container mx-auto p-8">
+        <h1 class="text-3xl font-bold mb-8">Theme Toggle Debug Test</h1>
+        
+        <div class="mb-8">
+            <button id="themeToggle" 
+                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+                Toggle Theme
+            </button>
+            <span id="currentTheme" class="ml-4 text-sm"></span>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow transition-colors">
+                <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Light/Dark Card</h2>
+                <p class="text-gray-600 dark:text-gray-400">This card should change color when you toggle the theme.</p>
+            </div>
+            
+            <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg shadow transition-colors">
+                <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Secondary Card</h2>
+                <p class="text-gray-600 dark:text-gray-400">This is another test card.</p>
+            </div>
+        </div>
+        
+        <div class="mt-8">
+            <h3 class="text-lg font-semibold mb-4">Current HTML Classes:</h3>
+            <pre id="htmlClasses" class="bg-gray-100 dark:bg-gray-800 p-4 rounded text-sm overflow-auto"></pre>
+        </div>
+    </div>
+
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        const currentThemeSpan = document.getElementById('currentTheme');
+        const htmlClassesDiv = document.getElementById('htmlClasses');
+        const html = document.documentElement;
+        
+        function updateDisplay() {
+            const isDark = html.classList.contains('dark');
+            currentThemeSpan.textContent = isDark ? 'Dark Mode' : 'Light Mode';
+            htmlClassesDiv.textContent = `HTML classes: "${html.className}"`;
+        }
+        
+        themeToggle.addEventListener('click', () => {
+            html.classList.toggle('dark');
+            updateDisplay();
+        });
+        
+        // Initial display update
+        updateDisplay();
+    </script>
+</body>
+</html>

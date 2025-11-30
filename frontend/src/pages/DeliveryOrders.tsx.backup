@@ -1,0 +1,292 @@
+import { useState, useEffect } from 'react';
+import { Search, Filter, Plus, Download, Eye, Edit, Trash2 } from 'lucide-react';
+import { DeliveryOrder } from '../types';
+import { mockAPI } from '../services/mockData';
+import DODetailModal from '../components/DODetailModal';
+import MasterDOPrint from '../components/MasterDOPrint';
+import DOForm from '../components/DOForm';
+import MonthlySummary from '../components/MonthlySummary';
+
+const DeliveryOrders = () => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [orders, setOrders] = useState<DeliveryOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState('ALL');
+  const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
+  const [activeTab, setActiveTab] = useState<'list' | 'summary'>('list');
+
+  useEffect(() => {
+    loadOrders();
+  }, [filterType]);
+
+  const loadOrders = async () => {
+    setLoading(true);
+    try {
+      const data = await mockAPI.deliveryOrders.getAll({
+        importOrExport: filterType,
+      });
+      setOrders(data);
+    } catch (error) {
+      console.error('Failed to load delivery orders:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredOrders = orders.filter(order =>
+    order.doNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.truckNo.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleViewOrder = (order: DeliveryOrder) => {
+    setSelectedOrder(order);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedOrder(null);
+  };
+
+  const handlePrintOrder = () => {
+    window.print();
+  };
+
+  const handleNewDO = () => {
+    setEditingOrder(null);
+    setIsFormOpen(true);
+  };
+
+  const handleEditOrder = (order: DeliveryOrder) => {
+    setEditingOrder(order);
+    setIsFormOpen(true);
+  };
+
+  const handleSaveOrder = (orderData: Partial<DeliveryOrder>) => {
+    console.log('Saving order:', orderData);
+    // TODO: Call API to save/update order
+    // For now, just refresh the list
+    loadOrders();
+  };
+
+  return (
+    <div>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Delivery Orders</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Manage all delivery orders and transportation records
+          </p>
+        </div>
+        <div className="mt-4 sm:mt-0 flex space-x-3">
+          <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </button>
+          <button 
+            onClick={handleNewDO}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New DO
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('list')}
+            className={`${
+              activeTab === 'list'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            All Orders
+          </button>
+          <button
+            onClick={() => setActiveTab('summary')}
+            className={`${
+              activeTab === 'summary'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            Monthly Summary
+          </button>
+        </nav>
+      </div>
+
+      {/* Conditional Content */}
+      {activeTab === 'list' ? (
+        <>
+          {/* Filters */}
+          <div className="bg-white shadow rounded-lg p-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search by DO#, Truck, Client..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+              <select 
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="ALL">All Types</option>
+                <option value="IMPORT">Import</option>
+                <option value="EXPORT">Export</option>
+              </select>
+              <input
+                type="date"
+                className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+              <button className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <Filter className="w-4 h-4 mr-2" />
+                More Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white shadow rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      DO Number
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Client
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Truck
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Destination
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tonnage
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                        Loading data...
+                      </td>
+                    </tr>
+                  ) : filteredOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                        No delivery orders found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredOrders.map((order) => (
+                      <tr key={order.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {order.doNumber}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {order.date}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            order.importOrExport === 'IMPORT' 
+                              ? 'bg-blue-100 text-blue-800' 
+                              : 'bg-green-100 text-green-800'
+                          }`}>
+                            {order.importOrExport}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {order.clientName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {order.truckNo}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {order.destination}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {order.tonnages} tons
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button 
+                            onClick={() => handleViewOrder(order)}
+                            className="text-primary-600 hover:text-primary-900 mr-3"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleEditOrder(order)}
+                            className="text-yellow-600 hover:text-yellow-900 mr-3" 
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button className="text-red-600 hover:text-red-900" title="Delete">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <MonthlySummary orders={orders} />
+      )}
+
+      {/* DO Detail Modal */}
+      {selectedOrder && (
+        <DODetailModal
+          order={selectedOrder}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          onPrint={handlePrintOrder}
+        />
+      )}
+
+      {/* Master DO Print Template (hidden, shown only when printing) */}
+      {selectedOrder && <MasterDOPrint order={selectedOrder} />}
+
+      {/* DO Form for Create/Edit */}
+      <DOForm
+        order={editingOrder || undefined}
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        onSave={handleSaveOrder}
+      />
+    </div>
+  );
+};
+
+export default DeliveryOrders;

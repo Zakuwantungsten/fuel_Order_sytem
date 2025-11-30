@@ -1,0 +1,91 @@
+MMEDIATE ACTION ITEMS:
+Priority 1 (Must Fix):
+Build the backend API (Express + PostgreSQL/MySQL)
+Implement auto-calculation for Fuel Record balance
+Fix duplicate code in LPODetailForm
+Create database schema linking DO → Fuel Record → LPO
+Priority 2 (Should Have):
+Implement LPO-to-Fuel-Record linkage display
+Add fuel consumption analytics dashboard
+Create reporting for fuel costs vs routes
+Implement station/yard master data management
+Priority 3 (Nice to Have):
+Real-time fuel tracking
+Mobile-responsive optimizations
+Automated alerts for low balance or unusual consumption
+Historical trend analysis
+
+
+okay i would like the tab that contains the fuel record, do, dashboard and lpos - to be likego the very side until i click it is when it become full like that like only show the icons till i hover to it
+solve for me the error sin this file and thenext file - lpo.txs file too there are red lines 
+
+
+0114269450 - alfani 
+
+mongodb+srv://comradesAdmin:HAMDUNASSOR@cluster0.5ztrw.mongodb.net/?appName=Cluster0
+
+check for do print
+check for duplicate
+
+DAR ES SALAAM YARD:
+Username: dar_yard
+Password: dar123
+Role: dar_yard
+Yard: DAR YARD
+TANGA YARD:
+Username: tanga_yard
+Password: tanga123
+Role: tanga_yard
+Yard: TANGA YARD
+MMSA YARD:
+Username: mmsa_yard
+Password: mmsa123
+Role: mmsa_yard
+Yard: MMSA YARD
+
+
+things to work on 
+put an excel like interface exactlly to my codes for easy lpo making and 
+
+today - 
+store the destinations and from details of truck before do creation of export type so that when it is changed it doesn't vanish and can be used in lpo creation
+
+whats remaining in lpo
+in the workbook should be able to edit values as truck number, liters destination and everything and save and enable auto fetch 
+
+// Correct rates: USD stations = 1.2, TZS stations have specific rates
+const STATION_DEFAULTS: Record<string, { going?: number; returning?: number; rate: number; currency: 'USD' | 'TZS' }> = {
+  // Zambia stations (USD)
+  'LAKE CHILABOMBWE': { going: 260, returning: 0, rate: 1.2, currency: 'USD' },
+  'LAKE NDOLA': { going: 0, returning: 50, rate: 1.2, currency: 'USD' },  // Return: 50L for Zambia Return split
+  'LAKE KAPIRI': { going: 0, returning: 350, rate: 1.2, currency: 'USD' }, // Return: 350L for Zambia Return split
+  'LAKE KITWE': { going: 260, returning: 0, rate: 1.2, currency: 'USD' },
+  'LAKE KABANGWA': { going: 260, returning: 0, rate: 1.2, currency: 'USD' },
+  'LAKE CHINGOLA': { going: 260, returning: 0, rate: 1.2, currency: 'USD' },
+  // Tanzania stations (TZS)
+  'LAKE TUNDUMA': { going: 0, returning: 100, rate: 2875, currency: 'TZS' }, // Tunduma Return
+  'INFINITY': { going: 450, returning: 400, rate: 2757, currency: 'TZS' },   // Mbeya (both directions)
+  'GBP MOROGORO': { going: 0, returning: 100, rate: 2710, currency: 'TZS' }, // Morogoro Return
+  'GBP KANGE': { going: 0, returning: 70, rate: 2730, currency: 'TZS' },     // Tanga Return (70L for Mombasa/MSA)
+  'GPB KANGE': { going: 0, returning: 70, rate: 2730, currency: 'TZS' },     // Typo version - Tanga Return
+  // Cash payment (variable rate)
+  'CASH': { going: 0, returning: 0, rate: 0, currency: 'TZS' }, // Rate entered manually
+};
+
+// Standard fuel allocations by checkpoint - exported for use in fuel record display
+export const STANDARD_ALLOCATIONS = {
+  darYard: { standard: 550, kisarawe: 580 },
+  mbeyaGoing: 450,
+  zambiaReturn: { ndola: 50, kapiri: 350, total: 400 },
+  tundumaReturn: 100,
+  mbeyaReturn: 400,
+  moroReturn: 100,
+  tangaReturn: 70,
+};
+localStorage.removeItem('fuel_order_theme')
+
+
+Test Your Theme Toggle:
+Start the development server: npm run dev (in the frontend directory)
+Toggle the theme using any theme toggle button
+Check if the entire interface changes - background, text, cards, buttons, navigation

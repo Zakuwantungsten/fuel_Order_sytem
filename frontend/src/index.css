@@ -1,0 +1,776 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Light mode styles (default) */
+body {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  color: #0f172a;
+  min-height: 100vh;
+}
+
+/* Light mode scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Dark mode body styles - applied when html has .dark class */
+html.dark body {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #f8fafc;
+}
+
+/* Smooth transitions for all modes */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark mode scrollbar */
+html.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+  border: 1px solid #334155;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Light mode form elements */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  color-scheme: light;
+}
+
+/* Light mode checkboxes and radios */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #3b82f6;
+  width: 16px;
+  height: 16px;
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+}
+
+/* Light mode focus states */
+input:focus,
+select:focus,
+textarea:focus,
+button:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+/* Light mode button variants */
+.btn {
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn:focus {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 2px solid var(--text-accent);
+  color: var(--text-accent);
+}
+
+.btn-outline:hover {
+  background-color: var(--text-accent);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+}
+
+.btn-success:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-1px);
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  border: none;
+}
+
+.btn-warning:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  transform: translateY(-1px);
+}
+
+/* Light mode link styles */
+a {
+  color: var(--text-accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+a:hover {
+  color: #2563eb;
+  text-decoration: underline;
+  text-decoration-color: #93c5fd;
+  text-underline-offset: 3px;
+}
+
+/* Light mode selection styles */
+::selection {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+/* Dark mode form elements */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  color-scheme: dark;
+}
+
+/* Enhanced dark mode styles */
+html.dark {
+  /* Card backgrounds */
+  --card-bg: #1f2937;
+  --card-border: #374151;
+  --card-hover: #374151;
+  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+  --card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+  
+  /* Input backgrounds */
+  --input-bg: #374151;
+  --input-border: #4b5563;
+  --input-border-hover: #6b7280;
+  --input-focus: #6366f1;
+  --input-focus-ring: rgba(99, 102, 241, 0.2);
+  
+  /* Button styles */
+  --button-primary-bg: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  --button-primary-hover: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  --button-primary-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.3);
+  --button-secondary-bg: #374151;
+  --button-secondary-hover: #4b5563;
+  --button-secondary-border: #4b5563;
+  
+  /* Text colors */
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --text-accent: #6366f1;
+  
+  /* Border colors */
+  --border-color: #374151;
+  --border-hover: #4b5563;
+  --divider-color: #4b5563;
+  
+  /* Shadow colors */
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  --shadow-light: rgba(0, 0, 0, 0.3);
+  --shadow-medium: rgba(0, 0, 0, 0.4);
+  
+  /* Status colors for dark mode */
+  --success-bg: #065f46;
+  --success-border: #047857;
+  --success-text: #10b981;
+  --warning-bg: #92400e;
+  --warning-border: #d97706;
+  --warning-text: #fbbf24;
+  --error-bg: #991b1b;
+  --error-border: #dc2626;
+  --error-text: #f87171;
+  --info-bg: #1e40af;
+  --info-border: #3b82f6;
+  --info-text: #60a5fa;
+}
+
+html:not(.dark) {
+  /* Enhanced Light mode CSS variables */
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --card-hover: #f8fafc;
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --card-shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --input-border-hover: #94a3b8;
+  --input-focus: #3b82f6;
+  --input-focus-ring: rgba(59, 130, 246, 0.1);
+  
+  --button-primary-bg: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  --button-primary-hover: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  --button-primary-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.25);
+  --button-secondary-bg: #f8fafc;
+  --button-secondary-hover: #f1f5f9;
+  --button-secondary-border: #e2e8f0;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-accent: #3b82f6;
+  
+  --border-color: #e2e8f0;
+  --border-hover: #cbd5e1;
+  --divider-color: #f1f5f9;
+  
+  --shadow-color: rgba(15, 23, 42, 0.08);
+  --shadow-light: rgba(15, 23, 42, 0.04);
+  --shadow-medium: rgba(15, 23, 42, 0.12);
+  
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --success-text: #166534;
+  --warning-bg: #fffbeb;
+  --warning-border: #fed7aa;
+  --warning-text: #a16207;
+  --error-bg: #fef2f2;
+  --error-border: #fecaca;
+  --error-text: #dc2626;
+  --info-bg: #eff6ff;
+  --info-border: #bfdbfe;
+  --info-text: #1d4ed8;
+}
+
+/* Light mode specific elements */
+.card {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(10px);
+}
+
+.card:hover {
+  background-color: var(--card-hover);
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-1px);
+}
+
+/* Light mode inputs */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-light);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):hover,
+select:hover,
+textarea:hover {
+  border-color: var(--input-border-hover);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+  outline: none;
+}
+
+/* Light mode buttons */
+.btn-primary {
+  background: var(--button-primary-bg);
+  border: none;
+  color: white;
+  box-shadow: var(--button-primary-shadow);
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: var(--button-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(59, 130, 246, 0.35);
+}
+
+.btn-secondary {
+  background-color: var(--button-secondary-bg);
+  border: 1px solid var(--button-secondary-border);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.btn-secondary:hover {
+  background-color: var(--button-secondary-hover);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+/* Light mode navigation */
+.nav-link {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  background-color: var(--button-secondary-hover);
+  color: var(--text-primary);
+  border-radius: 8px;
+}
+
+/* Light mode table styles */
+table {
+  background-color: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+th {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  color: var(--text-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+td {
+  border-color: var(--divider-color);
+}
+
+tr:hover {
+  background-color: var(--card-hover);
+}
+
+/* Dark mode specific elements */
+html.dark .card {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+html.dark .card:hover {
+  background-color: var(--card-hover);
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+html.dark .btn-primary {
+  background: var(--button-primary-bg);
+  box-shadow: var(--button-primary-shadow);
+}
+
+html.dark .btn-primary:hover {
+  background: var(--button-primary-hover);
+  box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.4);
+}
+
+html.dark .btn-secondary {
+  background-color: var(--button-secondary-bg);
+  color: var(--text-primary);
+}
+
+html.dark .btn-secondary:hover {
+  background-color: var(--button-secondary-hover);
+}
+
+/* Dark mode table styles */
+html.dark table {
+  background-color: var(--card-bg);
+}
+
+html.dark th,
+html.dark td {
+  border-color: var(--border-color);
+}
+
+html.dark th {
+  background-color: var(--button-secondary-bg);
+  color: var(--text-primary);
+}
+
+html.dark tr:hover {
+  background-color: var(--card-hover);
+}
+
+/* Dark mode modal styles */
+html.dark .modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.75);
+}
+
+html.dark .modal-content {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+/* Dark mode sidebar/navigation */
+html.dark .sidebar {
+  background-color: #111827;
+  border-color: var(--border-color);
+}
+
+html.dark .nav-link {
+  color: var(--text-secondary);
+}
+
+html.dark .nav-link:hover,
+html.dark .nav-link.active {
+  background-color: var(--button-secondary-bg);
+  color: var(--text-primary);
+}
+
+/* Dark mode badges and chips */
+html.dark .badge,
+html.dark .chip {
+  background-color: var(--button-secondary-bg);
+  color: var(--text-primary);
+}
+
+/* Dark mode dropdown menus */
+html.dark .dropdown-menu {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+html.dark .dropdown-item {
+  color: var(--text-secondary);
+}
+
+html.dark .dropdown-item:hover {
+  background-color: var(--button-secondary-bg);
+  color: var(--text-primary);
+}
+
+/* Dark mode tooltips */
+html.dark .tooltip {
+  background-color: var(--card-bg);
+  color: var(--text-primary);
+  border-color: var(--card-border);
+}
+
+/* Dark mode alerts */
+html.dark .alert {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+}
+
+/* Dark mode loading indicators */
+html.dark .spinner {
+  border-color: var(--border-color);
+  border-top-color: var(--input-focus);
+}
+
+/* Light mode success/error states */
+.text-success {
+  color: var(--success-text) !important;
+}
+
+.text-danger,
+.text-error {
+  color: var(--error-text) !important;
+}
+
+.text-warning {
+  color: var(--warning-text) !important;
+}
+
+.text-info {
+  color: var(--info-text) !important;
+}
+
+.bg-success {
+  background-color: var(--success-bg) !important;
+  border: 1px solid var(--success-border);
+  color: var(--success-text);
+}
+
+.bg-danger,
+.bg-error {
+  background-color: var(--error-bg) !important;
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
+}
+
+.bg-warning {
+  background-color: var(--warning-bg) !important;
+  border: 1px solid var(--warning-border);
+  color: var(--warning-text);
+}
+
+.bg-info {
+  background-color: var(--info-bg) !important;
+  border: 1px solid var(--info-border);
+  color: var(--info-text);
+}
+
+/* Light mode badges and status indicators */
+.badge,
+.chip {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  font-weight: 500;
+  box-shadow: var(--shadow-light);
+}
+
+.badge:hover,
+.chip:hover {
+  background: var(--button-secondary-hover);
+  transform: translateY(-1px);
+}
+
+/* Light mode dropdown menus */
+.dropdown-menu {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
+}
+
+.dropdown-item {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.dropdown-item:hover {
+  background-color: var(--button-secondary-hover);
+  color: var(--text-primary);
+  border-radius: 4px;
+}
+
+/* Light mode tooltips */
+.tooltip {
+  background-color: var(--card-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow-hover);
+  border-radius: 6px;
+}
+
+/* Light mode alerts */
+.alert {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  color: var(--text-primary);
+  border-radius: 8px;
+  box-shadow: var(--shadow-light);
+}
+
+/* Light mode loading indicators */
+.spinner {
+  border-color: var(--border-color);
+  border-top-color: var(--text-accent);
+}
+
+/* Light mode modal styles */
+.modal-backdrop {
+  background-color: rgba(15, 23, 42, 0.25);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+}
+
+/* Light mode sidebar/navigation */
+.sidebar {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-color: var(--border-color);
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+}
+
+/* Dark mode success/error states */
+html.dark .text-success {
+  color: #10b981 !important;
+}
+
+html.dark .text-danger,
+html.dark .text-error {
+  color: #ef4444 !important;
+}
+
+html.dark .text-warning {
+  color: #f59e0b !important;
+}
+
+html.dark .text-info {
+  color: #06b6d4 !important;
+}
+
+html.dark .bg-success {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+  color: #10b981;
+}
+
+html.dark .bg-danger,
+html.dark .bg-error {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  color: #ef4444;
+}
+
+html.dark .bg-warning {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  color: #f59e0b;
+}
+
+html.dark .bg-info {
+  background-color: rgba(6, 182, 212, 0.1) !important;
+  color: #06b6d4;
+}
+
+/* Dark mode print adjustments */
+@media print {
+  html.dark body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  html.dark * {
+    background: transparent !important;
+    color: black !important;
+    border-color: #ccc !important;
+  }
+}
+
+#root {
+  width: 100%;
+  margin: 0;
+}
+
+/* Print Styles */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  /* Hide everything except the print content */
+  .no-print,
+  .fixed.inset-0.bg-gray-500,
+  button,
+  header,
+  nav,
+  footer {
+    display: none !important;
+  }
+  
+  /* Show print content */
+  .print\:block {
+    display: block !important;
+  }
+  
+  /* Remove modal styling for print */
+  .fixed.inset-0 {
+    position: static !important;
+  }
+  
+  .inline-block {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  
+  /* Ensure proper page breaks */
+  .page-break-before {
+    page-break-before: always;
+  }
+  
+  .page-break-after {
+    page-break-after: always;
+  }
+  
+  .page-break-avoid {
+    page-break-inside: avoid;
+  }
+}

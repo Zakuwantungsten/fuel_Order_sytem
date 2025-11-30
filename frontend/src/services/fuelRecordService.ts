@@ -1,0 +1,498 @@
+import { DeliveryOrder, FuelRecord } from '../types';
+import FuelConfigService from './fuelConfigService';
+
+/**
+ * Fuel Record Service
+ * Handles all automatic fuel record calculations and LPO generation
+ */
+
+interface FuelAllocation {
+  tangaYard?: number;
+  darYard?: number;
+  darGoing?: number;
+  moroGoing?: number;
+  mbeyaGoing?: number;
+  tdmGoing?: number;
+  zambiaGoing?: number;
+  congoFuel?: number;
+  zambiaReturn?: number;
+  tundumaReturn?: number;
+  mbeyaReturn?: number;
+  moroReturn?: number;
+  darReturn?: number;
+  tangaReturn?: number;
+}
+
+interface LPOToGenerate {
+  station: string;
+  truckNo: string;
+  doNo: string;
+  liters: number;
+  destination: string;
+  checkpoint: string;
+}
+
+/**
+ * Determine extra fuel allocation based on truck batch
+ */
+export function calculateExtraFuel(truckNo: string): number {
+  return FuelConfigService.getExtraFuel(truckNo);
+}
+
+/**
+ * Extract month name with year from date string (e.g., "2025-11-29" -> "November 2025")
+ */
+export function extractMonthFromDate(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      throw new Error('Invalid date');
+    }
+    
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    return `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+  } catch (error) {
+    // Fallback to current month
+    const now = new Date();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  }
+}
+
+/**
+ * Determine journey start location from DO data
+ */
+export function determineJourneyStart(deliveryOrder: DeliveryOrder): 'TANGA' | 'DAR' {
+  // Analyze loading point or start location
+  const loadingPoint = deliveryOrder.loadingPoint?.toLowerCase() || '';
+  
+  if (loadingPoint.includes('tanga')) {
+    return 'TANGA';
+  }
+  
+  // Default to DAR for most cases
+  return 'DAR';
+}
+
+/**
+ * Determine if truck is going to Mombasa based on destination
+ */
+export function isDestinationMombasa(destination: string): boolean {
+  return destination?.toLowerCase().includes('mombasa') || false;
+}
+
+/**
+ * Calculate fuel allocations for a going journey (IMPORT)
+ */
+export function calculateGoingFuelAllocations(
+  deliveryOrder: DeliveryOrder,
+  extra: number,
+  totalLiters: number,
+  loadingPoint: 'DAR_YARD' | 'KISARAWE' | 'DAR_STATION'
+): FuelAllocation {
+  const config = FuelConfigService.loadConfig();
+  const allocations: FuelAllocation = {};
+  const destination = deliveryOrder.destination?.toUpperCase() || '';
+  const start = determineJourneyStart(deliveryOrder);
+  
+  // Step 1: Handle start location
+  if (start === 'TANGA') {
+    allocations.tangaYard = config.standardAllocations.tangaYardToDar;
+  }
+  
+  // Step 2: Handle Dar loading
+  if (loadingPoint === 'DAR_YARD') {
+    allocations.darYard = config.standardAllocations.darYardStandard;
+  } else if (loadingPoint === 'KISARAWE') {
+    allocations.darYard = config.standardAllocations.darYardKisarawe;
+  } else if (loadingPoint === 'DAR_STATION') {
+    // Fuel purchased at station in Dar (not yard)
+    // This will need an LPO
+    allocations.darGoing = totalLiters; // Custom amount given
+  }
+  
+  // Step 3: Calculate Mbeya Going
+  if (loadingPoint === 'DAR_STATION') {
+    // Subtract 550 from what was given, then add 450
+    const remaining = totalLiters - 550;
+    allocations.mbeyaGoing = remaining + config.standardAllocations.mbeyaGoing;
+  } else {
+    // If got fuel at yard (550 or 580), just give 450 at Mbeya
+    allocations.mbeyaGoing = config.standardAllocations.mbeyaGoing;
+  }
+  
+  // Step 4: Calculate Zambia Going (or Congo for special destinations)
+  const totalFuelSoFar = totalLiters + extra;
+  
+  // Check for special destinations
+  if (destination.includes('LUSAKA')) {
+    allocations.zambiaGoing = config.specialDestinations.lusaka;
+  } else if (destination.includes('LUBUMBASHI') || destination.includes('LUBUMBASH')) {
+    allocations.zambiaGoing = config.specialDestinations.lubumbashi;
+  } else {
+    // Standard calculation: (totalLiters + extra) - 900
+    allocations.zambiaGoing = totalFuelSoFar - 900;
+  }
+  
+  return allocations;
+}
+
+/**
+ * Calculate fuel allocations for a return journey (EXPORT)
+ */
+export function calculateReturnFuelAllocations(
+  deliveryOrder: DeliveryOrder
+): FuelAllocation {
+  const config = FuelConfigService.loadConfig();
+  const allocations: FuelAllocation = {};
+  const destination = deliveryOrder.destination?.toUpperCase() || '';
+  
+  // Step 1: Zambia Return - 400 liters total (split between 2 stations)
+  // Note: This will generate 2 separate LPOs
+  allocations.zambiaReturn = config.zambiaReturnStations.total;
+  
+  // Step 2: Tunduma Return
+  allocations.tundumaReturn = config.standardAllocations.tundumaReturn;
+  
+  // Step 3: Mbeya Return
+  allocations.mbeyaReturn = config.standardAllocations.mbeyaReturn;
+  
+  // Step 4: Check if destination is Mombasa
+  if (isDestinationMombasa(destination)) {
+    allocations.moroReturn = config.standardAllocations.moroReturnToMombasa;
+    allocations.tangaReturn = config.standardAllocations.tangaReturnToMombasa;
+  }
+  
+  // Step 5: Handle any Dar Return scenarios (if applicable)
+  // This can be filled in based on specific conditions
+  
+  return allocations;
+}
+
+/**
+ * Calculate total balance
+ */
+export function calculateBalance(
+  totalLiters: number,
+  extra: number,
+  allocations: FuelAllocation
+): number {
+  const totalFuel = totalLiters + (extra || 0);
+  
+  const totalAllocations = Math.abs(
+    (allocations.tangaYard || 0) +
+    (allocations.darYard || 0) +
+    (allocations.darGoing || 0) +
+    (allocations.moroGoing || 0) +
+    (allocations.mbeyaGoing || 0) +
+    (allocations.tdmGoing || 0) +
+    (allocations.zambiaGoing || 0) +
+    (allocations.congoFuel || 0) +
+    (allocations.zambiaReturn || 0) +
+    (allocations.tundumaReturn || 0) +
+    (allocations.mbeyaReturn || 0) +
+    (allocations.moroReturn || 0) +
+    (allocations.darReturn || 0) +
+    (allocations.tangaReturn || 0)
+  );
+  
+  // In the CSV, allocations are negative, so balance = total - allocations
+  return totalFuel - totalAllocations;
+}
+
+/**
+ * Determine which LPOs need to be generated for fuel allocations
+ * Company fuel from yards does NOT generate LPOs
+ */
+export function determineLPOsToGenerate(
+  deliveryOrder: DeliveryOrder,
+  allocations: FuelAllocation,
+  isReturnJourney: boolean
+): LPOToGenerate[] {
+  const lpos: LPOToGenerate[] = [];
+  const truckNo = deliveryOrder.truckNo;
+  const doNo = deliveryOrder.doNumber;
+  const destination = deliveryOrder.destination || '';
+  
+  // Dar Going - fuel purchased at station (not yard)
+  if (allocations.darGoing && allocations.darGoing > 0) {
+    lpos.push({
+      station: 'DAR_STATION', // Will need to be specified
+      truckNo,
+      doNo,
+      liters: allocations.darGoing,
+      destination,
+      checkpoint: 'Dar Going'
+    });
+  }
+  
+  // Return journey LPOs
+  if (isReturnJourney) {
+    const config = FuelConfigService.loadConfig();
+    
+    // Zambia Return - 2 separate LPOs
+    if (allocations.zambiaReturn && allocations.zambiaReturn > 0) {
+      lpos.push({
+        station: config.zambiaReturnStations.lakeNdola.name,
+        truckNo,
+        doNo,
+        liters: config.zambiaReturnStations.lakeNdola.liters,
+        destination,
+        checkpoint: 'Zambia Return'
+      });
+      
+      lpos.push({
+        station: config.zambiaReturnStations.lakeKapiri.name,
+        truckNo,
+        doNo,
+        liters: config.zambiaReturnStations.lakeKapiri.liters,
+        destination,
+        checkpoint: 'Zambia Return'
+      });
+    }
+    
+    // Tunduma Return
+    if (allocations.tundumaReturn && allocations.tundumaReturn > 0) {
+      lpos.push({
+        station: 'TUNDUMA_STATION', // Station name needed
+        truckNo,
+        doNo,
+        liters: allocations.tundumaReturn,
+        destination,
+        checkpoint: 'Tunduma Return'
+      });
+    }
+    
+    // Mbeya Return
+    if (allocations.mbeyaReturn && allocations.mbeyaReturn > 0) {
+      lpos.push({
+        station: 'MBEYA_STATION', // Station name needed
+        truckNo,
+        doNo,
+        liters: allocations.mbeyaReturn,
+        destination,
+        checkpoint: 'Mbeya Return'
+      });
+    }
+    
+    // Moro Return (for Mombasa destinations)
+    if (allocations.moroReturn && allocations.moroReturn > 0) {
+      lpos.push({
+        station: 'MORO_STATION', // Station name needed
+        truckNo,
+        doNo,
+        liters: allocations.moroReturn,
+        destination,
+        checkpoint: 'Moro Return'
+      });
+    }
+    
+    // Tanga Return (for Mombasa destinations)
+    if (allocations.tangaReturn && allocations.tangaReturn > 0) {
+      lpos.push({
+        station: 'TANGA_STATION', // Station name needed
+        truckNo,
+        doNo,
+        liters: allocations.tangaReturn,
+        destination,
+        checkpoint: 'Tanga Return'
+      });
+    }
+    
+    // Dar Return (if applicable)
+    if (allocations.darReturn && allocations.darReturn > 0) {
+      lpos.push({
+        station: 'DAR_STATION', // Station name needed
+        truckNo,
+        doNo,
+        liters: allocations.darReturn,
+        destination,
+        checkpoint: 'Dar Return'
+      });
+    }
+  }
+  
+  return lpos;
+}
+
+/**
+ * Main function to create a fuel record from a delivery order
+ * Note: Checkpoint fields remain at 0 until actual fuel orders (LPOs) are created
+ * @param deliveryOrder - The delivery order to create fuel record from
+ * @param loadingPoint - Loading point (reserved for future use when implementing yard fuel tracking)
+ * @param totalLiters - Total liters allocated based on destination
+ */
+export function createFuelRecordFromDO(
+  deliveryOrder: DeliveryOrder,
+  _loadingPoint: 'DAR_YARD' | 'KISARAWE' | 'DAR_STATION' = 'DAR_YARD',
+  totalLiters: number = 2200
+): { fuelRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[] } {
+  const isImport = deliveryOrder.importOrExport === 'IMPORT';
+  const extra = calculateExtraFuel(deliveryOrder.truckNo);
+  const start = determineJourneyStart(deliveryOrder);
+  
+  // Note: _loadingPoint parameter preserved for future yard fuel tracking implementation
+  
+  if (isImport) {
+    // Going journey - create new fuel record with EMPTY checkpoints
+    // Checkpoints will be filled when LPOs are actually created and fulfilled
+    const month = extractMonthFromDate(deliveryOrder.date);
+    
+    const fuelRecord: Partial<FuelRecord> = {
+      date: deliveryOrder.date,
+      month: month,
+      truckNo: deliveryOrder.truckNo,
+      goingDo: deliveryOrder.doNumber,
+      start: start,
+      from: start,
+      to: deliveryOrder.destination,
+      totalLts: totalLiters,
+      extra: extra || 0,
+      // ALL checkpoint fields start at 0 - they get filled when fuel orders are made
+      tangaYard: 0,
+      darYard: 0,
+      darGoing: 0,
+      moroGoing: 0,
+      mbeyaGoing: 0,
+      tdmGoing: 0,
+      zambiaGoing: 0,
+      congoFuel: 0,
+      zambiaReturn: 0,
+      tundumaReturn: 0,
+      mbeyaReturn: 0,
+      moroReturn: 0,
+      darReturn: 0,
+      tangaReturn: 0,
+      balance: totalLiters + extra, // Initial balance is totalLts + extra
+    };
+    
+    // Don't generate any LPOs automatically - they will be created manually as needed
+    const lposToGenerate: LPOToGenerate[] = [];
+    
+    return { fuelRecord, lposToGenerate };
+  } else {
+    // Return journey - will update existing record
+    // This is handled separately in updateFuelRecordWithReturnDO
+    return { fuelRecord: {}, lposToGenerate: [] };
+  }
+}
+
+/**
+ * Update existing fuel record with return DO information
+ * IMPORTANT: Stores original going journey from/to before changing them for return
+ */
+export function updateFuelRecordWithReturnDO(
+  existingRecord: FuelRecord,
+  returnDeliveryOrder: DeliveryOrder
+): { updatedRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[] } {
+  const returnAllocations = calculateReturnFuelAllocations(returnDeliveryOrder);
+  
+  // IMPORTANT: Store the original going journey from/to BEFORE we change them
+  // This is critical for LPO creation when the truck is still going
+  // The originalGoingFrom and originalGoingTo preserve the original going journey details
+  const originalGoingFrom = existingRecord.originalGoingFrom || existingRecord.from;
+  const originalGoingTo = existingRecord.originalGoingTo || existingRecord.to;
+  
+  // Update the from and to fields based on return journey
+  const updatedRecord: Partial<FuelRecord> = {
+    ...existingRecord,
+    returnDo: returnDeliveryOrder.doNumber,
+    // Store original going journey locations if not already stored
+    originalGoingFrom: originalGoingFrom,
+    originalGoingTo: originalGoingTo,
+    // Now update from/to for the current journey state (returning)
+    from: existingRecord.to, // Return journey reverses the route
+    to: existingRecord.start, // Back to start location
+    zambiaReturn: returnAllocations.zambiaReturn ? -returnAllocations.zambiaReturn : undefined,
+    tundumaReturn: returnAllocations.tundumaReturn ? -returnAllocations.tundumaReturn : undefined,
+    mbeyaReturn: returnAllocations.mbeyaReturn ? -returnAllocations.mbeyaReturn : undefined,
+    moroReturn: returnAllocations.moroReturn ? -returnAllocations.moroReturn : undefined,
+    darReturn: returnAllocations.darReturn ? -returnAllocations.darReturn : undefined,
+    tangaReturn: returnAllocations.tangaReturn ? -returnAllocations.tangaReturn : undefined,
+  };
+  
+  // Recalculate balance with return journey allocations
+  const allAllocations: FuelAllocation = {
+    tangaYard: existingRecord.tangaYard,
+    darYard: existingRecord.darYard,
+    darGoing: existingRecord.darGoing,
+    moroGoing: existingRecord.moroGoing,
+    mbeyaGoing: existingRecord.mbeyaGoing,
+    tdmGoing: existingRecord.tdmGoing,
+    zambiaGoing: existingRecord.zambiaGoing,
+    congoFuel: existingRecord.congoFuel,
+    ...returnAllocations,
+  };
+  
+  updatedRecord.balance = calculateBalance(
+    existingRecord.totalLts,
+    existingRecord.extra || 0,
+    allAllocations
+  );
+  
+  const lposToGenerate = determineLPOsToGenerate(returnDeliveryOrder, returnAllocations, true);
+  
+  return { updatedRecord, lposToGenerate };
+}
+
+/**
+ * Get the actual going destination for a fuel record
+ * Uses originalGoingTo if available (when EXPORT DO has changed the from/to),
+ * otherwise uses the current 'to' field
+ */
+export function getGoingDestination(fuelRecord: FuelRecord): string {
+  return fuelRecord.originalGoingTo || fuelRecord.to;
+}
+
+/**
+ * Get the actual going origin for a fuel record
+ * Uses originalGoingFrom if available (when EXPORT DO has changed the from/to),
+ * otherwise uses the current 'from' field
+ */
+export function getGoingOrigin(fuelRecord: FuelRecord): string {
+  return fuelRecord.originalGoingFrom || fuelRecord.from;
+}
+
+/**
+ * Determine if a truck is currently on its going journey or returning
+ * A truck is "going" if it doesn't have a returnDo yet
+ */
+export function isTruckGoingJourney(fuelRecord: FuelRecord): boolean {
+  return !fuelRecord.returnDo;
+}
+
+/**
+ * Find existing fuel record for a truck that needs a return DO update
+ */
+export function findMatchingGoingRecord(
+  truckNo: string,
+  allRecords: FuelRecord[]
+): FuelRecord | null {
+  // Find the most recent record for this truck that doesn't have a return DO yet
+  const matchingRecords = allRecords
+    .filter(record => record.truckNo === truckNo && !record.returnDo)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  
+  return matchingRecords[0] || null;
+}
+
+export default {
+  calculateExtraFuel,
+  extractMonthFromDate,
+  determineJourneyStart,
+  calculateGoingFuelAllocations,
+  calculateReturnFuelAllocations,
+  calculateBalance,
+  determineLPOsToGenerate,
+  createFuelRecordFromDO,
+  updateFuelRecordWithReturnDO,
+  findMatchingGoingRecord,
+  getGoingDestination,
+  getGoingOrigin,
+  isTruckGoingJourney,
+};

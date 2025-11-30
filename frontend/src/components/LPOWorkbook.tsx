@@ -1,0 +1,409 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, X, Download, Save, FileSpreadsheet, Trash2, Edit2, Copy } from 'lucide-react';
+import type { LPOWorkbook, LPOSummary } from '../types';
+import { lpoWorkbookAPI, lpoDocumentsAPI } from '../services/api';
+import LPOSheetView from './LPOSheetView';
+
+interface LPOWorkbookProps {
+  workbookId?: string | number; // Can be year number or ID
+  onClose?: () => void;
+  initialLpoNo?: string; // LPO number to open by default
+}
+
+const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialLpoNo }) => {
+  const [workbook, setWorkbook] = useState<LPOWorkbook | null>(null);
+  const [activeSheetId, setActiveSheetId] = useState<string | number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isRenaming, setIsRenaming] = useState<string | number | null>(null);
+  const [newSheetName, setNewSheetName] = useState('');
+  const [workbookName, setWorkbookName] = useState('');
+  const [isRenamingWorkbook, setIsRenamingWorkbook] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    if (workbookId) {
+      fetchWorkbook(workbookId);
+    } else {
+      // Use current year
+      fetchWorkbook(new Date().getFullYear());
+    }
+  }, [workbookId]);
+
+  const fetchWorkbook = async (idOrYear: string | number) => {
+    try {
+      setLoading(true);
+      // Determine if it's a year (4-digit number) or an ID
+      const year = typeof idOrYear === 'number' && idOrYear >= 2000 && idOrYear <= 2100 
+        ? idOrYear 
+        : new Date().getFullYear();
+      
+      const data = await lpoWorkbookAPI.getByYear(year);
+      setWorkbook(data);
+      setWorkbookName(data.name);
+      if (data.sheets && data.sheets.length > 0) {
+        // If initialLpoNo is provided, find and select that sheet
+        if (initialLpoNo) {
+          const targetSheet = data.sheets.find(sheet => sheet.lpoNo === initialLpoNo);
+          if (targetSheet && targetSheet.id) {
+            setActiveSheetId(targetSheet.id);
+          } else {
+            setActiveSheetId(data.sheets[0].id!);
+          }
+        } else {
+          setActiveSheetId(data.sheets[0].id!);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching workbook:', error);
+      // If not found, show empty state
+      setWorkbook(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateNextLPONumber = async (): Promise<string> => {
+    try {
+      return await lpoDocumentsAPI.getNextLpoNumber();
+    } catch (error) {
+      if (!workbook || !workbook.sheets || workbook.sheets.length === 0) {
+        return '2444';
+      }
+      
+      const numbers = workbook.sheets
+        .map(sheet => parseInt(sheet.lpoNo))
+        .filter(num => !isNaN(num))
+        .sort((a, b) => b - a);
+      
+      return numbers.length > 0 ? (numbers[0] + 1).toString() : '2444';
+    }
+  };
+
+  const handleAddSheet = async () => {
+    if (!workbook) return;
+    
+    try {
+      const nextLpoNo = await generateNextLPONumber();
+      // Create new LPO document - this automatically adds it to the correct year's workbook
+      const newSheet = await lpoDocumentsAPI.create({
+        lpoNo: nextLpoNo,
+        date: new Date().toISOString().split('T')[0],
+        station: 'CASH',
+        orderOf: 'TAHMEED',
+        entries: [{
+          doNo: 'NIL',
+          truckNo: 'T 000 AAA',
+          liters: 0,
+          rate: 1.2,
+          amount: 0,
+          dest: 'NIL'
+        }],
+        total: 0
+      });
+
+      setWorkbook(prev => prev ? {
+        ...prev,
+        sheets: [...(prev.sheets || []), newSheet as any]
+      } : null);
+      
+      setActiveSheetId(newSheet.id!);
+    } catch (error: any) {
+      console.error('Error adding sheet:', error);
+      alert('Error creating new LPO sheet. Please try again.');
+    }
+  };
+
+  const handleDeleteSheet = async (sheetId: string | number) => {
+    if (!workbook || !workbook.sheets || workbook.sheets.length <= 1) {
+      alert('Cannot delete the last sheet in the workbook');
+      return;
+    }
+    
+    if (window.confirm('Are you sure you want to delete this LPO sheet? This will also revert the fuel records.')) {
+      try {
+        await lpoDocumentsAPI.delete(sheetId);
+        
+        const updatedSheets = workbook.sheets.filter(sheet => sheet.id !== sheetId);
+        setWorkbook(prev => prev ? { ...prev, sheets: updatedSheets } : null);
+        
+        if (activeSheetId === sheetId) {
+          setActiveSheetId(updatedSheets[0]?.id || null);
+        }
+      } catch (error) {
+        console.error('Error deleting sheet:', error);
+        alert('Error deleting LPO sheet. Please try again.');
+      }
+    }
+  };
+
+  const handleRenameSheet = async (sheetId: string | number, newName: string) => {
+    if (!workbook) return;
+    
+    try {
+      const updatedSheet = await lpoDocumentsAPI.update(sheetId, {
+        lpoNo: newName
+      });
+      
+      setWorkbook(prev => prev ? {
+        ...prev,
+        sheets: (prev.sheets || []).map(sheet => 
+          sheet.id === sheetId ? { ...sheet, ...updatedSheet } : sheet
+        )
+      } : null);
+      
+      setIsRenaming(null);
+    } catch (error) {
+      console.error('Error renaming sheet:', error);
+      alert('Error renaming LPO sheet. Please try again.');
+    }
+  };
+
+  const handleDuplicateSheet = async (sourceSheet: LPOSummary) => {
+    if (!workbook) return;
+    
+    try {
+      const nextLpoNo = await generateNextLPONumber();
+      const newSheet = await lpoDocumentsAPI.create({
+        lpoNo: nextLpoNo,
+        date: sourceSheet.date,
+        station: sourceSheet.station,
+        orderOf: sourceSheet.orderOf,
+        entries: sourceSheet.entries.map(entry => ({ ...entry, id: undefined })),
+        total: sourceSheet.total
+      });
+
+      setWorkbook(prev => prev ? {
+        ...prev,
+        sheets: [...(prev.sheets || []), newSheet as any]
+      } : null);
+      
+      setActiveSheetId(newSheet.id!);
+    } catch (error) {
+      console.error('Error duplicating sheet:', error);
+      alert('Error duplicating LPO sheet. Please try again.');
+    }
+  };
+
+  const handleSaveWorkbook = async () => {
+    // In the new model, workbooks are auto-managed by year
+    // Individual sheets are saved automatically
+    setIsRenamingWorkbook(false);
+    alert('All changes are saved automatically!');
+  };
+
+  const handleExportWorkbook = async () => {
+    if (!workbook) return;
+    
+    try {
+      setExporting(true);
+      await lpoWorkbookAPI.exportWorkbook(workbook.year);
+      alert(`✓ Workbook LPOS_${workbook.year}.xlsx downloaded successfully!`);
+    } catch (error) {
+      console.error('Error exporting workbook:', error);
+      alert('Error exporting workbook. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const getActiveSheet = (): LPOSummary | null => {
+    if (!workbook || !activeSheetId || !workbook.sheets) return null;
+    return workbook.sheets.find(sheet => sheet.id === activeSheetId) || null;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading workbook...</div>
+      </div>
+    );
+  }
+
+  if (!workbook) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-500">Failed to load workbook</div>
+      </div>
+    );
+  }
+
+  const activeSheet = getActiveSheet();
+
+  return (
+    <div className="h-full flex flex-col bg-white">
+      {/* Workbook Header */}
+      <div className="border-b bg-gray-50 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <FileSpreadsheet className="w-6 h-6 text-green-600" />
+            {isRenamingWorkbook ? (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={workbookName}
+                  onChange={(e) => setWorkbookName(e.target.value)}
+                  className="px-2 py-1 border rounded text-lg font-semibold"
+                  autoFocus
+                  onBlur={() => setIsRenamingWorkbook(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveWorkbook();
+                    if (e.key === 'Escape') setIsRenamingWorkbook(false);
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-semibold text-gray-900">{workbook.name}</h1>
+                <button
+                  onClick={() => setIsRenamingWorkbook(true)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleSaveWorkbook}
+              className="flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              <Save className="w-4 h-4 mr-1" />
+              Save
+            </button>
+            <button
+              onClick={handleExportWorkbook}
+              disabled={exporting}
+              className={`flex items-center px-3 py-1 text-white rounded ${
+                exporting 
+                  ? 'bg-green-400 cursor-not-allowed' 
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
+            >
+              <Download className="w-4 h-4 mr-1" />
+              {exporting ? 'Exporting...' : 'Export'}
+            </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="p-2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Sheet Tabs */}
+      <div className="border-b bg-gray-100">
+        <div className="flex items-center overflow-x-auto">
+          {(workbook.sheets || []).map((sheet) => (
+            <div key={sheet.id} className="flex items-center">
+              <button
+                onClick={() => setActiveSheetId(sheet.id!)}
+                className={`px-4 py-2 text-sm font-medium border-r border-gray-300 whitespace-nowrap ${
+                  activeSheetId === sheet.id
+                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                {isRenaming === sheet.id ? (
+                  <input
+                    type="text"
+                    value={newSheetName}
+                    onChange={(e) => setNewSheetName(e.target.value)}
+                    onBlur={() => setIsRenaming(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleRenameSheet(sheet.id!, newSheetName);
+                      }
+                      if (e.key === 'Escape') {
+                        setIsRenaming(null);
+                      }
+                    }}
+                    className="w-20 px-1 py-0 text-sm border rounded"
+                    autoFocus
+                  />
+                ) : (
+                  <span>LPO {sheet.lpoNo}</span>
+                )}
+              </button>
+              
+              {activeSheetId === sheet.id && (
+                <div className="flex items-center ml-1">
+                  <button
+                    onClick={() => {
+                      setIsRenaming(sheet.id!);
+                      setNewSheetName(sheet.lpoNo);
+                    }}
+                    className="p-1 text-gray-400 hover:text-gray-600"
+                    title="Rename"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => handleDuplicateSheet(sheet)}
+                    className="p-1 text-gray-400 hover:text-gray-600"
+                    title="Duplicate"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSheet(sheet.id!)}
+                    className="p-1 text-gray-400 hover:text-red-600"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          
+          <button
+            onClick={handleAddSheet}
+            className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add Sheet
+          </button>
+        </div>
+      </div>
+
+      {/* Sheet Content */}
+      <div className="flex-1 overflow-hidden">
+        {activeSheet ? (
+          <LPOSheetView
+            sheet={activeSheet}
+            workbookId={workbook.id!}
+            onUpdate={(updatedSheet) => {
+              setWorkbook(prev => prev ? {
+                ...prev,
+                sheets: (prev.sheets || []).map(sheet => 
+                  sheet.id === updatedSheet.id ? updatedSheet : sheet
+                )
+              } : null);
+            }}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="text-center">
+              <FileSpreadsheet className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p>No sheet selected</p>
+              <button
+                onClick={handleAddSheet}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Add First Sheet
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default LPOWorkbook;

@@ -1,0 +1,637 @@
+import { useState, useEffect } from 'react';
+import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel } from 'lucide-react';
+import { LPOEntry } from '../types';
+import * as XLSX from 'xlsx';
+
+interface LPOSummaryProps {
+  lpoEntries: LPOEntry[];
+  selectedStations?: string[];
+  dateFrom?: string;
+  dateTo?: string;
+  onFiltersChange?: (filters: { stations: string[]; dateFrom: string; dateTo: string }) => void;
+}
+
+interface MonthlySummaryData {
+  month: string;
+  totalLPOs: number;
+  totalLiters: number;
+  totalAmount: number;
+  avgPricePerLiter: number;
+  byStation: Record<string, {
+    lpos: number;
+    liters: number;
+    amount: number;
+  }>;
+  byDestination: Record<string, number>;
+  entries: LPOEntry[];
+}
+
+const LPOSummary = ({ 
+  lpoEntries, 
+  selectedStations = [], 
+  dateFrom = '', 
+  dateTo = '', 
+  onFiltersChange 
+}: LPOSummaryProps) => {
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const [summary, setSummary] = useState<MonthlySummaryData | null>(null);
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [availableYears, setAvailableYears] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
+  const [localSelectedStations, setLocalSelectedStations] = useState<string[]>(selectedStations);
+  const [localDateFrom, setLocalDateFrom] = useState<string>(dateFrom);
+  const [localDateTo, setLocalDateTo] = useState<string>(dateTo);
+  const [availableStations, setAvailableStations] = useState<string[]>([]);
+
+  // Get current month name
+  const getCurrentMonth = () => {
+    return new Date().toLocaleDateString('en-US', { month: 'short' });
+  };
+
+  useEffect(() => {
+    if (lpoEntries.length > 0) {
+      // Extract unique months, years, and stations from LPO entries
+      const months = new Set<string>();
+      const years = new Set<string>();
+      const stations = new Set<string>();
+      
+      lpoEntries.forEach(entry => {
+        // Extract month from date format like "3-Oct", "15-Nov"
+        const parts = entry.date.split('-');
+        if (parts.length > 1) {
+          months.add(parts[1]); // "Oct", "Nov", etc.
+          // For year, we'll use the selectedYear or extract from full date if available
+          years.add(selectedYear);
+        }
+        stations.add(entry.dieselAt);
+      });
+      
+      const monthsArray = Array.from(months).sort((a, b) => {
+        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return monthOrder.indexOf(a) - monthOrder.indexOf(b);
+      });
+      
+      setAvailableMonths(monthsArray);
+      setAvailableYears(Array.from(years).sort());
+      setAvailableStations(Array.from(stations).sort());
+      
+      // Set default to current month if available, otherwise first month
+      const currentMonth = getCurrentMonth();
+      if (monthsArray.includes(currentMonth) && !selectedMonth) {
+        setSelectedMonth(currentMonth);
+      } else if (monthsArray.length > 0 && !selectedMonth) {
+        setSelectedMonth(monthsArray[monthsArray.length - 1]); // Latest month
+      }
+    }
+  }, [lpoEntries, selectedYear]);
+
+  // Notify parent of filter changes
+  useEffect(() => {
+    if (onFiltersChange) {
+      onFiltersChange({
+        stations: localSelectedStations,
+        dateFrom: localDateFrom,
+        dateTo: localDateTo
+      });
+    }
+  }, [localSelectedStations, localDateFrom, localDateTo, onFiltersChange]);
+
+  useEffect(() => {
+    if (selectedMonth && lpoEntries.length > 0) {
+      calculateMonthlySummary();
+    }
+  }, [selectedMonth, selectedYear, lpoEntries, localSelectedStations, localDateFrom, localDateTo]);
+
+  const calculateMonthlySummary = () => {
+    let filteredEntries = lpoEntries;
+
+    // Apply month filter
+    if (selectedMonth) {
+      filteredEntries = filteredEntries.filter(entry => entry.date.includes(selectedMonth));
+    }
+
+    // Apply station filter
+    if (localSelectedStations.length > 0) {
+      filteredEntries = filteredEntries.filter(entry => 
+        localSelectedStations.includes(entry.dieselAt)
+      );
+    }
+
+    // Apply date range filter (convert date format for comparison)
+    if (localDateFrom || localDateTo) {
+      filteredEntries = filteredEntries.filter(entry => {
+        // Convert "3-Oct" format to a comparable date
+        const parts = entry.date.split('-');
+        if (parts.length === 2) {
+          const day = parseInt(parts[0]);
+          const monthName = parts[1];
+          const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const monthIndex = monthOrder.indexOf(monthName);
+          
+          if (monthIndex !== -1) {
+            // Construct date string for comparison (assuming current year)
+            const entryDate = new Date(parseInt(selectedYear), monthIndex, day);
+            const fromDate = localDateFrom ? new Date(localDateFrom) : null;
+            const toDate = localDateTo ? new Date(localDateTo) : null;
+            
+            if (fromDate && entryDate < fromDate) return false;
+            if (toDate && entryDate > toDate) return false;
+          }
+        }
+        return true;
+      });
+    }
+    
+    const totalLiters = filteredEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
+    const totalAmount = filteredEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
+    const avgPricePerLiter = totalLiters > 0 ? totalAmount / totalLiters : 0;
+
+    // Group by station
+    const byStation: Record<string, { lpos: number; liters: number; amount: number; }> = {};
+    filteredEntries.forEach(entry => {
+      if (!byStation[entry.dieselAt]) {
+        byStation[entry.dieselAt] = { lpos: 0, liters: 0, amount: 0 };
+      }
+      byStation[entry.dieselAt].lpos += 1;
+      byStation[entry.dieselAt].liters += entry.ltrs;
+      byStation[entry.dieselAt].amount += (entry.ltrs * entry.pricePerLtr);
+    });
+
+    // Group by destination
+    const byDestination: Record<string, number> = {};
+    filteredEntries.forEach(entry => {
+      if (!byDestination[entry.destinations]) {
+        byDestination[entry.destinations] = 0;
+      }
+      byDestination[entry.destinations] += 1;
+    });
+
+    setSummary({
+      month: selectedMonth,
+      totalLPOs: filteredEntries.length,
+      totalLiters,
+      totalAmount,
+      avgPricePerLiter,
+      byStation,
+      byDestination,
+      entries: filteredEntries
+    });
+  };
+
+  const handleExportMonth = () => {
+    if (!summary) return;
+
+    const exportData = summary.entries.map((entry, index) => ({
+      'S/N': index + 1,
+      'Date': entry.date,
+      'LPO No.': entry.lpoNo,
+      'Diesel At': entry.dieselAt,
+      'DO/SDO': entry.doSdo,
+      'Truck No.': entry.truckNo,
+      'Liters': entry.ltrs,
+      'Price per Liter': entry.pricePerLtr,
+      'Total Amount': entry.ltrs * entry.pricePerLtr,
+      'Destinations': entry.destinations
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${selectedMonth}_${selectedYear}`);
+    XLSX.writeFile(wb, `LPO_Summary_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
+  const handleExportYear = () => {
+    if (availableMonths.length === 0) return;
+
+    const wb = XLSX.utils.book_new();
+
+    // Create a sheet for each month
+    availableMonths.forEach(month => {
+      const monthEntries = lpoEntries.filter(entry => entry.date.includes(month));
+      
+      if (monthEntries.length > 0) {
+        const exportData = monthEntries.map((entry, index) => ({
+          'S/N': index + 1,
+          'Date': entry.date,
+          'LPO No.': entry.lpoNo,
+          'Diesel At': entry.dieselAt,
+          'DO/SDO': entry.doSdo,
+          'Truck No.': entry.truckNo,
+          'Liters': entry.ltrs,
+          'Price per Liter': entry.pricePerLtr,
+          'Total Amount': entry.ltrs * entry.pricePerLtr,
+          'Destinations': entry.destinations
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        XLSX.utils.book_append_sheet(wb, ws, `${month}_${selectedYear}`);
+      }
+    });
+
+    // Create summary sheet
+    const yearSummary = availableMonths.map(month => {
+      const monthEntries = lpoEntries.filter(entry => entry.date.includes(month));
+      const totalLiters = monthEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
+      const totalAmount = monthEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
+      
+      return {
+        'Month': month,
+        'Total LPOs': monthEntries.length,
+        'Total Liters': totalLiters,
+        'Total Amount (TZS)': totalAmount,
+        'Average Price/Liter': totalLiters > 0 ? (totalAmount / totalLiters).toFixed(2) : 0
+      };
+    });
+
+    const summaryWs = XLSX.utils.json_to_sheet(yearSummary);
+    XLSX.utils.book_append_sheet(wb, summaryWs, `${selectedYear}_Summary`);
+
+    XLSX.writeFile(wb, `LPO_Summary_${selectedYear}.xlsx`);
+  };
+
+  if (!summary) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        {availableMonths.length === 0 ? 'No LPO data available' : 'Select a month to view summary'}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header with Controls */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <Calendar className="w-6 h-6 text-primary-600" />
+              <h3 className="text-xl font-semibold text-gray-900">
+                LPO Summary - {summary.month} {selectedYear}
+              </h3>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Year Selector */}
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              >
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+
+              {/* Month Selector */}
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              >
+                {availableMonths.map(month => (
+                  <option key={month} value={month}>{month}</option>
+                ))}
+              </select>
+
+              {/* View Mode Toggle */}
+              <div className="flex border border-gray-300 rounded-md overflow-hidden">
+                <button
+                  onClick={() => setViewMode('summary')}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    viewMode === 'summary'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Summary
+                </button>
+                <button
+                  onClick={() => setViewMode('detailed')}
+                  className={`px-4 py-2 text-sm font-medium border-l ${
+                    viewMode === 'detailed'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Detailed
+              </button>
+            </div>
+
+              {/* Export Buttons */}
+              <button
+                onClick={handleExportMonth}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export Filtered
+              </button>
+              
+              <button
+                onClick={handleExportYear}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Export Year
+              </button>
+            </div>
+          </div>
+
+          {/* Filters Section */}
+          <div className="border-t pt-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Station Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filter by Stations ({localSelectedStations.length} selected)
+                </label>
+                <div className="max-h-32 overflow-y-auto border border-gray-300 rounded-md p-2 bg-gray-50">
+                  <label className="flex items-center mb-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={localSelectedStations.length === availableStations.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setLocalSelectedStations([...availableStations]);
+                        } else {
+                          setLocalSelectedStations([]);
+                        }
+                      }}
+                      className="mr-2"
+                    />
+                    <span className="font-medium">Select All</span>
+                  </label>
+                  {availableStations.map(station => (
+                    <label key={station} className="flex items-center mb-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={localSelectedStations.includes(station)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setLocalSelectedStations(prev => [...prev, station]);
+                          } else {
+                            setLocalSelectedStations(prev => prev.filter(s => s !== station));
+                          }
+                        }}
+                        className="mr-2"
+                      />
+                      {station}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date Range Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date Range Filter
+                </label>
+                <div className="space-y-2">
+                  <input
+                    type="date"
+                    value={localDateFrom}
+                    onChange={(e) => setLocalDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    placeholder="From Date"
+                  />
+                  <input
+                    type="date"
+                    value={localDateTo}
+                    onChange={(e) => setLocalDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    placeholder="To Date"
+                  />
+                </div>
+              </div>
+
+              {/* Filter Actions */}
+              <div className="flex flex-col justify-end space-y-2">
+                <button
+                  onClick={() => {
+                    setLocalSelectedStations([...availableStations]);
+                    setLocalDateFrom('');
+                    setLocalDateTo('');
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Clear Filters
+                </button>
+                <div className="text-sm text-gray-600">
+                  Showing {summary.totalLPOs} of {lpoEntries.filter(e => e.date.includes(selectedMonth)).length} entries
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-lg shadow">
+          <p className="text-sm text-gray-600">Total LPOs</p>
+          <p className="text-2xl font-bold text-gray-900">{summary.totalLPOs}</p>
+        </div>
+        <div className="bg-blue-50 p-4 rounded-lg shadow">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm text-blue-600">Total Liters</p>
+            <Fuel className="w-5 h-5 text-blue-400" />
+          </div>
+          <p className="text-2xl font-bold text-blue-900">{summary.totalLiters.toLocaleString()}</p>
+        </div>
+        <div className="bg-green-50 p-4 rounded-lg shadow">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm text-green-600">Total Amount</p>
+            <DollarSign className="w-5 h-5 text-green-400" />
+          </div>
+          <p className="text-2xl font-bold text-green-900">TZS {summary.totalAmount.toLocaleString()}</p>
+        </div>
+        <div className="bg-yellow-50 p-4 rounded-lg shadow">
+          <p className="text-sm text-yellow-600">Avg Price/Liter</p>
+          <p className="text-2xl font-bold text-yellow-900">TZS {summary.avgPricePerLiter.toFixed(2)}</p>
+        </div>
+      </div>
+
+      {/* Summary View */}
+      {viewMode === 'summary' && (
+        <>
+          {/* Station Summary */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 overflow-hidden transition-colors">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Summary by Station</h4>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      Station
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      LPOs
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      Total Liters
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      Total Amount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      Avg Price/Liter
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {Object.entries(summary.byStation)
+                    .sort((a, b) => b[1].amount - a[1].amount)
+                    .map(([station, data]) => (
+                      <tr key={station} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {station}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {data.lpos}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {data.liters.toLocaleString()} L
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-600 dark:text-primary-400">
+                          TZS {data.amount.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          TZS {(data.amount / data.liters).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Destination Summary */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-900">LPOs by Destination</h4>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {Object.entries(summary.byDestination)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([destination, count]) => (
+                    <div key={destination} className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm text-gray-600 truncate">{destination}</p>
+                      <p className="text-lg font-semibold text-gray-900">{count} LPOs</p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Detailed View */}
+      {viewMode === 'detailed' && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 overflow-hidden transition-colors">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Detailed LPO Entries - {summary.month} {selectedYear} ({summary.totalLPOs} entries)
+            </h4>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    S/N
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    LPO No.
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    Diesel At
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    DO/SDO
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    Truck No.
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    Liters
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    Price/Liter
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                    Destinations
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {summary.entries
+                  .sort((a, b) => a.sn - b.sn)
+                  .map((entry) => (
+                    <tr key={entry.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                        {entry.sn}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {entry.date}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {entry.lpoNo}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {entry.dieselAt}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {entry.doSdo}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {entry.truckNo}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
+                        {entry.ltrs.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
+                        TZS {entry.pricePerLtr.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-primary-600">
+                        TZS {(entry.ltrs * entry.pricePerLtr).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {entry.destinations}
+                      </td>
+                    </tr>
+                  ))}
+                {/* Month Totals */}
+                <tr className="bg-gray-50 font-semibold">
+                  <td colSpan={6} className="px-4 py-3 text-sm text-right text-gray-900">
+                    Month Total:
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
+                    {summary.totalLiters.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3"></td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-primary-600">
+                    TZS {summary.totalAmount.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default LPOSummary;

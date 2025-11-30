@@ -1,0 +1,134 @@
+import mongoose, { Schema, Document } from 'mongoose';
+import { IDeliveryOrder } from '../types';
+
+export interface IDeliveryOrderDocument extends IDeliveryOrder, Document {}
+
+const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
+  {
+    sn: {
+      type: Number,
+      required: [true, 'Serial number is required'],
+    },
+    date: {
+      type: String,
+      required: [true, 'Date is required'],
+    },
+    importOrExport: {
+      type: String,
+      enum: ['IMPORT', 'EXPORT'],
+      required: [true, 'Import/Export type is required'],
+    },
+    doType: {
+      type: String,
+      enum: ['DO', 'SDO'],
+      required: [true, 'DO type is required'],
+    },
+    doNumber: {
+      type: String,
+      required: [true, 'DO number is required'],
+      unique: true,
+      trim: true,
+    },
+    invoiceNos: {
+      type: String,
+      trim: true,
+    },
+    clientName: {
+      type: String,
+      required: [true, 'Client name is required'],
+      trim: true,
+    },
+    truckNo: {
+      type: String,
+      required: [true, 'Truck number is required'],
+      trim: true,
+    },
+    trailerNo: {
+      type: String,
+      required: [true, 'Trailer number is required'],
+      trim: true,
+    },
+    containerNo: {
+      type: String,
+      required: [true, 'Container number is required'],
+      trim: true,
+    },
+    borderEntryDRC: {
+      type: String,
+      trim: true,
+    },
+    loadingPoint: {
+      type: String,
+      required: [true, 'Loading point is required'],
+      trim: true,
+    },
+    destination: {
+      type: String,
+      required: [true, 'Destination is required'],
+      trim: true,
+    },
+    haulier: {
+      type: String,
+      trim: true,
+    },
+    driverName: {
+      type: String,
+      trim: true,
+    },
+    tonnages: {
+      type: Number,
+      required: [true, 'Tonnage is required'],
+      min: [0, 'Tonnage cannot be negative'],
+    },
+    ratePerTon: {
+      type: Number,
+      required: [true, 'Rate per ton is required'],
+      min: [0, 'Rate cannot be negative'],
+    },
+    rate: {
+      type: String,
+      trim: true,
+    },
+    cargoType: {
+      type: String,
+      trim: true,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: function (_doc: any, ret: any) {
+        ret.id = ret._id;
+        delete ret._id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+  }
+);
+
+// Indexes
+// Note: doNumber already has a unique index from schema definition
+deliveryOrderSchema.index({ truckNo: 1 });
+deliveryOrderSchema.index({ date: 1 });
+deliveryOrderSchema.index({ importOrExport: 1 });
+deliveryOrderSchema.index({ isDeleted: 1 });
+deliveryOrderSchema.index({ clientName: 1 });
+deliveryOrderSchema.index({ destination: 1 });
+
+// Compound indexes for common queries
+deliveryOrderSchema.index({ truckNo: 1, date: -1 });
+deliveryOrderSchema.index({ date: -1, importOrExport: 1 });
+
+export const DeliveryOrder = mongoose.model<IDeliveryOrderDocument>(
+  'DeliveryOrder',
+  deliveryOrderSchema
+);

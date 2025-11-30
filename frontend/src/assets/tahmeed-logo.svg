@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <!-- Orange Horse Head -->
+  <g fill="#E67E22">
+    <!-- Horse head shape -->
+    <path d="M 850 120 Q 950 100 1050 150 Q 1100 180 1100 230 Q 1100 280 1050 320 L 1000 350 L 950 380 Q 900 400 850 380 L 800 350 Q 750 320 700 280 L 650 250 L 600 230 Q 550 210 500 220 L 450 240 L 400 270 Q 350 300 300 320 L 250 330 L 200 320 Q 150 300 120 260" stroke="none"/>
+    <!-- Triangle detail on head -->
+    <path d="M 1000 210 L 1020 240 L 980 240 Z" fill="white"/>
+    <!-- Mane flowing back -->
+    <path d="M 850 120 Q 820 100 780 90 L 720 85 Q 680 80 640 90 L 580 110 Q 540 130 510 160" stroke="none"/>
+    <path d="M 820 140 Q 780 120 740 115 L 680 110 Q 640 105 600 120 L 560 140" stroke="none"/>
+    <path d="M 790 170 Q 750 150 710 145 L 660 140 Q 620 135 580 150" stroke="none"/>
+  </g>
+  
+  <!-- Black stripe across middle -->
+  <path d="M 350 250 Q 400 220 450 210 L 550 200 Q 650 195 750 210 L 850 230 Q 900 240 950 260 L 1000 290 Q 1020 310 1000 340 L 950 360 Q 900 370 850 365 L 750 350 Q 650 340 550 345 L 450 355 Q 400 360 350 355 L 300 340 Q 280 325 280 300 Z" fill="#000000" stroke="none"/>
+  
+  <!-- White stripe below black -->
+  <path d="M 280 340 Q 320 330 360 330 L 450 335 Q 550 340 650 338 L 750 335 Q 850 330 920 340 L 970 355 Q 980 365 970 380 L 920 395 Q 870 400 820 398 L 720 390 Q 620 385 520 388 L 420 395 Q 370 398 320 395 L 270 385 Q 250 375 255 360 Z" fill="#FFFFFF" stroke="none"/>
+  
+  <!-- Orange body continuation -->
+  <path d="M 255 385 Q 300 375 350 375 L 450 380 Q 550 385 650 383 L 750 380 Q 850 375 920 385 L 970 398 Q 1000 410 1020 430 L 1030 460 Q 1020 490 980 510 L 900 530 Q 800 540 700 538 L 600 535 Q 500 530 400 535 L 300 543 Q 220 548 160 540 L 100 525 Q 60 505 50 470 L 55 430 Q 70 400 100 385 Z" fill="#E67E22" stroke="none"/>
+</g>
+
+  <!-- TAHMEED Text -->
+  <text x="10" y="580" font-family="Arial Black, sans-serif" font-size="120" font-weight="900" fill="#000000" letter-spacing="8">TAHMEED</text>
+  
+  <!-- Website URL -->
+  <text x="270" y="680" font-family="Arial, sans-serif" font-size="42" fill="#000000">www.tahmeedcoach.co.ke</text>
+  
+  <!-- Orange triangles on sides -->
+  <path d="M 10 650 L 120 680 L 10 710 Z" fill="#E67E22"/>
+  <path d="M 1270 650 L 1160 680 L 1270 710 Z" fill="#E67E22"/>
+</svg>
