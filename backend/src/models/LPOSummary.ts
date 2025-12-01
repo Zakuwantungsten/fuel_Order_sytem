@@ -39,6 +39,15 @@ const lpoDetailSchema = new Schema<ILPODetail>(
       type: Number,
       default: 0,
     },
+    // Amendment tracking - stores original value if liters were changed
+    originalLiters: {
+      type: Number,
+      default: null,
+    },
+    amendedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { _id: true }
 );

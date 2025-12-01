@@ -261,15 +261,15 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 transition-colors">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <Settings className="w-6 h-6 text-indigo-600" />
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <Settings className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
                 Admin Dashboard
               </h1>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Manage system configuration and settings
               </p>
             </div>
@@ -288,22 +288,22 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
       {/* Alerts */}
       {error && (
         <div className="max-w-7xl mx-auto px-4 mt-4">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <span className="text-red-700">{error}</span>
+          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+            <span className="text-red-700 dark:text-red-300">{error}</span>
             <button onClick={() => setError(null)} className="ml-auto">
-              <X className="w-4 h-4 text-red-600" />
+              <X className="w-4 h-4 text-red-600 dark:text-red-400" />
             </button>
           </div>
         </div>
       )}
       {success && (
         <div className="max-w-7xl mx-auto px-4 mt-4">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-            <span className="text-green-700">{success}</span>
+          <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+            <span className="text-green-700 dark:text-green-300">{success}</span>
             <button onClick={() => setSuccess(null)} className="ml-auto">
-              <X className="w-4 h-4 text-green-600" />
+              <X className="w-4 h-4 text-green-600 dark:text-green-400" />
             </button>
           </div>
         </div>
@@ -311,8 +311,8 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-4 mt-6">
-        <div className="bg-white rounded-lg shadow-sm border">
-          <div className="border-b overflow-x-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 transition-colors">
+          <div className="border-b dark:border-gray-700 overflow-x-auto">
             <nav className="flex -mb-px">
               {tabs.map(tab => {
                 const Icon = tab.icon;
@@ -322,8 +322,8 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
                     onClick={() => setActiveTab(tab.id as TabType)}
                     className={`flex items-center gap-2 px-6 py-4 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                       activeTab === tab.id
-                        ? 'border-indigo-600 text-indigo-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -463,18 +463,18 @@ function OverviewTab({ stats }: { stats: AdminStats }) {
       </div>
 
       {/* Role Distribution */}
-      <div className="bg-white rounded-lg border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-indigo-600" />
+      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 transition-colors">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
           User Role Distribution
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {stats.roleDistribution.map(role => (
-            <div key={role.role} className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-500 capitalize">
+            <div key={role.role} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
                 {role.role.replace(/_/g, ' ')}
               </p>
-              <p className="text-2xl font-bold text-gray-900">{role.count}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{role.count}</p>
             </div>
           ))}
         </div>
@@ -560,7 +560,7 @@ function StationsTab({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">Fuel Station Rates</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Fuel Station Rates</h3>
         <button
           onClick={() => setShowAdd(!showAdd)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
@@ -572,29 +572,29 @@ function StationsTab({
 
       {/* Add Station Form */}
       {showAdd && (
-        <div className="bg-gray-50 rounded-lg p-4 border">
-          <h4 className="font-medium text-gray-900 mb-3">Add New Station</h4>
+        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border dark:border-gray-600">
+          <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3">Add New Station</h4>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <input
               type="text"
               placeholder="Station ID (e.g., new_station)"
               value={newStation.id}
               onChange={e => setNewStation({ ...newStation, id: e.target.value })}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             />
             <input
               type="text"
               placeholder="Station Name"
               value={newStation.name}
               onChange={e => setNewStation({ ...newStation, name: e.target.value })}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             />
             <input
               type="text"
               placeholder="Location"
               value={newStation.location}
               onChange={e => setNewStation({ ...newStation, location: e.target.value })}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             />
             <input
               type="number"

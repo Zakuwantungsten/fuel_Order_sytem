@@ -114,19 +114,19 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Yard Fuel Dispensing</h1>
+      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Yard Fuel Dispensing</h1>
 
       {loading && (
-        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-800">
+        <div className="mb-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-blue-800 dark:text-blue-300">
           Loading...
         </div>
       )}
 
       {/* Info Banner */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
         <div className="flex items-start">
-          <AlertCircle className="w-5 h-5 text-blue-600 mr-3 mt-0.5" />
-          <div className="text-sm text-blue-800">
+          <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5" />
+          <div className="text-sm text-blue-800 dark:text-blue-300">
             <p className="font-semibold mb-1">How it works:</p>
             <ul className="list-disc list-inside space-y-1">
               <li>Search for the truck number to see if it has an active delivery order</li>
@@ -191,8 +191,8 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Entry Form */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
             <Save className="w-5 h-5 mr-2" />
             Record Fuel Dispensing
           </h2>
@@ -200,11 +200,11 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Yard</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Yard</label>
                 <select
                   value={selectedYard}
                   onChange={(e) => setSelectedYard(e.target.value as YardFuelDispense['yard'])}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 >
                   {yards.map((yard) => (
                     <option key={yard} value={yard}>
@@ -215,19 +215,19 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date</label>
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 />
               </div>
             </div>
 
             {/* Truck Search */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Search Truck Number
               </label>
               <div className="flex gap-2">
@@ -236,7 +236,7 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
                   value={truckSearchTerm}
                   onChange={(e) => setTruckSearchTerm(e.target.value.toUpperCase())}
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleTruckSearch())}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   placeholder="e.g., T699 DXY"
                 />
                 <button
@@ -253,40 +253,40 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
             {truckInfo && (
               <div className={`p-4 rounded-lg border-2 ${
                 truckInfo.hasActiveRecord 
-                  ? 'bg-green-50 border-green-300' 
-                  : 'bg-yellow-50 border-yellow-300'
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700' 
+                  : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700'
               }`}>
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="font-semibold text-gray-900">{truckInfo.truckNo}</div>
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">{truckInfo.truckNo}</div>
                     {truckInfo.hasActiveRecord ? (
                       <>
-                        <div className="text-sm text-gray-700 mt-1">
+                        <div className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                           DO: <span className="font-medium">{truckInfo.doNumber}</span>
                         </div>
-                        <div className="text-sm text-gray-700">
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
                           Destination: <span className="font-medium">{truckInfo.destination}</span>
                         </div>
-                        <div className="text-xs text-green-600 mt-2 flex items-center">
+                        <div className="text-xs text-green-600 dark:text-green-400 mt-2 flex items-center">
                           <Link2 className="w-3 h-3 mr-1" />
                           Will auto-link to fuel record
                         </div>
                       </>
                     ) : (
-                      <div className="text-sm text-yellow-700 mt-1">
+                      <div className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
                         No active DO found. Entry will be saved and linked when DO is created.
                       </div>
                     )}
                   </div>
                   {truckInfo.hasActiveRecord && (
-                    <CheckCircle className="w-6 h-6 text-green-600" />
+                    <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
                   )}
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Truck Number <span className="text-red-500">*</span>
               </label>
               <input
@@ -294,13 +294,13 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
                 required
                 value={newEntry.truckNo}
                 onChange={(e) => setNewEntry({ ...newEntry, truckNo: e.target.value.toUpperCase() })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="e.g., T699 DXY"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Fuel Amount (Liters) <span className="text-red-500">*</span>
               </label>
               <input
@@ -309,18 +309,18 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
                 min="1"
                 value={newEntry.liters || ''}
                 onChange={(e) => setNewEntry({ ...newEntry, liters: parseInt(e.target.value) || 0 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="Enter fuel amount"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes (Optional)</label>
               <textarea
                 value={newEntry.notes}
                 onChange={(e) => setNewEntry({ ...newEntry, notes: e.target.value })}
                 rows={2}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="Add any additional notes..."
               />
             </div>
@@ -336,17 +336,17 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
         </div>
 
         {/* Entries List */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Today's Entries</h2>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Today's Entries</h2>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
               <input
                 type="text"
                 placeholder="Search truck or DO..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
           </div>
@@ -357,39 +357,39 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
                 key={entry.id} 
                 className={`border-2 rounded-lg p-4 ${
                   entry.status === 'linked' 
-                    ? 'border-green-200 bg-green-50' 
+                    ? 'border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20' 
                     : entry.status === 'pending'
-                    ? 'border-yellow-200 bg-yellow-50'
-                    : 'border-gray-200 bg-white'
+                    ? 'border-yellow-200 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      entry.status === 'linked' ? 'bg-green-100' : 'bg-yellow-100'
+                      entry.status === 'linked' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30'
                     }`}>
                       <Truck className={`w-5 h-5 ${
-                        entry.status === 'linked' ? 'text-green-600' : 'text-yellow-600'
+                        entry.status === 'linked' ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'
                       }`} />
                     </div>
                     <div>
-                      <div className="font-medium text-gray-900">{entry.truckNo}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{entry.truckNo}</div>
                       {entry.linkedDONumber ? (
-                        <div className="text-sm text-gray-600 flex items-center">
+                        <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
                           <Link2 className="w-3 h-3 mr-1" />
                           DO: {entry.linkedDONumber}
                         </div>
                       ) : (
-                        <div className="text-sm text-yellow-600">Pending link</div>
+                        <div className="text-sm text-yellow-600 dark:text-yellow-400">Pending link</div>
                       )}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="flex items-center text-lg font-semibold text-gray-900">
+                    <div className="flex items-center text-lg font-semibold text-gray-900 dark:text-gray-100">
                       <Fuel className="w-4 h-4 mr-1" />
                       {entry.liters}L
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
                       {new Date(entry.timestamp).toLocaleTimeString('en-US', { 
                         hour: '2-digit', 
                         minute: '2-digit' 
@@ -398,7 +398,7 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between text-sm text-gray-600 mt-3">
+                <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mt-3">
                   <div className="flex items-center">
                     <User className="w-3 h-3 mr-1" />
                     {entry.enteredBy}
@@ -410,13 +410,13 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
                 </div>
 
                 {entry.notes && (
-                  <div className="mt-2 p-2 bg-white rounded text-sm text-gray-600 border border-gray-200">
+                  <div className="mt-2 p-2 bg-white dark:bg-gray-700 rounded text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600">
                     {entry.notes}
                   </div>
                 )}
 
                 {entry.status === 'linked' && (
-                  <div className="mt-2 flex items-center text-xs text-green-600 font-medium">
+                  <div className="mt-2 flex items-center text-xs text-green-600 dark:text-green-400 font-medium">
                     <CheckCircle className="w-3 h-3 mr-1" />
                     Auto-linked to fuel record
                   </div>
@@ -425,8 +425,8 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
             ))}
 
             {filteredEntries.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <Fuel className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <Fuel className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
                 <p>No entries found for {selectedYard}</p>
                 <p className="text-sm">on {new Date(selectedDate).toLocaleDateString()}</p>
               </div>

@@ -120,7 +120,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
   const destinations = ['DAR', 'MSA', 'Kpm', 'Likasi', 'Kolwezi', 'NIL'];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto transition-colors">
         <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -139,21 +139,21 @@ const LPOForm: React.FC<LPOFormProps> = ({
           {autoFillResult && !useCustom && (
             <div className={`mb-4 p-3 rounded-md flex items-start space-x-2 ${
               autoFillResult.confidence === 'high' 
-                ? 'bg-green-50 border border-green-200' 
+                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50' 
                 : autoFillResult.confidence === 'medium'
-                ? 'bg-yellow-50 border border-yellow-200'
-                : 'bg-orange-50 border border-orange-200'
+                ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/50'
+                : 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800/50'
             }`}>
               {autoFillResult.confidence === 'high' ? (
-                <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
               ) : (
-                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
               )}
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                   Auto-filled: {autoFillResult.doType === 'going' ? 'Going' : 'Returning'} DO {autoFillResult.doNumber}
                 </p>
-                <p className="text-xs text-gray-600 mt-1">{autoFillResult.reason}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{autoFillResult.reason}</p>
               </div>
               <button
                 type="button"
@@ -173,21 +173,21 @@ const LPOForm: React.FC<LPOFormProps> = ({
                   type="checkbox"
                   checked={useCustom}
                   onChange={toggleCustomMode}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 dark:bg-gray-700"
                 />
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Manual Entry Mode
                 </span>
               </label>
               {isAutoFetching && (
-                <span className="text-xs text-gray-500">Fetching DO...</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Fetching DO...</span>
               )}
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 S/No *
               </label>
               <input
@@ -196,12 +196,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 value={formData.sn}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Date *
               </label>
               <input
@@ -210,12 +210,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 value={formData.date}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 LPO No. *
               </label>
               <input
@@ -225,12 +225,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 onChange={handleChange}
                 required
                 placeholder="e.g., 2150"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Diesel @ (Station) *
               </label>
               <select
@@ -238,7 +238,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 value={formData.dieselAt}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               >
                 <option value="">Select Station</option>
                 {stations.map((station) => (
@@ -250,7 +250,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 DO/SDO *
               </label>
               <input
@@ -260,12 +260,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 onChange={handleChange}
                 required
                 placeholder="e.g., 6376"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Truck No. *
               </label>
               <input
@@ -275,12 +275,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 onChange={handleChange}
                 required
                 placeholder="e.g., T530 DRF"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Liters *
               </label>
               <input
@@ -290,12 +290,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 onChange={handleChange}
                 required
                 step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Price per Ltr *
               </label>
               <input
@@ -305,12 +305,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 onChange={handleChange}
                 required
                 step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Destinations *
               </label>
               <select
@@ -318,7 +318,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 value={formData.destinations}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               >
                 <option value="">Select Destination</option>
                 {destinations.map((dest) => (
@@ -331,10 +331,10 @@ const LPOForm: React.FC<LPOFormProps> = ({
           </div>
 
           {/* Calculated Amount Display */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-md">
+          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-md transition-colors">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-700">Total Amount:</span>
-              <span className="text-lg font-semibold text-gray-900">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Amount:</span>
+              <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {(formData.ltrs! * formData.pricePerLtr!).toLocaleString('en-US', {
                   style: 'currency',
                   currency: 'TZS',
@@ -344,7 +344,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
           </div>
 
           {/* Form Actions */}
-          <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
+          <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={onClose}

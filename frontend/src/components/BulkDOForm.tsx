@@ -283,33 +283,33 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         {/* Background overlay */}
         <div
-          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          className="fixed inset-0 transition-opacity bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-80"
           onClick={onClose}
         />
 
         {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full">
+        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full">
           {/* Header */}
-          <div className="bg-primary-600 px-6 py-4 flex items-center justify-between">
+          <div className="bg-primary-600 dark:bg-primary-700 px-6 py-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-white">
               Bulk Delivery Order Creation
             </h3>
-            <button onClick={onClose} className="p-2 text-white hover:bg-primary-700 rounded">
+            <button onClick={onClose} className="p-2 text-white hover:bg-primary-700 dark:hover:bg-primary-600 rounded">
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Form */}
-          <div className="bg-white px-6 py-6 max-h-[80vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 px-6 py-6 max-h-[80vh] overflow-y-auto">
             {/* Common Information */}
             <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 uppercase">
                 Common Information (Applied to All DOs)
               </h4>
               
               {/* DO/SDO Type Selector - Full width */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                   Order Type *
                 </label>
                 <div className="flex items-center space-x-6">
@@ -320,9 +320,9 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                       value="DO"
                       checked={commonData.doType === 'DO'}
                       onChange={handleDOTypeChange}
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600"
                     />
-                    <span className="ml-2 text-sm text-gray-700">DO (Delivery Order)</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">DO (Delivery Order)</span>
                   </label>
                   <label className="inline-flex items-center">
                     <input
@@ -331,16 +331,16 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                       value="SDO"
                       checked={commonData.doType === 'SDO'}
                       onChange={handleDOTypeChange}
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600"
                     />
-                    <span className="ml-2 text-sm text-gray-700">SDO (Special Delivery Order)</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">SDO (Special Delivery Order)</span>
                   </label>
                 </div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Starting {commonData.doType} Number *
                   </label>
                   <input
@@ -349,16 +349,16 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                     value={commonData.startingNumber}
                     onChange={handleCommonChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder={`e.g., 6433`}
                   />
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     Numbers will increment from this value
                   </p>
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Client Name *
                   </label>
                   <input
@@ -367,30 +367,30 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                     value={commonData.clientName}
                     onChange={handleCommonChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="Enter client name"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Date *</label>
                   <input
                     type="date"
                     name="date"
                     value={commonData.date}
                     onChange={handleCommonChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Import/Export *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Import/Export *</label>
                   <select
                     name="importOrExport"
                     value={commonData.importOrExport}
                     onChange={handleCommonChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   >
                     <option value="IMPORT">IMPORT</option>
                     <option value="EXPORT">EXPORT</option>
@@ -398,7 +398,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Loading Point *
                   </label>
                   <input
@@ -407,13 +407,13 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                     value={commonData.loadingPoint}
                     onChange={handleCommonChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="e.g., DAR"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Destination *
                   </label>
                   <input
@@ -422,19 +422,19 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                     value={commonData.destination}
                     onChange={handleCommonChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="e.g., CCR KOLWEZI"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Haulier</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Haulier</label>
                   <input
                     type="text"
                     name="haulier"
                     value={commonData.haulier}
                     onChange={handleCommonChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="Enter haulier name (optional)"
                   />
                 </div>
@@ -443,23 +443,23 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
 
             {/* Bulk Data Input */}
             <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 uppercase">
                 Truck Details (Paste from Excel/Spreadsheet)
               </h4>
-              <p className="text-sm text-gray-600 mb-2">
-                Paste data with columns: <span className="font-mono bg-gray-100 px-2 py-1 rounded">Truck No &nbsp;&nbsp; Trailer No &nbsp;&nbsp; Driver Name &nbsp;&nbsp; Tonnage &nbsp;&nbsp; Rate Per Ton</span>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                Paste data with columns: <span className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">Truck No &nbsp;&nbsp; Trailer No &nbsp;&nbsp; Driver Name &nbsp;&nbsp; Tonnage &nbsp;&nbsp; Rate Per Ton</span>
               </p>
               <textarea
                 value={bulkInput}
                 onChange={(e) => setBulkInput(e.target.value)}
                 rows={8}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
                 placeholder="T844 EKS&#9;T629 ELE&#9;John Doe&#9;30&#9;1850&#10;T845 ABC&#9;T630 DEF&#9;Jane Smith&#9;28&#9;1850"
               />
               <button
                 type="button"
                 onClick={parseBulkData}
-                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                className="mt-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600"
               >
                 <Plus className="w-4 h-4 inline mr-2" />
                 Parse Data ({bulkInput.split('\n').filter(l => l.trim()).length} rows)
@@ -468,9 +468,9 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
 
             {/* Preview of created orders */}
             {createdOrders.length > 0 && (
-              <div className="mb-6 border-2 border-green-500 rounded-lg">
-                <div className="bg-green-50 px-4 py-3 border-b border-green-200">
-                  <h4 className="text-base font-semibold text-green-800 flex items-center">
+              <div className="mb-6 border-2 border-green-500 dark:border-green-400 rounded-lg">
+                <div className="bg-green-50 dark:bg-green-900/20 px-4 py-3 border-b border-green-200 dark:border-green-700">
+                  <h4 className="text-base font-semibold text-green-800 dark:text-green-300 flex items-center">
                     <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
@@ -479,8 +479,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                 </div>
                 <div className="p-4">
                   <div className="mb-3">
-                    <p className="text-sm text-gray-700 mb-1 font-medium">What was created:</p>
-                    <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-1 font-medium">What was created:</p>
+                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
                       <li><strong>{createdOrders.length}</strong> Delivery Orders ({commonData.doType}-{commonData.startingNumber} to {commonData.doType}-{parseInt(commonData.startingNumber) + createdOrders.length - 1})</li>
                       <li><strong>{createdOrders.length}</strong> Fuel Records with automatic fuel allocations</li>
                       <li>LPO entries for station fuel purchases (if applicable)</li>
@@ -488,18 +488,18 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                     </ul>
                   </div>
                   
-                  <p className="text-sm text-gray-600 mb-3">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                     View these orders in the <strong>Delivery Orders</strong> tab, fuel records in <strong>Fuel Records</strong>, and LPOs in <strong>LPO Management</strong>.
                   </p>
                   
                   <details className="text-xs">
-                    <summary className="cursor-pointer text-gray-600 hover:text-gray-800 font-medium">Show all created DOs</summary>
+                    <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium">Show all created DOs</summary>
                     <div className="grid grid-cols-3 gap-2 mt-2">
                       {createdOrders.map((order, idx) => (
-                        <div key={idx} className="bg-white p-2 rounded border border-gray-200">
-                          <span className="font-semibold">{order.doType}-{order.doNumber}</span>
+                        <div key={idx} className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 dark:border-gray-600">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">{order.doType}-{order.doNumber}</span>
                           <br />
-                          <span className="text-gray-600">{order.truckNo}</span>
+                          <span className="text-gray-600 dark:text-gray-400">{order.truckNo}</span>
                         </div>
                       ))}
                     </div>
@@ -535,12 +535,12 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
           </div>
 
           {/* Footer */}
-          <div className="bg-gray-50 px-6 py-4 flex justify-between items-center">
+          <div className="bg-gray-50 dark:bg-gray-700 px-6 py-4 flex justify-between items-center">
             <div>
               {createdOrders.length > 0 && (
                 <button
                   onClick={downloadAllAsPDF}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center"
+                  className="px-4 py-2 bg-green-600 dark:bg-green-500 text-white rounded-md hover:bg-green-700 dark:hover:bg-green-600 flex items-center"
                 >
                   <FileDown className="w-4 h-4 mr-2" />
                   Download PDF Again
@@ -553,8 +553,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                 onClick={onClose}
                 className={`px-4 py-2 border rounded-md shadow-sm text-sm font-medium ${
                   createdOrders.length > 0
-                    ? 'bg-primary-600 text-white hover:bg-primary-700 border-transparent'
-                    : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'
+                    ? 'bg-primary-600 dark:bg-primary-500 text-white hover:bg-primary-700 dark:hover:bg-primary-600 border-transparent'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-600'
                 }`}
               >
                 {createdOrders.length > 0 ? 'Done' : 'Cancel'}
@@ -562,7 +562,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
               {parsedRows.length > 0 && createdOrders.length === 0 && (
                 <button
                   onClick={generateDOs}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 dark:bg-primary-500 hover:bg-primary-700 dark:hover:bg-primary-600"
                 >
                   Create {parsedRows.length} DOs
                 </button>

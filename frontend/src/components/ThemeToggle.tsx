@@ -1,4 +1,4 @@
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ThemeToggleProps {
@@ -14,7 +14,7 @@ export function ThemeToggle({
   showLabel = false,
   className = ''
 }: ThemeToggleProps) {
-  const { theme, toggleTheme, isDark } = useAuth();
+  const { toggleTheme, isDark } = useAuth();
 
   const sizeClasses = {
     sm: 'p-1.5',

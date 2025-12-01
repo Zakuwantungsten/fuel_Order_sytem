@@ -112,69 +112,69 @@ export function StationView({ user }: StationViewProps) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">{stationName} - Station Orders</h1>
-        <p className="text-gray-600">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">{stationName} - Station Orders</h1>
+        <p className="text-gray-600 dark:text-gray-400">
           {user.role === 'fuel_attendant' ? 'Fuel Attendant View' : 'Station Manager View'}
         </p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Pending Orders</div>
-              <div className="text-2xl font-bold text-gray-900 mt-1">{stats.pending}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Pending Orders</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{stats.pending}</div>
             </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <Truck className="w-6 h-6 text-yellow-600" />
+            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg flex items-center justify-center">
+              <Truck className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Fulfilled Today</div>
-              <div className="text-2xl font-bold text-gray-900 mt-1">{stats.fulfilled}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Fulfilled Today</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{stats.fulfilled}</div>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-600" />
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Total Liters Pending</div>
-              <div className="text-2xl font-bold text-gray-900 mt-1">{stats.totalLiters}L</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Total Liters Pending</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{stats.totalLiters}L</div>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Fuel className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+              <Fuel className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6 transition-colors">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
             <input
               type="text"
               placeholder="Search by truck, DO, LPO, or driver..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
             />
           </div>
           <div className="flex space-x-2">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as 'all' | 'pending' | 'fulfilled')}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
             >
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
@@ -248,10 +248,10 @@ export function StationView({ user }: StationViewProps) {
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         order.status === 'fulfilled'
-                          ? 'bg-green-100 text-green-800'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
                           : order.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
+                          ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
+                          : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
                       }`}
                     >
                       {order.status.charAt(0).toUpperCase() + order.status.slice(1)}

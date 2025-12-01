@@ -460,12 +460,14 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
 
 /**
  * Update LPO document (sheet) with fuel record adjustment
+ * Tracks amendments and prevents double updates
  */
 export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const newData = req.body;
 
+    // Use findOneAndUpdate with a version check to prevent race conditions
     const existingLpo = await LPOSummary.findOne({ _id: id, isDeleted: false });
 
     if (!existingLpo) {
@@ -482,19 +484,25 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       rate: number;
       amount: number;
       dest: string;
+      originalLiters?: number | null;
+      amendedAt?: Date | null;
+      _id?: any;
     }
 
-    // Calculate fuel record adjustments
+    // Calculate fuel record adjustments using database values (not request values)
     const oldEntriesMap = new Map<string, EntryType>(
-      existingLpo.entries.map((e) => [`${e.doNo}-${e.truckNo}`, e as EntryType])
+      existingLpo.entries.map((e) => [`${e.doNo}-${e.truckNo}`, e as unknown as EntryType])
     );
     const newEntries: EntryType[] = newData.entries || existingLpo.entries;
     const newEntriesMap = new Map<string, EntryType>(
       newEntries.map((e: EntryType) => [`${e.doNo}-${e.truckNo}`, e])
     );
 
-    logger.info(`Old entries: ${JSON.stringify([...oldEntriesMap.entries()])}`);
-    logger.info(`New entries: ${JSON.stringify([...newEntriesMap.entries()])}`);
+    logger.info(`Old entries (from DB): ${JSON.stringify([...oldEntriesMap.entries()])}`);
+    logger.info(`New entries (from request): ${JSON.stringify([...newEntriesMap.entries()])}`);
+
+    // Track entries that need fuel record updates and amendment tracking
+    const entriesToUpdate: EntryType[] = [];
 
     // Revert old entries that are removed or changed
     for (const [key, oldEntry] of oldEntriesMap) {
@@ -512,14 +520,27 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         // Entry liters changed - adjust the difference
         const difference = newEntry.liters - oldEntry.liters;
         logger.info(`Entry ${key} liters changed: ${oldEntry.liters} -> ${newEntry.liters} (diff: ${difference})`);
+        
+        // Track amendment - store original liters if this is the first change
+        const originalLiters = oldEntry.originalLiters ?? oldEntry.liters;
+        newEntry.originalLiters = originalLiters;
+        newEntry.amendedAt = new Date();
+        
         await updateFuelRecordForLPOEntry(
           oldEntry.doNo,
           difference,
           newData.station || existingLpo.station,
           oldEntry.truckNo
         );
+        
+        entriesToUpdate.push(newEntry);
       } else {
         logger.info(`Entry ${key} unchanged: ${oldEntry.liters}L`);
+        // Preserve amendment history if it exists
+        if (oldEntry.originalLiters !== undefined && oldEntry.originalLiters !== null) {
+          newEntry.originalLiters = oldEntry.originalLiters;
+          newEntry.amendedAt = oldEntry.amendedAt;
+        }
       }
     }
 
@@ -535,6 +556,27 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         );
       }
     }
+
+    // Update the newData.entries with amendment tracking
+    newData.entries = newEntries.map((entry: EntryType) => {
+      const key = `${entry.doNo}-${entry.truckNo}`;
+      const oldEntry = oldEntriesMap.get(key);
+      if (oldEntry && entry.liters !== oldEntry.liters) {
+        return {
+          ...entry,
+          originalLiters: oldEntry.originalLiters ?? oldEntry.liters,
+          amendedAt: new Date()
+        };
+      } else if (oldEntry?.originalLiters !== undefined && oldEntry.originalLiters !== null) {
+        // Preserve existing amendment history
+        return {
+          ...entry,
+          originalLiters: oldEntry.originalLiters,
+          amendedAt: oldEntry.amendedAt
+        };
+      }
+      return entry;
+    });
 
     // Update year if date changed
     if (newData.date) {

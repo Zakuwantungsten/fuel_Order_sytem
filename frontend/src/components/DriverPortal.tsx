@@ -231,14 +231,14 @@ export function DriverPortal({ user }: DriverPortalProps) {
   if (!user.truckNo) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 max-w-md transition-colors">
           <div className="text-center">
             <Info className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Truck Number Required</h3>
-            <p className="text-gray-600 mb-4">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Truck Number Required</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               Your account doesn't have a truck number assigned. Please contact your supervisor to set up your truck number.
             </p>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
               User: {user.firstName} {user.lastName}
             </div>
           </div>
@@ -251,8 +251,8 @@ export function DriverPortal({ user }: DriverPortalProps) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your information...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading your information...</p>
         </div>
       </div>
     );
@@ -261,8 +261,8 @@ export function DriverPortal({ user }: DriverPortalProps) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Driver Portal</h1>
-        <p className="text-gray-600">Welcome back! Here's your journey information.</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Driver Portal</h1>
+        <p className="text-gray-600 dark:text-gray-400">Welcome back! Here's your journey information.</p>
       </div>
 
       {/* Truck Info Card */}
@@ -293,41 +293,41 @@ export function DriverPortal({ user }: DriverPortalProps) {
 
       {/* Fuel Status */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Total Fuel</div>
-              <div className="text-xl font-bold text-gray-900">{driverData.totalFuel}L</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Total Fuel</div>
+              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.totalFuel}L</div>
             </div>
             <Fuel className="w-8 h-8 text-blue-500" />
           </div>
         </div>
         
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Extra Fuel</div>
-              <div className="text-xl font-bold text-gray-900">{driverData.extraFuel}L</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Extra Fuel</div>
+              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.extraFuel}L</div>
             </div>
             <Fuel className="w-8 h-8 text-green-500" />
           </div>
         </div>
         
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Used Fuel</div>
-              <div className="text-xl font-bold text-gray-900">{driverData.usedFuel}L</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Used Fuel</div>
+              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.usedFuel}L</div>
             </div>
             <Fuel className="w-8 h-8 text-orange-500" />
           </div>
         </div>
         
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Remaining</div>
-              <div className="text-xl font-bold text-gray-900">{driverData.remainingFuel}L</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Remaining</div>
+              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.remainingFuel}L</div>
             </div>
             <Fuel className="w-8 h-8 text-red-500" />
           </div>
@@ -335,10 +335,10 @@ export function DriverPortal({ user }: DriverPortalProps) {
       </div>
 
       {/* Notifications */}
-      <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
-        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 px-6 py-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-            <Bell className="w-5 h-5 mr-2 text-indigo-600" />
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-6 transition-colors">
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 px-6 py-4 border-b dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+            <Bell className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
             Notifications & Orders
             {unreadCount > 0 && (
               <span className="ml-3 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
@@ -347,33 +347,33 @@ export function DriverPortal({ user }: DriverPortalProps) {
             )}
           </h3>
         </div>
-        <div className="divide-y max-h-96 overflow-y-auto">
+        <div className="divide-y dark:divide-gray-700 max-h-96 overflow-y-auto">
           {notifications.length === 0 ? (
             <div className="p-8 text-center">
-              <Info className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No notifications yet</p>
+              <Info className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No notifications yet</p>
             </div>
           ) : (
             notifications.map((notification) => (
               <div
                 key={notification.id}
                 onClick={() => markNotificationRead(notification.id)}
-                className={`p-4 cursor-pointer transition-colors hover:bg-gray-50 ${
-                  notification.read ? 'bg-white' : 'bg-blue-50'
+                className={`p-4 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                  notification.read ? 'bg-white dark:bg-gray-800' : 'bg-blue-50 dark:bg-blue-900/20'
                 }`}
               >
                 <div className="flex items-start space-x-3">
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
                       notification.type === 'import'
-                        ? 'bg-green-100'
+                        ? 'bg-green-100 dark:bg-green-900/30'
                         : notification.type === 'export'
-                        ? 'bg-blue-100'
+                        ? 'bg-blue-100 dark:bg-blue-900/30'
                         : notification.type === 'return'
-                        ? 'bg-orange-100'
+                        ? 'bg-orange-100 dark:bg-orange-900/30'
                         : notification.type === 'fuel'
-                        ? 'bg-yellow-100'
-                        : 'bg-gray-100'
+                        ? 'bg-yellow-100 dark:bg-yellow-900/30'
+                        : 'bg-gray-100 dark:bg-gray-700'
                     }`}
                   >
                     {notification.type === 'import' || notification.type === 'export' ? (
@@ -395,14 +395,14 @@ export function DriverPortal({ user }: DriverPortalProps) {
                       <span
                         className={`text-xs font-semibold px-2 py-1 rounded ${
                           notification.type === 'import'
-                            ? 'bg-green-100 text-green-800'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                             : notification.type === 'export'
-                            ? 'bg-blue-100 text-blue-800'
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
                             : notification.type === 'return'
-                            ? 'bg-orange-100 text-orange-800'
+                            ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
                             : notification.type === 'fuel'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
+                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
                         }`}
                       >
                         {notification.type.toUpperCase()}
@@ -411,15 +411,15 @@ export function DriverPortal({ user }: DriverPortalProps) {
                         <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-900 font-medium mb-1">
+                    <p className="text-sm text-gray-900 dark:text-gray-100 font-medium mb-1">
                       {notification.message}
                     </p>
                     {notification.doNo && (
-                      <div className="text-xs text-gray-600 mb-1">
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                         DO: <span className="font-semibold">{notification.doNo}</span>
                       </div>
                     )}
-                    <div className="flex items-center text-xs text-gray-500">
+                    <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
                       <Clock className="w-3 h-3 mr-1" />
                       {new Date(notification.timestamp).toLocaleString()}
                     </div>
@@ -432,15 +432,15 @@ export function DriverPortal({ user }: DriverPortalProps) {
       </div>
 
       {/* Orders Tabs */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-200">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow transition-colors">
+        <div className="border-b border-gray-200 dark:border-gray-700">
           <nav className="flex space-x-8 px-6">
             <button
               onClick={() => setActiveTab('current')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'current'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
               }`}
             >
               Current Orders ({currentOrders.length})
@@ -449,8 +449,8 @@ export function DriverPortal({ user }: DriverPortalProps) {
               onClick={() => setActiveTab('history')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'history'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
               }`}
             >
               History ({completedOrders.length})
@@ -462,25 +462,25 @@ export function DriverPortal({ user }: DriverPortalProps) {
           {activeTab === 'current' && (
             <div className="space-y-4">
               {currentOrders.map((order) => (
-                <div key={order.id} className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border">
+                <div key={order.id} className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-lg border dark:border-gray-700">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
                         <MapPin className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <div className="font-semibold text-gray-900">{order.station}</div>
-                        <div className="text-sm text-gray-600">{order.liters} liters • LPO: {order.lpoNumber}</div>
-                        <div className="text-xs text-gray-500">DO: {order.doNo}</div>
+                        <div className="font-semibold text-gray-900 dark:text-gray-100">{order.station}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">{order.liters} liters • LPO: {order.lpoNumber}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-500">DO: {order.doNo}</div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-medium text-gray-900">{order.distance}</div>
-                      <div className="text-xs text-gray-600 flex items-center">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{order.distance}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center">
                         <Clock className="w-3 h-3 mr-1" />
                         ETA: {order.eta}
                       </div>
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mt-1">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 mt-1">
                         Upcoming
                       </span>
                     </div>
@@ -493,20 +493,20 @@ export function DriverPortal({ user }: DriverPortalProps) {
           {activeTab === 'history' && (
             <div className="space-y-4">
               {completedOrders.map((order) => (
-                <div key={order.id} className="bg-gray-50 p-4 rounded-lg border">
+                <div key={order.id} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border dark:border-gray-600">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
                         <CheckCircle className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <div className="font-semibold text-gray-900">{order.station}</div>
-                        <div className="text-sm text-gray-600">{order.liters} liters • LPO: {order.lpoNumber}</div>
-                        <div className="text-xs text-gray-500">DO: {order.doNo}</div>
+                        <div className="font-semibold text-gray-900 dark:text-gray-100">{order.station}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">{order.liters} liters • LPO: {order.lpoNumber}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-500">DO: {order.doNo}</div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
                         Completed
                       </span>
                     </div>

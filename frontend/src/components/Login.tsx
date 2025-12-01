@@ -12,7 +12,7 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const { login, isLoading, error, clearError, theme, toggleTheme, isDark } = useAuth();
+  const { login, isLoading, error, clearError, toggleTheme, isDark } = useAuth();
 
   // Clear error when component unmounts or credentials change
   useEffect(() => {

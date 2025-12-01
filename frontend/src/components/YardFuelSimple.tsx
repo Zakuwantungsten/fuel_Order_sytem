@@ -106,9 +106,9 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
   };
 
   return (
-    <div className="h-full bg-gray-50 overflow-auto">
+    <div className="h-full bg-gray-50 dark:bg-gray-900 overflow-auto transition-colors">
       {/* Header */}
-      <div className="bg-blue-600 text-white p-6 shadow-md sticky top-0 z-10">
+      <div className="bg-blue-600 dark:bg-blue-800 text-white p-6 shadow-md sticky top-0 z-10">
         <h1 className="text-2xl font-bold">{getYardName()} YARD</h1>
         <p className="text-sm opacity-90 mt-1">Fuel Dispense Entry</p>
         <p className="text-xs opacity-75 mt-1">Logged in as: {user?.username}</p>
@@ -116,7 +116,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
 
       {/* Message Banner */}
       {message && (
-        <div className={`mx-4 mt-4 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+        <div className={`mx-4 mt-4 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'}`}>
           {message.text}
         </div>
       )}
@@ -125,12 +125,12 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
       <div className="p-4 max-w-4xl mx-auto">
         {/* Entry Form */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6 transition-colors">
-          <h2 className="text-xl font-semibold mb-4 text-gray-800">Record Fuel Dispense</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Record Fuel Dispense</h2>
           
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Truck Number */}
             <div>
-              <label htmlFor="truckNo" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="truckNo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Truck Number *
               </label>
               <input
@@ -140,7 +140,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                 value={formData.truckNo}
                 onChange={handleInputChange}
                 placeholder="e.g., T123ABC"
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg uppercase font-semibold"
+                className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg uppercase font-semibold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 required
                 autoComplete="off"
               />
@@ -148,7 +148,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
 
             {/* Liters */}
             <div>
-              <label htmlFor="liters" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="liters" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Liters *
               </label>
               <input
@@ -160,14 +160,14 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                 placeholder="0"
                 step="0.01"
                 min="0"
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-semibold"
+                className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-semibold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 required
               />
             </div>
 
             {/* Date */}
             <div>
-              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Date *
               </label>
               <input
@@ -176,14 +176,14 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                 name="date"
                 value={formData.date}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 required
               />
             </div>
 
             {/* Notes (Optional) */}
             <div>
-              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Notes (Optional)
               </label>
               <textarea
@@ -193,7 +193,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                 onChange={handleInputChange}
                 placeholder="Any additional notes..."
                 rows={3}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
 
@@ -210,15 +210,15 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
 
         {/* Recent Entries */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-colors">
-          <h2 className="text-xl font-semibold mb-4 text-gray-800">Recent Entries</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Recent Entries</h2>
           
           {loading ? (
-            <div className="text-center py-12 text-gray-500">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
               <p>Loading...</p>
             </div>
           ) : recentEntries.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
               <p className="text-lg">No recent entries</p>
               <p className="text-sm mt-2">Your fuel dispense records will appear here</p>
             </div>
@@ -227,30 +227,30 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
               {recentEntries.map((entry, index) => (
                 <div 
                   key={entry._id || index} 
-                  className="border-2 border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  className="border-2 border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <p className="font-bold text-xl text-gray-800">{entry.truckNo}</p>
-                      <p className="text-sm text-gray-600">{entry.date}</p>
+                      <p className="font-bold text-xl text-gray-800 dark:text-gray-100">{entry.truckNo}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{entry.date}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-blue-600">{entry.liters}L</p>
+                      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{entry.liters}L</p>
                       <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
                         entry.status === 'linked' 
-                          ? 'bg-green-100 text-green-800' 
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' 
                           : entry.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
+                          ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
+                          : 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-300'
                       }`}>
                         {entry.status}
                       </span>
                     </div>
                   </div>
                   {entry.notes && (
-                    <p className="text-sm text-gray-600 mt-2 italic">Note: {entry.notes}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 italic">Note: {entry.notes}</p>
                   )}
-                  <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-200">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                     <span className="font-medium">by {entry.enteredBy}</span>
                     <span className="mx-2">•</span>
                     <span>{new Date(entry.timestamp).toLocaleString()}</span>

@@ -7,7 +7,6 @@ import {
   CheckCircle, 
   AlertCircle, 
   Info, 
-  X,
   Search,
   Filter,
   Download

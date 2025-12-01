@@ -112,3 +112,8 @@ dynamic fetch routes
 
 fixes - 
 fetches lpo for that particular truck
+
+
+
+make logic for automatic cancellation for manual or with bilal - handle flexibility 
+

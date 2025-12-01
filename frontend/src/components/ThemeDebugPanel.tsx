@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sun, Moon, Monitor, RefreshCw } from 'lucide-react';
+import { Sun, Moon, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const ThemeDebugPanel: React.FC = () => {

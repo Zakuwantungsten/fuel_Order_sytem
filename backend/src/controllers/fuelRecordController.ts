@@ -339,9 +339,61 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
       isDeleted: false,
     }).sort({ date: 1 }).lean();
 
+    // Calculate journey date range for CASH/NIL DO entries
+    // Journey starts from fuel record date and ends when balance reaches 0 or the last LPO date
+    const journeyStartDate = new Date(fuelRecord.date);
+    let journeyEndDate: Date;
+    
+    // Find the last LPO date to determine journey end
+    if (lpoEntries.length > 0) {
+      const lastLpoDate = new Date(lpoEntries[lpoEntries.length - 1].date);
+      // Add buffer of 7 days after last LPO for any additional CASH entries
+      journeyEndDate = new Date(lastLpoDate);
+      journeyEndDate.setDate(journeyEndDate.getDate() + 7);
+    } else {
+      // If no LPOs found, use 60 days from start as maximum journey duration
+      journeyEndDate = new Date(journeyStartDate);
+      journeyEndDate.setDate(journeyEndDate.getDate() + 60);
+    }
+    
+    // Also fetch CASH mode entries with NIL DO for this truck within the journey date range
+    // These are additional fuel entries when:
+    // 1. A station is out of fuel and driver gets fuel from another station via cash
+    // 2. Driver gets extra fuel due to circumstances (theft, etc.)
+    // These entries have doSdo = 'NIL' and destinations = 'NIL'
+    const cashLpoEntries = await LPOEntry.find({
+      truckNo: fuelRecord.truckNo,
+      $or: [
+        { doSdo: 'NIL' },
+        { doSdo: 'nil' },
+        { doSdo: '' },
+        { destinations: 'NIL' },
+        { destinations: 'nil' }
+      ],
+      date: { 
+        $gte: journeyStartDate.toISOString().split('T')[0],
+        $lte: journeyEndDate.toISOString().split('T')[0]
+      },
+      isDeleted: false,
+    }).sort({ date: 1 }).lean();
+
+    // Combine regular LPO entries with CASH/NIL entries
+    const allLpoEntries = [...lpoEntries];
+    
+    // Add CASH entries that aren't already included (check by _id to avoid duplicates)
+    const existingIds = new Set(lpoEntries.map((e: any) => e._id?.toString()));
+    for (const cashEntry of cashLpoEntries) {
+      if (!existingIds.has(cashEntry._id?.toString())) {
+        allLpoEntries.push(cashEntry);
+      }
+    }
+    
+    // Sort combined entries by date
+    allLpoEntries.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
     // Since we're using the unique DO numbers to fetch LPOs, all results are already 
     // specific to this journey - no additional date filtering needed
-    const filteredLPOs = lpoEntries;
+    const filteredLPOs = allLpoEntries;
 
     // Get yard fuel dispenses for this truck related to this journey
     // Use the same logic - DO numbers are the primary reference
@@ -421,12 +473,28 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
         totalGoingFuel: Object.values(goingFuelAllocations).reduce((a, b) => a + Math.abs(b), 0),
         totalReturnFuel: Object.values(returnFuelAllocations).reduce((a, b) => a + Math.abs(b), 0),
       },
-      lpoEntries: filteredLPOs.map((lpo: any) => ({
-        ...lpo,
-        id: lpo._id,
-        journeyType: lpo.doSdo === fuelRecord.goingDo ? 'going' : 
-                     lpo.doSdo === fuelRecord.returnDo ? 'return' : 'related',
-      })),
+      lpoEntries: filteredLPOs.map((lpo: any) => {
+        // Determine journey type
+        let journeyType: 'going' | 'return' | 'cash' | 'related';
+        const isNilDo = !lpo.doSdo || lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || lpo.doSdo === '';
+        const isNilDest = !lpo.destinations || lpo.destinations === 'NIL' || lpo.destinations === 'nil' || lpo.destinations === '';
+        
+        if (isNilDo || isNilDest) {
+          journeyType = 'cash'; // Cash mode payment (extra fuel or station out of fuel)
+        } else if (lpo.doSdo === fuelRecord.goingDo) {
+          journeyType = 'going';
+        } else if (lpo.doSdo === fuelRecord.returnDo) {
+          journeyType = 'return';
+        } else {
+          journeyType = 'related';
+        }
+        
+        return {
+          ...lpo,
+          id: lpo._id,
+          journeyType,
+        };
+      }),
       yardDispenses: yardDispenses.map((dispense: any) => ({
         ...dispense,
         id: dispense._id,
@@ -436,6 +504,13 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
         totalYardDispenses: yardDispenses.length,
         totalFuelOrdered: filteredLPOs.reduce((sum: number, lpo: any) => sum + (lpo.ltrs || 0), 0),
         totalYardFuel: yardDispenses.reduce((sum: number, d: any) => sum + (d.liters || 0), 0),
+        // Count by journey type
+        goingLPOs: filteredLPOs.filter((lpo: any) => lpo.doSdo === fuelRecord.goingDo).length,
+        returnLPOs: filteredLPOs.filter((lpo: any) => lpo.doSdo === fuelRecord.returnDo).length,
+        cashLPOs: filteredLPOs.filter((lpo: any) => {
+          const isNilDo = !lpo.doSdo || lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || lpo.doSdo === '';
+          return isNilDo;
+        }).length,
       },
     };
 

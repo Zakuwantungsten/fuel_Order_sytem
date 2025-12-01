@@ -48,7 +48,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     isYardRole ? 'yard_fuel' : isDriver ? 'driver_portal' : 'overview'
   );
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { logout, theme, toggleTheme, isDark } = useAuth();
+  const { logout, toggleTheme, isDark } = useAuth();
 
   const getMenuItems = () => {
     // Drivers only see their portal, no overview

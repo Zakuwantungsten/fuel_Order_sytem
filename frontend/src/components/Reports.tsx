@@ -53,8 +53,8 @@ export function Reports({}: ReportsProps) {
 
   if (error || !reportData) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <p className="text-red-800">{error || 'No data available'}</p>
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg p-4">
+        <p className="text-red-800 dark:text-red-400">{error || 'No data available'}</p>
       </div>
     );
   }
@@ -69,8 +69,8 @@ export function Reports({}: ReportsProps) {
               <div className="text-sm text-gray-600 dark:text-gray-400">Total Fuel Consumed</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{reportData.fuelConsumption.total.toLocaleString()}L</div>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Fuel className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+              <Fuel className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         </div>
@@ -81,8 +81,8 @@ export function Reports({}: ReportsProps) {
               <div className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatCurrency(reportData.financials.totalRevenue)}</div>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-green-600" />
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
           </div>
         </div>
@@ -93,8 +93,8 @@ export function Reports({}: ReportsProps) {
               <div className="text-sm text-gray-600 dark:text-gray-400">Total Trips</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{reportData.operations.totalTrips}</div>
             </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Truck className="w-6 h-6 text-purple-600" />
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+              <Truck className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </div>
           </div>
         </div>

@@ -214,7 +214,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading workbook...</div>
+        <div className="text-gray-500 dark:text-gray-400">Loading workbook...</div>
       </div>
     );
   }
@@ -222,7 +222,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   if (!workbook) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-red-500">Failed to load workbook</div>
+        <div className="text-red-500 dark:text-red-400">Failed to load workbook</div>
       </div>
     );
   }
@@ -230,19 +230,19 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   const activeSheet = getActiveSheet();
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-800 transition-colors">
       {/* Workbook Header */}
-      <div className="border-b bg-gray-50 p-4">
+      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <FileSpreadsheet className="w-6 h-6 text-green-600" />
+            <FileSpreadsheet className="w-6 h-6 text-green-600 dark:text-green-400" />
             {isRenamingWorkbook ? (
               <div className="flex items-center space-x-2">
                 <input
                   type="text"
                   value={workbookName}
                   onChange={(e) => setWorkbookName(e.target.value)}
-                  className="px-2 py-1 border rounded text-lg font-semibold"
+                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-lg font-semibold bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                   autoFocus
                   onBlur={() => setIsRenamingWorkbook(false)}
                   onKeyDown={(e) => {
@@ -253,10 +253,10 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
               </div>
             ) : (
               <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-semibold text-gray-900">{workbook.name}</h1>
+                <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{workbook.name}</h1>
                 <button
                   onClick={() => setIsRenamingWorkbook(true)}
-                  className="p-1 text-gray-400 hover:text-gray-600"
+                  className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
@@ -267,7 +267,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
           <div className="flex items-center space-x-2">
             <button
               onClick={handleSaveWorkbook}
-              className="flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
             >
               <Save className="w-4 h-4 mr-1" />
               Save
@@ -277,8 +277,8 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
               disabled={exporting}
               className={`flex items-center px-3 py-1 text-white rounded ${
                 exporting 
-                  ? 'bg-green-400 cursor-not-allowed' 
-                  : 'bg-green-600 hover:bg-green-700'
+                  ? 'bg-green-400 dark:bg-green-500 cursor-not-allowed' 
+                  : 'bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600'
               }`}
             >
               <Download className="w-4 h-4 mr-1" />
@@ -287,7 +287,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-2 text-gray-400 hover:text-gray-600"
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -297,16 +297,16 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
       </div>
 
       {/* Sheet Tabs */}
-      <div className="border-b bg-gray-100">
+      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
         <div className="flex items-center overflow-x-auto">
           {(workbook.sheets || []).map((sheet) => (
             <div key={sheet.id} className="flex items-center">
               <button
                 onClick={() => setActiveSheetId(sheet.id!)}
-                className={`px-4 py-2 text-sm font-medium border-r border-gray-300 whitespace-nowrap ${
+                className={`px-4 py-2 text-sm font-medium border-r border-gray-300 dark:border-gray-600 whitespace-nowrap ${
                   activeSheetId === sheet.id
-                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600'
                 }`}
               >
                 {isRenaming === sheet.id ? (
@@ -323,7 +323,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
                         setIsRenaming(null);
                       }
                     }}
-                    className="w-20 px-1 py-0 text-sm border rounded"
+                    className="w-20 px-1 py-0 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     autoFocus
                   />
                 ) : (
@@ -338,21 +338,21 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
                       setIsRenaming(sheet.id!);
                       setNewSheetName(sheet.lpoNo);
                     }}
-                    className="p-1 text-gray-400 hover:text-gray-600"
+                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     title="Rename"
                   >
                     <Edit2 className="w-3 h-3" />
                   </button>
                   <button
                     onClick={() => handleDuplicateSheet(sheet)}
-                    className="p-1 text-gray-400 hover:text-gray-600"
+                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     title="Duplicate"
                   >
                     <Copy className="w-3 h-3" />
                   </button>
                   <button
                     onClick={() => handleDeleteSheet(sheet.id!)}
-                    className="p-1 text-gray-400 hover:text-red-600"
+                    className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                     title="Delete"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -364,7 +364,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
           
           <button
             onClick={handleAddSheet}
-            className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            className="flex items-center px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
           >
             <Plus className="w-4 h-4 mr-1" />
             Add Sheet
@@ -388,13 +388,13 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
             }}
           />
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
+          <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
             <div className="text-center">
-              <FileSpreadsheet className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <FileSpreadsheet className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
               <p>No sheet selected</p>
               <button
                 onClick={handleAddSheet}
-                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
               >
                 Add First Sheet
               </button>

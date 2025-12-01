@@ -81,19 +81,19 @@ export default function FuelRecordDetailsModal({
         />
 
         {/* Modal */}
-        <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="relative w-full max-w-4xl bg-white dark:bg-gray-800 rounded-lg shadow-xl max-h-[90vh] overflow-hidden flex flex-col transition-colors">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+          <div className="flex items-center justify-between p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary-100 rounded-lg">
-                <Fuel className="w-6 h-6 text-primary-600" />
+              <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
+                <Fuel className="w-6 h-6 text-primary-600 dark:text-primary-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   Fuel Record Details
                 </h2>
                 {record && (
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     <span className="font-medium">{record.truckNo}</span> • {record.goingDo}
                     {record.returnDo && ` / ${record.returnDo}`}
                   </p>
@@ -102,9 +102,9 @@ export default function FuelRecordDetailsModal({
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
             >
-              <X className="w-5 h-5 text-gray-500" />
+              <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </button>
           </div>
 
@@ -126,43 +126,43 @@ export default function FuelRecordDetailsModal({
               <>
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <div className="text-sm text-blue-600 font-medium">Total Fuel</div>
-                    <div className="text-2xl font-bold text-blue-700">
+                  <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg">
+                    <div className="text-sm text-blue-600 dark:text-blue-400 font-medium">Total Fuel</div>
+                    <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
                       {allocations?.total.toLocaleString()} L
                     </div>
                   </div>
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <div className="text-sm text-green-600 font-medium">Extra Fuel</div>
-                    <div className="text-2xl font-bold text-green-700">
+                  <div className="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg">
+                    <div className="text-sm text-green-600 dark:text-green-400 font-medium">Extra Fuel</div>
+                    <div className="text-2xl font-bold text-green-700 dark:text-green-300">
                       {allocations?.extra || 0} L
                     </div>
                   </div>
-                  <div className="bg-orange-50 p-4 rounded-lg">
-                    <div className="text-sm text-orange-600 font-medium">Total LPOs</div>
-                    <div className="text-2xl font-bold text-orange-700">
+                  <div className="bg-orange-50 dark:bg-orange-900/30 p-4 rounded-lg">
+                    <div className="text-sm text-orange-600 dark:text-orange-400 font-medium">Total LPOs</div>
+                    <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
                       {details.summary.totalLPOs}
                     </div>
                   </div>
-                  <div className="bg-purple-50 p-4 rounded-lg">
-                    <div className="text-sm text-purple-600 font-medium">Balance</div>
-                    <div className="text-2xl font-bold text-purple-700">
+                  <div className="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-lg">
+                    <div className="text-sm text-purple-600 dark:text-purple-400 font-medium">Balance</div>
+                    <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
                       {allocations?.balance.toLocaleString()} L
                     </div>
                   </div>
                 </div>
 
                 {/* Journey Information Section */}
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
                   <button
                     onClick={() => toggleSection('journey')}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                   >
                     <div className="flex items-center">
-                      <ArrowLeftRight className="w-5 h-5 text-gray-500 mr-2" />
-                      <span className="font-medium text-gray-900">Journey Information</span>
+                      <ArrowLeftRight className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">Journey Information</span>
                       {journeyInfo?.hasDestinationChanged && (
-                        <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full">
+                        <span className="ml-2 px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs rounded-full">
                           Destination Changed
                         </span>
                       )}
@@ -177,12 +177,12 @@ export default function FuelRecordDetailsModal({
                   {expandedSections.journey && (
                     <div className="p-4 space-y-4">
                       {/* Going Journey */}
-                      <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
                         <div className="flex items-center mb-2">
                           <div className="w-3 h-3 bg-blue-500 rounded-full mr-2" />
-                          <span className="font-medium text-blue-800">Going Journey (IMPORT)</span>
+                          <span className="font-medium text-blue-800 dark:text-blue-300">Going Journey (IMPORT)</span>
                           {!journeyInfo?.isOnReturnJourney && (
-                            <span className="ml-2 px-2 py-0.5 bg-blue-200 text-blue-800 text-xs rounded-full">
+                            <span className="ml-2 px-2 py-0.5 bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 text-xs rounded-full">
                               <Clock className="w-3 h-3 inline mr-1" />
                               In Progress
                             </span>
@@ -190,28 +190,28 @@ export default function FuelRecordDetailsModal({
                         </div>
                         <div className="grid grid-cols-2 gap-4 mt-2">
                           <div>
-                            <div className="text-xs text-blue-600">From</div>
-                            <div className="font-medium text-blue-900">{journeyInfo?.goingJourney.from}</div>
+                            <div className="text-xs text-blue-600 dark:text-blue-400">From</div>
+                            <div className="font-medium text-blue-900 dark:text-blue-200">{journeyInfo?.goingJourney.from}</div>
                           </div>
                           <div>
-                            <div className="text-xs text-blue-600">To (Destination)</div>
-                            <div className="font-medium text-blue-900">{journeyInfo?.goingJourney.to}</div>
+                            <div className="text-xs text-blue-600 dark:text-blue-400">To (Destination)</div>
+                            <div className="font-medium text-blue-900 dark:text-blue-200">{journeyInfo?.goingJourney.to}</div>
                           </div>
                           <div>
-                            <div className="text-xs text-blue-600">DO Number</div>
-                            <div className="font-medium text-blue-900">{journeyInfo?.goingJourney.doNumber}</div>
+                            <div className="text-xs text-blue-600 dark:text-blue-400">DO Number</div>
+                            <div className="font-medium text-blue-900 dark:text-blue-200">{journeyInfo?.goingJourney.doNumber}</div>
                           </div>
                           <div>
-                            <div className="text-xs text-blue-600">Start Location</div>
-                            <div className="font-medium text-blue-900">{journeyInfo?.goingJourney.start}</div>
+                            <div className="text-xs text-blue-600 dark:text-blue-400">Start Location</div>
+                            <div className="font-medium text-blue-900 dark:text-blue-200">{journeyInfo?.goingJourney.start}</div>
                           </div>
                         </div>
                         {journeyInfo?.goingJourney.deliveryOrder && (
-                          <div className="mt-3 pt-3 border-t border-blue-200">
-                            <div className="text-xs text-blue-600 mb-1">Delivery Order Details</div>
+                          <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+                            <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">Delivery Order Details</div>
                             <div className="grid grid-cols-2 gap-2 text-sm">
-                              <div>Client: <span className="font-medium">{journeyInfo.goingJourney.deliveryOrder.clientName}</span></div>
-                              <div>Loading: <span className="font-medium">{journeyInfo.goingJourney.deliveryOrder.loadingPoint}</span></div>
+                              <div className="text-blue-900 dark:text-blue-200">Client: <span className="font-medium">{journeyInfo.goingJourney.deliveryOrder.clientName}</span></div>
+                              <div className="text-blue-900 dark:text-blue-200">Loading: <span className="font-medium">{journeyInfo.goingJourney.deliveryOrder.loadingPoint}</span></div>
                             </div>
                           </div>
                         )}
@@ -219,33 +219,33 @@ export default function FuelRecordDetailsModal({
 
                       {/* Return Journey (if exists) */}
                       {journeyInfo?.returnJourney ? (
-                        <div className="bg-green-50 p-4 rounded-lg">
+                        <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
                           <div className="flex items-center mb-2">
                             <div className="w-3 h-3 bg-green-500 rounded-full mr-2" />
-                            <span className="font-medium text-green-800">Return Journey (EXPORT)</span>
-                            <span className="ml-2 px-2 py-0.5 bg-green-200 text-green-800 text-xs rounded-full">
+                            <span className="font-medium text-green-800 dark:text-green-300">Return Journey (EXPORT)</span>
+                            <span className="ml-2 px-2 py-0.5 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 text-xs rounded-full">
                               <CheckCircle className="w-3 h-3 inline mr-1" />
                               Assigned
                             </span>
                           </div>
                           <div className="grid grid-cols-2 gap-4 mt-2">
                             <div>
-                              <div className="text-xs text-green-600">From</div>
-                              <div className="font-medium text-green-900">{journeyInfo.returnJourney.from}</div>
+                              <div className="text-xs text-green-600 dark:text-green-400">From</div>
+                              <div className="font-medium text-green-900 dark:text-green-200">{journeyInfo.returnJourney.from}</div>
                             </div>
                             <div>
-                              <div className="text-xs text-green-600">To</div>
-                              <div className="font-medium text-green-900">{journeyInfo.returnJourney.to}</div>
+                              <div className="text-xs text-green-600 dark:text-green-400">To</div>
+                              <div className="font-medium text-green-900 dark:text-green-200">{journeyInfo.returnJourney.to}</div>
                             </div>
                             <div>
-                              <div className="text-xs text-green-600">DO Number</div>
-                              <div className="font-medium text-green-900">{journeyInfo.returnJourney.doNumber}</div>
+                              <div className="text-xs text-green-600 dark:text-green-400">DO Number</div>
+                              <div className="font-medium text-green-900 dark:text-green-200">{journeyInfo.returnJourney.doNumber}</div>
                             </div>
                           </div>
                         </div>
                       ) : (
-                        <div className="bg-gray-50 p-4 rounded-lg border-2 border-dashed border-gray-300">
-                          <div className="flex items-center text-gray-500">
+                        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+                          <div className="flex items-center text-gray-500 dark:text-gray-400">
                             <Clock className="w-5 h-5 mr-2" />
                             <span>Return journey not yet assigned (awaiting EXPORT DO)</span>
                           </div>
@@ -254,12 +254,12 @@ export default function FuelRecordDetailsModal({
 
                       {/* Original Going Destination Warning */}
                       {journeyInfo?.hasDestinationChanged && (
-                        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
                           <div className="flex items-start">
-                            <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2 mt-0.5" />
+                            <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-2 mt-0.5" />
                             <div>
-                              <div className="font-medium text-yellow-800">Original Going Destination Preserved</div>
-                              <p className="text-sm text-yellow-700 mt-1">
+                              <div className="font-medium text-yellow-800 dark:text-yellow-300">Original Going Destination Preserved</div>
+                              <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
                                 The EXPORT DO has changed the from/to fields, but the original going journey
                                 destination (<strong>{journeyInfo.goingJourney.to}</strong>) is preserved for accurate
                                 fuel allocation calculations during the going journey.
@@ -273,15 +273,15 @@ export default function FuelRecordDetailsModal({
                 </div>
 
                 {/* Going Fuel Allocations */}
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
                   <button
                     onClick={() => toggleSection('goingFuel')}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                   >
                     <div className="flex items-center">
-                      <Fuel className="w-5 h-5 text-blue-500 mr-2" />
-                      <span className="font-medium text-gray-900">Going Journey Fuel</span>
-                      <span className="ml-2 text-sm text-gray-500">
+                      <Fuel className="w-5 h-5 text-blue-500 dark:text-blue-400 mr-2" />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">Going Journey Fuel</span>
+                      <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
                         ({allocations?.totalGoingFuel.toLocaleString()} L total)
                       </span>
                     </div>
@@ -293,17 +293,17 @@ export default function FuelRecordDetailsModal({
                   </button>
                   
                   {expandedSections.goingFuel && (
-                    <div className="p-4">
+                    <div className="p-4 dark:bg-gray-800">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {Object.entries(allocations?.going || {}).map(([key, value]) => (
                           <div
                             key={key}
-                            className={`p-3 rounded-lg ${value ? 'bg-blue-50' : 'bg-gray-50'}`}
+                            className={`p-3 rounded-lg ${value ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-gray-50 dark:bg-gray-700'}`}
                           >
-                            <div className="text-xs text-gray-500 capitalize">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
                               {key.replace(/([A-Z])/g, ' $1').trim()}
                             </div>
-                            <div className={`text-lg font-semibold ${value ? 'text-blue-700' : 'text-gray-400'}`}>
+                            <div className={`text-lg font-semibold ${value ? 'text-blue-700 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}>
                               {value ? `${Math.abs(value).toLocaleString()} L` : '-'}
                             </div>
                           </div>
@@ -314,15 +314,15 @@ export default function FuelRecordDetailsModal({
                 </div>
 
                 {/* Return Fuel Allocations */}
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
                   <button
                     onClick={() => toggleSection('returnFuel')}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                   >
                     <div className="flex items-center">
-                      <Fuel className="w-5 h-5 text-green-500 mr-2" />
-                      <span className="font-medium text-gray-900">Return Journey Fuel</span>
-                      <span className="ml-2 text-sm text-gray-500">
+                      <Fuel className="w-5 h-5 text-green-500 dark:text-green-400 mr-2" />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">Return Journey Fuel</span>
+                      <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
                         ({allocations?.totalReturnFuel.toLocaleString()} L total)
                       </span>
                     </div>
@@ -334,17 +334,17 @@ export default function FuelRecordDetailsModal({
                   </button>
                   
                   {expandedSections.returnFuel && (
-                    <div className="p-4">
+                    <div className="p-4 dark:bg-gray-800">
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         {Object.entries(allocations?.return || {}).map(([key, value]) => (
                           <div
                             key={key}
-                            className={`p-3 rounded-lg ${value ? 'bg-green-50' : 'bg-gray-50'}`}
+                            className={`p-3 rounded-lg ${value ? 'bg-green-50 dark:bg-green-900/30' : 'bg-gray-50 dark:bg-gray-700'}`}
                           >
-                            <div className="text-xs text-gray-500 capitalize">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
                               {key.replace(/([A-Z])/g, ' $1').trim()}
                             </div>
-                            <div className={`text-lg font-semibold ${value ? 'text-green-700' : 'text-gray-400'}`}>
+                            <div className={`text-lg font-semibold ${value ? 'text-green-700 dark:text-green-300' : 'text-gray-400 dark:text-gray-500'}`}>
                               {value ? `${Math.abs(value).toLocaleString()} L` : '-'}
                             </div>
                           </div>
@@ -355,17 +355,23 @@ export default function FuelRecordDetailsModal({
                 </div>
 
                 {/* LPO Entries */}
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
                   <button
                     onClick={() => toggleSection('lpos')}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                   >
-                    <div className="flex items-center">
-                      <FileText className="w-5 h-5 text-orange-500 mr-2" />
-                      <span className="font-medium text-gray-900">LPO Entries</span>
-                      <span className="ml-2 text-sm text-gray-500">
+                    <div className="flex items-center flex-wrap gap-2">
+                      <FileText className="w-5 h-5 text-orange-500 dark:text-orange-400 mr-2" />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">LPO Entries</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
                         ({details.lpoEntries.length} entries • {details.summary.totalFuelOrdered.toLocaleString()} L)
                       </span>
+                      {/* Show breakdown by type */}
+                      {details.summary.cashLPOs && details.summary.cashLPOs > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                          {details.summary.cashLPOs} Cash
+                        </span>
+                      )}
                     </div>
                     {expandedSections.lpos ? (
                       <ChevronUp className="w-5 h-5 text-gray-400" />
@@ -375,7 +381,7 @@ export default function FuelRecordDetailsModal({
                   </button>
                   
                   {expandedSections.lpos && (
-                    <div className="p-4">
+                    <div className="p-4 dark:bg-gray-800">
                       {details.lpoEntries.length === 0 ? (
                         <div className="text-center py-4 text-gray-500 dark:text-gray-400">
                           No LPO entries found for this fuel record
@@ -400,8 +406,22 @@ export default function FuelRecordDetailsModal({
                                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{lpo.lpoNo}</td>
                                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{lpo.date}</td>
                                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{lpo.dieselAt}</td>
-                                  <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{lpo.doSdo}</td>
-                                  <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100">{lpo.ltrs.toLocaleString()}</td>
+                                  <td className="px-3 py-2 text-gray-700 dark:text-gray-300">
+                                    {lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || !lpo.doSdo ? (
+                                      <span className="text-amber-600 dark:text-amber-400 italic">NIL (Cash)</span>
+                                    ) : lpo.doSdo}
+                                  </td>
+                                  <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100">
+                                    <div className="flex flex-col items-end">
+                                      <span>{lpo.ltrs.toLocaleString()}</span>
+                                      {/* Show amendment info if liters were changed */}
+                                      {lpo.originalLtrs !== undefined && lpo.originalLtrs !== null && lpo.originalLtrs !== lpo.ltrs && (
+                                        <span className="text-xs text-amber-600 dark:text-amber-400">
+                                          (was {lpo.originalLtrs.toLocaleString()})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">{lpo.pricePerLtr.toLocaleString()}</td>
                                   <td className="px-3 py-2 text-center">
                                     <span className={`px-2 py-0.5 rounded-full text-xs ${
@@ -409,9 +429,11 @@ export default function FuelRecordDetailsModal({
                                         ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                                         : lpo.journeyType === 'return'
                                         ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                        : lpo.journeyType === 'cash'
+                                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                                         : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
                                     }`}>
-                                      {lpo.journeyType}
+                                      {lpo.journeyType === 'cash' ? 'CASH' : lpo.journeyType}
                                     </span>
                                   </td>
                                 </tr>
@@ -494,10 +516,10 @@ export default function FuelRecordDetailsModal({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end p-4 border-t bg-gray-50">
+          <div className="flex items-center justify-end p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
             >
               Close
             </button>

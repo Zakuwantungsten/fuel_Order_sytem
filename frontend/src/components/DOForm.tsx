@@ -206,34 +206,34 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         {/* Background overlay */}
         <div
-          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          className="fixed inset-0 transition-opacity bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-80"
           onClick={handleClose}
         />
 
         {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
           {/* Header */}
-          <div className="bg-primary-600 px-6 py-4 flex items-center justify-between">
+          <div className="bg-primary-600 dark:bg-primary-700 px-6 py-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-white">
               {order ? `Edit ${order.doType || 'DO'}-${order.doNumber}` : 'New Delivery Order'}
             </h3>
-            <button onClick={handleClose} className="p-2 text-white hover:bg-primary-700 rounded">
+            <button onClick={handleClose} className="p-2 text-white hover:bg-primary-700 dark:hover:bg-primary-600 rounded">
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="bg-white px-6 py-6">
+          <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 px-6 py-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Basic Information */}
               <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 uppercase">
                   Basic Information
                 </h4>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                   Type *
                 </label>
                 <div className="flex items-center space-x-6">
@@ -244,9 +244,9 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                       value="DO"
                       checked={formData.doType === 'DO'}
                       onChange={handleDOTypeChange}
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600"
                     />
-                    <span className="ml-2 text-sm text-gray-700">DO (Delivery Order)</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">DO (Delivery Order)</span>
                   </label>
                   <label className="inline-flex items-center">
                     <input
@@ -255,15 +255,15 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                       value="SDO"
                       checked={formData.doType === 'SDO'}
                       onChange={handleDOTypeChange}
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600"
                     />
-                    <span className="ml-2 text-sm text-gray-700">SDO (Special Delivery Order)</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">SDO (Special Delivery Order)</span>
                   </label>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   {formData.doType || 'DO'} Number *
                 </label>
                 <input
@@ -272,31 +272,31 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   value={formData.doNumber || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., 0001 or 1"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Date *</label>
                 <input
                   type="date"
                   name="date"
                   value={formData.date || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Import/Export *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Import/Export *</label>
                 <select
                   name="importOrExport"
                   value={formData.importOrExport || 'IMPORT'}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
                   <option value="IMPORT">IMPORT</option>
                   <option value="EXPORT">EXPORT</option>
@@ -304,7 +304,7 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Invoice Numbers
                 </label>
                 <input
@@ -312,20 +312,20 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   name="invoiceNos"
                   value={formData.invoiceNos || ''}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Optional"
                 />
               </div>
 
               {/* Client Information */}
               <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 mt-4 uppercase">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 mt-4 uppercase">
                   Client & Haulier Information
                 </h4>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Client Name *
                 </label>
                 <input
@@ -334,32 +334,32 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   value={formData.clientName || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter client name"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Haulier</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Haulier</label>
                 <input
                   type="text"
                   name="haulier"
                   value={formData.haulier || ''}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter haulier name"
                 />
               </div>
 
               {/* Vehicle Information */}
               <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 mt-4 uppercase">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 mt-4 uppercase">
                   Vehicle Information
                 </h4>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Truck Number *
                 </label>
                 <input
@@ -368,13 +368,13 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   value={formData.truckNo || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., T844 EKS"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Trailer Number *
                 </label>
                 <input
@@ -383,13 +383,13 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   value={formData.trailerNo || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., T629 ELE"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Container Number *
                 </label>
                 <input
@@ -398,13 +398,13 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   value={formData.containerNo || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., LOOSE CARGO"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Border Entry DRC
                 </label>
                 <input
@@ -412,13 +412,13 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   name="borderEntryDRC"
                   value={formData.borderEntryDRC || ''}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Optional"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Driver Name
                 </label>
                 <input
@@ -426,20 +426,20 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   name="driverName"
                   value={formData.driverName || ''}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter driver name"
                 />
               </div>
 
               {/* Route Information */}
               <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 mt-4 uppercase">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 mt-4 uppercase">
                   Route Information
                 </h4>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Loading Point *
                 </label>
                 <input
@@ -448,13 +448,13 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   value={formData.loadingPoint || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., DAR"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Destination *
                 </label>
                 <input
@@ -463,20 +463,20 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   value={formData.destination || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., CCR KOLWEZI"
                 />
               </div>
 
               {/* Financial Information */}
               <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 mt-4 uppercase">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 mt-4 uppercase">
                   Financial Information
                 </h4>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Tonnage *
                 </label>
                 <input
@@ -487,13 +487,13 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   required
                   min="0"
                   step="0.1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter tonnage"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Rate Per Ton ($) *
                 </label>
                 <input
@@ -504,16 +504,16 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   required
                   min="0"
                   step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter rate per ton"
                 />
               </div>
 
               <div className="md:col-span-2">
-                <div className="bg-primary-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-700">
+                <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
                     <span className="font-semibold">Total Amount:</span>{' '}
-                    <span className="text-lg font-bold text-primary-600">
+                    <span className="text-lg font-bold text-primary-600 dark:text-primary-400">
                       ${((formData.tonnages || 0) * (formData.ratePerTon || 0)).toFixed(2)}
                     </span>
                   </p>
@@ -528,7 +528,7 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
                   >
                     Done
                   </button>
@@ -536,7 +536,7 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                     type="button"
                     onClick={handleDownload}
                     disabled={isDownloading}
-                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 disabled:opacity-50"
                   >
                     <Download className="w-4 h-4 mr-2" />
                     {isDownloading ? 'Downloading...' : 'Download DO'}
@@ -547,13 +547,13 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
                   >
                     {order ? 'Update' : 'Create'} DO
                   </button>

@@ -16,6 +16,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [editedSheet, setEditedSheet] = useState<LPOSheet>(sheet);
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // Prevent double submissions
 
   useEffect(() => {
     setEditedSheet(sheet);
@@ -48,6 +49,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   };
 
   const handleSave = async () => {
+    if (isSaving) return; // Prevent double submission
+    setIsSaving(true);
     try {
       const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, editedSheet);
       onUpdate(updatedSheet);
@@ -56,11 +59,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     } catch (error) {
       console.error('Error saving sheet:', error);
       alert('Error saving changes. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   // Save a single row edit to the backend
   const handleRowSave = async (_index: number) => {
+    if (isSaving) return; // Prevent double submission
+    setIsSaving(true);
     try {
       const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, editedSheet);
       onUpdate(updatedSheet);
@@ -69,6 +76,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     } catch (error) {
       console.error('Error saving entry:', error);
       alert('Error saving entry. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 

@@ -254,7 +254,7 @@ const LPOSummary = ({
 
   if (!summary) {
     return (
-      <div className="text-center py-8 text-gray-500">
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
         {availableMonths.length === 0 ? 'No LPO data available' : 'Select a month to view summary'}
       </div>
     );
@@ -263,12 +263,12 @@ const LPOSummary = ({
   return (
     <div className="space-y-6">
       {/* Header with Controls */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 p-4 transition-colors">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex items-center space-x-3">
-              <Calendar className="w-6 h-6 text-primary-600" />
-              <h3 className="text-xl font-semibold text-gray-900">
+              <Calendar className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                 LPO Summary - {summary.month} {selectedYear}
               </h3>
             </div>
@@ -278,7 +278,7 @@ const LPOSummary = ({
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
               >
                 {availableYears.map(year => (
                   <option key={year} value={year}>{year}</option>
@@ -289,7 +289,7 @@ const LPOSummary = ({
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
               >
                 {availableMonths.map(month => (
                   <option key={month} value={month}>{month}</option>
@@ -297,23 +297,23 @@ const LPOSummary = ({
               </select>
 
               {/* View Mode Toggle */}
-              <div className="flex border border-gray-300 rounded-md overflow-hidden">
+              <div className="flex border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
                 <button
                   onClick={() => setViewMode('summary')}
                   className={`px-4 py-2 text-sm font-medium ${
                     viewMode === 'summary'
                       ? 'bg-primary-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
+                      : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  } transition-colors`}
                 >
                   Summary
                 </button>
                 <button
                   onClick={() => setViewMode('detailed')}
-                  className={`px-4 py-2 text-sm font-medium border-l ${
+                  className={`px-4 py-2 text-sm font-medium border-l border-gray-300 dark:border-gray-600 ${
                     viewMode === 'detailed'
                       ? 'bg-primary-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
                 }`}
               >
                 Detailed
@@ -323,7 +323,7 @@ const LPOSummary = ({
               {/* Export Buttons */}
               <button
                 onClick={handleExportMonth}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
               >
                 <Download className="w-4 h-4 mr-2" />
                 Export Filtered
@@ -340,14 +340,14 @@ const LPOSummary = ({
           </div>
 
           {/* Filters Section */}
-          <div className="border-t pt-4">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* Station Filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Filter by Stations ({localSelectedStations.length} selected)
                 </label>
-                <div className="max-h-32 overflow-y-auto border border-gray-300 rounded-md p-2 bg-gray-50">
+                <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-gray-50 dark:bg-gray-700 transition-colors">
                   <label className="flex items-center mb-2 text-sm">
                     <input
                       type="checkbox"
@@ -385,7 +385,7 @@ const LPOSummary = ({
 
               {/* Date Range Filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Date Range Filter
                 </label>
                 <div className="space-y-2">
@@ -393,14 +393,14 @@ const LPOSummary = ({
                     type="date"
                     value={localDateFrom}
                     onChange={(e) => setLocalDateFrom(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
                     placeholder="From Date"
                   />
                   <input
                     type="date"
                     value={localDateTo}
                     onChange={(e) => setLocalDateTo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
                     placeholder="To Date"
                   />
                 </div>
@@ -414,11 +414,11 @@ const LPOSummary = ({
                     setLocalDateFrom('');
                     setLocalDateTo('');
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                 >
                   Clear Filters
                 </button>
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
                   Showing {summary.totalLPOs} of {lpoEntries.filter(e => e.date.includes(selectedMonth)).length} entries
                 </div>
               </div>
@@ -429,27 +429,27 @@ const LPOSummary = ({
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <p className="text-sm text-gray-600">Total LPOs</p>
-          <p className="text-2xl font-bold text-gray-900">{summary.totalLPOs}</p>
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+          <p className="text-sm text-gray-600 dark:text-gray-400">Total LPOs</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.totalLPOs}</p>
         </div>
-        <div className="bg-blue-50 p-4 rounded-lg shadow">
+        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-blue-600">Total Liters</p>
-            <Fuel className="w-5 h-5 text-blue-400" />
+            <p className="text-sm text-blue-600 dark:text-blue-400">Total Liters</p>
+            <Fuel className="w-5 h-5 text-blue-400 dark:text-blue-300" />
           </div>
-          <p className="text-2xl font-bold text-blue-900">{summary.totalLiters.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{summary.totalLiters.toLocaleString()}</p>
         </div>
-        <div className="bg-green-50 p-4 rounded-lg shadow">
+        <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-green-600">Total Amount</p>
-            <DollarSign className="w-5 h-5 text-green-400" />
+            <p className="text-sm text-green-600 dark:text-green-400">Total Amount</p>
+            <DollarSign className="w-5 h-5 text-green-400 dark:text-green-300" />
           </div>
-          <p className="text-2xl font-bold text-green-900">TZS {summary.totalAmount.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-green-900 dark:text-green-100">TZS {summary.totalAmount.toLocaleString()}</p>
         </div>
-        <div className="bg-yellow-50 p-4 rounded-lg shadow">
-          <p className="text-sm text-yellow-600">Avg Price/Liter</p>
-          <p className="text-2xl font-bold text-yellow-900">TZS {summary.avgPricePerLiter.toFixed(2)}</p>
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+          <p className="text-sm text-yellow-600 dark:text-yellow-400">Avg Price/Liter</p>
+          <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">TZS {summary.avgPricePerLiter.toFixed(2)}</p>
         </div>
       </div>
 
@@ -510,18 +510,18 @@ const LPOSummary = ({
           </div>
 
           {/* Destination Summary */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-900">LPOs by Destination</h4>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 overflow-hidden transition-colors">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">LPOs by Destination</h4>
             </div>
             <div className="p-6">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {Object.entries(summary.byDestination)
                   .sort((a, b) => b[1] - a[1])
                   .map(([destination, count]) => (
-                    <div key={destination} className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-sm text-gray-600 truncate">{destination}</p>
-                      <p className="text-lg font-semibold text-gray-900">{count} LPOs</p>
+                    <div key={destination} className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg transition-colors">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{destination}</p>
+                      <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{count} LPOs</p>
                     </div>
                   ))}
               </div>
@@ -578,49 +578,49 @@ const LPOSummary = ({
                 {summary.entries
                   .sort((a, b) => a.sn - b.sn)
                   .map((entry) => (
-                    <tr key={entry.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                    <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                         {entry.sn}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.date}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         {entry.lpoNo}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.dieselAt}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.doSdo}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.truckNo}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100">
                         {entry.ltrs.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100">
                         TZS {entry.pricePerLtr.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-primary-600">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-primary-600 dark:text-primary-400">
                         TZS {(entry.ltrs * entry.pricePerLtr).toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.destinations}
                       </td>
                     </tr>
                   ))}
                 {/* Month Totals */}
-                <tr className="bg-gray-50 font-semibold">
-                  <td colSpan={6} className="px-4 py-3 text-sm text-right text-gray-900">
+                <tr className="bg-gray-50 dark:bg-gray-700 font-semibold">
+                  <td colSpan={6} className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
                     Month Total:
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100">
                     {summary.totalLiters.toLocaleString()}
                   </td>
                   <td className="px-4 py-3"></td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-primary-600">
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-primary-600 dark:text-primary-400">
                     TZS {summary.totalAmount.toLocaleString()}
                   </td>
                   <td className="px-4 py-3"></td>

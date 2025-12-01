@@ -48,6 +48,15 @@ const lpoEntrySchema = new Schema<ILPOEntryDocument>(
       required: [true, 'Destination is required'],
       trim: true,
     },
+    // Amendment tracking - stores original value if liters were changed
+    originalLtrs: {
+      type: Number,
+      default: null,
+    },
+    amendedAt: {
+      type: Date,
+      default: null,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

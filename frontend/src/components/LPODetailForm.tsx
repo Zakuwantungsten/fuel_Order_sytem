@@ -696,20 +696,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
             {/* Cash Currency Converter - Only shown when CASH is selected */}
             {formData.station === 'CASH' && (
-              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <h4 className="text-sm font-semibold text-yellow-800 mb-3">💱 Cash Currency Converter</h4>
-                <p className="text-xs text-yellow-700 mb-3">
+              <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+                <h4 className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 mb-3">💱 Cash Currency Converter</h4>
+                <p className="text-xs text-yellow-700 dark:text-yellow-300 mb-3">
                   Enter the local rate and conversion rate to calculate the final TZS rate for the LPO.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-yellow-800 mb-1">
+                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-200 mb-1">
                       Currency
                     </label>
                     <select
                       value={cashConversion.currency}
                       onChange={(e) => setCashConversion(prev => ({ ...prev, currency: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 dark:border-yellow-600 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     >
                       <option value="ZMW">ZMW (Zambian Kwacha)</option>
                       <option value="USD">USD (US Dollar)</option>
@@ -717,7 +717,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-yellow-800 mb-1">
+                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-200 mb-1">
                       Local Rate ({cashConversion.currency}/Liter)
                     </label>
                     <input
@@ -726,11 +726,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       onChange={(e) => setCashConversion(prev => ({ ...prev, localRate: parseFloat(e.target.value) || 0 }))}
                       placeholder="e.g., 26"
                       step="0.01"
-                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 dark:border-yellow-600 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-yellow-800 mb-1">
+                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-200 mb-1">
                       Conversion Rate (TZS per {cashConversion.currency})
                     </label>
                     <input
@@ -739,20 +739,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       onChange={(e) => setCashConversion(prev => ({ ...prev, conversionRate: parseFloat(e.target.value) || 0 }))}
                       placeholder="e.g., 116"
                       step="0.01"
-                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 dark:border-yellow-600 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-yellow-800 mb-1">
+                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-200 mb-1">
                       Calculated Rate (TZS/Liter)
                     </label>
-                    <div className="w-full px-2 py-1.5 text-sm bg-yellow-100 border border-yellow-300 rounded-md font-semibold text-yellow-900">
+                    <div className="w-full px-2 py-1.5 text-sm bg-yellow-100 dark:bg-yellow-800/30 border border-yellow-300 dark:border-yellow-600 rounded-md font-semibold text-yellow-900 dark:text-yellow-200">
                       {cashConversion.calculatedRate.toFixed(2)} TZS
                     </div>
                   </div>
                 </div>
                 {cashConversion.calculatedRate > 0 && (
-                  <p className="text-xs text-yellow-700 mt-2">
+                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-2">
                     Formula: {cashConversion.localRate} {cashConversion.currency}/L × {cashConversion.conversionRate} TZS/{cashConversion.currency} = {cashConversion.calculatedRate.toFixed(2)} TZS/L
                   </p>
                 )}
@@ -761,8 +761,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           </div>
 
           {/* Instructions */}
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm text-blue-800">
+          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
               <strong>Instructions:</strong> Enter a truck number to auto-fetch DO number and destination. 
               Use the <ArrowRight className="inline w-4 h-4" /> / <ArrowLeft className="inline w-4 h-4" /> 
               button to toggle between Going and Returning DO.
@@ -842,8 +842,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               onClick={() => toggleDirection(index)}
                               className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
                                 autoFill.direction === 'going'
-                                  ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                                  : 'bg-orange-100 text-orange-800 hover:bg-orange-200'
+                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
+                                  : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
                               }`}
                               title="Click to toggle direction"
                             >
@@ -922,33 +922,33 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           </div>
 
           {/* Total Display */}
-          <div className="mb-6 p-4 bg-primary-50 rounded-lg">
+          <div className="mb-6 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
             <div className="flex justify-between items-center">
-              <span className="text-lg font-semibold text-gray-900">TOTAL:</span>
-              <span className="text-2xl font-bold text-primary-700">
+              <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">TOTAL:</span>
+              <span className="text-2xl font-bold text-primary-700 dark:text-primary-400">
                 {formData.total?.toFixed(2)}
               </span>
             </div>
             {formData.entries && formData.entries.length > 0 && (
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Total Liters: {formData.entries.reduce((sum, e) => sum + e.liters, 0)}L
               </p>
             )}
           </div>
 
           {/* Form Actions */}
-          <div className="flex justify-end space-x-3 pt-4 border-t">
+          <div className="flex justify-end space-x-3 pt-4 border-t dark:border-gray-700">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!formData.entries || formData.entries.length === 0}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
             >
               {initialData ? 'Update' : 'Create'} LPO Document
             </button>

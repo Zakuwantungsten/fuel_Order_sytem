@@ -100,47 +100,47 @@ export function PaymentManager({ user: _user }: { user: any }) {
               <div className="text-sm text-gray-600 dark:text-gray-400">Active Orders</div>
               <div className="text-2xl text-gray-900 dark:text-gray-100 mt-1">{stats.active}</div>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-600" />
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Cancelled Orders</div>
-              <div className="text-2xl text-gray-900 mt-1">{stats.cancelled}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Cancelled Orders</div>
+              <div className="text-2xl text-gray-900 dark:text-gray-100 mt-1">{stats.cancelled}</div>
             </div>
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <XCircle className="w-6 h-6 text-red-600" />
+            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+              <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600">Pending Amount</div>
-              <div className="text-2xl text-gray-900 mt-1">${stats.totalAmount}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Pending Amount</div>
+              <div className="text-2xl text-gray-900 dark:text-gray-100 mt-1">${stats.totalAmount}</div>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Search */}
-      <div className="bg-white p-4 rounded-lg shadow mb-6">
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors mb-6">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
           <input
             type="text"
             placeholder="Search by truck number, LPO, or station..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
           />
         </div>
       </div>
@@ -179,24 +179,24 @@ export function PaymentManager({ user: _user }: { user: any }) {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredOrders.map((order) => (
-                <tr key={order.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {order.lpoNumber}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.station}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.truckNo}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.doNo}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.liters} L</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${order.amount}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{order.station}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{order.truckNo}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.doNo}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{order.liters} L</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">${order.amount}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <span
                         className={`px-2 py-1 text-xs rounded-full ${
                           order.status === 'active'
-                            ? 'bg-green-100 text-green-800'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
                             : order.status === 'cancelled'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-blue-100 text-blue-800'
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
+                            : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400'
                         }`}
                       >
                         {order.status.toUpperCase()}
@@ -232,7 +232,7 @@ export function PaymentManager({ user: _user }: { user: any }) {
                         </>
                       )}
                       {order.status === 'cancelled' && order.reason && (
-                        <span className="text-xs text-gray-500">{order.reason}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{order.reason}</span>
                       )}
                     </div>
                   </td>
@@ -256,12 +256,12 @@ export function PaymentManager({ user: _user }: { user: any }) {
       )}
 
       {/* Info Box */}
-      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+      <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/50 rounded-lg transition-colors">
         <div className="flex items-start">
-          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3" />
+          <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-500 mt-0.5 mr-3" />
           <div>
-            <h3 className="text-sm text-yellow-900">Payment Manager Responsibilities</h3>
-            <div className="mt-2 text-sm text-yellow-800">
+            <h3 className="text-sm text-yellow-900 dark:text-yellow-200">Payment Manager Responsibilities</h3>
+            <div className="mt-2 text-sm text-yellow-800 dark:text-yellow-300">
               <ul className="list-disc list-inside space-y-1">
                 <li>Cancel orders when assigned station is out of fuel</li>
                 <li>Arrange alternative payment at other stations</li>
@@ -304,43 +304,43 @@ function CancelOrderModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <h2 className="text-gray-900">Cancel Order</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md transition-colors">
+        <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+          <h2 className="text-gray-900 dark:text-gray-100">Cancel Order</h2>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-600 mb-2">Order Details:</div>
+          <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg transition-colors">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Order Details:</div>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-600">LPO:</span>
-                <span className="text-gray-900">{order.lpoNumber}</span>
+                <span className="text-gray-600 dark:text-gray-400">LPO:</span>
+                <span className="text-gray-900 dark:text-gray-100">{order.lpoNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Truck:</span>
-                <span className="text-gray-900">{order.truckNo}</span>
+                <span className="text-gray-600 dark:text-gray-400">Truck:</span>
+                <span className="text-gray-900 dark:text-gray-100">{order.truckNo}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Station:</span>
-                <span className="text-gray-900">{order.station}</span>
+                <span className="text-gray-600 dark:text-gray-400">Station:</span>
+                <span className="text-gray-900 dark:text-gray-100">{order.station}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Amount:</span>
-                <span className="text-gray-900">${order.amount}</span>
+                <span className="text-gray-600 dark:text-gray-400">Amount:</span>
+                <span className="text-gray-900 dark:text-gray-100">${order.amount}</span>
               </div>
             </div>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-700 mb-2">Cancellation Reason</label>
+              <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">Cancellation Reason</label>
               <select
                 required
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
               >
                 <option value="">Select a reason</option>
                 {predefinedReasons.map((r) => (
@@ -353,12 +353,12 @@ function CancelOrderModal({
 
             {reason === 'Other' && (
               <div>
-                <label className="block text-sm text-gray-700 mb-2">Specify Reason</label>
+                <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">Specify Reason</label>
                 <textarea
                   required
                   value={customReason}
                   onChange={(e) => setCustomReason(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
                   rows={3}
                   placeholder="Enter the reason for cancellation..."
                 />
@@ -370,7 +370,7 @@ function CancelOrderModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Close
             </button>

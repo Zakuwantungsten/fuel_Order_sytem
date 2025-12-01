@@ -160,7 +160,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
 
   if (!summary) {
     return (
-      <div className="text-center py-8 text-gray-500">
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
         Select a month to view summary
       </div>
     );
@@ -171,11 +171,11 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
   return (
     <div className="space-y-6">
       {/* Header with Controls */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 p-4 transition-colors">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <Calendar className="w-6 h-6 text-primary-600" />
-            <h3 className="text-xl font-semibold text-gray-900">
+            <Calendar className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
               DO Summary - {summary.month} 2025
             </h3>
           </div>
@@ -185,7 +185,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
             >
               {availableMonths.map(month => (
                 <option key={month} value={month}>{month}</option>
@@ -193,24 +193,24 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
             </select>
 
             {/* View Mode Toggle */}
-            <div className="flex border border-gray-300 rounded-md overflow-hidden">
+            <div className="flex border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
               <button
                 onClick={() => setViewMode('summary')}
                 className={`px-4 py-2 text-sm font-medium ${
                   viewMode === 'summary'
                     ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+                } transition-colors`}
               >
                 Summary
               </button>
               <button
                 onClick={() => setViewMode('detailed')}
-                className={`px-4 py-2 text-sm font-medium border-l ${
+                className={`px-4 py-2 text-sm font-medium border-l border-gray-300 dark:border-gray-600 ${
                   viewMode === 'detailed'
                     ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+                } transition-colors`}
               >
                 Detailed
               </button>
@@ -219,11 +219,11 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
             {/* Group By Selector (only in detailed view) */}
             {viewMode === 'detailed' && (
               <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-gray-500" />
+                <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                 <select
                   value={groupBy}
                   onChange={(e) => setGroupBy(e.target.value as any)}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
                 >
                   <option value="none">No Grouping</option>
                   <option value="client">Group by Client</option>
@@ -235,7 +235,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
             {/* Export Button */}
             <button
               onClick={handleExportSummary}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
             >
               <Download className="w-4 h-4 mr-2" />
               Export
@@ -246,41 +246,41 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
 
       {/* Key Metrics - Always visible */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <p className="text-sm text-gray-600">Total Orders</p>
-          <p className="text-2xl font-bold text-gray-900">{summary.totalOrders}</p>
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+          <p className="text-sm text-gray-600 dark:text-gray-400">Total Orders</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.totalOrders}</p>
         </div>
-        <div className="bg-blue-50 p-4 rounded-lg shadow">
-          <p className="text-sm text-blue-600">Import</p>
-          <p className="text-2xl font-bold text-blue-900">{summary.totalImport}</p>
+        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+          <p className="text-sm text-blue-600 dark:text-blue-400">Import</p>
+          <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{summary.totalImport}</p>
         </div>
-        <div className="bg-green-50 p-4 rounded-lg shadow">
-          <p className="text-sm text-green-600">Export</p>
-          <p className="text-2xl font-bold text-green-900">{summary.totalExport}</p>
+        <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+          <p className="text-sm text-green-600 dark:text-green-400">Export</p>
+          <p className="text-2xl font-bold text-green-900 dark:text-green-100">{summary.totalExport}</p>
         </div>
-        <div className="bg-purple-50 p-4 rounded-lg shadow">
-          <p className="text-sm text-purple-600">Total Tonnage</p>
-          <p className="text-2xl font-bold text-purple-900">{summary.totalTonnage.toFixed(1)}</p>
+        <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+          <p className="text-sm text-purple-600 dark:text-purple-400">Total Tonnage</p>
+          <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">{summary.totalTonnage.toFixed(1)}</p>
         </div>
-        <div className="bg-primary-50 p-4 rounded-lg shadow">
-          <p className="text-sm text-primary-600">Total Revenue</p>
-          <p className="text-2xl font-bold text-primary-900">${summary.totalRevenue.toFixed(2)}</p>
+        <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+          <p className="text-sm text-primary-600 dark:text-primary-400">Total Revenue</p>
+          <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">${summary.totalRevenue.toFixed(2)}</p>
         </div>
-        <div className="bg-orange-50 p-4 rounded-lg shadow">
+        <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-orange-600">Fuel Consumed</p>
-            <Fuel className="w-5 h-5 text-orange-400" />
+            <p className="text-sm text-orange-600 dark:text-orange-400">Fuel Consumed</p>
+            <Fuel className="w-5 h-5 text-orange-400 dark:text-orange-300" />
           </div>
-          <p className="text-2xl font-bold text-orange-900">{summary.totalFuelConsumed.toLocaleString()} L</p>
-          <p className="text-xs text-orange-600 mt-1">Avg: {summary.avgFuelPerOrder.toFixed(0)} L/order</p>
+          <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">{summary.totalFuelConsumed.toLocaleString()} L</p>
+          <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">Avg: {summary.avgFuelPerOrder.toFixed(0)} L/order</p>
         </div>
-        <div className="bg-yellow-50 p-4 rounded-lg shadow">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-yellow-600">Fuel Cost</p>
-            <DollarSign className="w-5 h-5 text-yellow-400" />
+            <p className="text-sm text-yellow-600 dark:text-yellow-400">Fuel Cost</p>
+            <DollarSign className="w-5 h-5 text-yellow-400 dark:text-yellow-300" />
           </div>
-          <p className="text-2xl font-bold text-yellow-900">TZS {summary.totalFuelCost.toLocaleString()}</p>
-          <p className="text-xs text-yellow-600 mt-1">
+          <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">TZS {summary.totalFuelCost.toLocaleString()}</p>
+          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
             {summary.totalFuelConsumed > 0 && `${(summary.totalFuelCost / summary.totalFuelConsumed).toFixed(2)} per L`}
           </p>
         </div>
@@ -337,18 +337,18 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
           </div>
 
           {/* Destination Summary */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-900">Orders by Destination</h4>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 overflow-hidden transition-colors">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Orders by Destination</h4>
             </div>
             <div className="p-6">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {Object.entries(summary.byDestination)
                   .sort((a, b) => b[1] - a[1])
                   .map(([destination, count]) => (
-                    <div key={destination} className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-sm text-gray-600 truncate">{destination}</p>
-                      <p className="text-lg font-semibold text-gray-900">{count} orders</p>
+                    <div key={destination} className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg transition-colors">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{destination}</p>
+                      <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{count} orders</p>
                     </div>
                   ))}
               </div>

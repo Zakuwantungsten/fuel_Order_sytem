@@ -34,6 +34,9 @@ export interface LPOEntry {
   ltrs: number;
   pricePerLtr: number;
   destinations: string;
+  // Amendment tracking
+  originalLtrs?: number | null;
+  amendedAt?: string | null;
 }
 
 // LPO Detail format (from LPOS 2025.csv)
@@ -45,6 +48,9 @@ export interface LPODetail {
   rate: number;
   amount: number;
   dest: string;
+  // Amendment tracking
+  originalLiters?: number | null;
+  amendedAt?: string | null;
 }
 
 // LPO Auto-fetch types

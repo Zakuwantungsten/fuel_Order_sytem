@@ -76,6 +76,9 @@ export interface ILPOEntry {
   ltrs: number;
   pricePerLtr: number;
   destinations: string;
+  // Amendment tracking
+  originalLtrs?: number | null;
+  amendedAt?: Date | null;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -91,6 +94,9 @@ export interface ILPODetail {
   amount: number;
   dest: string;
   sortOrder?: number;
+  // Amendment tracking
+  originalLiters?: number | null;
+  amendedAt?: Date | null;
 }
 
 // LPO Summary/Document (Sheet in workbook)

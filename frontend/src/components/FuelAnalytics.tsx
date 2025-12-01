@@ -136,43 +136,43 @@ const FuelAnalytics = ({ fuelRecords, lpoEntries }: FuelAnalyticsProps) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 p-4 transition-colors">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <BarChart3 className="w-6 h-6 text-primary-600" />
-            <h3 className="text-xl font-semibold text-gray-900">Fuel Analytics Dashboard</h3>
+            <BarChart3 className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Fuel Analytics Dashboard</h3>
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
             {/* View Toggle */}
-            <div className="flex border border-gray-300 rounded-md overflow-hidden">
+            <div className="flex border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
               <button
                 onClick={() => setSelectedView('routes')}
                 className={`px-4 py-2 text-sm font-medium ${
                   selectedView === 'routes'
                     ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+                } transition-colors`}
               >
                 By Routes
               </button>
               <button
                 onClick={() => setSelectedView('trucks')}
-                className={`px-4 py-2 text-sm font-medium border-l ${
+                className={`px-4 py-2 text-sm font-medium border-l border-gray-300 dark:border-gray-600 ${
                   selectedView === 'trucks'
                     ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+                } transition-colors`}
               >
                 By Trucks
               </button>
               <button
                 onClick={() => setSelectedView('costs')}
-                className={`px-4 py-2 text-sm font-medium border-l ${
+                className={`px-4 py-2 text-sm font-medium border-l border-gray-300 dark:border-gray-600 ${
                   selectedView === 'costs'
                     ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+                } transition-colors`}
               >
                 Costs
               </button>
@@ -183,61 +183,61 @@ const FuelAnalytics = ({ fuelRecords, lpoEntries }: FuelAnalyticsProps) => {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Trips</p>
-              <p className="text-2xl font-bold text-gray-900">{overallStats.totalTrips}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Total Trips</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{overallStats.totalTrips}</p>
             </div>
-            <Truck className="w-8 h-8 text-blue-500" />
+            <Truck className="w-8 h-8 text-blue-500 dark:text-blue-400" />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Fuel Consumed</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Fuel Consumed</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {overallStats.totalFuelConsumed.toLocaleString()} L
               </p>
             </div>
-            <Fuel className="w-8 h-8 text-orange-500" />
+            <Fuel className="w-8 h-8 text-orange-500 dark:text-orange-400" />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Avg Fuel/Trip</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Avg Fuel/Trip</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {overallStats.avgFuelPerTrip.toFixed(0)} L
               </p>
             </div>
-            <TrendingDown className="w-8 h-8 text-green-500" />
+            <TrendingDown className="w-8 h-8 text-green-500 dark:text-green-400" />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Balance</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Total Balance</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {overallStats.totalBalance.toLocaleString()} L
               </p>
             </div>
-            <TrendingUp className="w-8 h-8 text-purple-500" />
+            <TrendingUp className="w-8 h-8 text-purple-500 dark:text-purple-400" />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Cost</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Total Cost</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 TZS {overallStats.totalCost.toLocaleString()}
               </p>
             </div>
-            <DollarSign className="w-8 h-8 text-primary-500" />
+            <DollarSign className="w-8 h-8 text-primary-500 dark:text-primary-400" />
           </div>
         </div>
       </div>

@@ -276,13 +276,18 @@ export interface FuelRecordDetails {
     totalGoingFuel: number;
     totalReturnFuel: number;
   };
-  lpoEntries: (LPOEntry & { journeyType: 'going' | 'return' | 'related' })[];
+  lpoEntries: (LPOEntry & { 
+    journeyType: 'going' | 'return' | 'cash' | 'related';
+  })[];
   yardDispenses: YardFuelDispense[];
   summary: {
     totalLPOs: number;
     totalYardDispenses: number;
     totalFuelOrdered: number;
     totalYardFuel: number;
+    goingLPOs?: number;
+    returnLPOs?: number;
+    cashLPOs?: number;
   };
 }
 
