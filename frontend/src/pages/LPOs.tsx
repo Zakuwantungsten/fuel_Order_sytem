@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown } from 'lucide-react';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
 import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
@@ -33,6 +33,7 @@ const LPOs = () => {
     dateTo: ''
   });
   const [openDropdowns, setOpenDropdowns] = useState<{[key: string | number]: boolean}>({});
+  const [dropdownPosition, setDropdownPosition] = useState<{top: number, left: number}>({top: 0, left: 0});
   const [exportingYear, setExportingYear] = useState<number | null>(null);
   const [selectedLpoNo, setSelectedLpoNo] = useState<string | null>(null);
 
@@ -232,8 +233,17 @@ const LPOs = () => {
     }
   };
 
-  // Toggle dropdown menu
-  const toggleDropdown = (lpoId: string | number) => {
+  // Toggle dropdown menu with position calculation
+  const toggleDropdown = (lpoId: string | number, event?: React.MouseEvent<HTMLButtonElement>) => {
+    if (event) {
+      const button = event.currentTarget;
+      const rect = button.getBoundingClientRect();
+      // Position dropdown below button, aligned to right edge
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: Math.max(10, rect.right - 224) // 224 = dropdown width (w-56 = 14rem = 224px)
+      });
+    }
     setOpenDropdowns(prev => ({
       ...prev,
       [lpoId]: !prev[lpoId]
@@ -708,8 +718,8 @@ const LPOs = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden transition-colors">
-        <div className="overflow-x-auto">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg transition-colors" style={{ overflow: 'visible' }}>
+        <div className="overflow-x-auto" style={{ overflow: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
@@ -801,11 +811,11 @@ const LPOs = () => {
                       {(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex space-x-2">
+                      <div className="flex space-x-2 relative">
                         {/* Copy/Download Dropdown */}
                         <div className="relative">
                           <button
-                            onClick={(e) => { e.stopPropagation(); toggleDropdown(rowKey); }}
+                            onClick={(e) => { e.stopPropagation(); toggleDropdown(rowKey, e); }}
                             className="flex items-center px-2 py-1 text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
                             title="Copy/Download LPO"
                           >
@@ -814,7 +824,13 @@ const LPOs = () => {
                           </button>
                           
                           {openDropdowns[rowKey] && (
-                            <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-10">
+                            <div 
+                              className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
+                              style={{
+                                top: `${dropdownPosition.top}px`,
+                                left: `${dropdownPosition.left}px`
+                              }}
+                            >
                               <div className="py-1">
                                 <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                   Copy Options
@@ -828,34 +844,34 @@ const LPOs = () => {
                                 </button>
                                 <button
                                   onClick={() => handleCopyWhatsAppText(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                                 >
                                   <MessageSquare className="w-4 h-4 mr-2" />
                                   Copy for WhatsApp
                                 </button>
                                 <button
                                   onClick={() => handleCopyCsvText(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                                 >
                                   <FileSpreadsheet className="w-4 h-4 mr-2" />
                                   Copy as CSV Text
                                 </button>
                                 
-                                <div className="border-t border-gray-200 my-1"></div>
+                                <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
                                 
-                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                   Download Options
                                 </div>
                                 <button
                                   onClick={() => handleDownloadPDF(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                                 >
                                   <FileDown className="w-4 h-4 mr-2 text-red-600" />
                                   Download as PDF
                                 </button>
                                 <button
                                   onClick={() => handleDownloadImage(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                                 >
                                   <Download className="w-4 h-4 mr-2 text-green-600" />
                                   Download as Image

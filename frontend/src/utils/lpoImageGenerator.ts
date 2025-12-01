@@ -53,13 +53,17 @@ export const generateLPOImage = async (data: LPOSummary, preparedBy?: string): P
   const element = await createLPOElement(data, preparedBy);
   
   try {
+    // Get the actual dimensions of the element
+    const elementHeight = element.scrollHeight;
+    const elementWidth = element.scrollWidth;
+    
     const canvas = await html2canvas(element, {
       scale: 2, // Higher quality
       useCORS: true,
       backgroundColor: '#ffffff',
       logging: false,
-      width: 794, // A4 width in pixels at 96 DPI
-      height: 1123, // A4 height in pixels at 96 DPI
+      width: elementWidth,
+      height: elementHeight,
     });
 
     return new Promise((resolve, reject) => {
@@ -126,13 +130,17 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string, prepar
   const element = await createLPOElement(data, preparedBy);
   
   try {
+    // Get the actual dimensions of the element
+    const elementHeight = element.scrollHeight;
+    const elementWidth = element.scrollWidth;
+    
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
       logging: false,
-      width: 794,
-      height: 1123,
+      width: elementWidth,
+      height: elementHeight,
     });
 
     // Create PDF with A4 dimensions
