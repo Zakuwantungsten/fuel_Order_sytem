@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, LogIn, User, Lock, AlertCircle, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo } from '../utils/permissions';
-import tahmeedLogo from '../../assets/logo.png';
+import tahmeedLogo from '../assets/logo.png';
 
 const Login: React.FC = () => {
   const [credentials, setCredentials] = useState({

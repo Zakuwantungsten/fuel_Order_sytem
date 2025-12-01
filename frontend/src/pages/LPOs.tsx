@@ -373,6 +373,7 @@ const LPOs = () => {
     setSelectedLpoNo(null);
     setViewMode('list');
     fetchWorkbooks(); // Refresh workbooks list
+    fetchLpos(); // Refresh LPO entries to show updated values
   };
 
   const handleExport = () => {
