@@ -1,5 +1,6 @@
 import { YardFuelDispense, FuelRecord } from '../types';
 import { yardFuelAPI, fuelRecordsAPI } from './api';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 /**
  * Service for handling yard fuel dispensing operations
@@ -51,13 +52,13 @@ export const yardFuelService = {
       }
       
       return {
-        truckNo: truckNo.toUpperCase(),
+        truckNo: formatTruckNumber(truckNo),
         hasActiveRecord: false,
       };
     } catch (error) {
       console.error('Error searching truck info:', error);
       return {
-        truckNo: truckNo.toUpperCase(),
+        truckNo: formatTruckNumber(truckNo),
         hasActiveRecord: false,
       };
     }

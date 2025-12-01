@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { LPOSummary, LPODetail, FuelRecord } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI } from '../services/api';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 // Station defaults mapping based on direction
 // Correct rates: USD stations = 1.2, TZS stations have specific rates
@@ -397,26 +398,29 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   // Handle truck number change with auto-fetch
   const handleTruckNoChange = async (index: number, truckNo: string) => {
+    // Format the truck number to standard format: T(number)(space)(letters)
+    const formattedTruckNo = formatTruckNumber(truckNo);
+    
     // Update the truck number immediately
     const updatedEntries = [...(formData.entries || [])];
-    updatedEntries[index] = { ...updatedEntries[index], truckNo };
+    updatedEntries[index] = { ...updatedEntries[index], truckNo: formattedTruckNo };
     setFormData(prev => ({ ...prev, entries: updatedEntries }));
 
     // If truck number is valid, fetch data
-    if (truckNo && truckNo.length >= 5) {
+    if (formattedTruckNo && formattedTruckNo.length >= 5) {
       setEntryAutoFillData(prev => ({
         ...prev,
         [index]: { ...prev[index], loading: true, fetched: false }
       }));
 
-      const result = await fetchTruckData(truckNo);
+      const result = await fetchTruckData(formattedTruckNo);
       
       const direction = entryAutoFillData[index]?.direction || 'going';
       const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
       
       // IMPORTANT: Use goingDestination for going journey fuel allocation
       // This ensures we use the original destination before EXPORT DO changed it
-      const destinationForAllocation = direction === 'going' 
+      const destinationForAllocation = direction === 'going'
         ? result.goingDestination 
         : result.destination;
       
@@ -824,7 +828,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               <input
                                 type="text"
                                 value={entry.truckNo}
-                                onChange={(e) => handleTruckNoChange(index, e.target.value.toUpperCase())}
+                                onChange={(e) => handleTruckNoChange(index, e.target.value)}
                                 placeholder="T762 DWK"
                                 className="w-28 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                               />

@@ -1,16 +1,21 @@
 import { useState } from 'react';
 import { DeliveryOrder } from '../types';
 import { cleanDriverName } from '../utils/dataCleanup';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DOSheetViewProps {
   order: DeliveryOrder;
+  preparedBy?: string; // Optional: override username for prepared by field
 }
 
 /**
  * DOSheetView - Displays a single Delivery Order in the workbook sheet format
  * Matches the DeliveryNotePrint layout for consistency
  */
-const DOSheetView = ({ order }: DOSheetViewProps) => {
+const DOSheetView = ({ order, preparedBy }: DOSheetViewProps) => {
+  const { user } = useAuth();
+  const preparedByName = preparedBy || user?.username || '';
+  
   const formatDate = (dateString: string) => {
     if (!dateString) return new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const date = new Date(dateString);
@@ -168,7 +173,7 @@ const DOSheetView = ({ order }: DOSheetViewProps) => {
         <div className="border border-gray-800 mb-4 text-sm p-2 bg-white">
           <div className="flex items-center">
             <span className="font-bold mr-2 text-gray-800">Prepared By:</span>
-            <span className="flex-1 border-b border-gray-400 px-2 py-1"></span>
+            <span className="flex-1 border-b border-gray-400 px-2 py-1 text-gray-800">{preparedByName}</span>
           </div>
         </div>
 

@@ -588,7 +588,8 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       }
 
       // Row 23: Prepared By
-      sheet.getCell('B23').value = 'Prepared By: _______________________';
+      const preparedByUser = (req as AuthRequest).user?.username || '';
+      sheet.getCell('B23').value = `Prepared By: ${preparedByUser}`;
       sheet.getCell('B23').font = { bold: true };
 
       // Row 25: Releasing Clerk

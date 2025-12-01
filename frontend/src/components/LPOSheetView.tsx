@@ -4,6 +4,8 @@ import { LPOSheet, LPODetail, LPOSummary } from '../types';
 import { lpoWorkbookAPI } from '../services/api';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
+import { useAuth } from '../contexts/AuthContext';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 interface LPOSheetViewProps {
   sheet: LPOSheet;
@@ -12,6 +14,7 @@ interface LPOSheetViewProps {
 }
 
 const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate }) => {
+  const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editedSheet, setEditedSheet] = useState<LPOSheet>(sheet);
   const [editingRow, setEditingRow] = useState<number | null>(null);
@@ -118,7 +121,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const handleCopyImageToClipboard = async () => {
     try {
       const lpoSummary = convertToLPOSummary();
-      const success = await copyLPOImageToClipboard(lpoSummary);
+      const success = await copyLPOImageToClipboard(lpoSummary, user?.username);
       
       if (success) {
         alert('LPO image copied to clipboard successfully!');
@@ -172,7 +175,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const handleDownloadPDF = async () => {
     try {
       const lpoSummary = convertToLPOSummary();
-      await downloadLPOPDF(lpoSummary);
+      await downloadLPOPDF(lpoSummary, undefined, user?.username);
       alert('✓ LPO PDF downloaded successfully!');
     } catch (error) {
       console.error('Error downloading PDF:', error);
@@ -185,7 +188,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const handleDownloadImage = async () => {
     try {
       const lpoSummary = convertToLPOSummary();
-      await downloadLPOImage(lpoSummary);
+      await downloadLPOImage(lpoSummary, undefined, user?.username);
       alert('✓ LPO image downloaded successfully!');
     } catch (error) {
       console.error('Error downloading image:', error);
@@ -196,9 +199,13 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   const handleEntryEdit = (index: number, field: keyof LPODetail, value: string | number) => {
     const updatedEntries = [...editedSheet.entries];
+    
+    // Format truck number to standard format
+    const processedValue = field === 'truckNo' ? formatTruckNumber(value as string) : value;
+    
     updatedEntries[index] = {
       ...updatedEntries[index],
-      [field]: value
+      [field]: processedValue
     };
 
     // Recalculate amount if liters or rate changed

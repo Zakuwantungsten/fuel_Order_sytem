@@ -3,9 +3,10 @@ import { LPOSummary } from '../types';
 
 interface LPOPrintProps {
   data: LPOSummary;
+  preparedBy?: string; // Username for prepared by field
 }
 
-const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data }, ref) => {
+const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }, ref) => {
   return (
     <div ref={ref} className="bg-white" style={{ 
       width: '210mm', 
@@ -308,11 +309,19 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data }, ref) => {
               Prepared By
             </p>
             <p style={{ 
+              fontSize: '11px',
+              color: '#000',
+              margin: '4px 0',
+              fontWeight: '500'
+            }}>
+              {preparedBy || ''}
+            </p>
+            <p style={{ 
               fontSize: '10px',
               color: '#666',
               margin: 0
             }}>
-              Name & Signature
+              Signature
             </p>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Save, CheckCircle, Fuel, Truck, Calendar, User, Link2, AlertCircle } from 'lucide-react';
 import { YardFuelDispense } from '../types';
 import yardFuelService from '../services/yardFuelService';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 interface YardFuelEntryProps {
   user: any;
@@ -234,7 +235,7 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
                 <input
                   type="text"
                   value={truckSearchTerm}
-                  onChange={(e) => setTruckSearchTerm(e.target.value.toUpperCase())}
+                  onChange={(e) => setTruckSearchTerm(formatTruckNumber(e.target.value))}
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleTruckSearch())}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   placeholder="e.g., T699 DXY"
@@ -293,7 +294,7 @@ export function YardFuelEntry({ user }: YardFuelEntryProps) {
                 type="text"
                 required
                 value={newEntry.truckNo}
-                onChange={(e) => setNewEntry({ ...newEntry, truckNo: e.target.value.toUpperCase() })}
+                onChange={(e) => setNewEntry({ ...newEntry, truckNo: formatTruckNumber(e.target.value) })}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="e.g., T699 DXY"
               />

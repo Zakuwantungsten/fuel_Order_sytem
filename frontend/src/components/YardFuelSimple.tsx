@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { yardFuelService } from '../services/yardFuelService';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 interface YardFuelSimpleProps {
   user: any;
@@ -47,7 +48,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'liters' ? parseFloat(value) || 0 : value.toUpperCase(),
+      [name]: name === 'liters' ? parseFloat(value) || 0 : (name === 'truckNo' ? formatTruckNumber(value) : value.toUpperCase()),
     }));
   };
 
@@ -73,7 +74,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
       setSubmitting(true);
       const response = await yardFuelService.create({
         ...formData,
-        truckNo: formData.truckNo.trim().toUpperCase(),
+        truckNo: formatTruckNumber(formData.truckNo),
       });
       
       // Check if it was linked to a fuel record

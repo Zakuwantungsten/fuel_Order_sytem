@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { YardFuelDispense, FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
 
 /**
  * Get all yard fuel dispenses with pagination and filters
@@ -86,6 +86,11 @@ export const getYardFuelDispenseById = async (req: AuthRequest, res: Response): 
  */
 export const createYardFuelDispense = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    // Format truck number to standard format
+    if (req.body.truckNo) {
+      req.body.truckNo = formatTruckNumber(req.body.truckNo);
+    }
+    
     // Auto-detect yard based on user role
     let yard = req.body.yard;
     const userRole = req.user?.role;

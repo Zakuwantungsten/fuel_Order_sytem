@@ -30,6 +30,7 @@ import {
 } from '../services/api';
 import { User } from '../types';
 import CreateUserModal, { BatchTruckCreation } from './CreateUserModal';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 interface AdminDashboardProps {
   user: any;
@@ -900,7 +901,7 @@ function TrucksTab({
               type="text"
               placeholder="Full Truck Number (optional)"
               value={newTruck.truckNumber}
-              onChange={e => setNewTruck({ ...newTruck, truckNumber: e.target.value })}
+              onChange={e => setNewTruck({ ...newTruck, truckNumber: formatTruckNumber(e.target.value) })}
               className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
             />
             <select

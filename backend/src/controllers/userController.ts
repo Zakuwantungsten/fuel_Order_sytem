@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { User } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
 import crypto from 'crypto';
 
 /**
@@ -88,6 +88,9 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
   try {
     const { username, email, password, firstName, lastName, role, department, station, truckNo } = req.body;
 
+    // Format truck number to standard format
+    const formattedTruckNo = truckNo ? formatTruckNumber(truckNo) : undefined;
+
     // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ username }, { email }],
@@ -113,7 +116,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       role: role || 'viewer',
       department,
       station,
-      truckNo,
+      truckNo: formattedTruckNo,
       isActive: true,
       isDeleted: false,
     });

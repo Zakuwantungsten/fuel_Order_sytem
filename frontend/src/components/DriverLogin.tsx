@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Truck, Loader, AlertCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../services/api';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 interface DriverLoginProps {
   onLoginSuccess: (truckNo: string) => void;
@@ -11,6 +12,10 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
   const [truckNo, setTruckNo] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleTruckNoChange = (value: string) => {
+    setTruckNo(formatTruckNumber(value));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +82,7 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
               id="truckNo"
               type="text"
               value={truckNo}
-              onChange={(e) => setTruckNo(e.target.value.toUpperCase())}
+              onChange={(e) => handleTruckNoChange(e.target.value)}
               placeholder="e.g., T699 DXY"
               className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors uppercase"
               disabled={loading}

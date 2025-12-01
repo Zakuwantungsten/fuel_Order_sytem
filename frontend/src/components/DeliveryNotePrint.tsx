@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { DeliveryOrder } from '../types';
 import { cleanDriverName } from '../utils/dataCleanup';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DeliveryNotePrintProps {
   order: DeliveryOrder;
   showOnScreen?: boolean;
+  preparedBy?: string; // Optional: override username for prepared by field
 }
 
-const DeliveryNotePrint = ({ order, showOnScreen = false }: DeliveryNotePrintProps) => {
+const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: DeliveryNotePrintProps) => {
+  const { user } = useAuth();
+  const preparedByName = preparedBy || user?.username || '';
+  
   const formatDate = (dateString: string) => {
     if (!dateString) return new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const date = new Date(dateString);
@@ -228,7 +233,7 @@ const DeliveryNotePrint = ({ order, showOnScreen = false }: DeliveryNotePrintPro
           <div className="border border-black mb-4 text-sm p-2" style={{ backgroundColor: 'white' }}>
             <div className="flex items-center">
               <span className="font-bold mr-2" style={{ color: 'black' }}>Prepared By:</span>
-              <span className="flex-1 border-b border-gray-400 px-2 py-1"></span>
+              <span className="flex-1 border-b border-gray-400 px-2 py-1" style={{ color: 'black' }}>{preparedByName}</span>
             </div>
           </div>
 

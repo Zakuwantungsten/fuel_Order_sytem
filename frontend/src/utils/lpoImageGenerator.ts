@@ -100,7 +100,7 @@ const addWatermarkToCanvas = async (canvas: HTMLCanvasElement): Promise<HTMLCanv
  * Creates a temporary DOM element with the LPO print component
  * and returns the rendered element
  */
-const createLPOElement = (data: LPOSummary): Promise<HTMLElement> => {
+const createLPOElement = (data: LPOSummary, preparedBy?: string): Promise<HTMLElement> => {
   return new Promise((resolve) => {
     // Create a temporary container
     const container = document.createElement('div');
@@ -122,8 +122,8 @@ const createLPOElement = (data: LPOSummary): Promise<HTMLElement> => {
       }
     };
 
-    // Render the LPO component
-    root.render(React.createElement(LPOPrint, { ref, data }));
+    // Render the LPO component with preparedBy username
+    root.render(React.createElement(LPOPrint, { ref, data, preparedBy }));
   });
 };
 
@@ -140,8 +140,8 @@ const cleanupElement = (element: HTMLElement) => {
 /**
  * Generate LPO as image blob using html2canvas
  */
-export const generateLPOImage = async (data: LPOSummary): Promise<Blob> => {
-  const element = await createLPOElement(data);
+export const generateLPOImage = async (data: LPOSummary, preparedBy?: string): Promise<Blob> => {
+  const element = await createLPOElement(data, preparedBy);
   
   try {
     let canvas = await html2canvas(element, {
@@ -173,9 +173,9 @@ export const generateLPOImage = async (data: LPOSummary): Promise<Blob> => {
 /**
  * Copy LPO image to clipboard
  */
-export const copyLPOImageToClipboard = async (data: LPOSummary): Promise<boolean> => {
+export const copyLPOImageToClipboard = async (data: LPOSummary, preparedBy?: string): Promise<boolean> => {
   try {
-    const blob = await generateLPOImage(data);
+    const blob = await generateLPOImage(data, preparedBy);
     
     if (!navigator.clipboard || !navigator.clipboard.write) {
       throw new Error('Clipboard API not supported');
@@ -194,9 +194,9 @@ export const copyLPOImageToClipboard = async (data: LPOSummary): Promise<boolean
 /**
  * Download LPO as image (PNG)
  */
-export const downloadLPOImage = async (data: LPOSummary, filename?: string): Promise<void> => {
+export const downloadLPOImage = async (data: LPOSummary, filename?: string, preparedBy?: string): Promise<void> => {
   try {
-    const blob = await generateLPOImage(data);
+    const blob = await generateLPOImage(data, preparedBy);
     const url = URL.createObjectURL(blob);
     
     const a = document.createElement('a');
@@ -216,8 +216,8 @@ export const downloadLPOImage = async (data: LPOSummary, filename?: string): Pro
 /**
  * Download LPO as PDF
  */
-export const downloadLPOPDF = async (data: LPOSummary, filename?: string): Promise<void> => {
-  const element = await createLPOElement(data);
+export const downloadLPOPDF = async (data: LPOSummary, filename?: string, preparedBy?: string): Promise<void> => {
+  const element = await createLPOElement(data, preparedBy);
   
   try {
     let canvas = await html2canvas(element, {

@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { yardFuelService } from '../services/yardFuelService';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 interface YardFuelEntry {
   truckNo: string;
@@ -53,7 +54,7 @@ const YardFuel: React.FC = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'liters' ? parseFloat(value) || 0 : value.toUpperCase(),
+      [name]: name === 'liters' ? parseFloat(value) || 0 : (name === 'truckNo' ? formatTruckNumber(value) : value.toUpperCase()),
     }));
   };
 
@@ -74,7 +75,7 @@ const YardFuel: React.FC = () => {
       setSubmitting(true);
       await yardFuelService.create({
         ...formData,
-        truckNo: formData.truckNo.trim().toUpperCase(),
+        truckNo: formatTruckNumber(formData.truckNo),
       });
       
       toast.success('Fuel dispense recorded successfully!');

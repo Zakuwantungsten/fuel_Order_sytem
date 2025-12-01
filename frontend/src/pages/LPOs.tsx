@@ -9,8 +9,10 @@ import { PermissionGuard } from '../components/ProtectedRoute';
 import { RESOURCES, ACTIONS } from '../utils/permissions';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
+import { useAuth } from '../contexts/AuthContext';
 
 const LPOs = () => {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [lpos, setLpos] = useState<LPOEntry[]>([]);
   const [filteredLpos, setFilteredLpos] = useState<LPOEntry[]>([]);
@@ -155,7 +157,7 @@ const LPOs = () => {
     closeAllDropdowns();
     try {
       const lpoSummary = convertToLPOSummary(lpo);
-      const success = await copyLPOImageToClipboard(lpoSummary);
+      const success = await copyLPOImageToClipboard(lpoSummary, user?.username);
       
       if (success) {
         alert('✓ LPO image copied to clipboard successfully!\nYou can now paste it anywhere.');
@@ -173,7 +175,7 @@ const LPOs = () => {
     closeAllDropdowns();
     try {
       const lpoSummary = convertToLPOSummary(lpo);
-      await downloadLPOPDF(lpoSummary);
+      await downloadLPOPDF(lpoSummary, undefined, user?.username);
       alert('✓ LPO PDF downloaded successfully!');
     } catch (error) {
       console.error('Error downloading PDF:', error);
@@ -186,7 +188,7 @@ const LPOs = () => {
     closeAllDropdowns();
     try {
       const lpoSummary = convertToLPOSummary(lpo);
-      await downloadLPOImage(lpoSummary);
+      await downloadLPOImage(lpoSummary, undefined, user?.username);
       alert('✓ LPO image downloaded successfully!');
     } catch (error) {
       console.error('Error downloading image:', error);

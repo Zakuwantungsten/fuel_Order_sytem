@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
 
 /**
  * Get all fuel records with pagination and filters
@@ -144,6 +144,11 @@ export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): P
  */
 export const createFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    // Format truck number to standard format
+    if (req.body.truckNo) {
+      req.body.truckNo = formatTruckNumber(req.body.truckNo);
+    }
+    
     // Check if truck already has an open fuel record (without returnDo)
     // This validation only applies when creating a NEW going journey fuel record
     // Export DOs will update existing records, not create new ones
