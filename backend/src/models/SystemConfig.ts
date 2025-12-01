@@ -136,8 +136,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
   }
 );
 
-// Index for quick lookup
-systemConfigSchema.index({ configType: 1 });
+// Index for quick lookup (configType already has unique: true which creates an index)
 systemConfigSchema.index({ isDeleted: 1 });
 
 export const SystemConfig = mongoose.model<ISystemConfigDocument>('SystemConfig', systemConfigSchema);
