@@ -320,30 +320,42 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
       }).lean();
     }
 
-    // Get all LPO entries for this truck and either DO
+    // Get all LPO entries for this truck that are related to this journey
+    // Use DO numbers as the primary reference since they are unique per journey
+    // A journey has a goingDo (IMPORT) and optionally a returnDo (EXPORT)
+    // LPOs are linked to the journey via the doSdo field matching either DO number
+    
+    const lpoQueryConditions: any[] = [
+      { doSdo: fuelRecord.goingDo, truckNo: fuelRecord.truckNo }
+    ];
+    
+    // Add returnDo condition if it exists - this covers LPOs created during the return journey
+    if (fuelRecord.returnDo && fuelRecord.returnDo.trim() !== '') {
+      lpoQueryConditions.push({ doSdo: fuelRecord.returnDo, truckNo: fuelRecord.truckNo });
+    }
+    
     const lpoEntries = await LPOEntry.find({
-      $or: [
-        { doSdo: fuelRecord.goingDo },
-        { doSdo: fuelRecord.returnDo },
-        { truckNo: fuelRecord.truckNo }
-      ],
+      $or: lpoQueryConditions,
       isDeleted: false,
     }).sort({ date: 1 }).lean();
 
-    // Filter LPOs to only include those within the journey date range
-    const journeyStartDate = new Date(fuelRecord.date);
-    const filteredLPOs = lpoEntries.filter((lpo: any) => {
-      const lpoDate = new Date(lpo.date);
-      return lpoDate >= journeyStartDate;
-    });
+    // Since we're using the unique DO numbers to fetch LPOs, all results are already 
+    // specific to this journey - no additional date filtering needed
+    const filteredLPOs = lpoEntries;
 
-    // Get yard fuel dispenses for this truck
+    // Get yard fuel dispenses for this truck related to this journey
+    // Use the same logic - DO numbers are the primary reference
+    const yardQueryConditions: any[] = [
+      { linkedDONumber: fuelRecord.goingDo },
+      { truckNo: fuelRecord.truckNo, linkedFuelRecordId: id }
+    ];
+    
+    if (fuelRecord.returnDo && fuelRecord.returnDo.trim() !== '') {
+      yardQueryConditions.push({ linkedDONumber: fuelRecord.returnDo });
+    }
+    
     const yardDispenses = await YardFuelDispense.find({
-      $or: [
-        { linkedDONumber: fuelRecord.goingDo },
-        { linkedDONumber: fuelRecord.returnDo },
-        { truckNo: fuelRecord.truckNo, linkedFuelRecordId: id }
-      ],
+      $or: yardQueryConditions,
       isDeleted: false,
     }).sort({ date: 1 }).lean();
 
