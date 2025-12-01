@@ -457,18 +457,17 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     // Add header row at row 5
     const summaryHeaderRow = summarySheet.getRow(5);
     summaryHeaderRow.values = ['', '', 'DO Number', 'Date', 'Client', 'Truck No', 'Destination', 'Tonnage', 'Type'];
-    summaryHeaderRow.font = { bold: true };
-    summaryHeaderRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF4472C4' },
-    };
-    summaryHeaderRow.eachCell((cell, colNumber) => {
-      if (colNumber >= 3) {
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.alignment = { horizontal: 'center' };
-      }
-    });
+    // Apply styling only to columns 3-9 (the actual data columns)
+    for (let col = 3; col <= 9; col++) {
+      const cell = summaryHeaderRow.getCell(col);
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center' };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' },
+      };
+    }
 
     // Add summary data for each DO
     let rowNum = 6;
@@ -484,7 +483,10 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
         order.tonnages,
         order.importOrExport,
       ];
-      row.alignment = { horizontal: 'center' };
+      // Apply alignment only to columns 3-9
+      for (let col = 3; col <= 9; col++) {
+        row.getCell(col).alignment = { horizontal: 'center' };
+      }
       rowNum++;
     });
 
@@ -602,15 +604,17 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       // Row 18: Items Table Header
       const tableHeaderRow = sheet.getRow(18);
       tableHeaderRow.values = ['', 'CONTAINER NO.', 'B/L NO', 'PACKAGES', 'CONTENTS', 'WEIGHT', 'MEASUREMENT', ''];
-      tableHeaderRow.font = { bold: true };
-      tableHeaderRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE5E7EB' },
-      };
-      tableHeaderRow.alignment = { horizontal: 'center' };
+      // Apply styling only to columns 2-7 (the actual table columns)
       for (let col = 2; col <= 7; col++) {
-        tableHeaderRow.getCell(col).border = {
+        const cell = tableHeaderRow.getCell(col);
+        cell.font = { bold: true };
+        cell.alignment = { horizontal: 'center' };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE5E7EB' },
+        };
+        cell.border = {
           top: { style: 'thin' },
           left: { style: 'thin' },
           bottom: { style: 'thin' },
@@ -621,17 +625,19 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       // Row 19: Item Data
       const dataRow = sheet.getRow(19);
       dataRow.values = ['', order.containerNo || 'LOOSE CARGO', '', '', '', `${order.tonnages} TONS`, '', ''];
-      dataRow.alignment = { horizontal: 'center' };
-      dataRow.getCell(2).font = { bold: true };
-      dataRow.getCell(6).font = { bold: true };
+      // Apply styling only to columns 2-7
       for (let col = 2; col <= 7; col++) {
-        dataRow.getCell(col).border = {
+        const cell = dataRow.getCell(col);
+        cell.alignment = { horizontal: 'center' };
+        cell.border = {
           top: { style: 'thin' },
           left: { style: 'thin' },
           bottom: { style: 'thin' },
           right: { style: 'thin' },
         };
       }
+      dataRow.getCell(2).font = { bold: true };
+      dataRow.getCell(6).font = { bold: true };
 
       // Empty rows for table
       for (let i = 20; i <= 21; i++) {
