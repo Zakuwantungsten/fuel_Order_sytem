@@ -100,3 +100,15 @@ git push -u origin main
 
 
 cd /home/zakuwantungsten/Desktop/Fuel_Order/frontend && rm -rf node_modules/.vite && rm -rf .vite && rm -rf dist
+
+
+corrections 
+Auto completion
+export given or filtered column
+logo watermmark to lpo sheets or pdfs or images
+database table for destinations
+dynamic fetch routes
+
+
+fixes - 
+fetches lpo for that particular truck

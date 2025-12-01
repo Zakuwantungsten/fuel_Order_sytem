@@ -186,49 +186,79 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
       let isFirstPage = true;
       let successCount = 0;
 
-      for (let i = 0; i < createdOrders.length; i++) {
-        const element = document.getElementById(`bulk-do-${i}`);
-        
-        if (!element) {
-          console.error(`Element bulk-do-${i} not found - skipping`);
-          continue;
+      // Get the container with hidden elements and move it into view temporarily
+      const hiddenContainer = document.getElementById('bulk-do-hidden-container');
+      const containerOriginalStyle = hiddenContainer?.style.cssText || '';
+      
+      if (hiddenContainer) {
+        // Move container into view but make it invisible to user
+        hiddenContainer.style.position = 'absolute';
+        hiddenContainer.style.left = '0';
+        hiddenContainer.style.top = '0';
+        hiddenContainer.style.visibility = 'visible';
+        hiddenContainer.style.opacity = '0';
+        hiddenContainer.style.pointerEvents = 'none';
+        hiddenContainer.style.zIndex = '-9999';
+      }
+      
+      // Wait for container repositioning
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      try {
+        for (let i = 0; i < createdOrders.length; i++) {
+          const element = document.getElementById(`bulk-do-${i}`);
+          
+          if (!element) {
+            console.error(`Element bulk-do-${i} not found - skipping`);
+            continue;
+          }
+          
+          // Wait for images and content to load
+          await new Promise(resolve => setTimeout(resolve, 150));
+          
+          const canvas = await html2canvas(element, {
+            scale: 3,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            allowTaint: true,
+            imageTimeout: 0,
+            windowWidth: 816,
+            onclone: (_clonedDoc, clonedElement) => {
+              // Ensure cloned element is properly visible in the clone
+              clonedElement.style.visibility = 'visible';
+              clonedElement.style.opacity = '1';
+            }
+          });
+          
+          const imgData = canvas.toDataURL('image/png', 1.0);
+          
+          // A4 dimensions in mm
+          const pdfWidth = 210;
+          
+          // Calculate dimensions to fit the content (3/4 width as per image)
+          const targetWidth = pdfWidth * 0.75; // 157.5mm width
+          const imgHeight = (canvas.height * targetWidth) / canvas.width;
+          
+          // Center horizontally
+          const xOffset = (pdfWidth - targetWidth) / 2;
+          const yOffset = 10; // Top margin
+          
+          if (!isFirstPage) {
+            pdf.addPage();
+          }
+          isFirstPage = false;
+          
+          pdf.addImage(imgData, 'PNG', xOffset, yOffset, targetWidth, imgHeight);
+          successCount++;
+          
+          console.log(`Added DO ${i + 1}/${createdOrders.length} to PDF`);
         }
-        
-        // Wait for images and content to load
-        await new Promise(resolve => setTimeout(resolve, 150));
-        
-        const canvas = await html2canvas(element, {
-          scale: 3,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-          allowTaint: true,
-          imageTimeout: 0,
-          windowWidth: 816,
-        });
-        
-        const imgData = canvas.toDataURL('image/png', 1.0);
-        
-        // A4 dimensions in mm
-        const pdfWidth = 210;
-        
-        // Calculate dimensions to fit the content (3/4 width as per image)
-        const targetWidth = pdfWidth * 0.75; // 157.5mm width
-        const imgHeight = (canvas.height * targetWidth) / canvas.width;
-        
-        // Center horizontally
-        const xOffset = (pdfWidth - targetWidth) / 2;
-        const yOffset = 10; // Top margin
-        
-        if (!isFirstPage) {
-          pdf.addPage();
+      } finally {
+        // Restore original container styles
+        if (hiddenContainer) {
+          hiddenContainer.style.cssText = containerOriginalStyle;
         }
-        isFirstPage = false;
-        
-        pdf.addImage(imgData, 'PNG', xOffset, yOffset, targetWidth, imgHeight);
-        successCount++;
-        
-        console.log(`Added DO ${i + 1}/${createdOrders.length} to PDF`);
       }
 
       const startNum = parseInt(commonData.startingNumber);
@@ -480,7 +510,16 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
 
             {/* Hidden elements for PDF generation */}
             {createdOrders.length > 0 && (
-              <div style={{ position: 'fixed', left: '-9999px', top: 0, width: '816px' }}>
+              <div 
+                id="bulk-do-hidden-container"
+                style={{ 
+                  position: 'fixed', 
+                  left: '-9999px', 
+                  top: 0, 
+                  width: '816px',
+                  visibility: 'hidden'
+                }}
+              >
                 {createdOrders.map((order, idx) => (
                   <div key={idx} id={`bulk-do-${idx}`} style={{ 
                     width: '816px', 
