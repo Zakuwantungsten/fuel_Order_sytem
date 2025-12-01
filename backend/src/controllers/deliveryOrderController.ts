@@ -424,73 +424,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       });
     }
 
-    // Create a summary sheet first
-    const summarySheet = excelWorkbook.addWorksheet('Summary');
-    
-    // Add logo to summary sheet
-    if (logoId !== null) {
-      summarySheet.addImage(logoId, {
-        tl: { col: 0, row: 0 },
-        ext: { width: 150, height: 75 },
-      });
-    }
-
-    // Summary header
-    summarySheet.mergeCells('C1:H1');
-    summarySheet.getCell('C1').value = `DELIVERY ORDERS ${year} - SUMMARY`;
-    summarySheet.getCell('C1').font = { bold: true, size: 16 };
-    summarySheet.getCell('C1').alignment = { horizontal: 'center' };
-
-    // Summary columns
-    summarySheet.columns = [
-      { header: '', key: 'logo', width: 20 },
-      { header: '', key: 'space', width: 5 },
-      { header: 'DO Number', key: 'doNumber', width: 15 },
-      { header: 'Date', key: 'date', width: 12 },
-      { header: 'Client', key: 'client', width: 25 },
-      { header: 'Truck No', key: 'truckNo', width: 15 },
-      { header: 'Destination', key: 'destination', width: 20 },
-      { header: 'Tonnage', key: 'tonnage', width: 12 },
-      { header: 'Type', key: 'type', width: 10 },
-    ];
-
-    // Add header row at row 5
-    const summaryHeaderRow = summarySheet.getRow(5);
-    summaryHeaderRow.values = ['', '', 'DO Number', 'Date', 'Client', 'Truck No', 'Destination', 'Tonnage', 'Type'];
-    // Apply styling only to columns 3-9 (the actual data columns)
-    for (let col = 3; col <= 9; col++) {
-      const cell = summaryHeaderRow.getCell(col);
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.alignment = { horizontal: 'center' };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF4472C4' },
-      };
-    }
-
-    // Add summary data for each DO
-    let rowNum = 6;
-    deliveryOrders.forEach((order) => {
-      const row = summarySheet.getRow(rowNum);
-      row.values = [
-        '', '',
-        order.doNumber,
-        order.date,
-        order.clientName,
-        order.truckNo,
-        order.destination,
-        order.tonnages,
-        order.importOrExport,
-      ];
-      // Apply alignment only to columns 3-9
-      for (let col = 3; col <= 9; col++) {
-        row.getCell(col).alignment = { horizontal: 'center' };
-      }
-      rowNum++;
-    });
-
-    // Create individual sheets for each DO (like LPO workbook)
+    // Create individual sheets for each DO FIRST (like LPO workbook)
     for (const order of deliveryOrders) {
       // Sheet name: DO number (max 31 chars for Excel)
       const sheetName = (order.doNumber || 'DO').substring(0, 31);
@@ -696,6 +630,72 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
         sheet.getRow(row).getCell(7).border = { right: { style: 'thin' } };
       }
     }
+
+    // Create Summary sheet LAST (so it appears at the end)
+    const summarySheet = excelWorkbook.addWorksheet('Summary');
+    
+    // Add logo to summary sheet
+    if (logoId !== null) {
+      summarySheet.addImage(logoId, {
+        tl: { col: 0, row: 0 },
+        ext: { width: 150, height: 75 },
+      });
+    }
+
+    // Summary header
+    summarySheet.mergeCells('C1:H1');
+    summarySheet.getCell('C1').value = `DELIVERY ORDERS ${year} - SUMMARY`;
+    summarySheet.getCell('C1').font = { bold: true, size: 16 };
+    summarySheet.getCell('C1').alignment = { horizontal: 'center' };
+
+    // Summary columns
+    summarySheet.columns = [
+      { header: '', key: 'logo', width: 20 },
+      { header: '', key: 'space', width: 5 },
+      { header: 'DO Number', key: 'doNumber', width: 15 },
+      { header: 'Date', key: 'date', width: 12 },
+      { header: 'Client', key: 'client', width: 25 },
+      { header: 'Truck No', key: 'truckNo', width: 15 },
+      { header: 'Destination', key: 'destination', width: 20 },
+      { header: 'Tonnage', key: 'tonnage', width: 12 },
+      { header: 'Type', key: 'type', width: 10 },
+    ];
+
+    // Add header row at row 5
+    const summaryHeaderRow = summarySheet.getRow(5);
+    summaryHeaderRow.values = ['', '', 'DO Number', 'Date', 'Client', 'Truck No', 'Destination', 'Tonnage', 'Type'];
+    // Apply styling only to columns 3-9 (the actual data columns)
+    for (let col = 3; col <= 9; col++) {
+      const cell = summaryHeaderRow.getCell(col);
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center' };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' },
+      };
+    }
+
+    // Add summary data for each DO
+    let summaryRowNum = 6;
+    deliveryOrders.forEach((order) => {
+      const row = summarySheet.getRow(summaryRowNum);
+      row.values = [
+        '', '',
+        order.doNumber,
+        order.date,
+        order.clientName,
+        order.truckNo,
+        order.destination,
+        order.tonnages,
+        order.importOrExport,
+      ];
+      // Apply alignment only to columns 3-9
+      for (let col = 3; col <= 9; col++) {
+        row.getCell(col).alignment = { horizontal: 'center' };
+      }
+      summaryRowNum++;
+    });
 
     // Set response headers
     res.setHeader(

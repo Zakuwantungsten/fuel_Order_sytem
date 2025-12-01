@@ -39,7 +39,7 @@ const DOSheetView = ({ order }: DOSheetViewProps) => {
           </div>
           
           {/* Logo */}
-          <div className="w-40 h-24 flex items-center justify-center flex-shrink-0 bg-white border border-gray-200 rounded">
+          <div className="w-40 h-24 flex items-center justify-center flex-shrink-0 bg-white">
             <LogoComponent />
           </div>
         </div>

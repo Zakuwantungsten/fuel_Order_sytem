@@ -12,7 +12,7 @@ interface DOWorkbookProps {
 
 const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoNumber }) => {
   const [workbook, setWorkbook] = useState<DOWorkbookType | null>(null);
-  const [activeSheetId, setActiveSheetId] = useState<string | number | null>(null);
+  const [activeDoNumber, setActiveDoNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [workbookName, setWorkbookName] = useState('');
   const [isRenamingWorkbook, setIsRenamingWorkbook] = useState(false);
@@ -43,13 +43,13 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
         // If initialDoNumber is provided, find and select that sheet
         if (initialDoNumber) {
           const targetSheet = data.sheets.find(sheet => sheet.doNumber === initialDoNumber);
-          if (targetSheet && targetSheet.id) {
-            setActiveSheetId(targetSheet.id);
+          if (targetSheet) {
+            setActiveDoNumber(targetSheet.doNumber);
           } else {
-            setActiveSheetId(data.sheets[0].id!);
+            setActiveDoNumber(data.sheets[0].doNumber);
           }
         } else {
-          setActiveSheetId(data.sheets[0].id!);
+          setActiveDoNumber(data.sheets[0].doNumber);
         }
       }
     } catch (error) {
@@ -76,8 +76,8 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
   };
 
   const getActiveSheet = (): DeliveryOrder | null => {
-    if (!workbook || !activeSheetId || !workbook.sheets) return null;
-    return workbook.sheets.find(sheet => sheet.id === activeSheetId) || null;
+    if (!workbook || !activeDoNumber || !workbook.sheets) return null;
+    return workbook.sheets.find(sheet => sheet.doNumber === activeDoNumber) || null;
   };
 
   if (loading) {
@@ -174,12 +174,12 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
       {/* Sheet Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
         <div className="flex items-center overflow-x-auto">
-          {(workbook.sheets || []).map((sheet) => (
-            <div key={sheet.id} className="flex items-center">
+          {(workbook.sheets || []).map((sheet, index) => (
+            <div key={sheet.doNumber || `sheet-${index}`} className="flex items-center">
               <button
-                onClick={() => setActiveSheetId(sheet.id!)}
+                onClick={() => setActiveDoNumber(sheet.doNumber)}
                 className={`px-4 py-2 text-sm font-medium border-r border-gray-300 dark:border-gray-600 whitespace-nowrap ${
-                  activeSheetId === sheet.id
+                  activeDoNumber === sheet.doNumber
                     ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                     : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600'
                 }`}
@@ -201,7 +201,7 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
       </div>
 
       {/* Sheet Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         {activeSheet ? (
           <DOSheetView
             order={activeSheet}
