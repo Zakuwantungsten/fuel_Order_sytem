@@ -512,20 +512,10 @@ const FuelRecords = () => {
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{record.start}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">
-                        {record.originalGoingFrom && record.originalGoingFrom !== record.from ? (
-                          <span className="relative" title={`Original: ${record.originalGoingFrom}`}>
-                            {record.from}
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full" />
-                          </span>
-                        ) : record.from}
+                        {record.from}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">
-                        {record.originalGoingTo && record.originalGoingTo !== record.to ? (
-                          <span className="relative" title={`Original going dest: ${record.originalGoingTo}`}>
-                            {record.to}
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full" />
-                          </span>
-                        ) : record.to}
+                        {record.to}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-center text-gray-900 dark:text-gray-100">{record.totalLts.toLocaleString()}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-center text-gray-600 dark:text-gray-400">{record.extra || '-'}</td>

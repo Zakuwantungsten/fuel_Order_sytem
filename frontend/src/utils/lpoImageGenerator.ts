@@ -5,6 +5,97 @@ import jsPDF from 'jspdf';
 import { createRoot } from 'react-dom/client';
 import LPOPrint from '../components/LPOPrint';
 
+// Import the logo for watermark - Vite will resolve this to the correct URL
+import logoSrc from '../../assets/logo.png';
+
+// Cache the loaded logo image
+let cachedLogo: HTMLImageElement | null = null;
+let logoLoadPromise: Promise<HTMLImageElement> | null = null;
+
+/**
+ * Preload and cache the logo image
+ */
+const getLogoImage = (): Promise<HTMLImageElement> => {
+  // If already loading, return existing promise
+  if (logoLoadPromise) {
+    return logoLoadPromise;
+  }
+  
+  // If already cached, return immediately
+  if (cachedLogo) {
+    return Promise.resolve(cachedLogo);
+  }
+  
+  logoLoadPromise = new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      cachedLogo = img;
+      console.log('Logo loaded successfully:', img.width, 'x', img.height, 'from:', logoSrc);
+      resolve(img);
+    };
+    img.onerror = (err) => {
+      console.error('Failed to load logo from:', logoSrc, err);
+      logoLoadPromise = null; // Reset so we can retry
+      reject(new Error('Failed to load logo image'));
+    };
+    img.src = logoSrc;
+  });
+  
+  return logoLoadPromise;
+};
+
+// Preload the logo immediately when the module loads
+getLogoImage().catch(err => console.warn('Failed to preload logo:', err));
+
+/**
+ * Add watermark logo to a canvas
+ */
+const addWatermarkToCanvas = async (canvas: HTMLCanvasElement): Promise<HTMLCanvasElement> => {
+  try {
+    const logo = await getLogoImage();
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx) {
+      console.error('Could not get canvas context for watermark');
+      return canvas;
+    }
+
+    console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+    console.log('Logo natural dimensions:', logo.naturalWidth, 'x', logo.naturalHeight);
+
+    // Calculate watermark dimensions - make it 50% of canvas width
+    const watermarkWidth = canvas.width * 0.5;
+    const aspectRatio = logo.naturalHeight / logo.naturalWidth;
+    const watermarkHeight = watermarkWidth * aspectRatio;
+
+    // Position watermark in the CENTER horizontally, but at 35% from top vertically
+    // This ensures it appears in the main content area, not in empty space below
+    const x = (canvas.width - watermarkWidth) / 2;
+    const y = (canvas.height * 0.35) - (watermarkHeight / 2); // 35% from top
+
+    console.log('Watermark will be drawn at:', x, y, 'size:', watermarkWidth, 'x', watermarkHeight);
+
+    // Save the current context state
+    ctx.save();
+
+    // Set watermark opacity - visible but not distracting (20% opacity)
+    ctx.globalAlpha = 0.20;
+
+    // Draw the watermark logo
+    ctx.drawImage(logo, x, y, watermarkWidth, watermarkHeight);
+
+    // Restore the context state
+    ctx.restore();
+
+    console.log('Watermark drawn successfully');
+    return canvas;
+  } catch (error) {
+    console.error('Failed to add watermark:', error);
+    return canvas; // Return original canvas if watermark fails
+  }
+};
+
 /**
  * Creates a temporary DOM element with the LPO print component
  * and returns the rendered element
@@ -53,7 +144,7 @@ export const generateLPOImage = async (data: LPOSummary): Promise<Blob> => {
   const element = await createLPOElement(data);
   
   try {
-    const canvas = await html2canvas(element, {
+    let canvas = await html2canvas(element, {
       scale: 2, // Higher quality
       useCORS: true,
       backgroundColor: '#ffffff',
@@ -61,6 +152,9 @@ export const generateLPOImage = async (data: LPOSummary): Promise<Blob> => {
       width: 794, // A4 width in pixels at 96 DPI
       height: 1123, // A4 height in pixels at 96 DPI
     });
+
+    // Add watermark to the canvas
+    canvas = await addWatermarkToCanvas(canvas);
 
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
@@ -126,7 +220,7 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string): Promi
   const element = await createLPOElement(data);
   
   try {
-    const canvas = await html2canvas(element, {
+    let canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
@@ -134,6 +228,9 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string): Promi
       width: 794,
       height: 1123,
     });
+
+    // Add watermark to the canvas
+    canvas = await addWatermarkToCanvas(canvas);
 
     // Create PDF with A4 dimensions
     const pdf = new jsPDF({
