@@ -107,6 +107,20 @@ export interface LPOWorkbook {
   updatedAt?: string;
 }
 
+// DO Workbook Types (Excel-like structure - one per year, each DO is a sheet)
+export interface DOWorkbook {
+  id?: string | number;
+  year: number; // Year this workbook represents (e.g., 2025)
+  name: string; // Workbook name like "DELIVERY ORDERS 2025"
+  sheetCount?: number; // Number of sheets (DOs) in this workbook
+  sheets?: DeliveryOrder[]; // Each DO is a sheet in the workbook
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// DOSheet is just an alias for DeliveryOrder for clarity in workbook context
+export type DOSheet = DeliveryOrder;
+
 // LPO Sheet is same as LPOSummary (alias for clarity)
 export interface LPOSheet extends LPOSummary {
   workbookId?: string | number;

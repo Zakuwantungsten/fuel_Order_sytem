@@ -10,6 +10,13 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Workbook routes (must be before /:id routes to avoid conflicts)
+router.get('/workbooks', asyncHandler(deliveryOrderController.getAllWorkbooks));
+router.get('/workbooks/years', asyncHandler(deliveryOrderController.getAvailableYears));
+router.get('/workbooks/:year', asyncHandler(deliveryOrderController.getWorkbookByYear));
+router.get('/workbooks/:year/export', asyncHandler(deliveryOrderController.exportWorkbook));
+router.get('/workbooks/:year/month/:month/export', asyncHandler(deliveryOrderController.exportMonth));
+
 // Get routes
 router.get('/', commonValidation.pagination, validate, asyncHandler(deliveryOrderController.getAllDeliveryOrders));
 router.get('/next-do-number', asyncHandler(deliveryOrderController.getNextDONumber));

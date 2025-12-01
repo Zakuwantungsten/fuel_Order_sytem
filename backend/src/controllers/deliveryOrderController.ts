@@ -3,6 +3,15 @@ import { DeliveryOrder } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import ExcelJS from 'exceljs';
+import path from 'path';
+import fs from 'fs';
+
+// Month names for sheet naming
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
 
 /**
  * Get all delivery orders with pagination and filters
@@ -238,6 +247,652 @@ export const getAllTrucks = async (req: AuthRequest, res: Response): Promise<voi
       message: 'Trucks retrieved successfully',
       data: { trucks },
     });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get all DO workbooks (one per year)
+ */
+export const getAllWorkbooks = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    // Get distinct years from delivery orders
+    const years = await DeliveryOrder.distinct('date', { isDeleted: false });
+    
+    // Extract unique years from dates (format: YYYY-MM-DD)
+    const uniqueYears = [...new Set(
+      years
+        .map(date => {
+          const year = parseInt(date.split('-')[0], 10);
+          return isNaN(year) ? null : year;
+        })
+        .filter(year => year !== null && year >= 2000 && year <= 2100)
+    )].sort((a, b) => (b as number) - (a as number));
+
+    // Build workbook data for each year
+    const workbooks = await Promise.all(
+      uniqueYears.map(async (year) => {
+        const yearStart = `${year}-01-01`;
+        const yearEnd = `${year}-12-31`;
+        
+        const count = await DeliveryOrder.countDocuments({
+          isDeleted: false,
+          date: { $gte: yearStart, $lte: yearEnd }
+        });
+
+        // Count months with data
+        const monthsWithData = await DeliveryOrder.aggregate([
+          {
+            $match: {
+              isDeleted: false,
+              date: { $gte: yearStart, $lte: yearEnd }
+            }
+          },
+          {
+            $group: {
+              _id: { $substr: ['$date', 5, 2] }
+            }
+          }
+        ]);
+
+        return {
+          id: year,
+          year,
+          name: `DELIVERY ORDERS ${year}`,
+          sheetCount: monthsWithData.length,
+          totalDOs: count,
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'DO workbooks retrieved successfully',
+      data: workbooks,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get workbook by year with monthly sheets
+ */
+export const getWorkbookByYear = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const year = parseInt(req.params.year, 10);
+
+    if (isNaN(year)) {
+      throw new ApiError(400, 'Invalid year');
+    }
+
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+
+    // Get all DOs for the year - each DO is its own sheet
+    const deliveryOrders = await DeliveryOrder.find({
+      isDeleted: false,
+      date: { $gte: yearStart, $lte: yearEnd }
+    }).sort({ date: 1, doNumber: 1 }).lean();
+
+    // Each DO is a sheet (like LPO workbook)
+    const workbook = {
+      id: year,
+      year,
+      name: `DELIVERY ORDERS ${year}`,
+      sheetCount: deliveryOrders.length,
+      sheets: deliveryOrders.map(order => ({
+        ...order,
+        workbookId: year,
+        isActive: true
+      })),
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'DO workbook retrieved successfully',
+      data: workbook,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get available years for DO workbooks
+ */
+export const getAvailableYears = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const years = await DeliveryOrder.distinct('date', { isDeleted: false });
+    
+    const uniqueYears = [...new Set(
+      years
+        .map(date => {
+          const year = parseInt(date.split('-')[0], 10);
+          return isNaN(year) ? null : year;
+        })
+        .filter(year => year !== null && year >= 2000 && year <= 2100)
+    )].sort((a, b) => (b as number) - (a as number));
+
+    res.status(200).json({
+      success: true,
+      message: 'Available years retrieved successfully',
+      data: uniqueYears,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Export DO workbook as Excel file with logo and formatting
+ */
+export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const year = parseInt(req.params.year, 10);
+
+    if (isNaN(year)) {
+      throw new ApiError(400, 'Invalid year');
+    }
+
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+
+    // Get all DOs for the year
+    const deliveryOrders = await DeliveryOrder.find({
+      isDeleted: false,
+      date: { $gte: yearStart, $lte: yearEnd }
+    }).sort({ date: 1, doNumber: 1 }).lean();
+
+    if (deliveryOrders.length === 0) {
+      throw new ApiError(404, 'No delivery orders found for this year');
+    }
+
+    // Create Excel workbook
+    const excelWorkbook = new ExcelJS.Workbook();
+    excelWorkbook.creator = 'Fuel Order System';
+    excelWorkbook.created = new Date();
+
+    // Load logo image
+    let logoId: number | null = null;
+    const logoPath = path.join(__dirname, '../../assets/logo.png');
+    if (fs.existsSync(logoPath)) {
+      logoId = excelWorkbook.addImage({
+        filename: logoPath,
+        extension: 'png',
+      });
+    }
+
+    // Create a summary sheet first
+    const summarySheet = excelWorkbook.addWorksheet('Summary');
+    
+    // Add logo to summary sheet
+    if (logoId !== null) {
+      summarySheet.addImage(logoId, {
+        tl: { col: 0, row: 0 },
+        ext: { width: 150, height: 75 },
+      });
+    }
+
+    // Summary header
+    summarySheet.mergeCells('C1:H1');
+    summarySheet.getCell('C1').value = `DELIVERY ORDERS ${year} - SUMMARY`;
+    summarySheet.getCell('C1').font = { bold: true, size: 16 };
+    summarySheet.getCell('C1').alignment = { horizontal: 'center' };
+
+    // Summary columns
+    summarySheet.columns = [
+      { header: '', key: 'logo', width: 20 },
+      { header: '', key: 'space', width: 5 },
+      { header: 'DO Number', key: 'doNumber', width: 15 },
+      { header: 'Date', key: 'date', width: 12 },
+      { header: 'Client', key: 'client', width: 25 },
+      { header: 'Truck No', key: 'truckNo', width: 15 },
+      { header: 'Destination', key: 'destination', width: 20 },
+      { header: 'Tonnage', key: 'tonnage', width: 12 },
+      { header: 'Type', key: 'type', width: 10 },
+    ];
+
+    // Add header row at row 5
+    const summaryHeaderRow = summarySheet.getRow(5);
+    summaryHeaderRow.values = ['', '', 'DO Number', 'Date', 'Client', 'Truck No', 'Destination', 'Tonnage', 'Type'];
+    summaryHeaderRow.font = { bold: true };
+    summaryHeaderRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' },
+    };
+    summaryHeaderRow.eachCell((cell, colNumber) => {
+      if (colNumber >= 3) {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.alignment = { horizontal: 'center' };
+      }
+    });
+
+    // Add summary data for each DO
+    let rowNum = 6;
+    deliveryOrders.forEach((order) => {
+      const row = summarySheet.getRow(rowNum);
+      row.values = [
+        '', '',
+        order.doNumber,
+        order.date,
+        order.clientName,
+        order.truckNo,
+        order.destination,
+        order.tonnages,
+        order.importOrExport,
+      ];
+      row.alignment = { horizontal: 'center' };
+      rowNum++;
+    });
+
+    // Create individual sheets for each DO (like LPO workbook)
+    for (const order of deliveryOrders) {
+      // Sheet name: DO number (max 31 chars for Excel)
+      const sheetName = (order.doNumber || 'DO').substring(0, 31);
+      const sheet = excelWorkbook.addWorksheet(sheetName);
+
+      // Format date
+      const formatDate = (dateString: string) => {
+        if (!dateString) return new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      };
+
+      // Set column widths for delivery note format
+      sheet.getColumn(1).width = 3;
+      sheet.getColumn(2).width = 15;
+      sheet.getColumn(3).width = 15;
+      sheet.getColumn(4).width = 15;
+      sheet.getColumn(5).width = 15;
+      sheet.getColumn(6).width = 15;
+      sheet.getColumn(7).width = 15;
+      sheet.getColumn(8).width = 3;
+
+      // Add logo
+      if (logoId !== null) {
+        sheet.addImage(logoId, {
+          tl: { col: 5, row: 0 },
+          ext: { width: 140, height: 70 },
+        });
+      }
+
+      // Row 1-2: Company name
+      sheet.mergeCells('B1:D2');
+      sheet.getCell('B1').value = 'TAHMEED';
+      sheet.getCell('B1').font = { bold: true, size: 24, color: { argb: 'FFE67E22' } };
+
+      // Row 3: Website
+      sheet.getCell('B3').value = 'www.tahmeedcoach.co.ke';
+      sheet.getCell('B3').font = { size: 9 };
+
+      // Row 4: Email
+      sheet.getCell('B4').value = 'Email: info@tahmeedcoach.co.ke';
+      sheet.getCell('B4').font = { size: 9 };
+
+      // Row 5: Tel
+      sheet.getCell('B5').value = 'Tel: +254 700 000 000';
+      sheet.getCell('B5').font = { size: 9 };
+
+      // Row 7: Title
+      sheet.mergeCells('B7:G7');
+      sheet.getCell('B7').value = 'DELIVERY NOTE GOODS RECEIVED NOTE';
+      sheet.getCell('B7').font = { bold: true, size: 14 };
+      sheet.getCell('B7').alignment = { horizontal: 'center' };
+      sheet.getCell('B7').border = {
+        top: { style: 'medium' },
+        bottom: { style: 'medium' },
+      };
+
+      // Row 9: DO Number and Date
+      sheet.mergeCells('B9:D9');
+      sheet.getCell('B9').value = `${order.doType || 'DO'} #: ${order.doNumber}`;
+      sheet.getCell('B9').font = { bold: true, size: 12 };
+      sheet.getCell('D9').font = { color: { argb: 'FFDC3545' } };
+
+      sheet.mergeCells('E9:G9');
+      sheet.getCell('E9').value = `Date: ${formatDate(order.date)}`;
+      sheet.getCell('E9').font = { bold: true };
+      sheet.getCell('E9').alignment = { horizontal: 'right' };
+
+      // Row 11: TO
+      sheet.getCell('B11').value = 'TO:';
+      sheet.getCell('B11').font = { bold: true };
+      sheet.getCell('C11').value = order.clientName;
+      sheet.getCell('C11').font = { bold: true };
+
+      // Row 12: Description
+      sheet.mergeCells('B12:G12');
+      sheet.getCell('B12').value = 'Please receive the under mentioned containers/Packages ex.m.v';
+      sheet.getCell('B12').font = { size: 9 };
+
+      // Row 13: MPRO and POL
+      sheet.getCell('B13').value = `MPRO NO: ${order.invoiceNos || ''}`;
+      sheet.getCell('D13').value = `POL: ${order.loadingPoint}`;
+
+      // Row 14: Arrive
+      sheet.getCell('E13').value = `Arrive: ${order.importOrExport === 'IMPORT' ? 'TANGA/DAR' : order.loadingPoint}`;
+
+      // Row 15: Destination
+      sheet.getCell('B15').value = 'For Destination:';
+      sheet.getCell('B15').font = { bold: true };
+      sheet.getCell('C15').value = order.destination;
+      sheet.getCell('C15').font = { bold: true };
+
+      // Row 16: Haulier
+      sheet.getCell('B16').value = 'Haulier:';
+      sheet.getCell('B16').font = { bold: true };
+      sheet.getCell('C16').value = order.haulier;
+      sheet.getCell('C16').font = { bold: true };
+
+      // Row 15: Lorry No
+      sheet.getCell('E15').value = 'Lorry No:';
+      sheet.getCell('E15').font = { bold: true };
+      sheet.getCell('F15').value = order.truckNo;
+      sheet.getCell('F15').font = { bold: true };
+
+      // Row 16: Trailer No
+      sheet.getCell('E16').value = 'Trailer No:';
+      sheet.getCell('E16').font = { bold: true };
+      sheet.getCell('F16').value = order.trailerNo;
+      sheet.getCell('F16').font = { bold: true };
+
+      // Row 18: Items Table Header
+      const tableHeaderRow = sheet.getRow(18);
+      tableHeaderRow.values = ['', 'CONTAINER NO.', 'B/L NO', 'PACKAGES', 'CONTENTS', 'WEIGHT', 'MEASUREMENT', ''];
+      tableHeaderRow.font = { bold: true };
+      tableHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE5E7EB' },
+      };
+      tableHeaderRow.alignment = { horizontal: 'center' };
+      for (let col = 2; col <= 7; col++) {
+        tableHeaderRow.getCell(col).border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      }
+
+      // Row 19: Item Data
+      const dataRow = sheet.getRow(19);
+      dataRow.values = ['', order.containerNo || 'LOOSE CARGO', '', '', '', `${order.tonnages} TONS`, '', ''];
+      dataRow.alignment = { horizontal: 'center' };
+      dataRow.getCell(2).font = { bold: true };
+      dataRow.getCell(6).font = { bold: true };
+      for (let col = 2; col <= 7; col++) {
+        dataRow.getCell(col).border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      }
+
+      // Empty rows for table
+      for (let i = 20; i <= 21; i++) {
+        const emptyRow = sheet.getRow(i);
+        emptyRow.values = ['', '', '', '', '', '', '', ''];
+        for (let col = 2; col <= 7; col++) {
+          emptyRow.getCell(col).border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        }
+      }
+
+      // Row 23: Prepared By
+      sheet.getCell('B23').value = 'Prepared By: _______________________';
+      sheet.getCell('B23').font = { bold: true };
+
+      // Row 25: Releasing Clerk
+      sheet.getCell('B25').value = 'Releasing Clerks Name';
+      sheet.getCell('B25').font = { bold: true };
+
+      // Row 28: Remarks
+      sheet.getCell('B28').value = `REMARKS: ${order.cargoType || ''}`;
+      sheet.getCell('B28').font = { bold: true };
+
+      // Row 29: Rate
+      sheet.mergeCells('B29:G29');
+      sheet.getCell('B29').value = `$${order.ratePerTon} PER TON`;
+      sheet.getCell('B29').font = { bold: true, size: 14 };
+      sheet.getCell('B29').alignment = { horizontal: 'center' };
+
+      // Row 32: Acknowledgment
+      sheet.mergeCells('B32:G32');
+      sheet.getCell('B32').value = 'Acknowledge receipts of the goods as detailed above';
+      sheet.getCell('B32').font = { bold: true };
+
+      // Row 33: Delivers Name
+      sheet.getCell('B33').value = 'Delivers Name:';
+      sheet.getCell('B33').font = { bold: true };
+      sheet.getCell('C33').value = order.driverName || '';
+      sheet.getCell('C33').font = { bold: true };
+
+      sheet.getCell('E33').value = 'Date:';
+      sheet.getCell('E33').font = { bold: true };
+      sheet.getCell('F33').value = formatDate(order.date);
+      sheet.getCell('F33').font = { bold: true };
+
+      // Row 35: National ID
+      sheet.getCell('B35').value = 'National ID/Passport No. _______________________';
+
+      // Add borders to sections
+      for (let row = 9; row <= 35; row++) {
+        sheet.getRow(row).getCell(2).border = { left: { style: 'thin' } };
+        sheet.getRow(row).getCell(7).border = { right: { style: 'thin' } };
+      }
+    }
+
+    // Set response headers
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=DELIVERY_ORDERS_${year}.xlsx`
+    );
+
+    await excelWorkbook.xlsx.write(res);
+    res.end();
+
+    logger.info(`DO Workbook exported for year ${year} by ${req.user?.username}`);
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Export specific month as Excel
+ */
+export const exportMonth = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const year = parseInt(req.params.year, 10);
+    const month = parseInt(req.params.month, 10);
+
+    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+      throw new ApiError(400, 'Invalid year or month');
+    }
+
+    const monthStart = `${year}-${month.toString().padStart(2, '0')}-01`;
+    const monthEnd = `${year}-${month.toString().padStart(2, '0')}-31`;
+
+    // Get all DOs for the month
+    const deliveryOrders = await DeliveryOrder.find({
+      isDeleted: false,
+      date: { $gte: monthStart, $lte: monthEnd }
+    }).sort({ date: 1, sn: 1 }).lean();
+
+    if (deliveryOrders.length === 0) {
+      throw new ApiError(404, 'No delivery orders found for this month');
+    }
+
+    const monthName = MONTH_NAMES[month - 1];
+
+    // Create Excel workbook
+    const excelWorkbook = new ExcelJS.Workbook();
+    excelWorkbook.creator = 'Fuel Order System';
+    excelWorkbook.created = new Date();
+
+    // Load logo image
+    let logoId: number | null = null;
+    const logoPath = path.join(__dirname, '../../assets/logo.png');
+    if (fs.existsSync(logoPath)) {
+      logoId = excelWorkbook.addImage({
+        filename: logoPath,
+        extension: 'png',
+      });
+    }
+
+    // Create sheet
+    const sheet = excelWorkbook.addWorksheet(monthName);
+
+    // Add logo
+    if (logoId !== null) {
+      sheet.addImage(logoId, {
+        tl: { col: 0, row: 0 },
+        ext: { width: 120, height: 60 },
+      });
+    }
+
+    // Header
+    sheet.mergeCells('C1:K1');
+    sheet.getCell('C1').value = `DELIVERY ORDERS - ${monthName.toUpperCase()} ${year}`;
+    sheet.getCell('C1').font = { bold: true, size: 14 };
+    sheet.getCell('C1').alignment = { horizontal: 'center' };
+
+    // Add spacing
+    sheet.addRow([]);
+    sheet.addRow([]);
+    sheet.addRow([]);
+
+    // Column headers
+    const headerRow = sheet.addRow([
+      'S/N', 'Date', 'Type', 'DO Number', 'Client', 'Truck No', 
+      'Trailer No', 'Container', 'Destination', 'Tonnage', 'Rate/Ton', 'Amount'
+    ]);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' },
+    };
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    // Set column widths
+    sheet.getColumn(1).width = 6;
+    sheet.getColumn(2).width = 12;
+    sheet.getColumn(3).width = 10;
+    sheet.getColumn(4).width = 15;
+    sheet.getColumn(5).width = 20;
+    sheet.getColumn(6).width = 12;
+    sheet.getColumn(7).width = 12;
+    sheet.getColumn(8).width = 15;
+    sheet.getColumn(9).width = 20;
+    sheet.getColumn(10).width = 10;
+    sheet.getColumn(11).width = 12;
+    sheet.getColumn(12).width = 15;
+
+    // Add data
+    let rowIndex = 1;
+    let totalTonnage = 0;
+    let totalAmount = 0;
+
+    for (const entry of deliveryOrders) {
+      const amount = (entry.tonnages || 0) * (entry.ratePerTon || 0);
+      totalTonnage += entry.tonnages || 0;
+      totalAmount += amount;
+
+      const dataRow = sheet.addRow([
+        rowIndex++,
+        entry.date,
+        entry.importOrExport,
+        entry.doNumber,
+        entry.clientName,
+        entry.truckNo,
+        entry.trailerNo,
+        entry.containerNo,
+        entry.destination,
+        entry.tonnages,
+        entry.ratePerTon,
+        amount
+      ]);
+
+      if (rowIndex % 2 === 0) {
+        dataRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF2F2F2' },
+        };
+      }
+
+      const typeCell = dataRow.getCell(3);
+      if (entry.importOrExport === 'IMPORT') {
+        typeCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFDCE6F1' },
+        };
+      } else {
+        typeCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFD4EDDA' },
+        };
+      }
+
+      dataRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    }
+
+    // Totals row
+    const totalRow = sheet.addRow([
+      '', '', '', '', '', '', '', 'TOTAL:', '', totalTonnage, '', totalAmount
+    ]);
+    totalRow.font = { bold: true };
+    totalRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFD9E1F2' },
+    };
+
+    // Set response headers
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=DELIVERY_ORDERS_${monthName}_${year}.xlsx`
+    );
+
+    await excelWorkbook.xlsx.write(res);
+    res.end();
+
+    logger.info(`DO Month export for ${monthName} ${year} by ${req.user?.username}`);
   } catch (error: any) {
     throw error;
   }

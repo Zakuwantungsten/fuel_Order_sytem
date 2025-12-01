@@ -5,6 +5,7 @@ import {
   LPOSummary, 
   LPOWorkbook, 
   LPOSheet, 
+  DOWorkbook,
   FuelRecord, 
   DashboardStats,
   ReportStats,
@@ -83,6 +84,65 @@ export const deliveryOrdersAPI = {
       params: { doType } 
     });
     return response.data.data?.nextSN || 1;
+  },
+};
+
+// DO Workbook API (Excel-like workbook management - one workbook per year with monthly sheets)
+export const doWorkbookAPI = {
+  // Get all workbooks (one per year)
+  getAll: async (): Promise<DOWorkbook[]> => {
+    const response = await apiClient.get('/delivery-orders/workbooks');
+    return response.data.data || [];
+  },
+
+  // Get workbook by year with all its sheets (months)
+  getByYear: async (year: number): Promise<DOWorkbook> => {
+    const response = await apiClient.get(`/delivery-orders/workbooks/${year}`);
+    return response.data.data;
+  },
+
+  // Get available years
+  getAvailableYears: async (): Promise<number[]> => {
+    const response = await apiClient.get('/delivery-orders/workbooks/years');
+    return response.data.data || [];
+  },
+
+  // Export workbook as Excel file with logo and formatting
+  exportWorkbook: async (year: number): Promise<void> => {
+    const response = await apiClient.get(`/delivery-orders/workbooks/${year}/export`, {
+      responseType: 'blob',
+    });
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `DELIVERY_ORDERS_${year}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  // Export specific month as Excel
+  exportMonth: async (year: number, month: number): Promise<void> => {
+    const response = await apiClient.get(`/delivery-orders/workbooks/${year}/month/${month}/export`, {
+      responseType: 'blob',
+    });
+    
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthName = monthNames[month - 1] || 'Unknown';
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `DELIVERY_ORDERS_${monthName}_${year}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 };
 

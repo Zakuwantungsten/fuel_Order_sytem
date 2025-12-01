@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Download, Eye, Edit, Trash2, Printer } from 'lucide-react';
-import { DeliveryOrder } from '../types';
-import { fuelRecordsAPI, deliveryOrdersAPI } from '../services/api';
+import { Search, Filter, Plus, Download, Eye, Edit, Trash2, Printer, FileSpreadsheet, List, BarChart3, FileDown } from 'lucide-react';
+import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
+import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
 import FuelConfigService from '../services/fuelConfigService';
 import DODetailModal from '../components/DODetailModal';
@@ -9,6 +9,7 @@ import DOForm from '../components/DOForm';
 import BulkDOForm from '../components/BulkDOForm';
 import MonthlySummary from '../components/MonthlySummary';
 import BatchDOPrint from '../components/BatchDOPrint';
+import DOWorkbook from '../components/DOWorkbook';
 import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup';
 
 const DeliveryOrders = () => {
@@ -21,12 +22,21 @@ const DeliveryOrders = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isBulkFormOpen, setIsBulkFormOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
-  const [activeTab, setActiveTab] = useState<'list' | 'summary'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'summary' | 'workbook'>('list');
   const [selectedOrders, setSelectedOrders] = useState<(string | number)[]>([]);
   const [batchPrintOrders, setBatchPrintOrders] = useState<DeliveryOrder[]>([]);
+  
+  // Workbook state
+  const [workbooks, setWorkbooks] = useState<DOWorkbookType[]>([]);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedWorkbookId, setSelectedWorkbookId] = useState<string | number | null>(null);
+  const [exportingYear, setExportingYear] = useState<number | null>(null);
 
   useEffect(() => {
     loadOrders();
+    fetchWorkbooks();
+    fetchAvailableYears();
   }, [filterType]);
 
   const loadOrders = async () => {
@@ -53,6 +63,63 @@ const DeliveryOrders = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchWorkbooks = async () => {
+    try {
+      const data = await doWorkbookAPI.getAll();
+      setWorkbooks(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching DO workbooks:', error);
+      setWorkbooks([]);
+    }
+  };
+
+  const fetchAvailableYears = async () => {
+    try {
+      const years = await doWorkbookAPI.getAvailableYears();
+      if (years.length > 0) {
+        setAvailableYears(years);
+        setSelectedYear(years[0]); // Most recent year
+      } else {
+        const currentYear = new Date().getFullYear();
+        setAvailableYears([currentYear]);
+        setSelectedYear(currentYear);
+      }
+    } catch (error) {
+      console.error('Error fetching available years:', error);
+      const currentYear = new Date().getFullYear();
+      setAvailableYears([currentYear]);
+      setSelectedYear(currentYear);
+    }
+  };
+
+  const handleExportWorkbook = async (year: number) => {
+    try {
+      setExportingYear(year);
+      await doWorkbookAPI.exportWorkbook(year);
+      alert(`✓ Workbook DELIVERY_ORDERS_${year}.xlsx downloaded successfully!`);
+    } catch (error: any) {
+      console.error('Error exporting workbook:', error);
+      if (error.response?.status === 404) {
+        alert(`No delivery orders found for year ${year}`);
+      } else {
+        alert('Failed to export workbook. Please try again.');
+      }
+    } finally {
+      setExportingYear(null);
+    }
+  };
+
+  const handleOpenWorkbook = (year: number) => {
+    setSelectedYear(year);
+    setSelectedWorkbookId(year);
+  };
+
+  const handleCloseWorkbook = () => {
+    setSelectedWorkbookId(null);
+    setActiveTab('list');
+    fetchWorkbooks(); // Refresh workbooks list
   };
 
   const filteredOrders = Array.isArray(orders) ? orders.filter(order =>
@@ -329,8 +396,9 @@ const DeliveryOrders = () => {
               activeTab === 'list'
                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
+            <List className="w-4 h-4 mr-2" />
             All Orders
           </button>
           <button
@@ -339,15 +407,128 @@ const DeliveryOrders = () => {
               activeTab === 'summary'
                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
+            <BarChart3 className="w-4 h-4 mr-2" />
             Monthly Summary
+          </button>
+          <button
+            onClick={() => setActiveTab('workbook')}
+            className={`${
+              activeTab === 'workbook'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Workbook
           </button>
         </nav>
       </div>
 
       {/* Conditional Content */}
-      {activeTab === 'list' ? (
+      {activeTab === 'workbook' ? (
+        selectedWorkbookId ? (
+          <div className="h-[calc(100vh-200px)]">
+            <DOWorkbook 
+              workbookId={selectedWorkbookId} 
+              onClose={handleCloseWorkbook}
+            />
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-6 transition-colors">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">DO Workbooks by Year</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Each workbook contains individual sheets for each delivery order</p>
+              </div>
+            </div>
+            
+            {/* Year Selection for Export */}
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Export Workbook</h3>
+              <div className="flex items-center gap-4">
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  {availableYears.map((year) => (
+                    <option key={year} value={year}>DELIVERY ORDERS {year}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handleExportWorkbook(selectedYear)}
+                  disabled={exportingYear !== null}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                >
+                  {exportingYear === selectedYear ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="w-4 h-4 mr-2" />
+                      Download Excel
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {workbooks.map((workbook) => (
+                <div
+                  key={workbook.id || workbook.year}
+                  className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition-shadow bg-white dark:bg-gray-800"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center">
+                        <FileSpreadsheet className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-2" />
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {workbook.name}
+                        </h3>
+                      </div>
+                      <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                        <p>{workbook.sheetCount || 0} delivery orders</p>
+                        <p>Year: {workbook.year}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleOpenWorkbook(workbook.year)}
+                        className="px-3 py-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                      >
+                        Open
+                      </button>
+                      <button
+                        onClick={() => handleExportWorkbook(workbook.year)}
+                        disabled={exportingYear === workbook.year}
+                        className="px-3 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                      >
+                        {exportingYear === workbook.year ? '...' : 'Export'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              {workbooks.length === 0 && (
+                <div className="col-span-full text-center py-8">
+                  <FileSpreadsheet className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400 mb-2">No workbooks found</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500">Workbooks are generated automatically from your delivery orders</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      ) : activeTab === 'list' ? (
         <>
           {/* Filters */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-4 mb-6 transition-colors">
@@ -474,9 +655,9 @@ const DeliveryOrders = () => {
             </div>
           </div>
         </>
-      ) : (
+      ) : activeTab === 'summary' ? (
         <MonthlySummary orders={orders} />
-      )}
+      ) : null}
 
       {/* DO Detail Modal */}
       {selectedOrder && (
