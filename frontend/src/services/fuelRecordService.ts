@@ -385,13 +385,13 @@ export function createFuelRecordFromDO(
 /**
  * Update existing fuel record with return DO information
  * IMPORTANT: Stores original going journey from/to before changing them for return
+ * NOTE: Return checkpoint fields (zambiaReturn, tundumaReturn, mbeyaReturn, etc.) 
+ *       remain at 0 until LPOs are actually created - same as going journey logic
  */
 export function updateFuelRecordWithReturnDO(
   existingRecord: FuelRecord,
   returnDeliveryOrder: DeliveryOrder
 ): { updatedRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[] } {
-  const returnAllocations = calculateReturnFuelAllocations(returnDeliveryOrder);
-  
   // IMPORTANT: Store the original going journey from/to BEFORE we change them
   // This is critical for LPO creation when the truck is still going
   // The originalGoingFrom and originalGoingTo preserve the original going journey details
@@ -399,6 +399,8 @@ export function updateFuelRecordWithReturnDO(
   const originalGoingTo = existingRecord.originalGoingTo || existingRecord.to;
   
   // Update the from and to fields based on return journey
+  // NOTE: Return checkpoint fields remain at their current values (0 or whatever was set by LPOs)
+  // They will be updated when LPOs are created, NOT automatically when return DO is created
   const updatedRecord: Partial<FuelRecord> = {
     ...existingRecord,
     returnDo: returnDeliveryOrder.doNumber,
@@ -408,34 +410,16 @@ export function updateFuelRecordWithReturnDO(
     // Now update from/to for the current journey state (returning)
     from: existingRecord.to, // Return journey reverses the route
     to: existingRecord.start, // Back to start location
-    zambiaReturn: returnAllocations.zambiaReturn ? -returnAllocations.zambiaReturn : undefined,
-    tundumaReturn: returnAllocations.tundumaReturn ? -returnAllocations.tundumaReturn : undefined,
-    mbeyaReturn: returnAllocations.mbeyaReturn ? -returnAllocations.mbeyaReturn : undefined,
-    moroReturn: returnAllocations.moroReturn ? -returnAllocations.moroReturn : undefined,
-    darReturn: returnAllocations.darReturn ? -returnAllocations.darReturn : undefined,
-    tangaReturn: returnAllocations.tangaReturn ? -returnAllocations.tangaReturn : undefined,
+    // DO NOT pre-fill return checkpoint fields - they get filled when LPOs are created
+    // zambiaReturn, tundumaReturn, mbeyaReturn, etc. remain unchanged (0 or existing value)
   };
   
-  // Recalculate balance with return journey allocations
-  const allAllocations: FuelAllocation = {
-    tangaYard: existingRecord.tangaYard,
-    darYard: existingRecord.darYard,
-    darGoing: existingRecord.darGoing,
-    moroGoing: existingRecord.moroGoing,
-    mbeyaGoing: existingRecord.mbeyaGoing,
-    tdmGoing: existingRecord.tdmGoing,
-    zambiaGoing: existingRecord.zambiaGoing,
-    congoFuel: existingRecord.congoFuel,
-    ...returnAllocations,
-  };
+  // Balance remains unchanged - it will be updated when LPOs are created and fuel is deducted
+  // The existing balance already accounts for any going journey deductions
+  updatedRecord.balance = existingRecord.balance;
   
-  updatedRecord.balance = calculateBalance(
-    existingRecord.totalLts,
-    existingRecord.extra || 0,
-    allAllocations
-  );
-  
-  const lposToGenerate = determineLPOsToGenerate(returnDeliveryOrder, returnAllocations, true);
+  // Don't generate any LPOs automatically - they will be created manually as needed
+  const lposToGenerate: LPOToGenerate[] = [];
   
   return { updatedRecord, lposToGenerate };
 }
