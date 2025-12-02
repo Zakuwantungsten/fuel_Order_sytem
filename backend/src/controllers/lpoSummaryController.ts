@@ -930,6 +930,9 @@ export const deleteLPOSummary = async (req: AuthRequest, res: Response): Promise
 
 /**
  * Export workbook as Excel file
+ * Each LPO sheet matches the PDF/image export format exactly
+ * Sheet names are just the LPO number (e.g., "2444" instead of "LPO 2444")
+ * Summary sheet is placed at the end
  */
 export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -953,7 +956,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     excelWorkbook.creator = 'Fuel Order System';
     excelWorkbook.created = new Date();
 
-    // Define border style for all cells
+    // Define border styles
     const thinBorder: Partial<ExcelJS.Borders> = {
       top: { style: 'thin', color: { argb: 'FF000000' } },
       left: { style: 'thin', color: { argb: 'FF000000' } },
@@ -961,119 +964,341 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       right: { style: 'thin', color: { argb: 'FF000000' } },
     };
 
-    // Center alignment style
+    const thickBorder: Partial<ExcelJS.Borders> = {
+      top: { style: 'medium', color: { argb: 'FF000000' } },
+      left: { style: 'medium', color: { argb: 'FF000000' } },
+      bottom: { style: 'medium', color: { argb: 'FF000000' } },
+      right: { style: 'medium', color: { argb: 'FF000000' } },
+    };
+
+    // Alignment styles
     const centerAlignment: Partial<ExcelJS.Alignment> = {
       horizontal: 'center',
       vertical: 'middle',
     };
 
-    // Create a summary sheet first
+    const leftAlignment: Partial<ExcelJS.Alignment> = {
+      horizontal: 'left',
+      vertical: 'middle',
+    };
+
+    const rightAlignment: Partial<ExcelJS.Alignment> = {
+      horizontal: 'right',
+      vertical: 'middle',
+    };
+
+    // Create individual sheets for each LPO FIRST (before summary)
+    for (const lpo of lpoDocuments) {
+      // Sheet name is just the LPO number (e.g., "2444")
+      const sheetName = lpo.lpoNo.substring(0, 31);
+      const sheet = excelWorkbook.addWorksheet(sheetName);
+
+      // Set column widths to match PDF layout
+      sheet.getColumn(1).width = 18; // DO No.
+      sheet.getColumn(2).width = 16; // Truck No.
+      sheet.getColumn(3).width = 12; // Liters
+      sheet.getColumn(4).width = 12; // Rate
+      sheet.getColumn(5).width = 16; // Amount
+      sheet.getColumn(6).width = 22; // Dest.
+
+      // Row 1: Title - LOCAL PURCHASE ORDER
+      sheet.mergeCells('A1:D1');
+      const titleCell = sheet.getCell('A1');
+      titleCell.value = 'LOCAL PURCHASE ORDER';
+      titleCell.font = { bold: true, size: 18, color: { argb: 'FF000000' } };
+      titleCell.alignment = leftAlignment;
+
+      // Row 1 Right: LPO No.
+      sheet.mergeCells('E1:F1');
+      const lpoNoCell = sheet.getCell('E1');
+      lpoNoCell.value = `LPO No. ${lpo.lpoNo}`;
+      lpoNoCell.font = { bold: true, size: 14, color: { argb: 'FF000000' } };
+      lpoNoCell.alignment = rightAlignment;
+
+      // Row 2: Subtitle - FUEL SUPPLY
+      sheet.mergeCells('A2:D2');
+      const subtitleCell = sheet.getCell('A2');
+      subtitleCell.value = 'FUEL SUPPLY';
+      subtitleCell.font = { size: 11, color: { argb: 'FF444444' } };
+      subtitleCell.alignment = leftAlignment;
+
+      // Row 2 Right: Date
+      sheet.mergeCells('E2:F2');
+      const dateCell = sheet.getCell('E2');
+      const formattedDate = new Date(lpo.date).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+      dateCell.value = `Date: ${formattedDate}`;
+      dateCell.font = { size: 11, color: { argb: 'FF555555' } };
+      dateCell.alignment = rightAlignment;
+
+      // Row 3: Border separator
+      sheet.getRow(3).height = 8;
+      sheet.mergeCells('A3:F3');
+      sheet.getCell('A3').border = { bottom: { style: 'thick', color: { argb: 'FF000000' } } };
+
+      // Row 4: Station and Order Of
+      sheet.mergeCells('A4:C4');
+      const stationCell = sheet.getCell('A4');
+      stationCell.value = `Station: ${lpo.station}`;
+      stationCell.font = { size: 11, color: { argb: 'FF333333' } };
+      stationCell.alignment = leftAlignment;
+
+      sheet.mergeCells('D4:F4');
+      const orderOfCell = sheet.getCell('D4');
+      orderOfCell.value = `Order of: ${lpo.orderOf}`;
+      orderOfCell.font = { size: 11, color: { argb: 'FF333333' } };
+      orderOfCell.alignment = leftAlignment;
+
+      // Row 5: Empty row for spacing
+      sheet.getRow(5).height = 8;
+
+      // Row 6: Instructions
+      sheet.mergeCells('A6:F6');
+      const instructionsCell = sheet.getCell('A6');
+      instructionsCell.value = 'KINDLY SUPPLY THE FOLLOWING LITERS';
+      instructionsCell.font = { bold: true, size: 11, color: { argb: 'FF000000' } };
+      instructionsCell.alignment = leftAlignment;
+      instructionsCell.border = {
+        top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+        bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+      };
+
+      // Row 7: Empty row for spacing
+      sheet.getRow(7).height = 8;
+
+      // Row 8: Table Headers
+      const headerRow = sheet.getRow(8);
+      headerRow.values = ['DO No.', 'Truck No.', 'Liters', 'Rate', 'Amount', 'Dest.'];
+      headerRow.font = { bold: true, size: 11, color: { argb: 'FF000000' } };
+      headerRow.height = 24;
+      // Apply styling only to table columns (1-6)
+      for (let colNum = 1; colNum <= 6; colNum++) {
+        const cell = headerRow.getCell(colNum);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF5F5F5' },
+        };
+        cell.border = thickBorder;
+        if (colNum === 3 || colNum === 4 || colNum === 5) {
+          cell.alignment = rightAlignment;
+        } else {
+          cell.alignment = leftAlignment;
+        }
+      }
+
+      // Add entry data starting at row 9
+      let rowNum = 9;
+      let totalLiters = 0;
+      let totalAmount = 0;
+
+      for (const entry of lpo.entries) {
+        const row = sheet.getRow(rowNum);
+        const isCancelled = entry.isCancelled;
+        const isDriverAccount = entry.isDriverAccount;
+        
+        // Determine display values
+        const displayDoNo = isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo;
+        const displayDest = isDriverAccount ? 'NIL' : entry.dest;
+        
+        row.values = [
+          displayDoNo,
+          entry.truckNo,
+          entry.liters.toLocaleString(),
+          entry.rate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+          `$${entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          displayDest,
+        ];
+        
+        row.height = 22;
+        
+        // Apply styling only to table columns (1-6)
+        for (let colNum = 1; colNum <= 6; colNum++) {
+          const cell = row.getCell(colNum);
+          cell.border = thinBorder;
+          
+          if (colNum === 3 || colNum === 4 || colNum === 5) {
+            cell.alignment = rightAlignment;
+          } else {
+            cell.alignment = leftAlignment;
+          }
+          
+          // Color for cancelled entries
+          if (isCancelled) {
+            cell.font = { color: { argb: 'FFCC0000' }, strike: true };
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFE6E6' },
+            };
+          } else if (isDriverAccount) {
+            // Color for driver account entries
+            if (colNum === 1 || colNum === 6) {
+              cell.font = { color: { argb: 'FFCC6600' } };
+            }
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFF3E6' },
+            };
+          } else {
+            // Alternating row colors
+            if ((rowNum - 9) % 2 === 1) {
+              cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFAFAFA' },
+              };
+            }
+          }
+        }
+
+        // Sum up totals (excluding cancelled entries)
+        if (!isCancelled) {
+          totalLiters += entry.liters;
+          totalAmount += entry.amount;
+        }
+
+        rowNum++;
+      }
+
+      // Total Row
+      const totalRow = sheet.getRow(rowNum);
+      totalRow.values = [
+        'TOTAL',
+        '',
+        totalLiters.toLocaleString(),
+        '',
+        `$${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        '',
+      ];
+      totalRow.font = { bold: true, size: 11, color: { argb: 'FF000000' } };
+      totalRow.height = 26;
+      // Apply styling only to table columns (1-6)
+      for (let colNum = 1; colNum <= 6; colNum++) {
+        const cell = totalRow.getCell(colNum);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE8E8E8' },
+        };
+        cell.border = thickBorder;
+        if (colNum === 3 || colNum === 5) {
+          cell.alignment = rightAlignment;
+        } else if (colNum === 1) {
+          cell.alignment = leftAlignment;
+        } else {
+          cell.alignment = centerAlignment;
+        }
+      }
+
+      // Merge TOTAL label cells
+      sheet.mergeCells(`A${rowNum}:B${rowNum}`);
+
+      rowNum += 2; // Skip a row
+
+      // Signatures Section - Row after totals + 2
+      const sigRowNum = rowNum;
+      
+      // Add signature lines
+      const preparedByCell = sheet.getCell(`A${sigRowNum}`);
+      preparedByCell.value = 'Prepared By';
+      preparedByCell.font = { bold: true, size: 10 };
+      preparedByCell.border = { top: { style: 'medium', color: { argb: 'FF000000' } } };
+
+      const approvedByCell = sheet.getCell(`C${sigRowNum}`);
+      approvedByCell.value = 'Approved By';
+      approvedByCell.font = { bold: true, size: 10 };
+      approvedByCell.border = { top: { style: 'medium', color: { argb: 'FF000000' } } };
+
+      const receivedByCell = sheet.getCell(`E${sigRowNum}`);
+      receivedByCell.value = 'Received By';
+      receivedByCell.font = { bold: true, size: 10 };
+      receivedByCell.border = { top: { style: 'medium', color: { argb: 'FF000000' } } };
+
+      // Signature labels
+      const sigLabelRow = sheet.getRow(sigRowNum + 1);
+      sheet.getCell(`A${sigRowNum + 1}`).value = 'Signature';
+      sheet.getCell(`A${sigRowNum + 1}`).font = { size: 9, color: { argb: 'FF666666' } };
+      sheet.getCell(`C${sigRowNum + 1}`).value = 'Name & Signature';
+      sheet.getCell(`C${sigRowNum + 1}`).font = { size: 9, color: { argb: 'FF666666' } };
+      sheet.getCell(`E${sigRowNum + 1}`).value = 'Station Attendant';
+      sheet.getCell(`E${sigRowNum + 1}`).font = { size: 9, color: { argb: 'FF666666' } };
+
+      // Footer
+      const footerRowNum = sigRowNum + 4;
+      sheet.mergeCells(`A${footerRowNum}:F${footerRowNum}`);
+      const footerCell = sheet.getCell(`A${footerRowNum}`);
+      footerCell.value = 'This is a computer-generated document. No signature is required.';
+      footerCell.font = { size: 9, color: { argb: 'FF666666' } };
+      footerCell.border = { top: { style: 'thin', color: { argb: 'FFCCCCCC' } } };
+      
+      sheet.mergeCells(`A${footerRowNum + 1}:F${footerRowNum + 1}`);
+      const footerCell2 = sheet.getCell(`A${footerRowNum + 1}`);
+      footerCell2.value = 'For any queries, please contact the logistics department.';
+      footerCell2.font = { size: 9, color: { argb: 'FF666666' } };
+    }
+
+    // Create summary sheet LAST
     const summarySheet = excelWorkbook.addWorksheet('Summary');
     summarySheet.columns = [
       { header: 'LPO No', key: 'lpoNo', width: 12 },
-      { header: 'Date', key: 'date', width: 12 },
+      { header: 'Date', key: 'date', width: 14 },
       { header: 'Station', key: 'station', width: 20 },
       { header: 'Order Of', key: 'orderOf', width: 15 },
-      { header: 'Total (TZS)', key: 'total', width: 15 },
+      { header: 'Total Amount', key: 'total', width: 18 },
       { header: 'Entries', key: 'entries', width: 10 },
     ];
 
-    // Style header row
+    // Style summary header row
     const summaryHeaderRow = summarySheet.getRow(1);
-    summaryHeaderRow.font = { bold: true };
-    summaryHeaderRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' },
-    };
+    summaryHeaderRow.font = { bold: true, size: 11 };
+    summaryHeaderRow.height = 24;
     summaryHeaderRow.alignment = centerAlignment;
-    summaryHeaderRow.eachCell((cell) => {
-      cell.border = thinBorder;
-    });
-
-    lpoDocuments.forEach((lpo) => {
-      const row = summarySheet.addRow({
-        lpoNo: lpo.lpoNo,
-        date: lpo.date,
-        station: lpo.station,
-        orderOf: lpo.orderOf,
-        total: lpo.total,
-        entries: lpo.entries.length,
-      });
-      // Apply borders and center alignment to each data cell
-      row.alignment = centerAlignment;
-      row.eachCell((cell) => {
-        cell.border = thinBorder;
-      });
-    });
-
-    // Create individual sheets for each LPO
-    for (const lpo of lpoDocuments) {
-      const sheetName = `LPO ${lpo.lpoNo}`.substring(0, 31);
-      const sheet = excelWorkbook.addWorksheet(sheetName);
-
-      // Header info
-      sheet.mergeCells('A1:F1');
-      sheet.getCell('A1').value = `LPO No: ${lpo.lpoNo}`;
-      sheet.getCell('A1').font = { bold: true, size: 14 };
-      sheet.getCell('A1').alignment = centerAlignment;
-
-      sheet.mergeCells('A2:F2');
-      sheet.getCell('A2').value = `Date: ${lpo.date} | Station: ${lpo.station} | Order Of: ${lpo.orderOf}`;
-      sheet.getCell('A2').alignment = centerAlignment;
-
-      // Column headers at row 4
-      const headerRow = sheet.getRow(4);
-      headerRow.values = ['DO No', 'Truck No', 'Liters', 'Rate', 'Amount', 'Destination'];
-      headerRow.font = { bold: true };
-      headerRow.fill = {
+    // Apply styling only to table columns (1-6)
+    for (let colNum = 1; colNum <= 6; colNum++) {
+      const cell = summaryHeaderRow.getCell(colNum);
+      cell.fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: 'FFE0E0E0' },
       };
-      headerRow.alignment = centerAlignment;
-      headerRow.eachCell((cell) => {
-        cell.border = thinBorder;
-      });
-
-      // Set column widths
-      sheet.getColumn(1).width = 15;
-      sheet.getColumn(2).width = 15;
-      sheet.getColumn(3).width = 12;
-      sheet.getColumn(4).width = 12;
-      sheet.getColumn(5).width = 15;
-      sheet.getColumn(6).width = 20;
-
-      // Add entry data
-      let rowNum = 5;
-      for (const entry of lpo.entries) {
-        const row = sheet.getRow(rowNum);
-        row.values = [
-          entry.doNo,
-          entry.truckNo,
-          entry.liters,
-          entry.rate,
-          entry.amount,
-          entry.dest,
-        ];
-        row.alignment = centerAlignment;
-        row.eachCell((cell) => {
-          cell.border = thinBorder;
-        });
-        rowNum++;
-      }
-
-      // Total row
-      const totalRow = sheet.getRow(rowNum);
-      totalRow.values = ['', '', '', 'TOTAL:', lpo.total, ''];
-      totalRow.font = { bold: true };
-      totalRow.alignment = centerAlignment;
-      totalRow.eachCell((cell, colNumber) => {
-        if (colNumber >= 4 && colNumber <= 5) {
-          cell.border = thinBorder;
-        }
-      });
+      cell.border = thickBorder;
     }
+
+    // Add summary data
+    lpoDocuments.forEach((lpo, index) => {
+      const row = summarySheet.addRow({
+        lpoNo: lpo.lpoNo,
+        date: new Date(lpo.date).toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        }),
+        station: lpo.station,
+        orderOf: lpo.orderOf,
+        total: `$${lpo.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        entries: lpo.entries.filter((e: any) => !e.isCancelled).length,
+      });
+      row.alignment = centerAlignment;
+      row.height = 20;
+      // Apply borders and alternating colors only to table columns (1-6)
+      for (let colNum = 1; colNum <= 6; colNum++) {
+        const cell = row.getCell(colNum);
+        cell.border = thinBorder;
+        // Alternating row colors
+        if (index % 2 === 0) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFAFAFA' },
+          };
+        }
+      }
+    });
 
     // Set response headers
     res.setHeader(
