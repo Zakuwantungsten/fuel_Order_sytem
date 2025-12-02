@@ -337,7 +337,9 @@ export interface FuelRecordDetails {
     totalReturnFuel: number;
   };
   lpoEntries: (LPOEntry & { 
-    journeyType: 'going' | 'return' | 'cash' | 'related';
+    journeyType: 'going' | 'return' | 'cash' | 'driver_account' | 'related';
+    isDriverAccount?: boolean;
+    originalDoNo?: string;  // Reference DO for driver account entries
   })[];
   yardDispenses: YardFuelDispense[];
   summary: {
@@ -348,6 +350,7 @@ export interface FuelRecordDetails {
     goingLPOs?: number;
     returnLPOs?: number;
     cashLPOs?: number;
+    driverAccountLPOs?: number;
   };
 }
 
@@ -515,6 +518,12 @@ import type { DriverAccountEntry, DriverAccountWorkbook, CancellationReport } fr
 const CANCELLATION_HISTORY_KEY = 'fuel_order_cancellation_history';
 
 export const driverAccountAPI = {
+  // Get next LPO number
+  getNextLPONumber: async (): Promise<string> => {
+    const response = await apiClient.get('/driver-accounts/next-lpo-number');
+    return response.data.data?.nextLpoNo || '2445';
+  },
+
   // Get all entries with optional filters
   getAll: async (filters?: { year?: number; month?: string; truckNo?: string; status?: string }): Promise<DriverAccountEntry[]> => {
     const response = await apiClient.get('/driver-accounts', { params: filters });

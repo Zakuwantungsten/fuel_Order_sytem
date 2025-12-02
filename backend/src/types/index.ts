@@ -136,6 +136,9 @@ export interface ICancellationEntry {
   cancelledBy: string;
 }
 
+// Payment Mode Types for Driver Account
+export type PaymentMode = 'TIGO_LIPA' | 'VODA_LIPA' | 'SELCOM' | 'CASH' | 'STATION';
+
 // Driver Account Entry
 export interface IDriverAccountEntry {
   date: string;
@@ -148,13 +151,19 @@ export interface IDriverAccountEntry {
   rate: number;
   amount: number;
   station: string;
-  cancellationPoint: CancellationPoint;
-  originalDoNo?: string;
+  cancellationPoint?: CancellationPoint;  // Optional - driver account entries don't cancel any LPO
+  journeyDirection: 'going' | 'returning';  // Going or returning
+  originalDoNo?: string;  // Reference DO (not displayed in exports)
+  paymentMode?: PaymentMode;  // Mode of payment
+  paybillOrMobile?: string;  // Paybill number or mobile number for mobile payments
   status: 'pending' | 'settled' | 'disputed';
   settledAt?: Date;
   settledBy?: string;
   notes?: string;
   createdBy: string;
+  // Fields to track LPO creation
+  lpoCreated?: boolean;
+  lpoSummaryId?: string;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;

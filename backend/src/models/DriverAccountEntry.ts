@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { IDriverAccountEntry, CancellationPoint } from '../types';
+import { IDriverAccountEntry, CancellationPoint, PaymentMode } from '../types';
 
 export interface IDriverAccountEntryDocument extends IDriverAccountEntry, Document {}
 
@@ -17,6 +17,14 @@ const CANCELLATION_POINTS: CancellationPoint[] = [
   'MORO_RETURN',
   'DAR_RETURN',
   'TANGA_RETURN'
+];
+
+const PAYMENT_MODES: PaymentMode[] = [
+  'TIGO_LIPA',
+  'VODA_LIPA',
+  'SELCOM',
+  'CASH',
+  'STATION'
 ];
 
 const driverAccountEntrySchema = new Schema<IDriverAccountEntryDocument>(
@@ -68,10 +76,25 @@ const driverAccountEntrySchema = new Schema<IDriverAccountEntryDocument>(
     },
     cancellationPoint: {
       type: String,
-      enum: CANCELLATION_POINTS,
-      required: [true, 'Cancellation point is required'],
+      enum: [...CANCELLATION_POINTS, null, ''],
+      required: false, // Driver account entries don't cancel any LPO
+    },
+    journeyDirection: {
+      type: String,
+      enum: ['going', 'returning'],
+      required: [true, 'Journey direction is required'],
+      default: 'going',
     },
     originalDoNo: {
+      type: String,
+      trim: true,
+    },
+    paymentMode: {
+      type: String,
+      enum: PAYMENT_MODES,
+      default: 'CASH',
+    },
+    paybillOrMobile: {
       type: String,
       trim: true,
     },
@@ -93,6 +116,14 @@ const driverAccountEntrySchema = new Schema<IDriverAccountEntryDocument>(
     createdBy: {
       type: String,
       required: [true, 'Created by is required'],
+    },
+    lpoCreated: {
+      type: Boolean,
+      default: false,
+    },
+    lpoSummaryId: {
+      type: String,
+      trim: true,
     },
     isDeleted: {
       type: Boolean,

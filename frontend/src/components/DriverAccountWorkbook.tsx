@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, X, FileSpreadsheet, Trash2, 
   Copy, User, AlertTriangle, FileDown, Search,
-  Calendar, Fuel, DollarSign, ChevronDown
+  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard
 } from 'lucide-react';
-import type { DriverAccountEntry, DriverAccountWorkbook } from '../types';
+import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { driverAccountAPI } from '../services/api';
+import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
 import * as XLSX from 'xlsx';
 
 interface DriverAccountWorkbookProps {
@@ -84,6 +84,24 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     } catch (error) {
       console.error('Error adding entry:', error);
       alert('Failed to add entry. Please try again.');
+    }
+  };
+
+  const addBatchEntries = async (entries: Omit<DriverAccountEntry, 'id' | 'createdAt' | 'createdBy'>[]) => {
+    if (!workbook || entries.length === 0) return;
+
+    try {
+      await driverAccountAPI.createBatch(entries.map(entry => ({
+        ...entry,
+        createdBy: user?.username || 'Unknown'
+      } as any)));
+      
+      // Reload workbook to get updated data
+      await loadWorkbook();
+      setShowAddForm(false);
+    } catch (error) {
+      console.error('Error adding batch entries:', error);
+      alert('Failed to add entries. Please try again.');
     }
   };
 
@@ -515,37 +533,177 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
         <AddDriverAccountEntryModal
           onClose={() => setShowAddForm(false)}
           onSubmit={addEntry}
+          onSubmitBatch={addBatchEntries}
         />
       )}
     </div>
   );
 };
 
-// Add Entry Modal Component
+// Add Entry Modal Component with multiple trucks support
 interface AddDriverAccountEntryModalProps {
   onClose: () => void;
   onSubmit: (entry: Omit<DriverAccountEntry, 'id' | 'createdAt' | 'createdBy'>) => void;
+  onSubmitBatch?: (entries: Omit<DriverAccountEntry, 'id' | 'createdAt' | 'createdBy'>[]) => void;
 }
 
-const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({ onClose, onSubmit }) => {
+interface TruckEntry {
+  truckNo: string;
+  driverName: string;
+  liters: number;
+  originalDoNo: string;
+}
+
+const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({ onClose, onSubmit, onSubmitBatch }) => {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
-    truckNo: '',
-    driverName: '',
-    originalDoNo: '',
-    liters: 0,
-    rate: 1.2,
     station: '',
     lpoNo: '',
+    rate: 1.2,
+    journeyDirection: 'going' as 'going' | 'returning',
+    paymentMode: 'CASH' as PaymentMode,
+    paybillOrMobile: '',
     notes: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Multiple trucks support
+  const [trucks, setTrucks] = useState<TruckEntry[]>([
+    { truckNo: '', driverName: '', liters: 0, originalDoNo: '' }
+  ]);
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingLPO, setIsFetchingLPO] = useState(false);
+  const [isFetchingDO, setIsFetchingDO] = useState<number | null>(null);
+
+  // Fetch next LPO number on mount
+  useEffect(() => {
+    const fetchNextLPO = async () => {
+      setIsFetchingLPO(true);
+      try {
+        const nextLpoNo = await driverAccountAPI.getNextLPONumber();
+        setFormData(prev => ({ ...prev, lpoNo: nextLpoNo }));
+      } catch (error) {
+        console.error('Error fetching next LPO number:', error);
+      } finally {
+        setIsFetchingLPO(false);
+      }
+    };
+    fetchNextLPO();
+  }, []);
+
+  // Fetch DO for a truck
+  const fetchDOForTruck = async (index: number, truckNo: string) => {
+    if (!truckNo || truckNo.length < 4) return;
+    
+    setIsFetchingDO(index);
+    try {
+      // Fetch all DOs for this truck
+      const allDOs = await deliveryOrdersAPI.getAll({ truckNo });
+      
+      if (allDOs && allDOs.length > 0) {
+        // Get the most recent DO based on journey direction
+        const relevantDOs = formData.journeyDirection === 'going'
+          ? allDOs.filter(d => d.importOrExport === 'IMPORT')
+          : allDOs.filter(d => d.importOrExport === 'EXPORT');
+        
+        if (relevantDOs.length > 0) {
+          // Sort by date descending and get the most recent
+          const sortedDOs = relevantDOs.sort((a, b) => 
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+          );
+          const latestDO = sortedDOs[0];
+          
+          setTrucks(prev => prev.map((t, i) => 
+            i === index ? { ...t, originalDoNo: latestDO.doNumber } : t
+          ));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching DO for truck:', error);
+    } finally {
+      setIsFetchingDO(null);
+    }
+  };
+
+  const addTruck = () => {
+    setTrucks(prev => [...prev, { truckNo: '', driverName: '', liters: 0, originalDoNo: '' }]);
+  };
+
+  const removeTruck = (index: number) => {
+    if (trucks.length === 1) return;
+    setTrucks(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateTruck = (index: number, field: keyof TruckEntry, value: string | number) => {
+    setTrucks(prev => prev.map((t, i) => 
+      i === index ? { ...t, [field]: value } : t
+    ));
+    
+    // Auto-fetch DO when truck number changes
+    if (field === 'truckNo' && typeof value === 'string' && value.length >= 4) {
+      fetchDOForTruck(index, value);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
-      ...formData,
-      amount: formData.liters * formData.rate
-    });
+    setIsLoading(true);
+
+    try {
+      // Filter out empty trucks
+      const validTrucks = trucks.filter(t => t.truckNo && t.liters > 0);
+      
+      if (validTrucks.length === 0) {
+        alert('Please add at least one truck with liters');
+        setIsLoading(false);
+        return;
+      }
+
+      if (validTrucks.length === 1) {
+        // Single entry
+        const truck = validTrucks[0];
+        onSubmit({
+          date: formData.date,
+          truckNo: truck.truckNo.toUpperCase(),
+          driverName: truck.driverName,
+          liters: truck.liters,
+          rate: formData.rate,
+          amount: truck.liters * formData.rate,
+          station: formData.station,
+          lpoNo: formData.lpoNo,
+          journeyDirection: formData.journeyDirection,
+          originalDoNo: truck.originalDoNo,
+          paymentMode: formData.paymentMode,
+          paybillOrMobile: formData.paybillOrMobile,
+          notes: formData.notes,
+        });
+      } else if (onSubmitBatch) {
+        // Multiple entries
+        const entries = validTrucks.map(truck => ({
+          date: formData.date,
+          truckNo: truck.truckNo.toUpperCase(),
+          driverName: truck.driverName,
+          liters: truck.liters,
+          rate: formData.rate,
+          amount: truck.liters * formData.rate,
+          station: formData.station,
+          lpoNo: formData.lpoNo,
+          journeyDirection: formData.journeyDirection,
+          originalDoNo: truck.originalDoNo,
+          paymentMode: formData.paymentMode,
+          paybillOrMobile: formData.paybillOrMobile,
+          notes: formData.notes,
+        }));
+        onSubmitBatch(entries);
+      }
+      
+      onClose();
+    } catch (error) {
+      console.error('Error submitting driver account entry:', error);
+      alert('Failed to create entry. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const stations = [
@@ -562,31 +720,42 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
     'MMSA YARD'
   ];
 
+  const paymentModes: { value: PaymentMode; label: string }[] = [
+    { value: 'TIGO_LIPA', label: 'Tigo Lipa' },
+    { value: 'VODA_LIPA', label: 'Voda Lipa' },
+    { value: 'SELCOM', label: 'Selcom' },
+    { value: 'CASH', label: 'Cash' },
+  ];
+
+  const totalAmount = trucks.reduce((sum, t) => sum + (t.liters * formData.rate), 0);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Add Driver Account Entry
+            Create Driver Account LPO
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* Warning Banner */}
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
             <div>
-              <h4 className="font-medium text-red-800 dark:text-red-300">Driver's Account Entry</h4>
+              <h4 className="font-medium text-red-800 dark:text-red-300">Driver's Account LPO</h4>
               <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-                This entry will NOT update fuel records. DO and destination will show as NIL in LPO exports.
+                This creates an LPO for Driver's Account. DO and destination will show as NIL in exports. 
+                This entry will NOT update fuel records.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Header Info */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date *</label>
               <input
@@ -599,49 +768,22 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Truck No *</label>
-              <input
-                type="text"
-                value={formData.truckNo}
-                onChange={(e) => setFormData(prev => ({ ...prev, truckNo: e.target.value.toUpperCase() }))}
-                required
-                placeholder="e.g., T530 DRF"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Driver Name</label>
-              <input
-                type="text"
-                value={formData.driverName}
-                onChange={(e) => setFormData(prev => ({ ...prev, driverName: e.target.value }))}
-                placeholder="Optional"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Original DO Reference</label>
-              <input
-                type="text"
-                value={formData.originalDoNo}
-                onChange={(e) => setFormData(prev => ({ ...prev, originalDoNo: e.target.value }))}
-                placeholder="e.g., 6376 (optional internal reference)"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">LPO No *</label>
-              <input
-                type="text"
-                value={formData.lpoNo}
-                onChange={(e) => setFormData(prev => ({ ...prev, lpoNo: e.target.value }))}
-                required
-                placeholder="e.g., 2150"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.lpoNo}
+                  onChange={(e) => setFormData(prev => ({ ...prev, lpoNo: e.target.value }))}
+                  required
+                  placeholder="Auto-fetched"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+                {isFetchingLPO && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
@@ -660,19 +802,6 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Liters *</label>
-              <input
-                type="number"
-                value={formData.liters}
-                onChange={(e) => setFormData(prev => ({ ...prev, liters: parseFloat(e.target.value) || 0 }))}
-                required
-                min="0"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rate per Liter *</label>
               <input
                 type="number"
@@ -684,15 +813,178 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
+          </div>
 
+          {/* Journey Direction - for DO reference */}
+          <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount</label>
-              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-600 rounded-md text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {(formData.liters * formData.rate).toLocaleString()}
+              <label className="block text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">
+                <MapPin className="w-4 h-4 inline mr-1" />
+                Journey Direction *
+              </label>
+              <div className="flex space-x-4">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="journeyDirection"
+                    value="going"
+                    checked={formData.journeyDirection === 'going'}
+                    onChange={() => setFormData(prev => ({ ...prev, journeyDirection: 'going' }))}
+                    className="w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Going</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="journeyDirection"
+                    value="returning"
+                    checked={formData.journeyDirection === 'returning'}
+                    onChange={() => setFormData(prev => ({ ...prev, journeyDirection: 'returning' }))}
+                    className="w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Returning</span>
+                </label>
               </div>
             </div>
           </div>
 
+          {/* Payment Section */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div>
+              <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
+                <CreditCard className="w-4 h-4 inline mr-1" />
+                Payment Mode *
+              </label>
+              <select
+                value={formData.paymentMode}
+                onChange={(e) => setFormData(prev => ({ ...prev, paymentMode: e.target.value as PaymentMode }))}
+                required
+                className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-blue-500"
+              >
+                {paymentModes.map(pm => (
+                  <option key={pm.value} value={pm.value}>{pm.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {formData.paymentMode !== 'CASH' && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
+                  Paybill / Mobile Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.paybillOrMobile}
+                  onChange={(e) => setFormData(prev => ({ ...prev, paybillOrMobile: e.target.value }))}
+                  placeholder={formData.paymentMode === 'TIGO_LIPA' ? 'e.g., 0711234567' : 'e.g., 0764123456'}
+                  className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Trucks Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
+                <Truck className="w-5 h-5 mr-2" />
+                Trucks ({trucks.length})
+              </h3>
+              <button
+                type="button"
+                onClick={addTruck}
+                className="flex items-center px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Add Truck
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {trucks.map((truck, index) => (
+                <div key={index} className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Truck #{index + 1}
+                    </span>
+                    {trucks.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeTruck(index)}
+                        className="p-1 text-red-600 hover:text-red-800"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Truck No *</label>
+                      <input
+                        type="text"
+                        value={truck.truckNo}
+                        onChange={(e) => updateTruck(index, 'truckNo', e.target.value.toUpperCase())}
+                        required
+                        placeholder="e.g., T530 DRF"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Driver Name</label>
+                      <input
+                        type="text"
+                        value={truck.driverName}
+                        onChange={(e) => updateTruck(index, 'driverName', e.target.value)}
+                        placeholder="Optional"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                        DO Reference
+                        {isFetchingDO === index && <span className="ml-1 text-blue-500">(fetching...)</span>}
+                      </label>
+                      <input
+                        type="text"
+                        value={truck.originalDoNo}
+                        onChange={(e) => updateTruck(index, 'originalDoNo', e.target.value)}
+                        placeholder="Auto-fetched"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Liters *</label>
+                      <input
+                        type="number"
+                        value={truck.liters || ''}
+                        onChange={(e) => updateTruck(index, 'liters', parseFloat(e.target.value) || 0)}
+                        required
+                        min="0"
+                        step="0.01"
+                        placeholder="0"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                      />
+                    </div>
+                  </div>
+                  
+                  {truck.liters > 0 && (
+                    <div className="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
+                      Amount: <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {(truck.liters * formData.rate).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
             <textarea
@@ -702,6 +994,16 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
               placeholder="Additional notes (optional)"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
+          </div>
+
+          {/* Total Amount */}
+          <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+            <div className="flex justify-between items-center text-lg">
+              <span className="font-medium text-gray-700 dark:text-gray-300">Total Amount:</span>
+              <span className="font-bold text-gray-900 dark:text-gray-100">
+                {totalAmount.toLocaleString()} ({trucks.filter(t => t.liters > 0).length} truck{trucks.filter(t => t.liters > 0).length !== 1 ? 's' : ''})
+              </span>
+            </div>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t dark:border-gray-700">
@@ -714,9 +1016,11 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+              disabled={isLoading}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center"
             >
-              Add to Driver's Account
+              {isLoading && <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>}
+              Create Driver Account LPO
             </button>
           </div>
         </form>

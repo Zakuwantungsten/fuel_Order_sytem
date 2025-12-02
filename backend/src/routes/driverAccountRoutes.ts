@@ -10,6 +10,9 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Get next LPO number
+router.get('/next-lpo-number', asyncHandler(driverAccountController.getNextLPONumber));
+
 // Get available years
 router.get('/years', asyncHandler(driverAccountController.getAvailableYears));
 

@@ -372,6 +372,11 @@ export default function FuelRecordDetailsModal({
                           {details.summary.cashLPOs} Cash
                         </span>
                       )}
+                      {details.summary.driverAccountLPOs && details.summary.driverAccountLPOs > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                          {details.summary.driverAccountLPOs} Driver Acc.
+                        </span>
+                      )}
                     </div>
                     {expandedSections.lpos ? (
                       <ChevronUp className="w-5 h-5 text-gray-400" />
@@ -402,12 +407,21 @@ export default function FuelRecordDetailsModal({
                             </thead>
                             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                               {details.lpoEntries.map((lpo, idx) => (
-                                <tr key={lpo.id || idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                <tr key={lpo.id || idx} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${lpo.isDriverAccount ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
                                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{lpo.lpoNo}</td>
                                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{lpo.date}</td>
                                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{lpo.dieselAt}</td>
                                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">
-                                    {lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || !lpo.doSdo ? (
+                                    {lpo.isDriverAccount ? (
+                                      <div className="flex flex-col">
+                                        <span className="text-red-600 dark:text-red-400 italic">NIL</span>
+                                        {lpo.originalDoNo && (
+                                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                                            (ref: {lpo.originalDoNo})
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || !lpo.doSdo ? (
                                       <span className="text-amber-600 dark:text-amber-400 italic">NIL (Cash)</span>
                                     ) : lpo.doSdo}
                                   </td>
@@ -431,9 +445,13 @@ export default function FuelRecordDetailsModal({
                                         ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                                         : lpo.journeyType === 'cash'
                                         ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                        : lpo.journeyType === 'driver_account'
+                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                                         : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
                                     }`}>
-                                      {lpo.journeyType === 'cash' ? 'CASH' : lpo.journeyType}
+                                      {lpo.journeyType === 'cash' ? 'CASH' 
+                                        : lpo.journeyType === 'driver_account' ? 'DRIVER ACC.'
+                                        : lpo.journeyType}
                                     </span>
                                   </td>
                                 </tr>

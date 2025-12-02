@@ -309,6 +309,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     const DeliveryOrder = require('../models').DeliveryOrder;
     const LPOEntry = require('../models').LPOEntry;
     const YardFuelDispense = require('../models').YardFuelDispense;
+    const DriverAccountEntry = require('../models').DriverAccountEntry;
+    const LPOSummary = require('../models').LPOSummary;
 
     // Get the going delivery order
     const goingDO = await DeliveryOrder.findOne({
@@ -382,6 +384,40 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
       isDeleted: false,
     }).sort({ date: 1 }).lean();
 
+    // Also fetch Driver Account LPO entries from LPO Summary
+    // These are created when driver account entries are added
+    const driverAccountLPOs = await LPOSummary.find({
+      orderOf: 'DRIVER ACCOUNT',
+      'entries.truckNo': fuelRecord.truckNo,
+      date: { 
+        $gte: journeyStartDate.toISOString().split('T')[0],
+        $lte: journeyEndDate.toISOString().split('T')[0]
+      },
+      isDeleted: false,
+    }).sort({ date: 1 }).lean();
+
+    // Convert driver account LPO summaries to LPO entry format
+    const driverAccountEntryFormat: any[] = [];
+    for (const summary of driverAccountLPOs) {
+      for (const entry of summary.entries) {
+        if (entry.truckNo === fuelRecord.truckNo) {
+          driverAccountEntryFormat.push({
+            _id: entry._id,
+            lpoNo: summary.lpoNo,
+            date: summary.date,
+            dieselAt: summary.station,
+            doSdo: entry.doNo,  // This will be 'NIL'
+            truckNo: entry.truckNo,
+            ltrs: entry.liters,
+            pricePerLtr: entry.rate,
+            destinations: entry.dest,  // This will be 'NIL'
+            isDriverAccount: true,
+            originalDoNo: entry.originalDoNo,  // The reference DO
+          });
+        }
+      }
+    }
+
     // Combine regular LPO entries with CASH/NIL entries
     const allLpoEntries = [...lpoEntries];
     
@@ -390,6 +426,14 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     for (const cashEntry of cashLpoEntries) {
       if (!existingIds.has(cashEntry._id?.toString())) {
         allLpoEntries.push(cashEntry);
+      }
+    }
+    
+    // Add driver account entries (with unique check)
+    for (const daEntry of driverAccountEntryFormat) {
+      if (!existingIds.has(daEntry._id?.toString())) {
+        allLpoEntries.push(daEntry);
+        existingIds.add(daEntry._id?.toString());
       }
     }
     
@@ -480,11 +524,14 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
       },
       lpoEntries: filteredLPOs.map((lpo: any) => {
         // Determine journey type
-        let journeyType: 'going' | 'return' | 'cash' | 'related';
+        let journeyType: 'going' | 'return' | 'cash' | 'driver_account' | 'related';
         const isNilDo = !lpo.doSdo || lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || lpo.doSdo === '';
         const isNilDest = !lpo.destinations || lpo.destinations === 'NIL' || lpo.destinations === 'nil' || lpo.destinations === '';
+        const isDriverAccount = lpo.isDriverAccount === true;
         
-        if (isNilDo || isNilDest) {
+        if (isDriverAccount) {
+          journeyType = 'driver_account'; // Driver's account entry
+        } else if (isNilDo || isNilDest) {
           journeyType = 'cash'; // Cash mode payment (extra fuel or station out of fuel)
         } else if (lpo.doSdo === fuelRecord.goingDo) {
           journeyType = 'going';
@@ -498,6 +545,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           ...lpo,
           id: lpo._id,
           journeyType,
+          isDriverAccount: lpo.isDriverAccount || false,
+          originalDoNo: lpo.originalDoNo,  // Reference DO for driver account entries
         };
       }),
       yardDispenses: yardDispenses.map((dispense: any) => ({
@@ -514,8 +563,9 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
         returnLPOs: filteredLPOs.filter((lpo: any) => lpo.doSdo === fuelRecord.returnDo).length,
         cashLPOs: filteredLPOs.filter((lpo: any) => {
           const isNilDo = !lpo.doSdo || lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || lpo.doSdo === '';
-          return isNilDo;
+          return isNilDo && !lpo.isDriverAccount;
         }).length,
+        driverAccountLPOs: filteredLPOs.filter((lpo: any) => lpo.isDriverAccount === true).length,
       },
     };
 

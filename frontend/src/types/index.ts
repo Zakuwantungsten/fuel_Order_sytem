@@ -352,17 +352,19 @@ export interface YardFuelDispense {
   status?: 'pending' | 'linked' | 'manual'; // pending = waiting for DO, linked = auto-matched, manual = manually entered
 }
 
-// Cash Mode Cancellation Types
+// Cash Mode Cancellation Types - Checkpoints along the route
 export type CancellationPoint = 
+  // Going direction checkpoints
   | 'DAR_GOING' 
   | 'MORO_GOING' 
   | 'MBEYA_GOING' 
-  | 'TDM_GOING' 
-  | 'ZAMBIA_GOING'
-  | 'INFINITY_GOING'  // Mbeya going station
+  | 'INFINITY_GOING'  // Mbeya area (going)
+  | 'TDM_GOING'       // TDM/Tunduma (going)
+  | 'ZAMBIA_GOING'    // Lake Chilabombwe
+  // Returning direction checkpoints
   | 'ZAMBIA_NDOLA'    // Returning - first part (50 liters)
   | 'ZAMBIA_KAPIRI'   // Returning - second part (350 liters)
-  | 'TUNDUMA_RETURN'
+  | 'TDM_RETURN'      // TDM/Tunduma (returning)
   | 'MBEYA_RETURN'
   | 'MORO_RETURN'
   | 'DAR_RETURN'
@@ -397,6 +399,9 @@ export interface LPODetailExtended extends LPODetail {
   paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';
 }
 
+// Payment Mode Types for Driver Account
+export type PaymentMode = 'TIGO_LIPA' | 'VODA_LIPA' | 'SELCOM' | 'CASH' | 'STATION';
+
 // Driver's Account Entry - for fuel given due to misuse/theft
 export interface DriverAccountEntry {
   id?: string | number;
@@ -411,12 +416,17 @@ export interface DriverAccountEntry {
   amount: number;
   station: string;        // Station where fuel was given
   cancellationPoint?: CancellationPoint; // Where fuel was cancelled
-  originalDoNo?: string;  // Original DO before cancellation
+  journeyDirection?: 'going' | 'returning';  // Going or returning
+  originalDoNo?: string;  // Original DO before cancellation (reference)
+  paymentMode?: PaymentMode;  // Mode of payment
+  paybillOrMobile?: string;  // Paybill number or mobile number for mobile payments
   lpoNo: string;          // Reference LPO number
   status?: 'pending' | 'settled' | 'disputed';
   settledAt?: string;
   settledBy?: string;
   notes?: string;         // Additional notes
+  lpoCreated?: boolean;   // Whether LPO was created
+  lpoSummaryId?: string;  // Reference to LPO Summary
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;

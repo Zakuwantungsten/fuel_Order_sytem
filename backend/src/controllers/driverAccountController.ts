@@ -1,9 +1,71 @@
 import { Response } from 'express';
-import { DriverAccountEntry } from '../models';
+import { DriverAccountEntry, LPOSummary, LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
 import ExcelJS from 'exceljs';
+
+/**
+ * Get the next available LPO number by checking both LPOSummary and DriverAccountEntry
+ */
+async function getNextAvailableLPONumber(): Promise<string> {
+  // Get the highest LPO number from LPOSummary
+  const lastLpoSummary = await LPOSummary.findOne({ isDeleted: false })
+    .sort({ lpoNo: -1 })
+    .select('lpoNo')
+    .lean();
+
+  // Get the highest LPO number from DriverAccountEntry
+  const lastDriverAccount = await DriverAccountEntry.findOne({ isDeleted: false })
+    .sort({ lpoNo: -1 })
+    .select('lpoNo')
+    .lean();
+
+  // Get the highest LPO number from LPOEntry as well
+  const lastLpoEntry = await LPOEntry.findOne({ isDeleted: false })
+    .sort({ lpoNo: -1 })
+    .select('lpoNo')
+    .lean();
+
+  let maxNumber = 2444; // Default starting number
+
+  if (lastLpoSummary?.lpoNo) {
+    const num = parseInt(lastLpoSummary.lpoNo, 10);
+    if (!isNaN(num) && num > maxNumber) {
+      maxNumber = num;
+    }
+  }
+
+  if (lastDriverAccount?.lpoNo) {
+    const num = parseInt(lastDriverAccount.lpoNo, 10);
+    if (!isNaN(num) && num > maxNumber) {
+      maxNumber = num;
+    }
+  }
+
+  if (lastLpoEntry?.lpoNo) {
+    const num = parseInt(lastLpoEntry.lpoNo, 10);
+    if (!isNaN(num) && num > maxNumber) {
+      maxNumber = num;
+    }
+  }
+
+  return (maxNumber + 1).toString();
+}
+
+/**
+ * Get the next LPO number for driver account entries
+ */
+export const getNextLPONumber = async (req: AuthRequest, res: Response) => {
+  const nextLpoNo = await getNextAvailableLPONumber();
+
+  res.json({
+    success: true,
+    data: {
+      nextLpoNo,
+    },
+  });
+};
 
 /**
  * Get all driver account entries with pagination and filtering
@@ -126,6 +188,7 @@ export const getAvailableYears = async (req: AuthRequest, res: Response) => {
 
 /**
  * Create a new driver account entry
+ * This also creates an LPO entry that appears in LPO sheets and management
  */
 export const createDriverAccountEntry = async (req: AuthRequest, res: Response) => {
   const {
@@ -137,7 +200,10 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
     rate,
     station,
     cancellationPoint,
+    journeyDirection = 'going',
     originalDoNo,
+    paymentMode = 'CASH',
+    paybillOrMobile,
     notes,
   } = req.body;
 
@@ -146,11 +212,15 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
   const month = dateObj.toLocaleString('default', { month: 'long' });
   const year = dateObj.getFullYear();
 
+  // Determine the LPO number - use provided or get next available
+  const finalLpoNo = lpoNo || await getNextAvailableLPONumber();
+
+  // Create the driver account entry
   const entry = new DriverAccountEntry({
     date,
     month,
     year,
-    lpoNo,
+    lpoNo: finalLpoNo,
     truckNo,
     driverName,
     liters,
@@ -158,7 +228,10 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
     amount: liters * rate,
     station,
     cancellationPoint,
+    journeyDirection,
     originalDoNo,
+    paymentMode,
+    paybillOrMobile,
     notes,
     status: 'pending',
     createdBy: req.user?.username || 'system',
@@ -166,7 +239,45 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
 
   await entry.save();
 
-  logger.info(`Driver account entry created: ${entry._id} for truck ${truckNo}`);
+  // Also create an LPO Summary entry so it appears in LPO sheets and management
+  // For driver account entries, DO and destination are set to NIL
+  try {
+    const lpoSummary = new LPOSummary({
+      lpoNo: finalLpoNo,
+      date,
+      year,
+      station: station,
+      orderOf: 'DRIVER ACCOUNT',
+      entries: [{
+        doNo: 'NIL',  // DO is NIL for driver account
+        truckNo,
+        liters,
+        rate,
+        amount: liters * rate,
+        dest: 'NIL',  // Destination is NIL for driver account
+        isDriverAccount: true,
+        originalDoNo,  // Keep the reference DO
+        sortOrder: 1,
+      }],
+      total: liters * rate,
+    });
+
+    await lpoSummary.save();
+
+    // Update the driver account entry with the LPO summary reference
+    entry.lpoCreated = true;
+    entry.lpoSummaryId = lpoSummary._id.toString();
+    await entry.save();
+
+    logger.info(`Driver account entry created: ${entry._id} for truck ${truckNo} with LPO ${finalLpoNo}`);
+  } catch (lpoError: any) {
+    // If LPO creation fails due to duplicate, still keep the driver account entry
+    if (lpoError.code === 11000) {
+      logger.warn(`LPO ${finalLpoNo} already exists, driver account entry created without separate LPO`);
+    } else {
+      logger.error(`Error creating LPO for driver account: ${lpoError.message}`);
+    }
+  }
 
   res.status(201).json({
     success: true,
@@ -177,15 +288,21 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
 
 /**
  * Create multiple driver account entries (batch)
+ * Supports multiple trucks in a single LPO
  */
 export const createBatchDriverAccountEntries = async (req: AuthRequest, res: Response) => {
-  const { entries } = req.body;
+  const { entries, sharedLpoNo } = req.body;
 
   if (!entries || !Array.isArray(entries) || entries.length === 0) {
     throw new ApiError(400, 'Entries array is required');
   }
 
+  // Get or generate a shared LPO number for all entries in this batch
+  const batchLpoNo = sharedLpoNo || await getNextAvailableLPONumber();
+  
   const createdEntries = [];
+  const lpoDetails = [];
+  let totalAmount = 0;
 
   for (const entryData of entries) {
     const dateObj = new Date(entryData.date);
@@ -194,8 +311,11 @@ export const createBatchDriverAccountEntries = async (req: AuthRequest, res: Res
 
     const entry = new DriverAccountEntry({
       ...entryData,
+      lpoNo: batchLpoNo,  // Use shared LPO number
       month,
       year,
+      journeyDirection: entryData.journeyDirection || 'going',
+      paymentMode: entryData.paymentMode || 'CASH',
       amount: entryData.liters * entryData.rate,
       status: 'pending',
       createdBy: req.user?.username || 'system',
@@ -203,14 +323,63 @@ export const createBatchDriverAccountEntries = async (req: AuthRequest, res: Res
 
     await entry.save();
     createdEntries.push(entry);
+
+    // Build LPO detail for this entry
+    lpoDetails.push({
+      doNo: 'NIL',  // DO is NIL for driver account
+      truckNo: entryData.truckNo,
+      liters: entryData.liters,
+      rate: entryData.rate,
+      amount: entryData.liters * entryData.rate,
+      dest: 'NIL',  // Destination is NIL for driver account
+      isDriverAccount: true,
+      originalDoNo: entryData.originalDoNo,
+      sortOrder: lpoDetails.length + 1,
+    });
+    totalAmount += entryData.liters * entryData.rate;
   }
 
-  logger.info(`Batch created ${createdEntries.length} driver account entries`);
+  // Create a single LPO Summary with all entries
+  try {
+    const firstEntry = entries[0];
+    const dateObj = new Date(firstEntry.date);
+    const year = dateObj.getFullYear();
+
+    const lpoSummary = new LPOSummary({
+      lpoNo: batchLpoNo,
+      date: firstEntry.date,
+      year,
+      station: firstEntry.station,
+      orderOf: 'DRIVER ACCOUNT',
+      entries: lpoDetails,
+      total: totalAmount,
+    });
+
+    await lpoSummary.save();
+
+    // Update all driver account entries with the LPO summary reference
+    for (const entry of createdEntries) {
+      entry.lpoCreated = true;
+      entry.lpoSummaryId = lpoSummary._id.toString();
+      await entry.save();
+    }
+
+    logger.info(`Batch created ${createdEntries.length} driver account entries with LPO ${batchLpoNo}`);
+  } catch (lpoError: any) {
+    if (lpoError.code === 11000) {
+      logger.warn(`LPO ${batchLpoNo} already exists, driver account entries created without separate LPO`);
+    } else {
+      logger.error(`Error creating LPO for batch driver account: ${lpoError.message}`);
+    }
+  }
 
   res.status(201).json({
     success: true,
     message: `${createdEntries.length} driver account entries created successfully`,
-    data: createdEntries,
+    data: {
+      entries: createdEntries,
+      lpoNo: batchLpoNo,
+    },
   });
 };
 
@@ -511,6 +680,7 @@ export const driverAccountController = {
   getDriverAccountEntryById,
   getDriverAccountEntriesByYear,
   getAvailableYears,
+  getNextLPONumber,
   createDriverAccountEntry,
   createBatchDriverAccountEntries,
   updateDriverAccountEntry,
