@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard } from 'lucide-react';
-import { LPOSheet, LPODetail, LPOSummary, CancellationReport } from '../types';
+import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw } from 'lucide-react';
+import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
 import { lpoWorkbookAPI } from '../services/api';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
@@ -9,7 +9,9 @@ import { formatTruckNumber } from '../utils/dataCleanup';
 import { 
   generateCancellationReport, 
   formatEntryForDisplay,
-  saveCancellationToHistory 
+  saveCancellationToHistory,
+  getAvailableCancellationPoints,
+  getCancellationPointDisplayName
 } from '../services/cancellationService';
 
 interface LPOSheetViewProps {
@@ -27,6 +29,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [isSaving, setIsSaving] = useState(false); // Prevent double submissions
   const [cancellationReport, setCancellationReport] = useState<CancellationReport | null>(null);
   const [showCancellationReport, setShowCancellationReport] = useState(false);
+  
+  // Cancellation modal state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancellingEntryIndex, setCancellingEntryIndex] = useState<number | null>(null);
+  const [cancellationDirection, setCancellationDirection] = useState<'going' | 'returning'>('going');
+  const [selectedCancellationPoint, setSelectedCancellationPoint] = useState<CancellationPoint | ''>('');
 
   useEffect(() => {
     setEditedSheet(sheet);
@@ -77,7 +85,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }
   };
 
-  const handleHeaderEdit = (field: keyof LPOSheet, value: string) => {
+  const handleHeaderEdit = async (field: keyof LPOSheet, value: string) => {
     setEditedSheet(prev => ({ ...prev, [field]: value }));
   };
 
@@ -129,6 +137,99 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setEditingRow(null);
   };
 
+  // Open cancel modal for an entry
+  const openCancelModal = (index: number) => {
+    setCancellingEntryIndex(index);
+    setSelectedCancellationPoint('');
+    setCancellationDirection('going');
+    setShowCancelModal(true);
+  };
+
+  // Handle cancelling an entry
+  const handleCancelEntry = async () => {
+    if (cancellingEntryIndex === null || !selectedCancellationPoint) {
+      alert('Please select a cancellation point');
+      return;
+    }
+
+    if (isSaving) return;
+    setIsSaving(true);
+
+    try {
+      const updatedEntries = [...editedSheet.entries];
+      updatedEntries[cancellingEntryIndex] = {
+        ...updatedEntries[cancellingEntryIndex],
+        isCancelled: true,
+        cancellationPoint: selectedCancellationPoint
+      };
+
+      // Recalculate total (excluding cancelled entries)
+      const newTotal = updatedEntries
+        .filter(e => !e.isCancelled)
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      const updatedSheet = {
+        ...editedSheet,
+        entries: updatedEntries,
+        total: newTotal
+      };
+
+      // Save to backend
+      const savedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, updatedSheet);
+      onUpdate(savedSheet);
+      setEditedSheet(savedSheet);
+      
+      setShowCancelModal(false);
+      setCancellingEntryIndex(null);
+      setSelectedCancellationPoint('');
+      
+      alert('✓ Entry cancelled successfully! Fuel record has been updated.');
+    } catch (error) {
+      console.error('Error cancelling entry:', error);
+      alert('Error cancelling entry. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle uncancelling an entry (restore it)
+  const handleUncancelEntry = async (index: number) => {
+    if (isSaving) return;
+    setIsSaving(true);
+
+    try {
+      const updatedEntries = [...editedSheet.entries];
+      updatedEntries[index] = {
+        ...updatedEntries[index],
+        isCancelled: false,
+        cancellationPoint: undefined
+      };
+
+      // Recalculate total
+      const newTotal = updatedEntries
+        .filter(e => !e.isCancelled)
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      const updatedSheet = {
+        ...editedSheet,
+        entries: updatedEntries,
+        total: newTotal
+      };
+
+      // Save to backend
+      const savedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, updatedSheet);
+      onUpdate(savedSheet);
+      setEditedSheet(savedSheet);
+      
+      alert('✓ Entry restored successfully! Fuel record has been updated.');
+    } catch (error) {
+      console.error('Error restoring entry:', error);
+      alert('Error restoring entry. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleCancel = () => {
     setEditedSheet(sheet);
     setIsEditing(false);
@@ -138,6 +239,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   // Convert LPOSheet to LPOSummary format
   const convertToLPOSummary = (): LPOSummary => {
     return {
+      id: sheet.id,
       lpoNo: editedSheet.lpoNo,
       date: editedSheet.date,
       station: editedSheet.station,
@@ -608,13 +710,20 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   
                   <div className="px-3 py-2 text-center">
                     <div className="flex items-center justify-center space-x-1">
-                      {isCancelled && (
-                        <span className="text-xs text-red-600 font-medium">CANCELLED</span>
-                      )}
-                      {isDriverAccount && (
+                      {isCancelled ? (
+                        <>
+                          <span className="text-xs text-red-600 font-medium mr-1">CANCELLED</span>
+                          <button
+                            onClick={() => handleUncancelEntry(index)}
+                            className="p-1 text-green-600 hover:text-green-800"
+                            title="Restore Entry"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+                        </>
+                      ) : isDriverAccount ? (
                         <span className="text-xs text-orange-600 font-medium">DRIVER A/C</span>
-                      )}
-                      {!isCancelled && !isDriverAccount && editingRow === index ? (
+                      ) : editingRow === index ? (
                         <>
                           <button
                             onClick={() => handleRowSave(index)}
@@ -626,20 +735,29 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                           <button
                             onClick={() => handleRowCancel(index)}
                             className="p-1 text-gray-600 hover:text-gray-800"
-                            title="Cancel"
+                            title="Cancel Edit"
                           >
                             <X className="w-3 h-3" />
                           </button>
                         </>
-                      ) : !isCancelled && !isDriverAccount ? (
-                        <button
-                          onClick={() => setEditingRow(index)}
-                          className="p-1 text-blue-600 hover:text-blue-800"
-                          title="Edit Entry"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </button>
-                      ) : null}
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => setEditingRow(index)}
+                            className="p-1 text-blue-600 hover:text-blue-800"
+                            title="Edit Entry"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => openCancelModal(index)}
+                            className="p-1 text-red-600 hover:text-red-800"
+                            title="Cancel Entry"
+                          >
+                            <Ban className="w-3 h-3" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -698,6 +816,115 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           </div>
         </div>
       </div>
+
+      {/* Cancel Entry Modal */}
+      {showCancelModal && cancellingEntryIndex !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Ban className="w-5 h-5 text-red-600 mr-2" />
+                Cancel Entry
+              </h3>
+              <button
+                onClick={() => {
+                  setShowCancelModal(false);
+                  setCancellingEntryIndex(null);
+                }}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="px-6 py-4">
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">
+                  <strong>Cancelling:</strong> Truck {editedSheet.entries[cancellingEntryIndex].truckNo} - {editedSheet.entries[cancellingEntryIndex].liters}L
+                </p>
+                <p className="text-xs text-red-600 mt-1">
+                  This will revert the fuel record deduction and mark this entry as cancelled.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Journey Direction
+                  </label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="cancelDirection"
+                        value="going"
+                        checked={cancellationDirection === 'going'}
+                        onChange={() => {
+                          setCancellationDirection('going');
+                          setSelectedCancellationPoint('');
+                        }}
+                        className="w-4 h-4 text-red-600"
+                      />
+                      <span className="text-sm">Going</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="cancelDirection"
+                        value="returning"
+                        checked={cancellationDirection === 'returning'}
+                        onChange={() => {
+                          setCancellationDirection('returning');
+                          setSelectedCancellationPoint('');
+                        }}
+                        className="w-4 h-4 text-red-600"
+                      />
+                      <span className="text-sm">Returning</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Cancellation Checkpoint *
+                  </label>
+                  <select
+                    value={selectedCancellationPoint}
+                    onChange={(e) => setSelectedCancellationPoint(e.target.value as CancellationPoint)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  >
+                    <option value="">Select checkpoint...</option>
+                    {getAvailableCancellationPoints('CASH')[cancellationDirection].map((point) => (
+                      <option key={point} value={point}>
+                        {getCancellationPointDisplayName(point)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowCancelModal(false);
+                  setCancellingEntryIndex(null);
+                }}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCancelEntry}
+                disabled={!selectedCancellationPoint || isSaving}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? 'Processing...' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -94,6 +94,44 @@ export interface LPOSummary {
   total: number;
   createdAt?: string;
   updatedAt?: string;
+  // Forwarding tracking (if this LPO was forwarded from another)
+  forwardedFrom?: {
+    lpoId: string | number;
+    lpoNo: string;
+    station: string;
+  };
+}
+
+// LPO Forwarding Types
+export interface ForwardingRoute {
+  id: string;
+  name: string;
+  description: string;
+  fromStation: string;
+  toStation: string;
+  defaultLiters: number;
+  rate: number;
+  currency: 'USD' | 'TZS';
+}
+
+export interface ForwardLPORequest {
+  sourceLpoId: string | number;
+  targetStation: string;
+  defaultLiters: number;
+  rate: number;
+  date?: string;
+  orderOf?: string;
+  includeOnlyActive?: boolean;
+}
+
+export interface ForwardLPOResponse {
+  sourceLpo: {
+    id: string;
+    lpoNo: string;
+    station: string;
+  };
+  forwardedLpo: LPOSummary;
+  entriesForwarded: number;
 }
 
 // LPO Workbook Types (Excel-like structure - one per year)

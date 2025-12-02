@@ -179,6 +179,12 @@ export interface ILPOSummary {
   orderOf: string;
   entries: ILPODetail[];
   total: number;
+  // Forwarding tracking - if this LPO was forwarded from another
+  forwardedFrom?: {
+    lpoId: string;
+    lpoNo: string;
+    station: string;
+  };
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;

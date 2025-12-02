@@ -2,20 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, X, FileSpreadsheet, Trash2, 
   Copy, User, AlertTriangle, FileDown, Search,
-  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard
+  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download
 } from 'lucide-react';
-import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode } from '../types';
+import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
+import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import * as XLSX from 'xlsx';
 
 interface DriverAccountWorkbookProps {
-  year?: number;
+  initialYear?: number;
   onClose?: () => void;
 }
 
 const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({ 
-  year = new Date().getFullYear(),
+  initialYear = new Date().getFullYear(),
   onClose 
 }) => {
   const { user } = useAuth();
@@ -26,25 +27,61 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const [selectedEntries, setSelectedEntries] = useState<Set<string | number>>(new Set());
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
+  const [openEntryDropdown, setOpenEntryDropdown] = useState<string | number | null>(null);
+  const [entryDropdownPosition, setEntryDropdownPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [selectedYear, setSelectedYear] = useState<number>(initialYear);
+  const [availableYears, setAvailableYears] = useState<number[]>([new Date().getFullYear()]);
+
+  // Current year for reference
+  const currentYear = new Date().getFullYear();
+
+  // Fetch available years from API
+  useEffect(() => {
+    const fetchAvailableYears = async () => {
+      try {
+        const years = await driverAccountAPI.getAvailableYears();
+        // Always include current year, sort descending (newest first)
+        const yearsSet = new Set([...years, currentYear]);
+        const sortedYears = Array.from(yearsSet).sort((a, b) => b - a);
+        setAvailableYears(sortedYears);
+      } catch (error) {
+        console.error('Error fetching available years:', error);
+        // Fallback to current year only
+        setAvailableYears([currentYear]);
+      }
+    };
+    fetchAvailableYears();
+  }, [currentYear]);
 
   // Load workbook from API
   useEffect(() => {
     loadWorkbook();
-  }, [year]);
+  }, [selectedYear]);
+
+  // Close entry dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openEntryDropdown !== null && !(event.target as Element).closest('.relative')) {
+        setOpenEntryDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openEntryDropdown]);
 
   const loadWorkbook = async () => {
     setLoading(true);
     try {
-      const data = await driverAccountAPI.getByYear(year);
+      const data = await driverAccountAPI.getByYear(selectedYear);
       
       if (data) {
         setWorkbook(data);
       } else {
         // Create empty workbook for display
         const newWorkbook: DriverAccountWorkbook = {
-          id: `da-${year}`,
-          year,
-          name: `DRIVER ACCOUNTS ${year}`,
+          id: `da-${selectedYear}`,
+          year: selectedYear,
+          name: `DRIVER ACCOUNTS ${selectedYear}`,
           entries: [],
           totalLiters: 0,
           totalAmount: 0,
@@ -56,9 +93,9 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       console.error('Error loading driver account workbook:', error);
       // Set empty workbook on error
       setWorkbook({
-        id: `da-${year}`,
-        year,
-        name: `DRIVER ACCOUNTS ${year}`,
+        id: `da-${selectedYear}`,
+        year: selectedYear,
+        name: `DRIVER ACCOUNTS ${selectedYear}`,
         entries: [],
         totalLiters: 0,
         totalAmount: 0,
@@ -174,8 +211,8 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Driver Accounts ${year}`);
-    XLSX.writeFile(wb, `DRIVER_ACCOUNTS_${year}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, `Driver Accounts ${selectedYear}`);
+    XLSX.writeFile(wb, `DRIVER_ACCOUNTS_${selectedYear}.xlsx`);
   };
 
   const copyToClipboard = async (format: 'text' | 'whatsapp') => {
@@ -184,7 +221,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     let text = '';
     
     if (format === 'whatsapp') {
-      text = `*DRIVER ACCOUNTS ${year}*\n\n`;
+      text = `*DRIVER ACCOUNTS ${selectedYear}*\n\n`;
       filteredEntries.forEach((entry, index) => {
         text += `${index + 1}. *${entry.truckNo}*\n`;
         text += `   📅 ${entry.date}\n`;
@@ -195,7 +232,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       });
       text += `*TOTAL: ${workbook.totalLiters}L - ${workbook.totalAmount.toLocaleString()}*`;
     } else {
-      text = `DRIVER ACCOUNTS ${year}\n`;
+      text = `DRIVER ACCOUNTS ${selectedYear}\n`;
       text += `${'='.repeat(50)}\n\n`;
       filteredEntries.forEach((entry, index) => {
         text += `${index + 1}. ${entry.truckNo} - ${entry.date}\n`;
@@ -222,6 +259,71 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     }).format(amount);
   };
 
+  // Convert driver account entry to LPO Summary format for image/PDF generation
+  const convertToLPOSummary = (entry: DriverAccountEntry): LPOSummary => {
+    // Parse date for formatting
+    const entryDate = new Date(entry.date);
+    const formattedDate = entryDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    return {
+      lpoNo: entry.lpoNo,
+      date: formattedDate,
+      station: entry.station,
+      orderOf: 'DRIVER ACCOUNT',
+      entries: [{
+        doNo: 'NIL',
+        truckNo: entry.truckNo,
+        liters: entry.liters,
+        rate: entry.rate,
+        amount: entry.amount,
+        dest: 'NIL',
+        isDriverAccount: true
+      }],
+      total: entry.amount
+    };
+  };
+
+  // Handle copy as image for a single entry
+  const handleCopyEntryAsImage = async (entry: DriverAccountEntry) => {
+    try {
+      const lpoSummary = convertToLPOSummary(entry);
+      const success = await copyLPOImageToClipboard(lpoSummary, user?.username);
+      
+      if (success) {
+        alert('✓ Driver Account LPO image copied to clipboard!\nYou can now paste it anywhere.');
+      } else {
+        alert('Failed to copy image to clipboard. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error copying image:', error);
+      alert('Failed to copy image. Your browser may not support this feature.');
+    }
+  };
+
+  // Handle download as PDF for a single entry
+  const handleDownloadEntryPDF = async (entry: DriverAccountEntry) => {
+    try {
+      const lpoSummary = convertToLPOSummary(entry);
+      await downloadLPOPDF(lpoSummary, undefined, user?.username);
+      alert('✓ Driver Account LPO PDF downloaded successfully!');
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert('Failed to download PDF. Please try again.');
+    }
+  };
+
+  // Handle download as Image for a single entry  
+  const handleDownloadEntryImage = async (entry: DriverAccountEntry) => {
+    try {
+      const lpoSummary = convertToLPOSummary(entry);
+      await downloadLPOImage(lpoSummary, undefined, user?.username);
+      alert('✓ Driver Account LPO image downloaded successfully!');
+    } catch (error) {
+      console.error('Error downloading image:', error);
+      alert('Failed to download image. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -238,8 +340,18 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
           <div className="flex items-center space-x-3">
             <User className="w-6 h-6 text-red-600" />
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              Driver Accounts {year}
+              Driver's Account
             </h1>
+            {/* Year Filter */}
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
+            >
+              {availableYears.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
             <span className="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm rounded-full">
               {workbook?.entries.length || 0} entries
             </span>
@@ -258,7 +370,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
               </button>
               
               {showCopyDropdown && (
-                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10">
+                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50">
                   <button
                     onClick={() => copyToClipboard('text')}
                     className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
@@ -449,9 +561,9 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
               <p className="text-sm mt-1">Add entries for fuel given due to misuse or theft</p>
             </div>
           ) : (
-            filteredEntries.map((entry) => (
+            filteredEntries.map((entry, index) => (
               <div 
-                key={entry.id} 
+                key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`} 
                 className={`border-b border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 ${
                   selectedEntries.has(entry.id!) ? 'bg-red-50 dark:bg-red-900/10' : ''
                 }`}
@@ -512,14 +624,75 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                       <span className="text-xs text-gray-500 dark:text-gray-400 block mt-1">{entry.notes}</span>
                     )}
                   </div>
-                  <div className="px-3 py-2 text-center">
-                    <button
-                      onClick={() => deleteEntry(entry.id!)}
-                      className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  <div className="px-3 py-2 text-center relative">
+                    <div className="flex items-center justify-center space-x-1">
+                      {/* Actions dropdown */}
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setEntryDropdownPosition({
+                              top: rect.bottom + 4,
+                              left: rect.right - 192 // 192px = w-48
+                            });
+                            setOpenEntryDropdown(openEntryDropdown === entry.id ? null : entry.id!);
+                          }}
+                          className="p-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                          title="More actions"
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+                        
+                        {openEntryDropdown === entry.id && (
+                          <div 
+                            className="fixed w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50"
+                            style={{ top: entryDropdownPosition.top, left: entryDropdownPosition.left }}
+                          >
+                            <button
+                              onClick={() => {
+                                handleCopyEntryAsImage(entry);
+                                setOpenEntryDropdown(null);
+                              }}
+                              className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                            >
+                              <Image className="w-4 h-4 mr-2 text-green-600" />
+                              Copy as Image
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleDownloadEntryPDF(entry);
+                                setOpenEntryDropdown(null);
+                              }}
+                              className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                            >
+                              <Download className="w-4 h-4 mr-2 text-blue-600" />
+                              Download PDF
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleDownloadEntryImage(entry);
+                                setOpenEntryDropdown(null);
+                              }}
+                              className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                            >
+                              <FileDown className="w-4 h-4 mr-2 text-purple-600" />
+                              Download Image
+                            </button>
+                            <div className="border-t border-gray-200 dark:border-gray-600"></div>
+                            <button
+                              onClick={() => {
+                                deleteEntry(entry.id!);
+                                setOpenEntryDropdown(null);
+                              }}
+                              className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete Entry
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -850,38 +1023,63 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
           </div>
 
           {/* Payment Section */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <div>
-              <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
-                <CreditCard className="w-4 h-4 inline mr-1" />
-                Payment Mode *
-              </label>
-              <select
-                value={formData.paymentMode}
-                onChange={(e) => setFormData(prev => ({ ...prev, paymentMode: e.target.value as PaymentMode }))}
-                required
-                className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-blue-500"
-              >
-                {paymentModes.map(pm => (
-                  <option key={pm.value} value={pm.value}>{pm.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {formData.paymentMode !== 'CASH' && (
-              <div className="md:col-span-2">
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3 flex items-center">
+              <CreditCard className="w-4 h-4 mr-2" />
+              Payment Details
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
                 <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
-                  Paybill / Mobile Number
+                  Payment Mode *
+                </label>
+                <select
+                  value={formData.paymentMode}
+                  onChange={(e) => setFormData(prev => ({ ...prev, paymentMode: e.target.value as PaymentMode, paybillOrMobile: e.target.value === 'CASH' ? '' : prev.paybillOrMobile }))}
+                  required
+                  className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-blue-500"
+                >
+                  {paymentModes.map(pm => (
+                    <option key={pm.value} value={pm.value}>{pm.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
+                  {formData.paymentMode === 'CASH' ? 'Paybill / Mobile (N/A for Cash)' : (
+                    formData.paymentMode === 'TIGO_LIPA' ? 'Tigo Pesa Paybill Number *' :
+                    formData.paymentMode === 'VODA_LIPA' ? 'Vodacom M-Pesa Paybill Number *' :
+                    formData.paymentMode === 'SELCOM' ? 'Selcom Paybill Number *' :
+                    'Paybill / Mobile Number *'
+                  )}
                 </label>
                 <input
                   type="text"
                   value={formData.paybillOrMobile}
                   onChange={(e) => setFormData(prev => ({ ...prev, paybillOrMobile: e.target.value }))}
-                  placeholder={formData.paymentMode === 'TIGO_LIPA' ? 'e.g., 0711234567' : 'e.g., 0764123456'}
-                  className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-blue-500"
+                  placeholder={
+                    formData.paymentMode === 'CASH' ? 'Not required for cash payment' :
+                    formData.paymentMode === 'TIGO_LIPA' ? 'Enter Tigo Lipa paybill (e.g., 0711234567)' :
+                    formData.paymentMode === 'VODA_LIPA' ? 'Enter M-Pesa paybill (e.g., 123456)' :
+                    formData.paymentMode === 'SELCOM' ? 'Enter Selcom paybill number' :
+                    'Enter paybill or mobile number'
+                  }
+                  disabled={formData.paymentMode === 'CASH'}
+                  required={formData.paymentMode !== 'CASH'}
+                  className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 ${
+                    formData.paymentMode === 'CASH' 
+                      ? 'bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                      : 'border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                  }`}
                 />
+                {formData.paymentMode !== 'CASH' && !formData.paybillOrMobile && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    ⚠️ Please enter the paybill number for {formData.paymentMode.replace('_', ' ')} payment
+                  </p>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Trucks Section */}

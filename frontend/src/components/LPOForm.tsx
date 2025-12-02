@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertCircle, CheckCircle, User, Ban, Info } from 'lucide-react';
-import { LPOEntry, CancellationPoint } from '../types';
+import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader } from 'lucide-react';
+import { LPOEntry, CancellationPoint, LPOSummary } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
+import { lpoDocumentsAPI } from '../services/api';
 import { 
   getAvailableCancellationPoints, 
   getCancellationPointDisplayName,
@@ -16,6 +17,7 @@ interface LPOFormProps {
     cancellationPoint?: CancellationPoint;
     isDriverAccount?: boolean;
     paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';
+    lposToCancel?: { lpoId: string; truckNo: string }[];  // LPOs to auto-cancel
   }) => void;
   initialData?: LPOEntry;
 }
@@ -44,6 +46,10 @@ const LPOForm: React.FC<LPOFormProps> = ({
   const [cancellationPoint, setCancellationPoint] = useState<CancellationPoint | ''>('');
   const [isDriverAccount, setIsDriverAccount] = useState(false);
   const [showCancellationInfo, setShowCancellationInfo] = useState(false);
+
+  // Auto-cancellation state: LPOs at checkpoint that have this truck
+  const [existingLPOsAtCheckpoint, setExistingLPOsAtCheckpoint] = useState<LPOSummary[]>([]);
+  const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
 
   const [isAutoFetching, setIsAutoFetching] = useState(false);
   const [autoFillResult, setAutoFillResult] = useState<{
@@ -97,6 +103,28 @@ const LPOForm: React.FC<LPOFormProps> = ({
     fetchDOAndDefaults();
   }, [formData.truckNo, formData.dieselAt, initialData, useCustom]);
 
+  // Fetch existing LPOs when CASH mode is selected and truck number is filled
+  useEffect(() => {
+    const fetchExistingLPOs = async () => {
+      if (isCashMode && formData.truckNo && formData.truckNo.length >= 4 && cancellationPoint) {
+        setIsFetchingLPOs(true);
+        try {
+          const lpos = await lpoDocumentsAPI.findAtCheckpoint(formData.truckNo);
+          setExistingLPOsAtCheckpoint(lpos);
+        } catch (error) {
+          console.error('Error fetching existing LPOs:', error);
+          setExistingLPOsAtCheckpoint([]);
+        } finally {
+          setIsFetchingLPOs(false);
+        }
+      } else {
+        setExistingLPOsAtCheckpoint([]);
+      }
+    };
+
+    fetchExistingLPOs();
+  }, [isCashMode, formData.truckNo, cancellationPoint]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -142,13 +170,20 @@ const LPOForm: React.FC<LPOFormProps> = ({
     } else if (isCashMode || formData.dieselAt === 'CASH') {
       paymentMode = 'CASH';
     }
+
+    // Prepare LPOs to cancel (for auto-cancellation when CASH mode)
+    const lposToCancel = existingLPOsAtCheckpoint.map(lpo => ({
+      lpoId: lpo.id as string,
+      truckNo: formData.truckNo as string
+    }));
     
     onSubmit({
       ...formData,
       isCashMode: isCashMode || formData.dieselAt === 'CASH',
       cancellationPoint: cancellationPoint || undefined,
       isDriverAccount,
-      paymentMode
+      paymentMode,
+      lposToCancel: lposToCancel.length > 0 ? lposToCancel : undefined
     });
     onClose();
   };
@@ -398,6 +433,48 @@ const LPOForm: React.FC<LPOFormProps> = ({
                   <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
                     Note: Zambia returning has two parts - Ndola ({ZAMBIA_RETURNING_PARTS.ndola.liters}L) and Kapiri ({ZAMBIA_RETURNING_PARTS.kapiri.liters}L). Select which part to cancel.
                   </p>
+                )}
+
+                {/* Existing LPOs to Cancel - Auto-cancellation Preview */}
+                {isFetchingLPOs && (
+                  <div className="mt-3 flex items-center space-x-2 text-sm text-orange-600">
+                    <Loader className="w-4 h-4 animate-spin" />
+                    <span>Checking for existing LPOs...</span>
+                  </div>
+                )}
+
+                {!isFetchingLPOs && existingLPOsAtCheckpoint.length > 0 && (
+                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                    <div className="flex items-start space-x-2">
+                      <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                          Auto-Cancellation: {existingLPOsAtCheckpoint.length} LPO(s) will be cancelled
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                          The following LPOs have truck {formData.truckNo} at checkpoint stations. They will be automatically cancelled when you create this CASH LPO:
+                        </p>
+                        <ul className="mt-2 space-y-1">
+                          {existingLPOsAtCheckpoint.map((lpo, idx) => (
+                            <li key={idx} className="text-xs text-red-700 dark:text-red-300 flex items-center space-x-2">
+                              <span className="font-medium">LPO #{lpo.lpoNo}</span>
+                              <span>-</span>
+                              <span>{lpo.station}</span>
+                              <span>-</span>
+                              <span>{lpo.entries.find(e => e.truckNo === formData.truckNo)?.liters || 0}L</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isFetchingLPOs && existingLPOsAtCheckpoint.length === 0 && cancellationPoint && formData.truckNo && (
+                  <div className="mt-3 flex items-center space-x-2 text-sm text-green-600">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>No existing LPOs found for this truck to cancel</span>
+                  </div>
                 )}
               </div>
 

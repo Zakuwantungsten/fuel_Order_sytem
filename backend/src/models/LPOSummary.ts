@@ -133,6 +133,21 @@ const lpoSummarySchema = new Schema<ILPOSummaryDocument>(
       required: [true, 'Total is required'],
       min: [0, 'Total cannot be negative'],
     },
+    // Forwarding tracking - if this LPO was forwarded from another
+    forwardedFrom: {
+      lpoId: {
+        type: Schema.Types.ObjectId,
+        ref: 'LPOSummary',
+      },
+      lpoNo: {
+        type: String,
+        trim: true,
+      },
+      station: {
+        type: String,
+        trim: true,
+      },
+    },
     isDeleted: {
       type: Boolean,
       default: false,

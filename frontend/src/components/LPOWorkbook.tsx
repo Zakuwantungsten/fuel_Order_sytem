@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Download, Save, FileSpreadsheet, Trash2, Edit2, Copy } from 'lucide-react';
+import { X, Download, Save, FileSpreadsheet, Trash2, Edit2 } from 'lucide-react';
 import type { LPOWorkbook, LPOSummary } from '../types';
 import { lpoWorkbookAPI, lpoDocumentsAPI } from '../services/api';
 import LPOSheetView from './LPOSheetView';
@@ -19,6 +19,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   const [workbookName, setWorkbookName] = useState('');
   const [isRenamingWorkbook, setIsRenamingWorkbook] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [isDeletingSheet, setIsDeletingSheet] = useState(false);
 
   useEffect(() => {
     if (workbookId) {
@@ -62,64 +63,21 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
     }
   };
 
-  const generateNextLPONumber = async (): Promise<string> => {
-    try {
-      return await lpoDocumentsAPI.getNextLpoNumber();
-    } catch (error) {
-      if (!workbook || !workbook.sheets || workbook.sheets.length === 0) {
-        return '2444';
-      }
-      
-      const numbers = workbook.sheets
-        .map(sheet => parseInt(sheet.lpoNo))
-        .filter(num => !isNaN(num))
-        .sort((a, b) => b - a);
-      
-      return numbers.length > 0 ? (numbers[0] + 1).toString() : '2444';
+  const handleDeleteSheet = async (sheetId: string | number | undefined) => {
+    if (!sheetId) {
+      alert('Cannot delete: Sheet ID is missing. Please refresh the page.');
+      return;
     }
-  };
-
-  const handleAddSheet = async () => {
-    if (!workbook) return;
     
-    try {
-      const nextLpoNo = await generateNextLPONumber();
-      // Create new LPO document - this automatically adds it to the correct year's workbook
-      const newSheet = await lpoDocumentsAPI.create({
-        lpoNo: nextLpoNo,
-        date: new Date().toISOString().split('T')[0],
-        station: 'CASH',
-        orderOf: 'TAHMEED',
-        entries: [{
-          doNo: 'NIL',
-          truckNo: 'T 000 AAA',
-          liters: 0,
-          rate: 1.2,
-          amount: 0,
-          dest: 'NIL'
-        }],
-        total: 0
-      });
-
-      setWorkbook(prev => prev ? {
-        ...prev,
-        sheets: [...(prev.sheets || []), newSheet as any]
-      } : null);
-      
-      setActiveSheetId(newSheet.id!);
-    } catch (error: any) {
-      console.error('Error adding sheet:', error);
-      alert('Error creating new LPO sheet. Please try again.');
-    }
-  };
-
-  const handleDeleteSheet = async (sheetId: string | number) => {
     if (!workbook || !workbook.sheets || workbook.sheets.length <= 1) {
       alert('Cannot delete the last sheet in the workbook');
       return;
     }
     
+    if (isDeletingSheet) return;
+    
     if (window.confirm('Are you sure you want to delete this LPO sheet? This will also revert the fuel records.')) {
+      setIsDeletingSheet(true);
       try {
         await lpoDocumentsAPI.delete(sheetId);
         
@@ -129,15 +87,22 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
         if (activeSheetId === sheetId) {
           setActiveSheetId(updatedSheets[0]?.id || null);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error deleting sheet:', error);
-        alert('Error deleting LPO sheet. Please try again.');
+        const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+        alert(`Error deleting LPO sheet: ${errorMsg}`);
+      } finally {
+        setIsDeletingSheet(false);
       }
     }
   };
 
-  const handleRenameSheet = async (sheetId: string | number, newName: string) => {
-    if (!workbook) return;
+  const handleRenameSheet = async (sheetId: string | number | undefined, newName: string) => {
+    if (!workbook || !sheetId) {
+      alert('Cannot rename: Sheet ID is missing.');
+      setIsRenaming(null);
+      return;
+    }
     
     try {
       const updatedSheet = await lpoDocumentsAPI.update(sheetId, {
@@ -152,35 +117,10 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
       } : null);
       
       setIsRenaming(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error renaming sheet:', error);
-      alert('Error renaming LPO sheet. Please try again.');
-    }
-  };
-
-  const handleDuplicateSheet = async (sourceSheet: LPOSummary) => {
-    if (!workbook) return;
-    
-    try {
-      const nextLpoNo = await generateNextLPONumber();
-      const newSheet = await lpoDocumentsAPI.create({
-        lpoNo: nextLpoNo,
-        date: sourceSheet.date,
-        station: sourceSheet.station,
-        orderOf: sourceSheet.orderOf,
-        entries: sourceSheet.entries.map(entry => ({ ...entry, id: undefined })),
-        total: sourceSheet.total
-      });
-
-      setWorkbook(prev => prev ? {
-        ...prev,
-        sheets: [...(prev.sheets || []), newSheet as any]
-      } : null);
-      
-      setActiveSheetId(newSheet.id!);
-    } catch (error) {
-      console.error('Error duplicating sheet:', error);
-      alert('Error duplicating LPO sheet. Please try again.');
+      const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+      alert(`Error renaming LPO sheet: ${errorMsg}`);
     }
   };
 
@@ -299,10 +239,10 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
       {/* Sheet Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
         <div className="flex items-center overflow-x-auto">
-          {(workbook.sheets || []).map((sheet) => (
-            <div key={sheet.id} className="flex items-center">
+          {(workbook.sheets || []).map((sheet, index) => (
+            <div key={sheet.id || `sheet-${sheet.lpoNo}-${index}`} className="flex items-center">
               <button
-                onClick={() => setActiveSheetId(sheet.id!)}
+                onClick={() => sheet.id && setActiveSheetId(sheet.id)}
                 className={`px-4 py-2 text-sm font-medium border-r border-gray-300 dark:border-gray-600 whitespace-nowrap ${
                   activeSheetId === sheet.id
                     ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
@@ -316,8 +256,8 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
                     onChange={(e) => setNewSheetName(e.target.value)}
                     onBlur={() => setIsRenaming(null)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleRenameSheet(sheet.id!, newSheetName);
+                      if (e.key === 'Enter' && sheet.id) {
+                        handleRenameSheet(sheet.id, newSheetName);
                       }
                       if (e.key === 'Escape') {
                         setIsRenaming(null);
@@ -335,25 +275,22 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
                 <div className="flex items-center ml-1">
                   <button
                     onClick={() => {
-                      setIsRenaming(sheet.id!);
-                      setNewSheetName(sheet.lpoNo);
+                      if (sheet.id) {
+                        setIsRenaming(sheet.id);
+                        setNewSheetName(sheet.lpoNo);
+                      }
                     }}
-                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    title="Rename"
+                    disabled={!sheet.id}
+                    className={`p-1 ${!sheet.id ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                    title={!sheet.id ? 'Cannot rename: No ID' : 'Rename'}
                   >
                     <Edit2 className="w-3 h-3" />
                   </button>
                   <button
-                    onClick={() => handleDuplicateSheet(sheet)}
-                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    title="Duplicate"
-                  >
-                    <Copy className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteSheet(sheet.id!)}
-                    className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-                    title="Delete"
+                    onClick={() => handleDeleteSheet(sheet.id)}
+                    disabled={isDeletingSheet || !sheet.id}
+                    className={`p-1 ${isDeletingSheet || !sheet.id ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 dark:hover:text-red-400'}`}
+                    title={!sheet.id ? 'Cannot delete: No ID' : 'Delete'}
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -361,14 +298,6 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
               )}
             </div>
           ))}
-          
-          <button
-            onClick={handleAddSheet}
-            className="flex items-center px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Add Sheet
-          </button>
         </div>
       </div>
 
@@ -391,13 +320,8 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
           <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
             <div className="text-center">
               <FileSpreadsheet className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <p>No sheet selected</p>
-              <button
-                onClick={handleAddSheet}
-                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-              >
-                Add First Sheet
-              </button>
+              <p>No LPO sheets available</p>
+              <p className="text-sm mt-2">Create LPOs using the LPO form to see them here</p>
             </div>
           </div>
         )}

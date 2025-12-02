@@ -116,4 +116,60 @@ fetches lpo for that particular truck
 
 
 make logic for automatic cancellation for manual or with bilal - handle flexibility 
+cancellation of do and of lpos 
 
+drivers account -  
+cashlogic 
+
+
+
+
+okay for the cash mode of payment we should be able to normalize fetch do and destination for for liters it should be custom - like cash mode of payment is meant when an assinged station is out of fuel and we buy fuel from 
+other station through cash, now so here is the logic when we buy from the other station it might be that we had already sent an order to a station that if out of fuel - so in this situation here we cancel the order sometimes it might be that we cancel sometrucks in that order or in that lpo or sometimes we cancel the whole lpo or order since all trucks may have filled to another station - if it is all trucks of a specific or particular order got cash and we might add a selection where to indicate where to like choose to cancel from for example if i put cash mode of payment and indicate going  - it should bring a drop down to indicate where in the going to cancel so listing all the station in the going and choose from so if i choose infinity that means i cancel the truck 's order at mbeya going or at infinity - so normally we fill that amount to the fuel record assinged to that truck through cash as normal then if the truck had an order to infinity or mbeya going it is cancelled or if many trucks have not have got cash mode at a particular station under one lpo then the entire lpo is cancelled same for returning but returning is a little bit complicated since - when returning zambia returning has two parts of filling  ndola 50 and kapiri 350 so we should also be able to select at which part of zambia returning are we cancelling and if cancelling happening we cancel the truck order at that lpo or if the whole lpo's truck get cash mode of payment the entire lpo get's cancelled - so we want here automatic cancellation - since we ll have that do we should be able to access the entries of that truck at  particular station that we are cancelling - for example - i put truck number and i get the do and we put custom liters and there should be a dropdown indicating at which point i am cancelling its order - if i clickthat and when i click create lpo document in the lpo sheet and lpo summary the truck do should be exachanged with the word cancelled and the enire summary be in red - that is for any truck that is cancelled - now the report the entire like lpo 2445 is cancelled or trucks number, number and number are cancelled in this lpo and this truck is cancllled in this lpo should be like a statement that could be displayed for me to copy and to paste it somewhere - and should be able to access this since i amy accidentally forget to copy and for this case the for cash mode of payment if a station if out of fuel the lpo should contain the do number and the destiantion  - when copied or downloaed - it can come as do nil and destiantion nill - in these scenarios - when a drivers is been allocated extra fuel due to misuse or theft - so the logic is that we put a button somewhere to indicate the driver's account like a checkbox - if clicked no updation of fuel record is done and also cancellation of lpo is done but creation of that lpo indicating driver's account is there - and since we will be fetching the do number to indicate the current journey no other other journey since a truck may have several journey but a truck has a journey of unique going and return do - so we fetch its appropriate do - but and create that lpo but that down shouldn't be shown anywhere its just a refernce for that journey - for image copy and download and for sheet record and for summary the destiation and do number is indicated nil - and so but when i click to the fuel record and showing all the entries of lpos of the truck this nill destination and nill do should be fetched since of that do  - and also sometimes we give fuel for this kind not only for cash but sometimes to the station that we have so when we have chosen a station and decided to give to driver's account we use the logic - and also we could also make a workbook just like for lpo for storing all those driver's account trucks that got extra fuel underdriver's account with their details and also include option for copy or dowload - and should also be able to export that driver's account excel and in sheet wise just like lpo
+
+
+/ Map station names to cancellation points
+export const STATION_TO_CANCELLATION_POINT: Record<string, CancellationPoint> = {
+  'DAR GOING': 'DAR_GOING',
+  'MORO GOING': 'MORO_GOING',
+  'MBEYA GOING': 'MBEYA_GOING',
+  'INFINITY': 'INFINITY_GOING',
+  'TDM GOING': 'TDM_GOING',
+  'ZAMBIA GOING': 'ZAMBIA_GOING',
+  'LAKE CHILABOMBWE': 'ZAMBIA_GOING',
+  'TCC': 'ZAMBIA_GOING',
+  'ZHANFEI': 'ZAMBIA_GOING',
+  'KAMOA': 'ZAMBIA_GOING',
+  'COMIKA': 'ZAMBIA_GOING',
+  'LAKE NDOLA': 'ZAMBIA_NDOLA',
+  'LAKE KAPIRI': 'ZAMBIA_KAPIRI',
+  'TUNDUMA RETURN': 'TUNDUMA_RETURN',
+  'MBEYA RETURN': 'MBEYA_RETURN',
+  'MORO RETURN': 'MORO_RETURN',
+  'DAR RETURN': 'DAR_RETURN',
+  'TANGA RETURN': 'TANGA_RETURN'
+};/ Get cancellation point display name
+export const getCancellationPointDisplayName = (point: CancellationPoint): string => {
+  const displayNames: Record<CancellationPoint, string> = {
+    'DAR_GOING': 'Dar Going',
+    'MORO_GOING': 'Moro Going',
+    'MBEYA_GOING': 'Mbeya Going',
+    'INFINITY_GOING': 'Infinity (Mbeya)',
+    'TDM_GOING': 'TDM Going',
+    'ZAMBIA_GOING': 'Zambia Going',
+    'ZAMBIA_NDOLA': 'Zambia Returning (Ndola - 50L)',
+    'ZAMBIA_KAPIRI': 'Zambia Returning (Kapiri - 350L)',
+    'TUNDUMA_RETURN': 'Tunduma Return',
+    'MBEYA_RETURN': 'Mbeya Return',
+    'MORO_RETURN': 'Moro Return',
+    'DAR_RETURN': 'Dar Return',
+    'TANGA_RETURN': 'Tanga Return'
+  };
+  return displayNames[point] || point;
+};
+
+
+Now I need to remove the cancellation point dropdown UI and the availableCancellationPoints variable:
+
+
+forward values to the next station - for zambia return for ndola and kapiri and tunduma and infinity withch is mbeya return 

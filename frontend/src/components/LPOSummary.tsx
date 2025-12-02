@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel } from 'lucide-react';
-import { LPOEntry } from '../types';
+import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle } from 'lucide-react';
+import { LPOEntry, DriverAccountEntry } from '../types';
+import { driverAccountAPI } from '../services/api';
 import * as XLSX from 'xlsx';
+
+// Extended LPO entry type that includes driver account flag
+interface ExtendedLPOEntry extends LPOEntry {
+  isDriverAccount?: boolean;
+  paymentMode?: string;
+  paybillOrMobile?: string;
+  journeyDirection?: 'going' | 'returning';
+  originalDoNo?: string;
+}
 
 interface LPOSummaryProps {
   lpoEntries: LPOEntry[];
@@ -9,6 +19,7 @@ interface LPOSummaryProps {
   dateFrom?: string;
   dateTo?: string;
   onFiltersChange?: (filters: { stations: string[]; dateFrom: string; dateTo: string }) => void;
+  includeDriverAccounts?: boolean; // Option to include driver account LPOs
 }
 
 interface MonthlySummaryData {
@@ -23,7 +34,9 @@ interface MonthlySummaryData {
     amount: number;
   }>;
   byDestination: Record<string, number>;
-  entries: LPOEntry[];
+  entries: ExtendedLPOEntry[];
+  driverAccountCount: number;
+  regularLPOCount: number;
 }
 
 const LPOSummary = ({ 
@@ -31,7 +44,8 @@ const LPOSummary = ({
   selectedStations = [], 
   dateFrom = '', 
   dateTo = '', 
-  onFiltersChange 
+  onFiltersChange,
+  includeDriverAccounts = true 
 }: LPOSummaryProps) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
@@ -43,6 +57,62 @@ const LPOSummary = ({
   const [localDateFrom, setLocalDateFrom] = useState<string>(dateFrom);
   const [localDateTo, setLocalDateTo] = useState<string>(dateTo);
   const [availableStations, setAvailableStations] = useState<string[]>([]);
+  const [driverAccountEntries, setDriverAccountEntries] = useState<ExtendedLPOEntry[]>([]);
+  const [loadingDriverAccounts, setLoadingDriverAccounts] = useState(false);
+
+  // Fetch driver account entries
+  useEffect(() => {
+    if (includeDriverAccounts) {
+      fetchDriverAccountEntries();
+    }
+  }, [selectedYear, includeDriverAccounts]);
+
+  const fetchDriverAccountEntries = async () => {
+    setLoadingDriverAccounts(true);
+    try {
+      const yearNum = parseInt(selectedYear) || new Date().getFullYear();
+      const entries = await driverAccountAPI.getAll({ year: yearNum });
+      
+      // Convert driver account entries to LPO entry format
+      const convertedEntries: ExtendedLPOEntry[] = entries.map((entry: DriverAccountEntry, index: number) => {
+        // Parse date to match LPO format
+        const entryDate = new Date(entry.date);
+        const day = entryDate.getDate();
+        const month = entryDate.toLocaleDateString('en-US', { month: 'short' });
+        
+        return {
+          id: entry.id || `da-${index}`,
+          sn: index + 1,
+          date: `${day}-${month}`,
+          lpoNo: entry.lpoNo,
+          dieselAt: entry.station,
+          doSdo: 'NIL', // Driver account LPOs show NIL
+          truckNo: entry.truckNo,
+          ltrs: entry.liters,
+          pricePerLtr: entry.rate,
+          destinations: 'NIL (Driver Acc.)', // Mark as driver account
+          isDriverAccount: true,
+          paymentMode: entry.paymentMode,
+          paybillOrMobile: entry.paybillOrMobile,
+          journeyDirection: entry.journeyDirection,
+          originalDoNo: entry.originalDoNo,
+        };
+      });
+      
+      setDriverAccountEntries(convertedEntries);
+    } catch (error) {
+      console.error('Error fetching driver account entries:', error);
+      setDriverAccountEntries([]);
+    } finally {
+      setLoadingDriverAccounts(false);
+    }
+  };
+
+  // Combined entries (regular LPOs + driver account LPOs)
+  const combinedEntries: ExtendedLPOEntry[] = [
+    ...lpoEntries.map(e => ({ ...e, isDriverAccount: false })),
+    ...driverAccountEntries
+  ];
 
   // Get current month name
   const getCurrentMonth = () => {
@@ -50,13 +120,13 @@ const LPOSummary = ({
   };
 
   useEffect(() => {
-    if (lpoEntries.length > 0) {
-      // Extract unique months, years, and stations from LPO entries
+    if (combinedEntries.length > 0) {
+      // Extract unique months, years, and stations from combined entries
       const months = new Set<string>();
       const years = new Set<string>();
       const stations = new Set<string>();
       
-      lpoEntries.forEach(entry => {
+      combinedEntries.forEach(entry => {
         // Extract month from date format like "3-Oct", "15-Nov"
         const parts = entry.date.split('-');
         if (parts.length > 1) {
@@ -85,7 +155,7 @@ const LPOSummary = ({
         setSelectedMonth(monthsArray[monthsArray.length - 1]); // Latest month
       }
     }
-  }, [lpoEntries, selectedYear]);
+  }, [combinedEntries, selectedYear]);
 
   // Notify parent of filter changes
   useEffect(() => {
@@ -99,13 +169,13 @@ const LPOSummary = ({
   }, [localSelectedStations, localDateFrom, localDateTo, onFiltersChange]);
 
   useEffect(() => {
-    if (selectedMonth && lpoEntries.length > 0) {
+    if (selectedMonth && combinedEntries.length > 0) {
       calculateMonthlySummary();
     }
-  }, [selectedMonth, selectedYear, lpoEntries, localSelectedStations, localDateFrom, localDateTo]);
+  }, [selectedMonth, selectedYear, combinedEntries, localSelectedStations, localDateFrom, localDateTo]);
 
   const calculateMonthlySummary = () => {
-    let filteredEntries = lpoEntries;
+    let filteredEntries = combinedEntries as ExtendedLPOEntry[];
 
     // Apply month filter
     if (selectedMonth) {
@@ -148,6 +218,10 @@ const LPOSummary = ({
     const totalLiters = filteredEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
     const totalAmount = filteredEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
     const avgPricePerLiter = totalLiters > 0 ? totalAmount / totalLiters : 0;
+    
+    // Count driver account vs regular LPOs
+    const driverAccountCount = filteredEntries.filter(e => e.isDriverAccount).length;
+    const regularLPOCount = filteredEntries.length - driverAccountCount;
 
     // Group by station
     const byStation: Record<string, { lpos: number; liters: number; amount: number; }> = {};
@@ -177,7 +251,9 @@ const LPOSummary = ({
       avgPricePerLiter,
       byStation,
       byDestination,
-      entries: filteredEntries
+      entries: filteredEntries,
+      driverAccountCount,
+      regularLPOCount
     });
   };
 
@@ -194,7 +270,10 @@ const LPOSummary = ({
       'Liters': entry.ltrs,
       'Price per Liter': entry.pricePerLtr,
       'Total Amount': entry.ltrs * entry.pricePerLtr,
-      'Destinations': entry.destinations
+      'Destinations': entry.destinations,
+      'Type': entry.isDriverAccount ? 'DRIVER ACCOUNT' : 'REGULAR',
+      'Payment Mode': entry.isDriverAccount ? (entry.paymentMode || 'N/A') : '',
+      'Paybill/Mobile': entry.isDriverAccount ? (entry.paybillOrMobile || 'N/A') : ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -210,7 +289,7 @@ const LPOSummary = ({
 
     // Create a sheet for each month
     availableMonths.forEach(month => {
-      const monthEntries = lpoEntries.filter(entry => entry.date.includes(month));
+      const monthEntries = combinedEntries.filter(entry => entry.date.includes(month));
       
       if (monthEntries.length > 0) {
         const exportData = monthEntries.map((entry, index) => ({
@@ -223,7 +302,10 @@ const LPOSummary = ({
           'Liters': entry.ltrs,
           'Price per Liter': entry.pricePerLtr,
           'Total Amount': entry.ltrs * entry.pricePerLtr,
-          'Destinations': entry.destinations
+          'Destinations': entry.destinations,
+          'Type': entry.isDriverAccount ? 'DRIVER ACCOUNT' : 'REGULAR',
+          'Payment Mode': entry.isDriverAccount ? (entry.paymentMode || 'N/A') : '',
+          'Paybill/Mobile': entry.isDriverAccount ? (entry.paybillOrMobile || 'N/A') : ''
         }));
 
         const ws = XLSX.utils.json_to_sheet(exportData);
@@ -233,13 +315,16 @@ const LPOSummary = ({
 
     // Create summary sheet
     const yearSummary = availableMonths.map(month => {
-      const monthEntries = lpoEntries.filter(entry => entry.date.includes(month));
+      const monthEntries = combinedEntries.filter(entry => entry.date.includes(month));
       const totalLiters = monthEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
       const totalAmount = monthEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
+      const driverAccountLPOs = monthEntries.filter(e => e.isDriverAccount).length;
       
       return {
         'Month': month,
         'Total LPOs': monthEntries.length,
+        'Regular LPOs': monthEntries.length - driverAccountLPOs,
+        'Driver Account LPOs': driverAccountLPOs,
         'Total Liters': totalLiters,
         'Total Amount (TZS)': totalAmount,
         'Average Price/Liter': totalLiters > 0 ? (totalAmount / totalLiters).toFixed(2) : 0
@@ -255,7 +340,8 @@ const LPOSummary = ({
   if (!summary) {
     return (
       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-        {availableMonths.length === 0 ? 'No LPO data available' : 'Select a month to view summary'}
+        {loadingDriverAccounts ? 'Loading driver account entries...' : 
+         (availableMonths.length === 0 ? 'No LPO data available' : 'Select a month to view summary')}
       </div>
     );
   }
@@ -268,9 +354,23 @@ const LPOSummary = ({
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex items-center space-x-3">
               <Calendar className="w-6 h-6 text-primary-600 dark:text-primary-400" />
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                LPO Summary - {summary.month} {selectedYear}
-              </h3>
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  LPO Summary - {summary.month} {selectedYear}
+                </h3>
+                {/* LPO type breakdown */}
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {summary.regularLPOCount} Regular
+                  </span>
+                  {summary.driverAccountCount > 0 && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
+                      <AlertTriangle className="w-3 h-3 mr-1" />
+                      {summary.driverAccountCount} Driver Acc.
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
@@ -577,22 +677,41 @@ const LPOSummary = ({
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {summary.entries
                   .sort((a, b) => a.sn - b.sn)
-                  .map((entry) => (
-                    <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  .map((entry, index) => (
+                    <tr 
+                      key={entry.id || `entry-${index}`} 
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+                        entry.isDriverAccount ? 'bg-red-50/50 dark:bg-red-900/10' : ''
+                      }`}
+                    >
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {entry.sn}
+                        {index + 1}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.date}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {entry.lpoNo}
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                        <span className={entry.isDriverAccount ? 'text-red-700 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}>
+                          {entry.lpoNo}
+                        </span>
+                        {entry.isDriverAccount && (
+                          <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                            DA
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.dieselAt}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {entry.doSdo}
+                        {entry.isDriverAccount ? (
+                          <span className="text-red-600 dark:text-red-400 italic">
+                            NIL
+                            {entry.originalDoNo && (
+                              <span className="text-xs ml-1 text-gray-400">(ref: {entry.originalDoNo})</span>
+                            )}
+                          </span>
+                        ) : entry.doSdo}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.truckNo}
@@ -608,6 +727,11 @@ const LPOSummary = ({
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.destinations}
+                        {entry.isDriverAccount && entry.paymentMode && (
+                          <span className="block text-xs text-red-500 dark:text-red-400 mt-0.5">
+                            ({entry.paymentMode.replace('_', ' ')}{entry.paybillOrMobile ? `: ${entry.paybillOrMobile}` : ''})
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -18,6 +18,7 @@ router.get('/workbooks/:year/export', asyncHandler(lpoSummaryController.exportWo
 
 // Get routes
 router.get('/next-number', asyncHandler(lpoSummaryController.getNextLPONumber));
+router.get('/find-at-checkpoint', asyncHandler(lpoSummaryController.findLPOsAtCheckpoint));
 router.get('/', commonValidation.pagination, validate, asyncHandler(lpoSummaryController.getAllLPOSummaries));
 router.get('/lpo/:lpoNo', asyncHandler(lpoSummaryController.getLPOSummaryByLPONo));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(lpoSummaryController.getLPOSummaryById));
@@ -29,6 +30,20 @@ router.post(
   lpoSummaryValidation.create,
   validate,
   asyncHandler(lpoSummaryController.createLPOSummary)
+);
+
+// Cancel truck in LPO route
+router.post(
+  '/cancel-truck',
+  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'station_manager'),
+  asyncHandler(lpoSummaryController.cancelTruckInLPO)
+);
+
+// Forward LPO to another station route
+router.post(
+  '/forward',
+  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'station_manager'),
+  asyncHandler(lpoSummaryController.forwardLPO)
 );
 
 // Update route
@@ -44,7 +59,7 @@ router.put(
 router.delete(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager'),
+  authorize('super_admin', 'admin', 'fuel_order_maker'),
   validate,
   asyncHandler(lpoSummaryController.deleteLPOSummary)
 );
@@ -66,7 +81,7 @@ router.put(
 
 router.delete(
   '/:workbookId/sheets/:sheetId',
-  authorize('super_admin', 'admin', 'manager'),
+  authorize('super_admin', 'admin', 'fuel_order_maker'),
   validate,
   asyncHandler(lpoSummaryController.deleteSheetFromWorkbook)
 );

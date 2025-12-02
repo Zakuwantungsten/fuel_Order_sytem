@@ -182,8 +182,13 @@ export const lpoWorkbookAPI = {
   },
 
   // Get workbook by year with all its sheets
-  getByYear: async (year: number): Promise<LPOWorkbook> => {
-    const response = await apiClient.get(`/lpo-documents/workbooks/${year}`);
+  // Optional months param: array of month numbers (1-12) to filter by
+  getByYear: async (year: number, months?: number[]): Promise<LPOWorkbook> => {
+    const params: any = {};
+    if (months && months.length > 0) {
+      params.months = months.join(',');
+    }
+    const response = await apiClient.get(`/lpo-documents/workbooks/${year}`, { params });
     return response.data.data;
   },
 
@@ -288,6 +293,43 @@ export const lpoDocumentsAPI = {
       }
       return '2444';
     }
+  },
+
+  // Find LPOs at a checkpoint for a specific truck (for auto-cancellation)
+  findAtCheckpoint: async (truckNo: string, station?: string): Promise<LPOSummary[]> => {
+    const params: any = { truckNo };
+    if (station) params.station = station;
+    const response = await apiClient.get('/lpo-documents/find-at-checkpoint', { params });
+    return response.data.data || [];
+  },
+
+  // Cancel a truck entry in an LPO
+  cancelTruck: async (lpoId: string | number, truckNo: string, cancellationPoint: string, reason?: string): Promise<LPOSummary> => {
+    const response = await apiClient.post('/lpo-documents/cancel-truck', {
+      lpoId,
+      truckNo,
+      cancellationPoint,
+      reason
+    });
+    return response.data.data;
+  },
+
+  // Forward an LPO to another station (e.g., Ndola → Kapiri, Lake Tunduma → Infinity)
+  forward: async (data: {
+    sourceLpoId: string | number;
+    targetStation: string;
+    defaultLiters: number;
+    rate: number;
+    date?: string;
+    orderOf?: string;
+    includeOnlyActive?: boolean;
+  }): Promise<{
+    sourceLpo: { id: string; lpoNo: string; station: string };
+    forwardedLpo: LPOSummary;
+    entriesForwarded: number;
+  }> => {
+    const response = await apiClient.post('/lpo-documents/forward', data);
+    return response.data.data;
   },
 };
 

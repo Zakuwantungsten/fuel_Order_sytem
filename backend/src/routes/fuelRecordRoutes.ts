@@ -40,7 +40,7 @@ router.put(
 router.delete(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager'),
+  authorize('super_admin', 'admin', 'fuel_order_maker'),
   validate,
   asyncHandler(fuelRecordController.deleteFuelRecord)
 );

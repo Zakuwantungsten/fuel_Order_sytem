@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar } from 'lucide-react';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
 import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
 import LPODetailForm from '../components/LPODetailForm';
@@ -11,6 +11,12 @@ import { RESOURCES, ACTIONS } from '../utils/permissions';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
+
+// Month names for display
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
 
 const LPOs = () => {
   const { user } = useAuth();
@@ -24,6 +30,9 @@ const LPOs = () => {
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
   const [stationFilter, setStationFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  // Month filter - default to current month (1-indexed)
+  const [selectedMonths, setSelectedMonths] = useState<number[]>([new Date().getMonth() + 1]);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account'] as const;
   type ViewMode = typeof VIEW_MODES[number];
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -46,13 +55,70 @@ const LPOs = () => {
 
   useEffect(() => {
     filterLpos();
-  }, [searchTerm, stationFilter, dateFilter, lpos]);
+  }, [searchTerm, stationFilter, dateFilter, selectedMonths, lpos]);
+
+  // Helper to parse date from various formats (e.g., "2-Dec", "1-Dec", "2025-12-02")
+  const getMonthFromDate = (dateStr: string): number | null => {
+    if (!dateStr) return null;
+    
+    // Try parsing "D-MMM" format (e.g., "2-Dec")
+    const shortMonthMatch = dateStr.match(/^\d{1,2}-(\w{3})$/i);
+    if (shortMonthMatch) {
+      const monthAbbr = shortMonthMatch[1].toLowerCase();
+      const monthMap: { [key: string]: number } = {
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+      };
+      return monthMap[monthAbbr] || null;
+    }
+    
+    // Try parsing ISO format "YYYY-MM-DD"
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      return parseInt(isoMatch[2], 10);
+    }
+    
+    // Try parsing as Date object
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.getMonth() + 1;
+    }
+    
+    return null;
+  };
+
+  // Get unique stations from the data
+  const availableStations = useMemo(() => {
+    const stations = new Set<string>();
+    lpos.forEach(lpo => {
+      if (lpo.dieselAt && lpo.dieselAt.trim()) {
+        stations.add(lpo.dieselAt.trim().toUpperCase());
+      }
+    });
+    return Array.from(stations).sort();
+  }, [lpos]);
+
+  // Get months that have data
+  const availableMonths = useMemo(() => {
+    const months = new Set<number>();
+    lpos.forEach(lpo => {
+      const month = getMonthFromDate(lpo.date);
+      if (month !== null) {
+        months.add(month);
+      }
+    });
+    return Array.from(months).sort((a, b) => a - b);
+  }, [lpos]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!(event.target as Element).closest('.relative')) {
         closeAllDropdowns();
+      }
+      // Close month dropdown if clicking outside
+      if (!(event.target as Element).closest('.month-dropdown-container')) {
+        setShowMonthDropdown(false);
       }
     };
 
@@ -256,8 +322,37 @@ const LPOs = () => {
     setOpenDropdowns({});
   };
 
+  // Toggle month selection
+  const toggleMonth = (month: number) => {
+    setSelectedMonths(prev => {
+      if (prev.includes(month)) {
+        // Don't allow deselecting all months
+        if (prev.length === 1) return prev;
+        return prev.filter(m => m !== month);
+      } else {
+        return [...prev, month].sort((a, b) => a - b);
+      }
+    });
+  };
+
+  // Get display text for selected months
+  const getMonthsDisplayText = (): string => {
+    if (selectedMonths.length === 0) return 'Select Month';
+    if (selectedMonths.length === 1) return MONTH_NAMES[selectedMonths[0] - 1];
+    if (selectedMonths.length === availableMonths.length && availableMonths.length > 0) return 'All Months';
+    return `${selectedMonths.length} months`;
+  };
+
   const filterLpos = () => {
     let filtered = [...lpos];
+
+    // Filter by selected months
+    if (selectedMonths.length > 0 && selectedMonths.length < 12) {
+      filtered = filtered.filter((lpo) => {
+        const lpoMonth = getMonthFromDate(lpo.date);
+        return lpoMonth !== null && selectedMonths.includes(lpoMonth);
+      });
+    }
 
     if (searchTerm) {
       filtered = filtered.filter(
@@ -742,7 +837,7 @@ const LPOs = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 mb-6 transition-colors">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <input
               type="text"
@@ -752,20 +847,84 @@ const LPOs = () => {
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
+          
+          {/* Month Multi-Select Dropdown */}
+          <div className="month-dropdown-container relative">
+            <button
+              onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
+            >
+              <span className="flex items-center">
+                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                {getMonthsDisplayText()}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showMonthDropdown && (
+              <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-y-auto">
+                {/* Quick Select Options */}
+                <div className="p-2 border-b border-gray-200 dark:border-gray-600">
+                  {availableMonths.includes(new Date().getMonth() + 1) && (
+                    <button
+                      onClick={() => {
+                        setSelectedMonths([new Date().getMonth() + 1]);
+                        setShowMonthDropdown(false);
+                      }}
+                      className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                    >
+                      Current Month ({MONTH_NAMES[new Date().getMonth()]})
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedMonths(availableMonths.length > 0 ? [...availableMonths] : [new Date().getMonth() + 1]);
+                      setShowMonthDropdown(false);
+                    }}
+                    className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                  >
+                    All Months ({availableMonths.length})
+                  </button>
+                </div>
+                
+                {/* Month Checkboxes - Only show months that have data */}
+                <div className="p-2">
+                  {availableMonths.length > 0 ? (
+                    availableMonths.map((monthNum) => (
+                      <label
+                        key={monthNum}
+                        className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMonths.includes(monthNum)}
+                          onChange={() => toggleMonth(monthNum)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{MONTH_NAMES[monthNum - 1]}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <div className="px-2 py-1.5 text-sm text-gray-500 dark:text-gray-400">
+                      No data available
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          
           <select
             value={stationFilter}
             onChange={(e) => setStationFilter(e.target.value)}
             className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
             <option value="">All Stations</option>
-            <option value="LAKE CHILABOMBWE">LAKE CHILABOMBWE</option>
-            <option value="LAKE NDOLA">LAKE NDOLA</option>
-            <option value="LAKE KAPIRI">LAKE KAPIRI</option>
-            <option value="CASH">CASH</option>
-            <option value="TCC">TCC</option>
-            <option value="ZHANFEI">ZHANFEI</option>
-            <option value="KAMOA">KAMOA</option>
-            <option value="COMIKA">COMIKA</option>
+            {availableStations.map((station) => (
+              <option key={station} value={station}>
+                {station}
+              </option>
+            ))}
           </select>
           <input
             type="date"
@@ -778,6 +937,7 @@ const LPOs = () => {
               setSearchTerm('');
               setStationFilter('');
               setDateFilter('');
+              setSelectedMonths([new Date().getMonth() + 1]); // Reset to current month
             }}
             className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >

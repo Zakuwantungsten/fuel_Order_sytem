@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry } from '../models';
+import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry, LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
@@ -247,10 +247,13 @@ export const getAllWorkbooks = async (req: AuthRequest, res: Response): Promise<
 
 /**
  * Get workbook by year with all its sheets (LPO documents)
+ * Supports optional month filtering via query params
+ * - months: comma-separated list of months (1-12) e.g., "11,12" for Nov & Dec
  */
 export const getWorkbookByYear = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const year = parseInt(req.params.year, 10);
+    const { months } = req.query;
 
     if (isNaN(year)) {
       throw new ApiError(400, 'Invalid year');
@@ -263,7 +266,22 @@ export const getWorkbookByYear = async (req: AuthRequest, res: Response): Promis
       workbook = await getOrCreateWorkbook(year);
     }
 
-    const sheets = await LPOSummary.find({ year, isDeleted: false })
+    // Build filter for sheets
+    const sheetFilter: any = { year, isDeleted: false };
+    
+    // If months parameter is provided, filter by month
+    if (months && typeof months === 'string') {
+      const monthNumbers = months.split(',').map(m => parseInt(m.trim(), 10)).filter(m => m >= 1 && m <= 12);
+      
+      if (monthNumbers.length > 0) {
+        // Filter by date field - extract month from date string (YYYY-MM-DD format)
+        sheetFilter.$expr = {
+          $in: [{ $month: { $dateFromString: { dateString: '$date' } } }, monthNumbers]
+        };
+      }
+    }
+
+    const sheets = await LPOSummary.find(sheetFilter)
       .sort({ lpoNo: 1 })
       .lean();
 
@@ -346,10 +364,13 @@ export const getLPOSummaryById = async (req: AuthRequest, res: Response): Promis
       throw new ApiError(404, 'LPO document not found');
     }
 
+    // Return with id field for frontend compatibility
+    const responseData = lpoSummary.toObject();
+    
     res.status(200).json({
       success: true,
       message: 'LPO document retrieved successfully',
-      data: lpoSummary,
+      data: { ...responseData, id: responseData._id },
     });
   } catch (error: any) {
     throw error;
@@ -369,10 +390,13 @@ export const getLPOSummaryByLPONo = async (req: AuthRequest, res: Response): Pro
       throw new ApiError(404, 'LPO document not found');
     }
 
+    // Return with id field for frontend compatibility
+    const responseData = lpoSummary.toObject();
+    
     res.status(200).json({
       success: true,
       message: 'LPO document retrieved successfully',
-      data: lpoSummary,
+      data: { ...responseData, id: responseData._id },
     });
   } catch (error: any) {
     throw error;
@@ -411,6 +435,126 @@ export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise
     });
   } catch (error: any) {
     throw error;
+  }
+};
+
+/**
+ * Helper function to sync LPOEntry records with LPOSummary
+ * Creates corresponding LPOEntry records for each entry in the LPOSummary
+ * This ensures the list view stays in sync with the workbook view
+ */
+const syncLPOEntriesToList = async (
+  lpoSummary: any,
+  station: string,
+  date: string
+): Promise<void> => {
+  try {
+    if (!lpoSummary.entries || lpoSummary.entries.length === 0) {
+      return;
+    }
+
+    // Get the highest SN for LPOEntry to continue numbering
+    const lastEntry = await LPOEntry.findOne({ isDeleted: false })
+      .sort({ sn: -1 })
+      .select('sn')
+      .lean();
+    let nextSn = lastEntry ? lastEntry.sn + 1 : 1;
+
+    // Create LPOEntry records for each entry in the LPOSummary
+    for (const entry of lpoSummary.entries) {
+      // Skip cancelled entries - they shouldn't appear in list view
+      if (entry.isCancelled) {
+        logger.info(`Skipping LPOEntry creation for cancelled entry: ${entry.truckNo}`);
+        continue;
+      }
+
+      // Create the LPOEntry record
+      await LPOEntry.create({
+        sn: nextSn++,
+        date: date,
+        lpoNo: lpoSummary.lpoNo,
+        dieselAt: station,
+        doSdo: entry.doNo || 'PENDING',
+        truckNo: entry.truckNo,
+        ltrs: entry.liters,
+        pricePerLtr: entry.rate,
+        destinations: entry.dest || 'PENDING',
+        originalLtrs: entry.originalLiters || null,
+        amendedAt: entry.amendedAt || null,
+      });
+    }
+
+    logger.info(`Synced ${lpoSummary.entries.length} LPOEntry records for LPO ${lpoSummary.lpoNo}`);
+  } catch (error: any) {
+    logger.error(`Error syncing LPOEntry records for LPO ${lpoSummary.lpoNo}: ${error.message}`);
+    // Don't throw - this is a sync operation, main LPO creation should succeed
+  }
+};
+
+/**
+ * Helper function to update LPOEntry records when LPOSummary is updated
+ * Syncs changes from workbook to list view
+ */
+const syncLPOEntriesOnUpdate = async (
+  lpoNo: string,
+  entries: any[],
+  station: string,
+  date: string
+): Promise<void> => {
+  try {
+    // Delete existing LPOEntry records for this LPO
+    await LPOEntry.updateMany(
+      { lpoNo, isDeleted: false },
+      { isDeleted: true, deletedAt: new Date() }
+    );
+
+    // Get the highest SN for LPOEntry to continue numbering
+    const lastEntry = await LPOEntry.findOne({ isDeleted: false })
+      .sort({ sn: -1 })
+      .select('sn')
+      .lean();
+    let nextSn = lastEntry ? lastEntry.sn + 1 : 1;
+
+    // Recreate LPOEntry records from updated entries
+    for (const entry of entries) {
+      // Skip cancelled entries
+      if (entry.isCancelled) {
+        continue;
+      }
+
+      await LPOEntry.create({
+        sn: nextSn++,
+        date: date,
+        lpoNo: lpoNo,
+        dieselAt: station,
+        doSdo: entry.doNo || 'PENDING',
+        truckNo: entry.truckNo,
+        ltrs: entry.liters,
+        pricePerLtr: entry.rate,
+        destinations: entry.dest || 'PENDING',
+        originalLtrs: entry.originalLiters || null,
+        amendedAt: entry.amendedAt || null,
+      });
+    }
+
+    logger.info(`Updated LPOEntry records for LPO ${lpoNo}`);
+  } catch (error: any) {
+    logger.error(`Error updating LPOEntry records for LPO ${lpoNo}: ${error.message}`);
+  }
+};
+
+/**
+ * Helper function to delete LPOEntry records when LPOSummary is deleted
+ */
+const syncLPOEntriesOnDelete = async (lpoNo: string): Promise<void> => {
+  try {
+    await LPOEntry.updateMany(
+      { lpoNo, isDeleted: false },
+      { isDeleted: true, deletedAt: new Date() }
+    );
+    logger.info(`Deleted LPOEntry records for LPO ${lpoNo}`);
+  } catch (error: any) {
+    logger.error(`Error deleting LPOEntry records for LPO ${lpoNo}: ${error.message}`);
   }
 };
 
@@ -478,12 +622,18 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       }
     }
 
+    // Sync LPOEntry records for the list view
+    await syncLPOEntriesToList(lpoSummary, data.station || lpoSummary.station, data.date);
+
     logger.info(`LPO document created: ${lpoSummary.lpoNo} for year ${year} by ${req.user?.username}`);
 
+    // Return with id field for frontend compatibility
+    const responseData = lpoSummary.toObject();
+    
     res.status(201).json({
       success: true,
       message: 'LPO document created successfully',
-      data: lpoSummary,
+      data: { ...responseData, id: responseData._id },
     });
   } catch (error: any) {
     throw error;
@@ -708,12 +858,27 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       { new: true, runValidators: true }
     );
 
+    if (!lpoSummary) {
+      throw new ApiError(404, 'LPO document not found');
+    }
+
+    // Sync LPOEntry records for the list view
+    await syncLPOEntriesOnUpdate(
+      lpoSummary.lpoNo,
+      lpoSummary.entries,
+      lpoSummary.station,
+      lpoSummary.date
+    );
+
     logger.info(`LPO document updated: ${lpoSummary?.lpoNo} by ${req.user?.username}`);
 
+    // Return with id field for frontend compatibility
+    const responseData = lpoSummary.toObject();
+    
     res.status(200).json({
       success: true,
       message: 'LPO document updated successfully',
-      data: lpoSummary,
+      data: { ...responseData, id: responseData._id },
     });
   } catch (error: any) {
     throw error;
@@ -748,6 +913,9 @@ export const deleteLPOSummary = async (req: AuthRequest, res: Response): Promise
       { isDeleted: true, deletedAt: new Date() },
       { new: true }
     );
+
+    // Sync delete to LPOEntry records
+    await syncLPOEntriesOnDelete(lpoSummary.lpoNo);
 
     logger.info(`LPO document deleted: ${lpoSummary.lpoNo} by ${req.user?.username}`);
 
@@ -897,6 +1065,250 @@ export const getAvailableYears = async (req: AuthRequest, res: Response): Promis
       success: true,
       message: 'Available years retrieved successfully',
       data: years,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Find LPOs at a specific checkpoint/station that have a particular truck
+ * Used for auto-cancellation when creating CASH LPOs
+ */
+export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo, station, cancellationPoint } = req.query;
+
+    if (!truckNo) {
+      throw new ApiError(400, 'Truck number is required');
+    }
+
+    // Find LPOs where this truck has an active (non-cancelled) entry at the given station
+    const query: any = {
+      isDeleted: false,
+      'entries.truckNo': truckNo,
+      'entries.isCancelled': { $ne: true }
+    };
+
+    // If station is provided, filter by station
+    if (station) {
+      query.station = station;
+    }
+
+    const lpos = await LPOSummary.find(query).lean();
+
+    // Filter entries to only include matching truck entries that are not cancelled
+    const matchingLpos = lpos.map(lpo => ({
+      ...lpo,
+      entries: lpo.entries.filter((e: any) => 
+        e.truckNo === truckNo && !e.isCancelled
+      )
+    })).filter(lpo => lpo.entries.length > 0);
+
+    res.status(200).json({
+      success: true,
+      message: `Found ${matchingLpos.length} LPOs with truck ${truckNo}`,
+      data: matchingLpos,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Cancel a specific truck entry in an LPO by marking it as cancelled
+ * This also reverts the fuel record deduction
+ */
+export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { lpoId, truckNo, cancellationPoint, reason } = req.body;
+
+    if (!lpoId || !truckNo || !cancellationPoint) {
+      throw new ApiError(400, 'LPO ID, truck number, and cancellation point are required');
+    }
+
+    // Find the LPO
+    const lpo = await LPOSummary.findOne({ _id: lpoId, isDeleted: false });
+    if (!lpo) {
+      throw new ApiError(404, 'LPO not found');
+    }
+
+    // Find the entry for this truck
+    const entryIndex = lpo.entries.findIndex((e: any) => 
+      e.truckNo === truckNo && !e.isCancelled
+    );
+
+    if (entryIndex === -1) {
+      throw new ApiError(404, 'Active entry for this truck not found in the LPO');
+    }
+
+    const entry = lpo.entries[entryIndex];
+
+    // Revert the fuel record deduction
+    await updateFuelRecordForLPOEntry(
+      entry.doNo,
+      -entry.liters,
+      lpo.station,
+      entry.truckNo
+    );
+
+    // Mark the entry as cancelled
+    lpo.entries[entryIndex].isCancelled = true;
+    lpo.entries[entryIndex].cancellationPoint = cancellationPoint;
+    lpo.entries[entryIndex].cancellationReason = reason || 'Cash mode payment - station was out of fuel';
+    lpo.entries[entryIndex].cancelledAt = new Date();
+
+    // Recalculate total (excluding cancelled entries)
+    lpo.total = lpo.entries
+      .filter((e: any) => !e.isCancelled)
+      .reduce((sum: number, e: any) => sum + e.amount, 0);
+
+    await lpo.save();
+
+    logger.info(`Truck ${truckNo} cancelled in LPO ${lpo.lpoNo} at ${cancellationPoint} by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully cancelled truck ${truckNo} in LPO ${lpo.lpoNo}`,
+      data: lpo,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Forward an LPO to a new station
+ * Creates a new LPO with the same truck entries but at a different station with new default liters
+ * 
+ * Common Use Cases:
+ * - Zambia Returning: Ndola (50L) → Kapiri (350L)
+ * - Tunduma Returning: Lake Tunduma (100L) → Infinity/Mbeya (400L)
+ */
+export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { 
+      sourceLpoId, 
+      targetStation, 
+      defaultLiters, 
+      rate, 
+      date, 
+      orderOf,
+      includeOnlyActive = true 
+    } = req.body;
+
+    if (!sourceLpoId || !targetStation || !defaultLiters || !rate) {
+      throw new ApiError(400, 'Source LPO ID, target station, default liters, and rate are required');
+    }
+
+    // Find the source LPO
+    const sourceLpo = await LPOSummary.findOne({ _id: sourceLpoId, isDeleted: false });
+    if (!sourceLpo) {
+      throw new ApiError(404, 'Source LPO not found');
+    }
+
+    // Validate target station is different
+    if (sourceLpo.station.toUpperCase() === targetStation.toUpperCase()) {
+      throw new ApiError(400, 'Target station cannot be the same as source station');
+    }
+
+    // Filter entries (only active, non-cancelled entries if specified)
+    const entriesToForward = includeOnlyActive
+      ? sourceLpo.entries.filter((e: any) => !e.isCancelled)
+      : sourceLpo.entries;
+
+    if (entriesToForward.length === 0) {
+      throw new ApiError(400, 'Source LPO has no active entries to forward');
+    }
+
+    // Create forwarded entries with new liters and rate
+    const forwardedEntries = entriesToForward.map((entry: any) => ({
+      doNo: entry.doNo,
+      truckNo: entry.truckNo,
+      liters: defaultLiters,
+      rate: rate,
+      amount: defaultLiters * rate,
+      dest: entry.dest,
+      // Reset cancellation/driver account fields
+      isCancelled: false,
+      isDriverAccount: false,
+      originalLiters: null,
+      amendedAt: null,
+    }));
+
+    // Get next LPO number
+    let nextNumber = 2445;
+    const lastLpo = await LPOSummary.findOne({ isDeleted: false })
+      .sort({ lpoNo: -1 })
+      .select('lpoNo')
+      .lean();
+
+    if (lastLpo && (lastLpo as any).lpoNo) {
+      const lastNumber = parseInt((lastLpo as any).lpoNo, 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    // Make sure the number doesn't already exist
+    let exists = await LPOSummary.exists({ lpoNo: nextNumber.toString(), isDeleted: false });
+    while (exists) {
+      nextNumber++;
+      exists = await LPOSummary.exists({ lpoNo: nextNumber.toString(), isDeleted: false });
+    }
+
+    // Calculate total
+    const total = forwardedEntries.reduce((sum: number, entry: any) => sum + entry.amount, 0);
+
+    // Create new LPO date
+    const lpoDate = date || new Date().toISOString().split('T')[0];
+    const dateObj = new Date(lpoDate);
+    const year = dateObj.getFullYear();
+
+    // Ensure workbook exists for this year
+    await getOrCreateWorkbook(year);
+
+    // Create the forwarded LPO
+    const forwardedLpo = await LPOSummary.create({
+      lpoNo: nextNumber.toString(),
+      date: lpoDate,
+      year,
+      station: targetStation.toUpperCase(),
+      orderOf: orderOf || sourceLpo.orderOf,
+      entries: forwardedEntries,
+      total,
+      // Track the source LPO for reference
+      forwardedFrom: {
+        lpoId: sourceLpo._id,
+        lpoNo: sourceLpo.lpoNo,
+        station: sourceLpo.station,
+      },
+    });
+
+    // Update fuel records for each entry (regular LPO entries)
+    for (const entry of forwardedEntries) {
+      await updateFuelRecordForLPOEntry(
+        entry.doNo,
+        entry.liters,
+        targetStation,
+        entry.truckNo
+      );
+    }
+
+    logger.info(`LPO ${sourceLpo.lpoNo} forwarded to ${targetStation} as LPO ${forwardedLpo.lpoNo} by ${req.user?.username}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Successfully forwarded LPO ${sourceLpo.lpoNo} to ${targetStation} as LPO ${forwardedLpo.lpoNo}`,
+      data: {
+        sourceLpo: {
+          id: sourceLpo._id,
+          lpoNo: sourceLpo.lpoNo,
+          station: sourceLpo.station,
+        },
+        forwardedLpo: forwardedLpo,
+        entriesForwarded: forwardedEntries.length,
+      },
     });
   } catch (error: any) {
     throw error;

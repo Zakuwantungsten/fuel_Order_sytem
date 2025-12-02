@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight } from 'lucide-react';
-import { LPOSummary, LPODetail, FuelRecord } from '../types';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban } from 'lucide-react';
+import { LPOSummary, LPODetail, FuelRecord, CancellationPoint } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import { 
+  getAvailableCancellationPoints, 
+  getCancellationPointDisplayName,
+  ZAMBIA_RETURNING_PARTS
+} from '../services/cancellationService';
 
 // Station defaults mapping based on direction
 // Correct rates: USD stations = 1.2, TZS stations have specific rates
@@ -80,6 +85,7 @@ interface EntryAutoFillData {
   fetched: boolean;
   fuelRecord: FuelRecord | null;
   goingDestination?: string;  // Store original going destination for proper fuel allocation
+  returnDoMissing?: boolean;  // Track if return DO is not yet inputted
 }
 
 // Cash currency conversion state
@@ -116,6 +122,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const [entryAutoFillData, setEntryAutoFillData] = useState<Record<number, EntryAutoFillData>>({});
   const [isLoadingLpoNumber, setIsLoadingLpoNumber] = useState(false);
 
+  // Cash cancellation state
+  const [cancellationDirection, setCancellationDirection] = useState<'going' | 'returning'>('going');
+  const [cancellationPoint, setCancellationPoint] = useState<CancellationPoint | ''>('');
+  const [existingLPOsForTrucks, setExistingLPOsForTrucks] = useState<Map<string, LPOSummary[]>>(new Map());
+  const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
+
   // Cash currency conversion state
   const [cashConversion, setCashConversion] = useState<CashConversion>({
     localRate: 0,
@@ -123,6 +135,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     currency: 'ZMW',
     calculatedRate: 0,
   });
+
+  // Forwarding state - tracks when trucks are auto-loaded from previous station
+  const [selectedSourceLpo, setSelectedSourceLpo] = useState<LPOSummary | null>(null);
+  const [isLoadingForward, setIsLoadingForward] = useState(false);
+  const [forwardDefaultLiters, setForwardDefaultLiters] = useState<number>(0);
+  const [forwardRate, setForwardRate] = useState<number>(0);
 
   // Calculate TZS rate when cash conversion values change
   useEffect(() => {
@@ -143,6 +161,36 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
     }
   }, [cashConversion.localRate, cashConversion.conversionRate, formData.station]);
+
+  // Fetch existing LPOs for trucks when CASH is selected and cancellation point is chosen
+  useEffect(() => {
+    const fetchExistingLPOs = async () => {
+      if (formData.station === 'CASH' && cancellationPoint && formData.entries && formData.entries.length > 0) {
+        setIsFetchingLPOs(true);
+        const newMap = new Map<string, LPOSummary[]>();
+        
+        try {
+          for (const entry of formData.entries) {
+            if (entry.truckNo && entry.truckNo.length >= 4) {
+              const lpos = await lpoDocumentsAPI.findAtCheckpoint(entry.truckNo);
+              if (lpos.length > 0) {
+                newMap.set(entry.truckNo, lpos);
+              }
+            }
+          }
+          setExistingLPOsForTrucks(newMap);
+        } catch (error) {
+          console.error('Error fetching existing LPOs:', error);
+        } finally {
+          setIsFetchingLPOs(false);
+        }
+      } else {
+        setExistingLPOsForTrucks(new Map());
+      }
+    };
+
+    fetchExistingLPOs();
+  }, [formData.station, cancellationPoint, formData.entries?.map(e => e.truckNo).join(',')]);
 
   useEffect(() => {
     if (initialData) {
@@ -348,28 +396,152 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     return { liters: 350, rate: 1.2 };
   };
 
-  const handleHeaderChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  // Zambia Return Split: Same trucks get fuel at TWO stations in sequence
+  // Lake Ndola (50L) → Lake Kapiri (350L) = 400L total for Zambia Return
+  // When creating LPO at LAKE KAPIRI, auto-fetch trucks from the last LAKE NDOLA LPO
+  const FORWARD_STATION_MAP: Record<string, { 
+    sourceStation: string; 
+    defaultLiters: number; 
+    rate: number;
+    description: string;
+  }> = {
+    'LAKE KAPIRI': { 
+      sourceStation: 'LAKE NDOLA', 
+      defaultLiters: 350, 
+      rate: 1.2,
+      description: 'Zambia Return: Ndola (50L) + Kapiri (350L) = 400L total'
+    },
+  };
+
+  // Fuel allocation reference:
+  // GOING: Dar Yard (550/580), Dar Going (variable), Mbeya Going (450), Zambia Going (calculated)
+  // RETURNING: Zambia Return (400 = Ndola 50 + Kapiri 350), Tunduma Return (100), 
+  //            Mbeya Return (400), Moro Return (100), Tanga Return (70), Dar Return (variable)
+
+  // Fetch the last LPO from a source station to forward trucks
+  const fetchLastLPOFromStation = async (sourceStation: string): Promise<LPOSummary | null> => {
+    try {
+      // Get LPOs filtered by station, sorted by date/lpoNo descending
+      const lpos = await lpoDocumentsAPI.getAll({ 
+        station: sourceStation, 
+        limit: 10,
+        sortBy: 'lpoNo',
+        sortOrder: 'desc'
+      });
+      
+      // Find the most recent LPO with active entries
+      const validLpo = lpos.find((lpo: LPOSummary) => {
+        const hasActiveEntries = lpo.entries.some(e => !e.isCancelled);
+        return hasActiveEntries;
+      });
+      
+      return validLpo || null;
+    } catch (error) {
+      console.error('Error fetching last LPO from station:', error);
+      return null;
+    }
+  };
+
+  // Auto-forward trucks when selecting a target station (LAKE KAPIRI or INFINITY)
+  const autoForwardFromPreviousStation = async (targetStation: string) => {
+    const forwardConfig = FORWARD_STATION_MAP[targetStation.toUpperCase()];
+    if (!forwardConfig) return;
+
+    setIsLoadingForward(true);
+    try {
+      const sourceLpo = await fetchLastLPOFromStation(forwardConfig.sourceStation);
+      
+      if (sourceLpo) {
+        const activeEntries = sourceLpo.entries.filter(e => !e.isCancelled);
+        
+        // Create forwarded entries with correct liters and rate
+        const forwardedEntries: LPODetail[] = activeEntries.map(entry => ({
+          doNo: entry.doNo,
+          truckNo: entry.truckNo,
+          liters: forwardConfig.defaultLiters,
+          rate: forwardConfig.rate,
+          amount: forwardConfig.defaultLiters * forwardConfig.rate,
+          dest: entry.dest,
+          isCancelled: false,
+          isDriverAccount: false,
+        }));
+
+        const total = forwardedEntries.reduce((sum, e) => sum + e.amount, 0);
+
+        setFormData(prev => ({
+          ...prev,
+          station: targetStation,
+          orderOf: sourceLpo.orderOf || prev.orderOf,
+          entries: forwardedEntries,
+          total,
+        }));
+
+        setSelectedSourceLpo(sourceLpo);
+        setForwardDefaultLiters(forwardConfig.defaultLiters);
+        setForwardRate(forwardConfig.rate);
+
+        // Set all entries as returning direction
+        const autoFillData: Record<number, EntryAutoFillData> = {};
+        forwardedEntries.forEach((_, idx) => {
+          autoFillData[idx] = { direction: 'returning', loading: false, fetched: true, fuelRecord: null };
+        });
+        setEntryAutoFillData(autoFillData);
+      }
+    } catch (error) {
+      console.error('Error auto-forwarding:', error);
+    } finally {
+      setIsLoadingForward(false);
+    }
+  };
+
+  // Reset forwarding state
+  const resetForwarding = () => {
+    setSelectedSourceLpo(null);
+    setForwardDefaultLiters(0);
+    setForwardRate(0);
+    setEntryAutoFillData({});
+    setFormData(prev => ({
+      ...prev,
+      station: '',
+      entries: [],
+      total: 0,
+    }));
+  };
+
+  const handleHeaderChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
 
-    // If station changes, update all entries with new default rates
+    // If station changes to a forwarding target (LAKE KAPIRI or INFINITY), auto-fetch trucks
     if (name === 'station' && value) {
-      const updatedEntries = formData.entries?.map((entry, idx) => {
-        const direction = entryAutoFillData[idx]?.direction || 'going';
-        const defaults = getStationDefaults(value, direction, entry.dest);
-        return {
-          ...entry,
-          rate: defaults.rate,
-          liters: entry.liters || defaults.liters,
-          amount: (entry.liters || defaults.liters) * defaults.rate
-        };
-      }) || [];
+      const stationUpper = value.toUpperCase();
       
-      const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
-      setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
+      // Check if this is a forwarding target station
+      if (FORWARD_STATION_MAP[stationUpper]) {
+        // Auto-forward from the source station
+        await autoForwardFromPreviousStation(value);
+      } else {
+        // Regular station change - update rates for existing entries
+        const updatedEntries = formData.entries?.map((entry, idx) => {
+          const direction = entryAutoFillData[idx]?.direction || 'going';
+          const defaults = getStationDefaults(value, direction, entry.dest);
+          return {
+            ...entry,
+            rate: defaults.rate,
+            liters: entry.liters || defaults.liters,
+            amount: (entry.liters || defaults.liters) * defaults.rate
+          };
+        }) || [];
+        
+        const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+        setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
+        
+        // Clear any previous forwarding state
+        setSelectedSourceLpo(null);
+      }
     }
   };
 
@@ -418,6 +590,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const direction = entryAutoFillData[index]?.direction || 'going';
       const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
       
+      // Check if return DO is missing
+      const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
+      
       // IMPORTANT: Use goingDestination for going journey fuel allocation
       // This ensures we use the original destination before EXPORT DO changed it
       const destinationForAllocation = direction === 'going'
@@ -450,7 +625,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           loading: false, 
           fetched: result.success, 
           fuelRecord: result.fuelRecord,
-          goingDestination: result.goingDestination  // Store for later use when toggling direction
+          goingDestination: result.goingDestination,  // Store for later use when toggling direction
+          returnDoMissing  // Track if return DO is missing
         }
       }));
     }
@@ -544,7 +720,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate entries
@@ -593,6 +769,27 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
     const total = validEntries.reduce((sum, entry) => sum + entry.amount, 0);
 
+    // Perform auto-cancellation for CASH mode if cancellation point is selected
+    if (formData.station === 'CASH' && cancellationPoint && existingLPOsForTrucks.size > 0) {
+      try {
+        // Cancel trucks in existing LPOs
+        for (const [truckNo, lpos] of existingLPOsForTrucks) {
+          for (const lpo of lpos) {
+            await lpoDocumentsAPI.cancelTruck(
+              lpo.id as string,
+              truckNo,
+              cancellationPoint,
+              'Cash mode payment - station was out of fuel'
+            );
+          }
+        }
+        console.log('Auto-cancellation completed');
+      } catch (error) {
+        console.error('Error during auto-cancellation:', error);
+        // Continue with LPO creation even if cancellation fails
+      }
+    }
+
     onSubmit({
       ...formData,
       entries: validEntries,
@@ -618,6 +815,52 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
+          {/* Auto-Forward Notice - Shows when trucks are loaded from previous station (Zambia Return) */}
+          {!initialData && selectedSourceLpo && (
+            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                  <div>
+                    <h3 className="font-medium text-green-800 dark:text-green-200">
+                      Trucks Forwarded from LPO #{selectedSourceLpo.lpoNo} ({selectedSourceLpo.station})
+                    </h3>
+                    <p className="text-sm text-green-600 dark:text-green-300">
+                      {formData.entries?.length} trucks loaded @ {forwardDefaultLiters}L each @ {forwardRate}/L
+                    </p>
+                    <p className="text-xs text-green-500 dark:text-green-400 mt-1">
+                      Zambia Return: Same trucks from Ndola (50L) now at Kapiri (350L) = 400L total
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetForwarding}
+                  className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Loading indicator when fetching trucks */}
+          {!initialData && isLoadingForward && (
+            <div className="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-700">
+              <div className="flex items-center space-x-3">
+                <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+                <div>
+                  <h3 className="font-medium text-indigo-800 dark:text-indigo-200">
+                    Loading trucks from previous station...
+                  </h3>
+                  <p className="text-sm text-indigo-600 dark:text-indigo-300">
+                    Fetching active entries to forward
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Header Information */}
           <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">LPO Header</h3>
@@ -762,6 +1005,110 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 )}
               </div>
             )}
+
+            {/* Cash Cancellation Point - Only shown when CASH is selected */}
+            {formData.station === 'CASH' && (
+              <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg">
+                <div className="flex items-center space-x-2 mb-3">
+                  <Ban className="w-5 h-5 text-orange-600" />
+                  <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-200">Cancellation Point</h4>
+                </div>
+                <p className="text-xs text-orange-700 dark:text-orange-300 mb-3">
+                  Select a cancellation checkpoint to automatically cancel trucks in any existing LPOs at that station.
+                </p>
+                
+                {/* Direction Toggle */}
+                <div className="flex space-x-4 mb-3">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancelDirection"
+                      value="going"
+                      checked={cancellationDirection === 'going'}
+                      onChange={() => {
+                        setCancellationDirection('going');
+                        setCancellationPoint('');
+                      }}
+                      className="w-4 h-4 text-orange-600"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Going</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancelDirection"
+                      value="returning"
+                      checked={cancellationDirection === 'returning'}
+                      onChange={() => {
+                        setCancellationDirection('returning');
+                        setCancellationPoint('');
+                      }}
+                      className="w-4 h-4 text-orange-600"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Returning</span>
+                  </label>
+                </div>
+
+                {/* Cancellation Point Dropdown */}
+                <select
+                  value={cancellationPoint}
+                  onChange={(e) => setCancellationPoint(e.target.value as CancellationPoint)}
+                  className="w-full px-3 py-2 border border-orange-300 dark:border-orange-600 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">Select cancellation point (optional)...</option>
+                  {getAvailableCancellationPoints('CASH')[cancellationDirection].map((point) => (
+                    <option key={point} value={point}>
+                      {getCancellationPointDisplayName(point)}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Zambia Returning Note */}
+                {cancellationDirection === 'returning' && (
+                  <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                    Note: Zambia returning has two parts - Ndola ({ZAMBIA_RETURNING_PARTS.ndola.liters}L) and Kapiri ({ZAMBIA_RETURNING_PARTS.kapiri.liters}L).
+                  </p>
+                )}
+
+                {/* Show existing LPOs that will be cancelled */}
+                {isFetchingLPOs && (
+                  <div className="mt-3 flex items-center space-x-2 text-sm text-orange-600">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Checking for existing LPOs...</span>
+                  </div>
+                )}
+
+                {!isFetchingLPOs && existingLPOsForTrucks.size > 0 && (
+                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                    <div className="flex items-start space-x-2">
+                      <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                          Auto-Cancellation: {existingLPOsForTrucks.size} truck(s) have existing LPOs
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                          The following will be automatically cancelled when you create this CASH LPO:
+                        </p>
+                        <ul className="mt-2 space-y-1">
+                          {Array.from(existingLPOsForTrucks.entries()).map(([truckNo, lpos]) => (
+                            <li key={truckNo} className="text-xs text-red-700 dark:text-red-300">
+                              <span className="font-medium">{truckNo}</span>: {lpos.map(l => `LPO #${l.lpoNo}`).join(', ')}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isFetchingLPOs && existingLPOsForTrucks.size === 0 && cancellationPoint && formData.entries && formData.entries.length > 0 && (
+                  <div className="mt-3 flex items-center space-x-2 text-sm text-green-600">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>No existing LPOs found for these trucks to cancel</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Instructions */}
@@ -841,22 +1188,30 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             </div>
                           </td>
                           <td className="px-3 py-3">
-                            <button
-                              type="button"
-                              onClick={() => toggleDirection(index)}
-                              className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                autoFill.direction === 'going'
-                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
-                                  : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
-                              }`}
-                              title="Click to toggle direction"
-                            >
-                              {autoFill.direction === 'going' ? (
-                                <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
-                              ) : (
-                                <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
+                            <div className="flex flex-col">
+                              <button
+                                type="button"
+                                onClick={() => toggleDirection(index)}
+                                className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                  autoFill.direction === 'going'
+                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
+                                    : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
+                                }`}
+                                title="Click to toggle direction"
+                              >
+                                {autoFill.direction === 'going' ? (
+                                  <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
+                                ) : (
+                                  <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
+                                )}
+                              </button>
+                              {/* Warning when Return DO is not yet inputted */}
+                              {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched && (
+                                <span className="text-xs text-amber-600 dark:text-amber-400 mt-1" title="Return DO not yet inputted in fuel record">
+                                  ⚠️ No Return DO
+                                </span>
                               )}
-                            </button>
+                            </div>
                           </td>
                           <td className="px-3 py-3">
                             <input
