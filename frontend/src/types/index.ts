@@ -101,6 +101,11 @@ export interface LPOSummary {
     lpoNo: string;
     station: string;
   };
+  // Custom station fields (for unlisted stations)
+  isCustomStation?: boolean;
+  customStationName?: string;
+  customGoingCheckpoint?: string;
+  customReturnCheckpoint?: string;
 }
 
 // LPO Forwarding Types
@@ -181,6 +186,12 @@ export interface LPODetail {
   cancellationPoint?: CancellationPoint;
   isDriverAccount?: boolean;
   paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';
+  // Custom station fields (for unlisted stations like small lake stations in Zambia)
+  isCustomStation?: boolean;
+  customStationName?: string;
+  // Custom checkpoint mapping: which fuel record column to update based on direction
+  customGoingCheckpoint?: string;   // Fuel record field for going direction (Custom1)
+  customReturnCheckpoint?: string;  // Fuel record field for return direction (Custom2)
 }
 
 // Fuel Record Types
@@ -407,7 +418,10 @@ export type CancellationPoint =
   | 'MBEYA_RETURN'
   | 'MORO_RETURN'
   | 'DAR_RETURN'
-  | 'TANGA_RETURN';
+  | 'TANGA_RETURN'
+  // Custom station checkpoints (for unlisted stations)
+  | 'CUSTOM_GOING'    // Custom station for going direction
+  | 'CUSTOM_RETURN';  // Custom station for return direction
 
 export interface CancellationInfo {
   isCancelled: boolean;

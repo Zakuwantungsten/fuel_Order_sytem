@@ -16,7 +16,9 @@ const CANCELLATION_POINTS: CancellationPoint[] = [
   'MBEYA_RETURN',
   'MORO_RETURN',
   'DAR_RETURN',
-  'TANGA_RETURN'
+  'TANGA_RETURN',
+  'CUSTOM_GOING',
+  'CUSTOM_RETURN'
 ];
 
 const lpoDetailSchema = new Schema<ILPODetail>(
@@ -87,6 +89,23 @@ const lpoDetailSchema = new Schema<ILPODetail>(
     },
     cancelledAt: {
       type: Date,
+    },
+    // Custom station fields (for unlisted stations like small lake stations in Zambia)
+    isCustomStation: {
+      type: Boolean,
+      default: false,
+    },
+    customStationName: {
+      type: String,
+      trim: true,
+    },
+    customGoingCheckpoint: {
+      type: String,
+      trim: true,
+    },
+    customReturnCheckpoint: {
+      type: String,
+      trim: true,
     },
   },
   { _id: true }

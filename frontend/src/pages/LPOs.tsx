@@ -394,35 +394,9 @@ const LPOs = () => {
   const handleDetailSubmit = async (data: Partial<LPOSummaryType>) => {
     try {
       // Create the LPO document - workbook is auto-created based on year
+      // The backend's syncLPOEntriesToList will automatically create the LPOEntry records
+      // for the list view, so we don't need to create them separately here
       await lpoDocumentsAPI.create(data);
-      
-      // Create summary entry for the LPO table (for legacy list view)
-      if (data.entries && data.entries.length > 0) {
-        // Convert date format from YYYY-MM-DD to D-MMM
-        const formatDate = (dateStr: string) => {
-          const date = new Date(dateStr);
-          const day = date.getDate();
-          const month = date.toLocaleDateString('en-US', { month: 'short' });
-          return `${day}-${month}`;
-        };
-        
-        // Create entries for each DO in the LPO
-        for (let i = 0; i < data.entries.length; i++) {
-          const entry = data.entries[i];
-          const summaryEntry = {
-            sn: lpos.length + i + 1,
-            date: formatDate(data.date!),
-            lpoNo: data.lpoNo!,
-            dieselAt: data.station!,
-            doSdo: entry.doNo,
-            truckNo: entry.truckNo,
-            ltrs: entry.liters,
-            pricePerLtr: entry.rate,
-            destinations: entry.dest
-          };
-          await lposAPI.create(summaryEntry);
-        }
-      }
       
       alert('LPO Document created successfully! Sheet added to workbook.');
       setIsDetailFormOpen(false);

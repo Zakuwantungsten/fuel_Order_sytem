@@ -16,7 +16,9 @@ const CANCELLATION_POINTS: CancellationPoint[] = [
   'MBEYA_RETURN',
   'MORO_RETURN',
   'DAR_RETURN',
-  'TANGA_RETURN'
+  'TANGA_RETURN',
+  'CUSTOM_GOING',
+  'CUSTOM_RETURN'
 ];
 
 const PAYMENT_MODES: PaymentMode[] = [

@@ -158,16 +158,22 @@ async function findFuelRecordWithDirection(
  * @param station - station name (determines field for non-CASH entries)
  * @param truckNo - truck number for identifying the fuel record
  * @param cancellationPoint - optional cancellation point (for CASH entries - determines which field to update)
+ * @param customCheckpointInfo - optional custom station checkpoint info
  */
 async function updateFuelRecordForLPOEntry(
   doNumber: string,
   litersChange: number,
   station: string,
   truckNo: string,
-  cancellationPoint?: string
+  cancellationPoint?: string,
+  customCheckpointInfo?: {
+    isCustomStation?: boolean;
+    customGoingCheckpoint?: string;
+    customReturnCheckpoint?: string;
+  }
 ): Promise<void> {
   try {
-    logger.info(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}, cancellationPoint=${cancellationPoint || 'N/A'}`);
+    logger.info(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}, cancellationPoint=${cancellationPoint || 'N/A'}, customInfo=${JSON.stringify(customCheckpointInfo || {})}`);
     
     const result = await findFuelRecordWithDirection(doNumber, truckNo);
     
@@ -187,8 +193,35 @@ async function updateFuelRecordForLPOEntry(
     const stationUpper = station.toUpperCase().trim();
     let fieldToUpdate: string | undefined;
 
+    // For CUSTOM station, use the custom checkpoint based on direction
+    // If only one direction is configured, use that checkpoint regardless of detected direction
+    if (customCheckpointInfo?.isCustomStation) {
+      const hasGoing = !!customCheckpointInfo.customGoingCheckpoint;
+      const hasReturn = !!customCheckpointInfo.customReturnCheckpoint;
+      
+      if (hasGoing && hasReturn) {
+        // Both directions configured - use based on detected direction
+        if (direction === 'going') {
+          fieldToUpdate = customCheckpointInfo.customGoingCheckpoint;
+          logger.info(`Custom station (Going) -> field: ${fieldToUpdate}`);
+        } else {
+          fieldToUpdate = customCheckpointInfo.customReturnCheckpoint;
+          logger.info(`Custom station (Return) -> field: ${fieldToUpdate}`);
+        }
+      } else if (hasGoing) {
+        // Only going configured - use it for any direction
+        fieldToUpdate = customCheckpointInfo.customGoingCheckpoint;
+        logger.info(`Custom station (only Going configured) -> field: ${fieldToUpdate}`);
+      } else if (hasReturn) {
+        // Only return configured - use it for any direction  
+        fieldToUpdate = customCheckpointInfo.customReturnCheckpoint;
+        logger.info(`Custom station (only Return configured) -> field: ${fieldToUpdate}`);
+      } else {
+        logger.warn(`Custom station but no checkpoint configured for any direction`);
+      }
+    }
     // For CASH station with cancellation point, use the cancellation point to determine the field
-    if (stationUpper === 'CASH' && cancellationPoint) {
+    else if (stationUpper === 'CASH' && cancellationPoint) {
       fieldToUpdate = CANCELLATION_POINT_TO_FUEL_FIELD[cancellationPoint];
       logger.info(`CASH mode with cancellation point ${cancellationPoint} -> field: ${fieldToUpdate}`);
     }
@@ -491,6 +524,15 @@ const syncLPOEntriesToList = async (
       return;
     }
 
+    // Format date to D-MMM format for list view consistency
+    const formatDate = (dateStr: string): string => {
+      const d = new Date(dateStr);
+      const day = d.getDate();
+      const month = d.toLocaleDateString('en-US', { month: 'short' });
+      return `${day}-${month}`;
+    };
+    const formattedDate = formatDate(date);
+
     // Get the highest SN for LPOEntry to continue numbering
     const lastEntry = await LPOEntry.findOne({ isDeleted: false })
       .sort({ sn: -1 })
@@ -509,7 +551,7 @@ const syncLPOEntriesToList = async (
       // Create the LPOEntry record
       await LPOEntry.create({
         sn: nextSn++,
-        date: date,
+        date: formattedDate,
         lpoNo: lpoSummary.lpoNo,
         dieselAt: station,
         doSdo: entry.doNo || 'PENDING',
@@ -546,6 +588,15 @@ const syncLPOEntriesOnUpdate = async (
       { isDeleted: true, deletedAt: new Date() }
     );
 
+    // Format date to D-MMM format for list view consistency
+    const formatDate = (dateStr: string): string => {
+      const d = new Date(dateStr);
+      const day = d.getDate();
+      const month = d.toLocaleDateString('en-US', { month: 'short' });
+      return `${day}-${month}`;
+    };
+    const formattedDate = formatDate(date);
+
     // Get the highest SN for LPOEntry to continue numbering
     const lastEntry = await LPOEntry.findOne({ isDeleted: false })
       .sort({ sn: -1 })
@@ -562,7 +613,7 @@ const syncLPOEntriesOnUpdate = async (
 
       await LPOEntry.create({
         sn: nextSn++,
-        date: date,
+        date: formattedDate,
         lpoNo: lpoNo,
         dieselAt: station,
         doSdo: entry.doNo || 'PENDING',
@@ -603,6 +654,14 @@ const syncLPOEntriesOnDelete = async (lpoNo: string): Promise<void> => {
 export const createLPOSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const data = req.body;
+    
+    // Log received data for debugging custom station
+    logger.info(`Creating LPO: station=${data.station}, isCustomStation=${data.isCustomStation}, customStationName=${data.customStationName}`);
+    if (data.entries) {
+      data.entries.forEach((entry: any, idx: number) => {
+        logger.info(`Entry[${idx}]: truck=${entry.truckNo}, isCustomStation=${entry.isCustomStation}, customGoing=${entry.customGoingCheckpoint}, customReturn=${entry.customReturnCheckpoint}`);
+      });
+    }
 
     // Extract year from date
     const dateObj = new Date(data.date);
@@ -653,12 +712,18 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
 
         // Regular entry - update fuel record
         // For CASH station entries, pass the cancellation point to determine the correct fuel field
+        // For CUSTOM station entries, pass the custom checkpoint info
         await updateFuelRecordForLPOEntry(
           entry.doNo,
           entry.liters,
           lpoSummary.station,
           entry.truckNo,
-          entry.cancellationPoint // Pass cancellation point for CASH entries
+          entry.cancellationPoint, // Pass cancellation point for CASH entries
+          entry.isCustomStation ? {
+            isCustomStation: entry.isCustomStation,
+            customGoingCheckpoint: entry.customGoingCheckpoint,
+            customReturnCheckpoint: entry.customReturnCheckpoint,
+          } : undefined
         );
       }
     }
@@ -716,6 +781,11 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       cancellationReason?: string;
       cancelledAt?: Date;
       _id?: any;
+      // Custom station fields
+      isCustomStation?: boolean;
+      customStationName?: string;
+      customGoingCheckpoint?: string;
+      customReturnCheckpoint?: string;
     }
 
     // Calculate fuel record adjustments using database values (not request values)
@@ -755,7 +825,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           -oldEntry.liters,
           existingLpo.station,
           oldEntry.truckNo,
-          oldEntry.cancellationPoint // Pass cancellation point for CASH entries
+          oldEntry.cancellationPoint, // Pass cancellation point for CASH entries
+          oldEntry.isCustomStation ? {
+            isCustomStation: oldEntry.isCustomStation,
+            customGoingCheckpoint: oldEntry.customGoingCheckpoint,
+            customReturnCheckpoint: oldEntry.customReturnCheckpoint,
+          } : undefined
         );
       } else if (newEntry.isCancelled && !oldEntry.isCancelled) {
         // Entry was just marked as cancelled - revert the fuel deduction
@@ -765,7 +840,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           -oldEntry.liters,
           existingLpo.station,
           oldEntry.truckNo,
-          oldEntry.cancellationPoint // Pass cancellation point for CASH entries
+          oldEntry.cancellationPoint, // Pass cancellation point for CASH entries
+          oldEntry.isCustomStation ? {
+            isCustomStation: oldEntry.isCustomStation,
+            customGoingCheckpoint: oldEntry.customGoingCheckpoint,
+            customReturnCheckpoint: oldEntry.customReturnCheckpoint,
+          } : undefined
         );
         
         // Mark cancellation time
@@ -778,7 +858,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           -oldEntry.liters,
           existingLpo.station,
           oldEntry.truckNo,
-          oldEntry.cancellationPoint // Pass cancellation point for CASH entries
+          oldEntry.cancellationPoint, // Pass cancellation point for CASH entries
+          oldEntry.isCustomStation ? {
+            isCustomStation: oldEntry.isCustomStation,
+            customGoingCheckpoint: oldEntry.customGoingCheckpoint,
+            customReturnCheckpoint: oldEntry.customReturnCheckpoint,
+          } : undefined
         );
         
         // Create driver account entry
@@ -812,7 +897,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           difference,
           newData.station || existingLpo.station,
           oldEntry.truckNo,
-          newEntry.cancellationPoint || oldEntry.cancellationPoint // Pass cancellation point for CASH entries
+          newEntry.cancellationPoint || oldEntry.cancellationPoint, // Pass cancellation point for CASH entries
+          (newEntry.isCustomStation || oldEntry.isCustomStation) ? {
+            isCustomStation: newEntry.isCustomStation || oldEntry.isCustomStation,
+            customGoingCheckpoint: newEntry.customGoingCheckpoint || oldEntry.customGoingCheckpoint,
+            customReturnCheckpoint: newEntry.customReturnCheckpoint || oldEntry.customReturnCheckpoint,
+          } : undefined
         );
         
         entriesToUpdate.push(newEntry);
@@ -860,13 +950,19 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         
         // Regular new entry - update fuel record
         // For CASH station entries, pass the cancellation point to determine the correct fuel field
+        // For CUSTOM station entries, pass the custom checkpoint info
         logger.info(`New entry: ${key}, adding ${newEntry.liters}L`);
         await updateFuelRecordForLPOEntry(
           newEntry.doNo,
           newEntry.liters,
           newData.station || existingLpo.station,
           newEntry.truckNo,
-          newEntry.cancellationPoint // Pass cancellation point for CASH entries
+          newEntry.cancellationPoint, // Pass cancellation point for CASH entries
+          newEntry.isCustomStation ? {
+            isCustomStation: newEntry.isCustomStation,
+            customGoingCheckpoint: newEntry.customGoingCheckpoint,
+            customReturnCheckpoint: newEntry.customReturnCheckpoint,
+          } : undefined
         );
       }
     }
@@ -951,7 +1047,13 @@ export const deleteLPOSummary = async (req: AuthRequest, res: Response): Promise
         entry.doNo,
         -entry.liters,
         lpoSummary.station,
-        entry.truckNo
+        entry.truckNo,
+        entry.cancellationPoint,
+        entry.isCustomStation ? {
+          isCustomStation: entry.isCustomStation,
+          customGoingCheckpoint: entry.customGoingCheckpoint,
+          customReturnCheckpoint: entry.customReturnCheckpoint,
+        } : undefined
       );
     }
 
@@ -1591,7 +1693,13 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
       entry.doNo,
       -entry.liters,
       lpo.station,
-      entry.truckNo
+      entry.truckNo,
+      entry.cancellationPoint,
+      entry.isCustomStation ? {
+        isCustomStation: entry.isCustomStation,
+        customGoingCheckpoint: entry.customGoingCheckpoint,
+        customReturnCheckpoint: entry.customReturnCheckpoint,
+      } : undefined
     );
 
     // Mark the entry as cancelled
@@ -1676,6 +1784,12 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
       isDriverAccount: false,
       originalLiters: null,
       amendedAt: null,
+      // Preserve custom station info if present
+      cancellationPoint: entry.cancellationPoint,
+      isCustomStation: entry.isCustomStation,
+      customStationName: entry.customStationName,
+      customGoingCheckpoint: entry.customGoingCheckpoint,
+      customReturnCheckpoint: entry.customReturnCheckpoint,
     }));
 
     // Get next LPO number
@@ -1733,7 +1847,13 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
         entry.doNo,
         entry.liters,
         targetStation,
-        entry.truckNo
+        entry.truckNo,
+        entry.cancellationPoint,
+        entry.isCustomStation ? {
+          isCustomStation: entry.isCustomStation,
+          customGoingCheckpoint: entry.customGoingCheckpoint,
+          customReturnCheckpoint: entry.customReturnCheckpoint,
+        } : undefined
       );
     }
 

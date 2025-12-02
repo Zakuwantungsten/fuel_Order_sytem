@@ -124,11 +124,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
         doNumber: order.doNumber?.toString().padStart(4, '0') || '0001'
       }));
       
-      // Set created orders FIRST before saving
+      // Set created orders for display and manual re-download
       setCreatedOrders(paddedOrders);
-      
-      // Wait for state update to propagate
-      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Save to backend
       console.log('Calling onSave with orders...');
@@ -144,12 +141,12 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
       console.log('✓ All orders saved successfully!');
       
       // Wait for DOM to render the hidden DO elements
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Automatically download PDF
+      // Automatically download PDF - pass orders directly to avoid state timing issues
       console.log('Starting PDF download...');
       try {
-        await downloadAllAsPDF();
+        await downloadAllAsPDF(paddedOrders);
         console.log('✓ PDF downloaded successfully!');
         
         // Show success message with download confirmation
@@ -168,14 +165,17 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
     }
   };
 
-  const downloadAllAsPDF = async () => {
-    if (createdOrders.length === 0) {
+  const downloadAllAsPDF = async (ordersToDownload?: Partial<DeliveryOrder>[]) => {
+    // Use passed orders or fall back to state (for manual download button)
+    const orders = ordersToDownload || createdOrders;
+    
+    if (orders.length === 0) {
       console.warn('No orders available for PDF generation');
       return;
     }
 
     try {
-      console.log(`Generating PDF for ${createdOrders.length} orders...`);
+      console.log(`Generating PDF for ${orders.length} orders...`);
       
       const pdf = new jsPDF({
         orientation: 'portrait',
@@ -205,7 +205,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       try {
-        for (let i = 0; i < createdOrders.length; i++) {
+        for (let i = 0; i < orders.length; i++) {
           const element = document.getElementById(`bulk-do-${i}`);
           
           if (!element) {
@@ -252,7 +252,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
           pdf.addImage(imgData, 'PNG', xOffset, yOffset, targetWidth, imgHeight);
           successCount++;
           
-          console.log(`Added DO ${i + 1}/${createdOrders.length} to PDF`);
+          console.log(`Added DO ${i + 1}/${orders.length} to PDF`);
         }
       } finally {
         // Restore original container styles
@@ -262,7 +262,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
       }
 
       const startNum = parseInt(commonData.startingNumber);
-      const endNum = startNum + createdOrders.length - 1;
+      const endNum = startNum + orders.length - 1;
       const paddedStart = startNum.toString().padStart(4, '0');
       const paddedEnd = endNum.toString().padStart(4, '0');
       const fileName = `${commonData.doType}-${paddedStart}-${paddedEnd}.pdf`;
@@ -539,7 +539,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
             <div>
               {createdOrders.length > 0 && (
                 <button
-                  onClick={downloadAllAsPDF}
+                  onClick={() => downloadAllAsPDF()}
                   className="px-4 py-2 bg-green-600 dark:bg-green-500 text-white rounded-md hover:bg-green-700 dark:hover:bg-green-600 flex items-center"
                 >
                   <FileDown className="w-4 h-4 mr-2" />

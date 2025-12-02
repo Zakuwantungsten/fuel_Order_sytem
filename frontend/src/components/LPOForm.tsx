@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader } from 'lucide-react';
+import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, MapPin } from 'lucide-react';
 import { LPOEntry, CancellationPoint, LPOSummary } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
 import { lpoDocumentsAPI } from '../services/api';
 import { 
   getAvailableCancellationPoints, 
   getCancellationPointDisplayName,
-  ZAMBIA_RETURNING_PARTS
+  ZAMBIA_RETURNING_PARTS,
+  FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
 
 interface LPOFormProps {
@@ -18,6 +19,11 @@ interface LPOFormProps {
     isDriverAccount?: boolean;
     paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';
     lposToCancel?: { lpoId: string; truckNo: string }[];  // LPOs to auto-cancel
+    // Custom station fields
+    isCustomStation?: boolean;
+    customStationName?: string;
+    customGoingCheckpoint?: string;   // Fuel record field for going direction
+    customReturnCheckpoint?: string;  // Fuel record field for return direction
   }) => void;
   initialData?: LPOEntry;
 }
@@ -46,6 +52,14 @@ const LPOForm: React.FC<LPOFormProps> = ({
   const [cancellationPoint, setCancellationPoint] = useState<CancellationPoint | ''>('');
   const [isDriverAccount, setIsDriverAccount] = useState(false);
   const [showCancellationInfo, setShowCancellationInfo] = useState(false);
+
+  // Custom station states
+  const [isCustomStation, setIsCustomStation] = useState(false);
+  const [customStationName, setCustomStationName] = useState('');
+  const [customGoingEnabled, setCustomGoingEnabled] = useState(false);  // Custom1 - for Going direction
+  const [customReturnEnabled, setCustomReturnEnabled] = useState(false); // Custom2 - for Return direction
+  const [customGoingCheckpoint, setCustomGoingCheckpoint] = useState(''); // Fuel record field for Going
+  const [customReturnCheckpoint, setCustomReturnCheckpoint] = useState(''); // Fuel record field for Return
 
   // Auto-cancellation state: LPOs at checkpoint that have this truck
   const [existingLPOsAtCheckpoint, setExistingLPOsAtCheckpoint] = useState<LPOSummary[]>([]);
@@ -138,11 +152,25 @@ const LPOForm: React.FC<LPOFormProps> = ({
     if (name === 'dieselAt') {
       if (value === 'CASH') {
         setIsCashMode(true);
+        setIsCustomStation(false);
         setUseCustom(true); // Cash mode requires manual entry of liters
-      } else {
+      } else if (value === 'CUSTOM') {
+        setIsCustomStation(true);
         setIsCashMode(false);
+        setUseCustom(true); // Custom mode requires manual entry
         setIsDriverAccount(false);
         setCancellationPoint('');
+      } else {
+        setIsCashMode(false);
+        setIsCustomStation(false);
+        setIsDriverAccount(false);
+        setCancellationPoint('');
+        // Reset custom station fields
+        setCustomStationName('');
+        setCustomGoingEnabled(false);
+        setCustomReturnEnabled(false);
+        setCustomGoingCheckpoint('');
+        setCustomReturnCheckpoint('');
       }
     }
   };
@@ -177,20 +205,51 @@ const LPOForm: React.FC<LPOFormProps> = ({
       return;
     }
 
+    // Validate: Custom station requires name and at least one direction enabled
+    if (isCustomStation) {
+      if (!customStationName.trim()) {
+        alert('For Custom station, you must enter the station name.');
+        return;
+      }
+      if (!customGoingEnabled && !customReturnEnabled) {
+        alert('For Custom station, you must enable at least one direction (Custom1 for Going or Custom2 for Return).');
+        return;
+      }
+      if (customGoingEnabled && !customGoingCheckpoint) {
+        alert('For Custom1 (Going), you must select which fuel record column to update.');
+        return;
+      }
+      if (customReturnEnabled && !customReturnCheckpoint) {
+        alert('For Custom2 (Return), you must select which fuel record column to update.');
+        return;
+      }
+    }
+
     // Prepare LPOs to cancel (for auto-cancellation when CASH mode)
     const lposToCancel = existingLPOsAtCheckpoint.map(lpo => ({
       lpoId: lpo.id as string,
       truckNo: formData.truckNo as string
     }));
     
-    onSubmit({
+    // For custom station, set the dieselAt to the custom station name for display
+    const submissionData = {
       ...formData,
+      dieselAt: isCustomStation ? customStationName : formData.dieselAt,
       isCashMode: isCashMode || formData.dieselAt === 'CASH',
-      cancellationPoint: cancellationPoint || undefined,
+      cancellationPoint: isCustomStation 
+        ? (customGoingEnabled ? 'CUSTOM_GOING' : 'CUSTOM_RETURN') as CancellationPoint
+        : (cancellationPoint || undefined),
       isDriverAccount,
       paymentMode,
-      lposToCancel: lposToCancel.length > 0 ? lposToCancel : undefined
-    });
+      lposToCancel: lposToCancel.length > 0 ? lposToCancel : undefined,
+      // Custom station fields
+      isCustomStation,
+      customStationName: isCustomStation ? customStationName : undefined,
+      customGoingCheckpoint: customGoingEnabled ? customGoingCheckpoint : undefined,
+      customReturnCheckpoint: customReturnEnabled ? customReturnCheckpoint : undefined,
+    };
+    
+    onSubmit(submissionData);
     onClose();
   };
 
@@ -212,7 +271,8 @@ const LPOForm: React.FC<LPOFormProps> = ({
     'TCC',
     'ZHANFEI',
     'KAMOA',
-    'COMIKA'
+    'COMIKA',
+    'CUSTOM'  // Custom station option at the bottom - for unlisted stations
   ];
 
   const destinations = ['DAR', 'MSA', 'Kpm', 'Likasi', 'Kolwezi', 'NIL'];
@@ -514,6 +574,157 @@ const LPOForm: React.FC<LPOFormProps> = ({
                   </p>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Custom Station Section */}
+          {(formData.dieselAt === 'CUSTOM' || isCustomStation) && (
+            <div className="mt-4 p-4 border-2 border-purple-300 dark:border-purple-700 rounded-lg bg-purple-50 dark:bg-purple-900/20">
+              <div className="flex items-center space-x-2 mb-4">
+                <MapPin className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                <span className="font-medium text-purple-800 dark:text-purple-300">
+                  Custom Station (Unlisted Station)
+                </span>
+              </div>
+              
+              <p className="text-sm text-purple-600 dark:text-purple-400 mb-4">
+                Use this for small stations in Zambia or other unlisted locations. Enter the station name and select which fuel record column(s) should be updated based on truck direction.
+              </p>
+
+              {/* Custom Station Name */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-1">
+                  Station Name *
+                </label>
+                <input
+                  type="text"
+                  value={customStationName}
+                  onChange={(e) => setCustomStationName(e.target.value)}
+                  placeholder="e.g., Lake Station Near Kapiri"
+                  className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Direction Selection */}
+              <div className="space-y-4">
+                {/* Custom1 - Going Direction */}
+                <div className={`p-3 rounded-lg border ${customGoingEnabled ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20' : 'border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-700/50'}`}>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={customGoingEnabled}
+                      onChange={(e) => {
+                        setCustomGoingEnabled(e.target.checked);
+                        if (!e.target.checked) setCustomGoingCheckpoint('');
+                      }}
+                      className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                    />
+                    <div>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        Custom1 - Going Direction
+                      </span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        For trucks with Going DO - fuel amount will be recorded in the selected column
+                      </p>
+                    </div>
+                  </label>
+                  
+                  {customGoingEnabled && (
+                    <div className="mt-3 ml-8">
+                      <label className="block text-sm font-medium text-green-700 dark:text-green-300 mb-1">
+                        Select Fuel Record Column for Going *
+                      </label>
+                      <select
+                        value={customGoingCheckpoint}
+                        onChange={(e) => setCustomGoingCheckpoint(e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 ${
+                          !customGoingCheckpoint ? 'border-red-300 dark:border-red-600' : 'border-green-300 dark:border-green-600'
+                        }`}
+                      >
+                        <option value="">Select checkpoint column...</option>
+                        {FUEL_RECORD_COLUMNS.going.map((col) => (
+                          <option key={col.field} value={col.field}>
+                            {col.label}
+                          </option>
+                        ))}
+                      </select>
+                      {!customGoingCheckpoint && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                          ⚠ Please select where Going fuel amounts should be recorded
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Custom2 - Return Direction */}
+                <div className={`p-3 rounded-lg border ${customReturnEnabled ? 'border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20' : 'border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-700/50'}`}>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={customReturnEnabled}
+                      onChange={(e) => {
+                        setCustomReturnEnabled(e.target.checked);
+                        if (!e.target.checked) setCustomReturnCheckpoint('');
+                      }}
+                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        Custom2 - Return Direction
+                      </span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        For trucks with Return DO - fuel amount will be recorded in the selected column
+                      </p>
+                    </div>
+                  </label>
+                  
+                  {customReturnEnabled && (
+                    <div className="mt-3 ml-8">
+                      <label className="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">
+                        Select Fuel Record Column for Return *
+                      </label>
+                      <select
+                        value={customReturnCheckpoint}
+                        onChange={(e) => setCustomReturnCheckpoint(e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 ${
+                          !customReturnCheckpoint ? 'border-red-300 dark:border-red-600' : 'border-blue-300 dark:border-blue-600'
+                        }`}
+                      >
+                        <option value="">Select checkpoint column...</option>
+                        {FUEL_RECORD_COLUMNS.return.map((col) => (
+                          <option key={col.field} value={col.field}>
+                            {col.label}
+                          </option>
+                        ))}
+                      </select>
+                      {!customReturnCheckpoint && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                          ⚠ Please select where Return fuel amounts should be recorded
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Summary of custom station config */}
+              {(customGoingEnabled || customReturnEnabled) && customStationName && (
+                <div className="mt-4 p-3 bg-purple-100 dark:bg-purple-900/30 rounded-md">
+                  <p className="text-sm font-medium text-purple-800 dark:text-purple-300 mb-2">
+                    Configuration Summary:
+                  </p>
+                  <ul className="text-xs text-purple-700 dark:text-purple-400 space-y-1">
+                    <li>📍 Station: <strong>{customStationName}</strong></li>
+                    {customGoingEnabled && customGoingCheckpoint && (
+                      <li>➡️ Going trucks → <strong>{FUEL_RECORD_COLUMNS.going.find(c => c.field === customGoingCheckpoint)?.label}</strong></li>
+                    )}
+                    {customReturnEnabled && customReturnCheckpoint && (
+                      <li>⬅️ Return trucks → <strong>{FUEL_RECORD_COLUMNS.return.find(c => c.field === customReturnCheckpoint)?.label}</strong></li>
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 

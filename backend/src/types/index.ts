@@ -105,6 +105,11 @@ export interface ILPODetail {
   originalDoNo?: string;
   cancellationReason?: string;
   cancelledAt?: Date;
+  // Custom station fields (for unlisted stations like small lake stations in Zambia)
+  isCustomStation?: boolean;
+  customStationName?: string;
+  customGoingCheckpoint?: string;   // Fuel record field for going direction (Custom1)
+  customReturnCheckpoint?: string;  // Fuel record field for return direction (Custom2)
 }
 
 // Cancellation Point Types
@@ -121,7 +126,10 @@ export type CancellationPoint =
   | 'MBEYA_RETURN'
   | 'MORO_RETURN'
   | 'DAR_RETURN'
-  | 'TANGA_RETURN';
+  | 'TANGA_RETURN'
+  // Custom station checkpoints (for unlisted stations)
+  | 'CUSTOM_GOING'
+  | 'CUSTOM_RETURN';
 
 // Cancellation Entry
 export interface ICancellationEntry {

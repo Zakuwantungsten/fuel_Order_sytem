@@ -107,6 +107,31 @@ export const CANCELLATION_POINT_TO_FUEL_FIELD: Record<CancellationPoint, string>
   'MORO_RETURN': 'moroReturn',
   'DAR_RETURN': 'darReturn',
   'TANGA_RETURN': 'tangaReturn',
+  // Custom station checkpoints (dynamically mapped to selected fuel record field)
+  'CUSTOM_GOING': 'darGoing',     // Default, but actual field is determined by customGoingCheckpoint
+  'CUSTOM_RETURN': 'darReturn',   // Default, but actual field is determined by customReturnCheckpoint
+};
+
+/**
+ * Available fuel record columns for custom station mapping
+ * These are the checkpoint columns where custom station fuel can be recorded
+ */
+export const FUEL_RECORD_COLUMNS = {
+  going: [
+    { field: 'darGoing', label: 'Dar Going' },
+    { field: 'moroGoing', label: 'Moro Going' },
+    { field: 'mbeyaGoing', label: 'Mbeya Going' },
+    { field: 'tdmGoing', label: 'TDM/Tunduma Going' },
+    { field: 'zambiaGoing', label: 'Zambia Going' },
+  ],
+  return: [
+    { field: 'zambiaReturn', label: 'Zambia Return' },
+    { field: 'tundumaReturn', label: 'Tunduma Return' },
+    { field: 'mbeyaReturn', label: 'Mbeya Return' },
+    { field: 'moroReturn', label: 'Moro Return' },
+    { field: 'darReturn', label: 'Dar Return' },
+    { field: 'tangaReturn', label: 'Tanga Return' },
+  ],
 };
 
 /**
@@ -133,7 +158,9 @@ export const getCancellationPointDisplayName = (point: CancellationPoint): strin
     'MBEYA_RETURN': 'Mbeya Return',
     'MORO_RETURN': 'Moro Return',
     'DAR_RETURN': 'Dar Return',
-    'TANGA_RETURN': 'Tanga Return'
+    'TANGA_RETURN': 'Tanga Return',
+    'CUSTOM_GOING': 'Custom Station (Going)',
+    'CUSTOM_RETURN': 'Custom Station (Return)'
   };
   return displayNames[point] || point;
 };
@@ -410,6 +437,7 @@ export default {
   ZAMBIA_RETURNING_PARTS,
   STATION_TO_CANCELLATION_POINT,
   CANCELLATION_POINT_TO_FUEL_FIELD,
+  FUEL_RECORD_COLUMNS,
   getCancellationPointDisplayName,
   getAvailableCancellationPoints,
   getFuelRecordFieldFromCancellationPoint,
