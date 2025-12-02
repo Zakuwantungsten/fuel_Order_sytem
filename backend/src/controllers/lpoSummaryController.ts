@@ -1109,7 +1109,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
           entry.truckNo,
           entry.liters.toLocaleString(),
           entry.rate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
-          `$${entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
           displayDest,
         ];
         
@@ -1172,7 +1172,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
         '',
         totalLiters.toLocaleString(),
         '',
-        `$${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         '',
       ];
       totalRow.font = { bold: true, size: 11, color: { argb: 'FF000000' } };
@@ -1280,7 +1280,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
         }),
         station: lpo.station,
         orderOf: lpo.orderOf,
-        total: `$${lpo.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        total: lpo.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         entries: lpo.entries.filter((e: any) => !e.isCancelled).length,
       });
       row.alignment = centerAlignment;

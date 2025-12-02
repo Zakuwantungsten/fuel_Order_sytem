@@ -245,7 +245,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
                 fontWeight: '500',
                 textDecoration
               }}>
-                ${entry.amount.toLocaleString('en-US', {
+                {entry.amount.toLocaleString('en-US', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2
                 })}
@@ -298,7 +298,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
               fontSize: '13px',
               color: '#000'
             }}>
-              ${data.entries
+              {data.entries
                 .filter(entry => !entry.isCancelled)
                 .reduce((sum, entry) => sum + entry.amount, 0)
                 .toLocaleString('en-US', {
