@@ -159,6 +159,7 @@ export interface IDriverAccountEntry {
   status: 'pending' | 'settled' | 'disputed';
   settledAt?: Date;
   settledBy?: string;
+  approvedBy?: string;  // Name of approver for the Driver's Account LPO
   notes?: string;
   createdBy: string;
   // Fields to track LPO creation
@@ -185,6 +186,7 @@ export interface ILPOSummary {
     lpoNo: string;
     station: string;
   };
+  createdBy?: string;  // Username of who created this LPO
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;

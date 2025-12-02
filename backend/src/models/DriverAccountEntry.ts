@@ -109,6 +109,10 @@ const driverAccountEntrySchema = new Schema<IDriverAccountEntryDocument>(
     settledBy: {
       type: String,
     },
+    approvedBy: {
+      type: String,
+      trim: true,
+    },
     notes: {
       type: String,
       trim: true,

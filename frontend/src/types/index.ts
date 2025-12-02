@@ -92,6 +92,7 @@ export interface LPOSummary {
   orderOf: string; // e.g., "TAHMEED"
   entries: LPODetail[];
   total: number;
+  createdBy?: string; // Username of who created this LPO
   createdAt?: string;
   updatedAt?: string;
   // Forwarding tracking (if this LPO was forwarded from another)
@@ -462,6 +463,7 @@ export interface DriverAccountEntry {
   status?: 'pending' | 'settled' | 'disputed';
   settledAt?: string;
   settledBy?: string;
+  approvedBy?: string;    // Name of approver for Driver's Account LPO
   notes?: string;         // Additional notes
   lpoCreated?: boolean;   // Whether LPO was created
   lpoSummaryId?: string;  // Reference to LPO Summary

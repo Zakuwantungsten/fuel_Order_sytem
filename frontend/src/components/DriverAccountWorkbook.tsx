@@ -235,7 +235,8 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       { wch: 15 },  // Station
       { wch: 10 },  // Status
       { wch: 10 },  // LPO No
-      { wch: 12 },  // Created By
+      { wch: 12 },  // Created By (Prepared By)
+      { wch: 15 },  // Approved By
       { wch: 20 },  // Notes
     ];
   };
@@ -256,7 +257,8 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       'Station': entry.station,
       'Status': entry.status || 'pending',
       'LPO No': entry.lpoNo,
-      'Created By': entry.createdBy || 'N/A',
+      'Prepared By': entry.createdBy || 'N/A',
+      'Approved By': entry.approvedBy || 'N/A',
       'Notes': entry.notes || ''
     }));
 
@@ -339,7 +341,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const handleCopyEntryAsImage = async (entry: DriverAccountEntry) => {
     try {
       const lpoSummary = convertToLPOSummary(entry);
-      const success = await copyLPOImageToClipboard(lpoSummary, user?.username);
+      const success = await copyLPOImageToClipboard(lpoSummary, user?.username, entry.approvedBy);
       
       if (success) {
         alert('✓ Driver Account LPO image copied to clipboard!\nYou can now paste it anywhere.');
@@ -356,7 +358,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const handleDownloadEntryPDF = async (entry: DriverAccountEntry) => {
     try {
       const lpoSummary = convertToLPOSummary(entry);
-      await downloadLPOPDF(lpoSummary, undefined, user?.username);
+      await downloadLPOPDF(lpoSummary, undefined, user?.username, entry.approvedBy);
       alert('✓ Driver Account LPO PDF downloaded successfully!');
     } catch (error) {
       console.error('Error downloading PDF:', error);
@@ -368,7 +370,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const handleDownloadEntryImage = async (entry: DriverAccountEntry) => {
     try {
       const lpoSummary = convertToLPOSummary(entry);
-      await downloadLPOImage(lpoSummary, undefined, user?.username);
+      await downloadLPOImage(lpoSummary, undefined, user?.username, entry.approvedBy);
       alert('✓ Driver Account LPO image downloaded successfully!');
     } catch (error) {
       console.error('Error downloading image:', error);
@@ -788,6 +790,7 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
     journeyDirection: 'going' as 'going' | 'returning',
     paymentMode: 'CASH' as PaymentMode,
     paybillOrMobile: '',
+    approvedBy: '',
     notes: ''
   });
 
@@ -900,6 +903,7 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
           originalDoNo: truck.originalDoNo,
           paymentMode: formData.paymentMode,
           paybillOrMobile: formData.paybillOrMobile,
+          approvedBy: formData.approvedBy,
           notes: formData.notes,
         });
       } else if (onSubmitBatch) {
@@ -917,6 +921,7 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
           originalDoNo: truck.originalDoNo,
           paymentMode: formData.paymentMode,
           paybillOrMobile: formData.paybillOrMobile,
+          approvedBy: formData.approvedBy,
           notes: formData.notes,
         }));
         onSubmitBatch(entries);
@@ -932,17 +937,21 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
   };
 
   const stations = [
+    // Zambia stations (USD rate: 1.2)
     'LAKE CHILABOMBWE',
     'LAKE NDOLA',
     'LAKE KAPIRI',
+    'LAKE KITWE',
+    'LAKE KABANGWA',
+    'LAKE CHINGOLA',
+    // Tanzania stations (TZS rates)
+    'LAKE TUNDUMA',
+    'INFINITY',
+    'GBP MOROGORO',
+    'GBP KANGE',
+    'GPB KANGE',
+    // Cash payment
     'CASH',
-    'TCC',
-    'ZHANFEI',
-    'KAMOA',
-    'COMIKA',
-    'DAR YARD',
-    'TANGA YARD',
-    'MMSA YARD'
   ];
 
   const paymentModes: { value: PaymentMode; label: string }[] = [
@@ -1131,6 +1140,30 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Approved By Section */}
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+            <h4 className="text-sm font-semibold text-green-800 dark:text-green-300 mb-3 flex items-center">
+              <User className="w-4 h-4 mr-2" />
+              Approval Information (for LPO document)
+            </h4>
+            <div>
+              <label className="block text-sm font-medium text-green-800 dark:text-green-300 mb-2">
+                Approved By *
+              </label>
+              <input
+                type="text"
+                value={formData.approvedBy}
+                onChange={(e) => setFormData(prev => ({ ...prev, approvedBy: e.target.value }))}
+                placeholder="Enter name of approver"
+                required
+                className="w-full px-3 py-2 border border-green-300 dark:border-green-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-green-500"
+              />
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                This name will appear on the LPO document when copied as image or downloaded as PDF
+              </p>
             </div>
           </div>
 

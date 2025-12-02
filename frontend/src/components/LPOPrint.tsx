@@ -4,9 +4,10 @@ import { LPOSummary } from '../types';
 interface LPOPrintProps {
   data: LPOSummary;
   preparedBy?: string; // Username for prepared by field
+  approvedBy?: string; // Name of approver (for Driver's Account LPOs)
 }
 
-const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }, ref) => {
+const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, approvedBy }, ref) => {
   return (
     <div ref={ref} className="bg-white" style={{ 
       width: '210mm', 
@@ -367,12 +368,22 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
             }}>
               Approved By
             </p>
+            {approvedBy && (
+              <p style={{ 
+                fontSize: '11px',
+                color: '#000',
+                margin: '4px 0',
+                fontWeight: '500'
+              }}>
+                {approvedBy}
+              </p>
+            )}
             <p style={{ 
               fontSize: '10px',
               color: '#666',
               margin: 0
             }}>
-              Name & Signature
+              {approvedBy ? 'Signature' : 'Name & Signature'}
             </p>
           </div>
         </div>

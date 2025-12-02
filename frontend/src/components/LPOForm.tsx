@@ -171,6 +171,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
       paymentMode = 'CASH';
     }
 
+    // Validate: CASH mode requires cancellation point
+    if (paymentMode === 'CASH' && !cancellationPoint) {
+      alert('For CASH payments, you must select a checkpoint (going/returning direction and specific checkpoint). This determines which fuel record column gets updated for the truck.');
+      return;
+    }
+
     // Prepare LPOs to cancel (for auto-cancellation when CASH mode)
     const lposToCancel = existingLPOsAtCheckpoint.map(lpo => ({
       lpoId: lpo.id as string,
@@ -349,7 +355,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 <div className="flex items-center space-x-2">
                   <Ban className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                   <span className="font-medium text-orange-800 dark:text-orange-300">
-                    Cash Mode Payment
+                    Cash Mode Payment (Checkpoint Required)
                   </span>
                 </div>
                 <button
@@ -368,7 +374,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
                     <strong>Cash Mode:</strong> Used when assigned station is out of fuel and fuel is bought from another station through cash.
                   </p>
                   <p className="mb-2">
-                    When you select a cancellation point, the truck's order at that station will be cancelled in the original LPO.
+                    <strong>Important:</strong> You must select a checkpoint. This determines which fuel record column gets updated for this truck.
                   </p>
                   <p>
                     <strong>Driver's Account:</strong> Check this for fuel given due to misuse or theft. DO and destination will show as NIL.
@@ -376,10 +382,10 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 </div>
               )}
 
-              {/* Cancellation Point Selection */}
+              {/* Cancellation Point Selection - Required */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">
-                  Cancellation Point (Where to cancel original order)
+                  Checkpoint (where fuel was purchased) *
                 </label>
                 
                 {/* Direction Toggle */}
@@ -414,19 +420,27 @@ const LPOForm: React.FC<LPOFormProps> = ({
                   </label>
                 </div>
 
-                {/* Cancellation Point Dropdown */}
+                {/* Cancellation Point Dropdown - Required */}
                 <select
+                  required
                   value={cancellationPoint}
                   onChange={(e) => setCancellationPoint(e.target.value as CancellationPoint)}
-                  className="w-full px-3 py-2 border border-orange-300 dark:border-orange-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className={`w-full px-3 py-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent ${
+                    !cancellationPoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
+                  }`}
                 >
-                  <option value="">Select cancellation point...</option>
+                  <option value="">Select checkpoint (required)...</option>
                   {getAvailableCancellationPoints('CASH')[cancellationDirection].map((point) => (
                     <option key={point} value={point}>
                       {getCancellationPointDisplayName(point)}
                     </option>
                   ))}
                 </select>
+                {!cancellationPoint && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    ⚠ Please select the checkpoint where cash was used. This determines which fuel record column gets updated.
+                  </p>
+                )}
 
                 {/* Zambia Returning Note */}
                 {cancellationDirection === 'returning' && (

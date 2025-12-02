@@ -148,6 +148,10 @@ const lpoSummarySchema = new Schema<ILPOSummaryDocument>(
         trim: true,
       },
     },
+    createdBy: {
+      type: String,
+      trim: true,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

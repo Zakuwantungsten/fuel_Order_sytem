@@ -86,6 +86,38 @@ export const STATION_TO_CANCELLATION_POINT: Record<string, CancellationPoint> = 
   // Note: TCC, ZHANFEI, KAMOA, COMIKA are DESTINATIONS, not checkpoints
 };
 
+/**
+ * Map cancellation points to fuel record fields
+ * This is used to update the correct column in the fuel record when CASH is used
+ * The fuel record tracks fuel consumption at each checkpoint along the route
+ */
+export const CANCELLATION_POINT_TO_FUEL_FIELD: Record<CancellationPoint, string> = {
+  // Going direction checkpoints
+  'DAR_GOING': 'darGoing',
+  'MORO_GOING': 'moroGoing',
+  'MBEYA_GOING': 'mbeyaGoing',
+  'INFINITY_GOING': 'mbeyaGoing',    // Infinity is in Mbeya area
+  'TDM_GOING': 'tdmGoing',
+  'ZAMBIA_GOING': 'zambiaGoing',
+  // Returning direction checkpoints
+  'ZAMBIA_NDOLA': 'zambiaReturn',    // Part of Zambia Return (50L)
+  'ZAMBIA_KAPIRI': 'zambiaReturn',   // Part of Zambia Return (350L)
+  'TDM_RETURN': 'tundumaReturn',
+  'MBEYA_RETURN': 'mbeyaReturn',
+  'MORO_RETURN': 'moroReturn',
+  'DAR_RETURN': 'darReturn',
+  'TANGA_RETURN': 'tangaReturn',
+};
+
+/**
+ * Get the fuel record field for a given cancellation point
+ * @param cancellationPoint The checkpoint where fuel was purchased via cash
+ * @returns The corresponding fuel record field name
+ */
+export const getFuelRecordFieldFromCancellationPoint = (cancellationPoint: CancellationPoint): string => {
+  return CANCELLATION_POINT_TO_FUEL_FIELD[cancellationPoint] || 'darGoing';
+};
+
 // Get cancellation point display name
 export const getCancellationPointDisplayName = (point: CancellationPoint): string => {
   const displayNames: Record<CancellationPoint, string> = {
@@ -326,8 +358,10 @@ export default {
   RETURNING_STATIONS,
   ZAMBIA_RETURNING_PARTS,
   STATION_TO_CANCELLATION_POINT,
+  CANCELLATION_POINT_TO_FUEL_FIELD,
   getCancellationPointDisplayName,
   getAvailableCancellationPoints,
+  getFuelRecordFieldFromCancellationPoint,
   createCancellationInfo,
   generateCancellationReport,
   generateCancellationStatement,

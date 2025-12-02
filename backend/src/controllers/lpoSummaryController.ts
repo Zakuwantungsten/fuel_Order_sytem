@@ -28,6 +28,28 @@ const STATION_TO_FUEL_FIELD: Record<string, { going?: string; returning?: string
   'CASH': { going: 'darGoing', returning: 'darReturn' },              // Default to Dar fields for cash
 };
 
+/**
+ * Map cancellation points to fuel record fields
+ * Used for CASH LPOs where the cancellation point indicates which checkpoint was used
+ */
+const CANCELLATION_POINT_TO_FUEL_FIELD: Record<string, string> = {
+  // Going direction checkpoints
+  'DAR_GOING': 'darGoing',
+  'MORO_GOING': 'moroGoing',
+  'MBEYA_GOING': 'mbeyaGoing',
+  'INFINITY_GOING': 'mbeyaGoing',    // Infinity is in Mbeya area
+  'TDM_GOING': 'tdmGoing',
+  'ZAMBIA_GOING': 'zambiaGoing',
+  // Returning direction checkpoints
+  'ZAMBIA_NDOLA': 'zambiaReturn',    // Part of Zambia Return (50L)
+  'ZAMBIA_KAPIRI': 'zambiaReturn',   // Part of Zambia Return (350L)
+  'TDM_RETURN': 'tundumaReturn',
+  'MBEYA_RETURN': 'mbeyaReturn',
+  'MORO_RETURN': 'moroReturn',
+  'DAR_RETURN': 'darReturn',
+  'TANGA_RETURN': 'tangaReturn',
+};
+
 // Station rates reference (for documentation/validation)
 const STATION_RATES: Record<string, { rate: number; currency: 'USD' | 'TZS' }> = {
   'LAKE CHILABOMBWE': { rate: 1.2, currency: 'USD' },
@@ -131,16 +153,21 @@ async function findFuelRecordWithDirection(
 
 /**
  * Update fuel record when LPO entry is created/updated
+ * @param doNumber - DO number for identifying the fuel record
  * @param litersChange - positive for deduction, negative for reverting
+ * @param station - station name (determines field for non-CASH entries)
+ * @param truckNo - truck number for identifying the fuel record
+ * @param cancellationPoint - optional cancellation point (for CASH entries - determines which field to update)
  */
 async function updateFuelRecordForLPOEntry(
   doNumber: string,
   litersChange: number,
   station: string,
-  truckNo: string
+  truckNo: string,
+  cancellationPoint?: string
 ): Promise<void> {
   try {
-    logger.info(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}`);
+    logger.info(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}, cancellationPoint=${cancellationPoint || 'N/A'}`);
     
     const result = await findFuelRecordWithDirection(doNumber, truckNo);
     
@@ -158,23 +185,34 @@ async function updateFuelRecordForLPOEntry(
     }
 
     const stationUpper = station.toUpperCase().trim();
-    const fieldMapping = STATION_TO_FUEL_FIELD[stationUpper];
+    let fieldToUpdate: string | undefined;
 
-    logger.info(`Found fuel record ${fuelRecord._id} for truck ${truckNo}, direction=${direction}, station=${stationUpper}`);
-
-    if (!fieldMapping) {
-      logger.warn(`No field mapping for station "${stationUpper}" - available: ${Object.keys(STATION_TO_FUEL_FIELD).join(', ')}`);
-      return;
+    // For CASH station with cancellation point, use the cancellation point to determine the field
+    if (stationUpper === 'CASH' && cancellationPoint) {
+      fieldToUpdate = CANCELLATION_POINT_TO_FUEL_FIELD[cancellationPoint];
+      logger.info(`CASH mode with cancellation point ${cancellationPoint} -> field: ${fieldToUpdate}`);
     }
 
-    let fieldToUpdate = direction === 'going' ? fieldMapping.going : fieldMapping.returning;
-
+    // Fallback to station-based mapping if no cancellation point or no mapping found
     if (!fieldToUpdate) {
-      fieldToUpdate = direction === 'going' ? fieldMapping.returning : fieldMapping.going;
+      const fieldMapping = STATION_TO_FUEL_FIELD[stationUpper];
+      
+      logger.info(`Found fuel record ${fuelRecord._id} for truck ${truckNo}, direction=${direction}, station=${stationUpper}`);
+
+      if (!fieldMapping) {
+        logger.warn(`No field mapping for station "${stationUpper}" - available: ${Object.keys(STATION_TO_FUEL_FIELD).join(', ')}`);
+        return;
+      }
+
+      fieldToUpdate = direction === 'going' ? fieldMapping.going : fieldMapping.returning;
+
+      if (!fieldToUpdate) {
+        fieldToUpdate = direction === 'going' ? fieldMapping.returning : fieldMapping.going;
+      }
     }
 
     if (!fieldToUpdate) {
-      logger.warn(`No valid field to update for station ${station} direction ${direction}`);
+      logger.warn(`No valid field to update for station ${station} direction ${direction} cancellationPoint ${cancellationPoint}`);
       return;
     }
 
@@ -574,10 +612,11 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     // Ensure workbook exists for this year
     await getOrCreateWorkbook(year);
 
-    // Create the LPO document with year
+    // Create the LPO document with year and createdBy
     const lpoSummary = await LPOSummary.create({
       ...data,
       year,
+      createdBy: req.user?.username || 'Unknown',
     });
 
     // Update fuel records for each entry (skip cancelled and driver account entries)
@@ -613,11 +652,13 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
         }
 
         // Regular entry - update fuel record
+        // For CASH station entries, pass the cancellation point to determine the correct fuel field
         await updateFuelRecordForLPOEntry(
           entry.doNo,
           entry.liters,
           lpoSummary.station,
-          entry.truckNo
+          entry.truckNo,
+          entry.cancellationPoint // Pass cancellation point for CASH entries
         );
       }
     }
@@ -713,7 +754,8 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           oldEntry.doNo,
           -oldEntry.liters,
           existingLpo.station,
-          oldEntry.truckNo
+          oldEntry.truckNo,
+          oldEntry.cancellationPoint // Pass cancellation point for CASH entries
         );
       } else if (newEntry.isCancelled && !oldEntry.isCancelled) {
         // Entry was just marked as cancelled - revert the fuel deduction
@@ -722,7 +764,8 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           oldEntry.doNo,
           -oldEntry.liters,
           existingLpo.station,
-          oldEntry.truckNo
+          oldEntry.truckNo,
+          oldEntry.cancellationPoint // Pass cancellation point for CASH entries
         );
         
         // Mark cancellation time
@@ -734,7 +777,8 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           oldEntry.doNo,
           -oldEntry.liters,
           existingLpo.station,
-          oldEntry.truckNo
+          oldEntry.truckNo,
+          oldEntry.cancellationPoint // Pass cancellation point for CASH entries
         );
         
         // Create driver account entry
@@ -767,7 +811,8 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           oldEntry.doNo,
           difference,
           newData.station || existingLpo.station,
-          oldEntry.truckNo
+          oldEntry.truckNo,
+          newEntry.cancellationPoint || oldEntry.cancellationPoint // Pass cancellation point for CASH entries
         );
         
         entriesToUpdate.push(newEntry);
@@ -814,12 +859,14 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         }
         
         // Regular new entry - update fuel record
+        // For CASH station entries, pass the cancellation point to determine the correct fuel field
         logger.info(`New entry: ${key}, adding ${newEntry.liters}L`);
         await updateFuelRecordForLPOEntry(
           newEntry.doNo,
           newEntry.liters,
           newData.station || existingLpo.station,
-          newEntry.truckNo
+          newEntry.truckNo,
+          newEntry.cancellationPoint // Pass cancellation point for CASH entries
         );
       }
     }
@@ -949,6 +996,20 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
 
     if (lpoDocuments.length === 0) {
       throw new ApiError(404, 'No LPO documents found for this year');
+    }
+
+    // Fetch all DriverAccountEntry records for the year to get approvedBy values
+    const driverAccountEntries = await DriverAccountEntry.find({ year })
+      .select('lpoNo truckNo approvedBy')
+      .lean();
+
+    // Create a map for quick lookup: key = "lpoNo-truckNo", value = approvedBy
+    const driverAccountApprovedByMap = new Map<string, string>();
+    for (const entry of driverAccountEntries) {
+      if (entry.approvedBy) {
+        const key = `${entry.lpoNo}-${entry.truckNo}`;
+        driverAccountApprovedByMap.set(key, entry.approvedBy);
+      }
     }
 
     // Create Excel workbook
@@ -1203,7 +1264,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       // Signatures Section - Row after totals + 2
       const sigRowNum = rowNum;
       
-      // Add signature lines
+      // Add signature lines with actual names
       const preparedByCell = sheet.getCell(`A${sigRowNum}`);
       preparedByCell.value = 'Prepared By';
       preparedByCell.font = { bold: true, size: 10 };
@@ -1219,17 +1280,39 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       receivedByCell.font = { bold: true, size: 10 };
       receivedByCell.border = { top: { style: 'medium', color: { argb: 'FF000000' } } };
 
+      // Names row - show actual names if available
+      const preparedByName = sheet.getCell(`A${sigRowNum + 1}`);
+      preparedByName.value = lpo.createdBy || '';
+      preparedByName.font = { size: 10, color: { argb: 'FF000000' } };
+
+      // Look up approvedBy from DriverAccountEntry for any driver account entries in this LPO
+      let approvedByValue = '';
+      for (const entry of lpo.entries) {
+        if (entry.isDriverAccount) {
+          const key = `${lpo.lpoNo}-${entry.truckNo}`;
+          const foundApprovedBy = driverAccountApprovedByMap.get(key);
+          if (foundApprovedBy) {
+            approvedByValue = foundApprovedBy;
+            break; // Use the first found approvedBy
+          }
+        }
+      }
+      
+      const approvedByName = sheet.getCell(`C${sigRowNum + 1}`);
+      approvedByName.value = approvedByValue;
+      approvedByName.font = { size: 10, color: { argb: 'FF000000' } };
+
       // Signature labels
-      const sigLabelRow = sheet.getRow(sigRowNum + 1);
-      sheet.getCell(`A${sigRowNum + 1}`).value = 'Signature';
-      sheet.getCell(`A${sigRowNum + 1}`).font = { size: 9, color: { argb: 'FF666666' } };
-      sheet.getCell(`C${sigRowNum + 1}`).value = 'Name & Signature';
-      sheet.getCell(`C${sigRowNum + 1}`).font = { size: 9, color: { argb: 'FF666666' } };
-      sheet.getCell(`E${sigRowNum + 1}`).value = 'Station Attendant';
-      sheet.getCell(`E${sigRowNum + 1}`).font = { size: 9, color: { argb: 'FF666666' } };
+      const sigLabelRowNum = sigRowNum + 2;
+      sheet.getCell(`A${sigLabelRowNum}`).value = 'Signature';
+      sheet.getCell(`A${sigLabelRowNum}`).font = { size: 9, color: { argb: 'FF666666' } };
+      sheet.getCell(`C${sigLabelRowNum}`).value = 'Name & Signature';
+      sheet.getCell(`C${sigLabelRowNum}`).font = { size: 9, color: { argb: 'FF666666' } };
+      sheet.getCell(`E${sigLabelRowNum}`).value = 'Station Attendant';
+      sheet.getCell(`E${sigLabelRowNum}`).font = { size: 9, color: { argb: 'FF666666' } };
 
       // Footer
-      const footerRowNum = sigRowNum + 4;
+      const footerRowNum = sigRowNum + 5;
       sheet.mergeCells(`A${footerRowNum}:F${footerRowNum}`);
       const footerCell = sheet.getCell(`A${footerRowNum}`);
       footerCell.value = 'This is a computer-generated document. No signature is required.';

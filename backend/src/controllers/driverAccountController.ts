@@ -204,6 +204,7 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
     originalDoNo,
     paymentMode = 'CASH',
     paybillOrMobile,
+    approvedBy,
     notes,
   } = req.body;
 
@@ -232,6 +233,7 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
     originalDoNo,
     paymentMode,
     paybillOrMobile,
+    approvedBy,
     notes,
     status: 'pending',
     createdBy: req.user?.username || 'system',
@@ -260,6 +262,7 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
         sortOrder: 1,
       }],
       total: liters * rate,
+      createdBy: req.user?.username || 'Unknown',
     });
 
     await lpoSummary.save();
@@ -353,6 +356,7 @@ export const createBatchDriverAccountEntries = async (req: AuthRequest, res: Res
       orderOf: 'DRIVER ACCOUNT',
       entries: lpoDetails,
       total: totalAmount,
+      createdBy: req.user?.username || 'Unknown',
     });
 
     await lpoSummary.save();
@@ -589,7 +593,7 @@ export const exportDriverAccountWorkbook = async (req: AuthRequest, res: Respons
     sheet.getCell('A1').font = { bold: true, size: 14 };
     sheet.getCell('A1').alignment = { horizontal: 'center' };
 
-    // Column headers
+    // Column headers - include Prepared By and Approved By
     sheet.addRow([]);
     sheet.addRow([
       'Date',
@@ -601,6 +605,8 @@ export const exportDriverAccountWorkbook = async (req: AuthRequest, res: Respons
       'Amount',
       'Station',
       'Status',
+      'Prepared By',
+      'Approved By',
     ]);
 
     const headerRow = sheet.getRow(3);
@@ -635,6 +641,8 @@ export const exportDriverAccountWorkbook = async (req: AuthRequest, res: Respons
         entry.amount,
         entry.station,
         entry.status.toUpperCase(),
+        entry.createdBy || '-',
+        entry.approvedBy || '-',
       ]);
       totalLiters += entry.liters;
       totalAmount += entry.amount;
@@ -642,7 +650,7 @@ export const exportDriverAccountWorkbook = async (req: AuthRequest, res: Respons
 
     // Total row
     const totalRowNum = sheet.rowCount + 1;
-    sheet.addRow(['', '', '', 'TOTAL', totalLiters, '', totalAmount, '', '']);
+    sheet.addRow(['', '', '', 'TOTAL', totalLiters, '', totalAmount, '', '', '', '']);
     const totalRow = sheet.getRow(totalRowNum);
     totalRow.font = { bold: true };
     totalRow.getCell(4).alignment = { horizontal: 'right' };
@@ -657,6 +665,8 @@ export const exportDriverAccountWorkbook = async (req: AuthRequest, res: Respons
     sheet.getColumn(7).width = 12;
     sheet.getColumn(8).width = 15;
     sheet.getColumn(9).width = 10;
+    sheet.getColumn(10).width = 15;
+    sheet.getColumn(11).width = 15;
   });
 
   // Generate buffer

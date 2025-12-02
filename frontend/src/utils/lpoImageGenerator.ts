@@ -9,7 +9,7 @@ import LPOPrint from '../components/LPOPrint';
  * Creates a temporary DOM element with the LPO print component
  * and returns the rendered element
  */
-const createLPOElement = (data: LPOSummary, preparedBy?: string): Promise<HTMLElement> => {
+const createLPOElement = (data: LPOSummary, preparedBy?: string, approvedBy?: string): Promise<HTMLElement> => {
   return new Promise((resolve) => {
     // Create a temporary container
     const container = document.createElement('div');
@@ -31,8 +31,8 @@ const createLPOElement = (data: LPOSummary, preparedBy?: string): Promise<HTMLEl
       }
     };
 
-    // Render the LPO component with preparedBy username
-    root.render(React.createElement(LPOPrint, { ref, data, preparedBy }));
+    // Render the LPO component with preparedBy and approvedBy
+    root.render(React.createElement(LPOPrint, { ref, data, preparedBy, approvedBy }));
   });
 };
 
@@ -49,8 +49,8 @@ const cleanupElement = (element: HTMLElement) => {
 /**
  * Generate LPO as image blob using html2canvas
  */
-export const generateLPOImage = async (data: LPOSummary, preparedBy?: string): Promise<Blob> => {
-  const element = await createLPOElement(data, preparedBy);
+export const generateLPOImage = async (data: LPOSummary, preparedBy?: string, approvedBy?: string): Promise<Blob> => {
+  const element = await createLPOElement(data, preparedBy, approvedBy);
   
   try {
     // Get the actual dimensions of the element
@@ -83,9 +83,9 @@ export const generateLPOImage = async (data: LPOSummary, preparedBy?: string): P
 /**
  * Copy LPO image to clipboard
  */
-export const copyLPOImageToClipboard = async (data: LPOSummary, preparedBy?: string): Promise<boolean> => {
+export const copyLPOImageToClipboard = async (data: LPOSummary, preparedBy?: string, approvedBy?: string): Promise<boolean> => {
   try {
-    const blob = await generateLPOImage(data, preparedBy);
+    const blob = await generateLPOImage(data, preparedBy, approvedBy);
     
     if (!navigator.clipboard || !navigator.clipboard.write) {
       throw new Error('Clipboard API not supported');
@@ -104,9 +104,9 @@ export const copyLPOImageToClipboard = async (data: LPOSummary, preparedBy?: str
 /**
  * Download LPO as image (PNG)
  */
-export const downloadLPOImage = async (data: LPOSummary, filename?: string, preparedBy?: string): Promise<void> => {
+export const downloadLPOImage = async (data: LPOSummary, filename?: string, preparedBy?: string, approvedBy?: string): Promise<void> => {
   try {
-    const blob = await generateLPOImage(data, preparedBy);
+    const blob = await generateLPOImage(data, preparedBy, approvedBy);
     const url = URL.createObjectURL(blob);
     
     const a = document.createElement('a');
@@ -126,8 +126,8 @@ export const downloadLPOImage = async (data: LPOSummary, filename?: string, prep
 /**
  * Download LPO as PDF
  */
-export const downloadLPOPDF = async (data: LPOSummary, filename?: string, preparedBy?: string): Promise<void> => {
-  const element = await createLPOElement(data, preparedBy);
+export const downloadLPOPDF = async (data: LPOSummary, filename?: string, preparedBy?: string, approvedBy?: string): Promise<void> => {
+  const element = await createLPOElement(data, preparedBy, approvedBy);
   
   try {
     // Get the actual dimensions of the element

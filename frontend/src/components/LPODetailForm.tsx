@@ -747,6 +747,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return;
     }
 
+    // CASH station requires cancellation point selection
+    if (formData.station === 'CASH' && !cancellationPoint) {
+      alert('For CASH payments, you must select a checkpoint (going/returning direction and specific checkpoint). This determines which fuel record column gets updated for the truck(s).');
+      return;
+    }
+
     // Validate each entry has required fields
     const invalidEntries = formData.entries.filter(
       (entry) => !entry.truckNo || !entry.truckNo.trim()
@@ -757,6 +763,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
 
     // Ensure all entries have required fields with proper defaults
+    // For CASH mode, also include the cancellation point in each entry
     const validEntries = formData.entries.map(entry => ({
       ...entry,
       doNo: (entry.doNo && entry.doNo.trim()) || 'NIL',
@@ -764,7 +771,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       dest: (entry.dest && entry.dest.trim()) || 'NIL',
       liters: Number(entry.liters) || 0,
       rate: Number(entry.rate) || 0,
-      amount: (Number(entry.liters) || 0) * (Number(entry.rate) || 0)
+      amount: (Number(entry.liters) || 0) * (Number(entry.rate) || 0),
+      // Include cancellation point for CASH entries so backend knows which fuel field to update
+      // Only set if station is CASH and cancellation point is selected (not empty string)
+      cancellationPoint: formData.station === 'CASH' && cancellationPoint ? cancellationPoint : undefined,
     }));
 
     const total = validEntries.reduce((sum, entry) => sum + entry.amount, 0);
@@ -1008,13 +1018,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
             {/* Cash Cancellation Point - Only shown when CASH is selected */}
             {formData.station === 'CASH' && (
-              <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg">
+              <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-300 dark:border-orange-600 rounded-lg">
                 <div className="flex items-center space-x-2 mb-3">
                   <Ban className="w-5 h-5 text-orange-600" />
-                  <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-200">Cancellation Point</h4>
+                  <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-200">Cash Purchase Checkpoint (Required)</h4>
                 </div>
                 <p className="text-xs text-orange-700 dark:text-orange-300 mb-3">
-                  Select a cancellation checkpoint to automatically cancel trucks in any existing LPOs at that station.
+                  <strong>Required:</strong> Select where the cash fuel was purchased. This determines which column in the fuel record gets updated for this truck.
+                  {cancellationPoint && ' Any existing LPOs at this checkpoint will be automatically cancelled.'}
                 </p>
                 
                 {/* Direction Toggle */}
@@ -1049,19 +1060,32 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </label>
                 </div>
 
-                {/* Cancellation Point Dropdown */}
-                <select
-                  value={cancellationPoint}
-                  onChange={(e) => setCancellationPoint(e.target.value as CancellationPoint)}
-                  className="w-full px-3 py-2 border border-orange-300 dark:border-orange-600 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                >
-                  <option value="">Select cancellation point (optional)...</option>
-                  {getAvailableCancellationPoints('CASH')[cancellationDirection].map((point) => (
-                    <option key={point} value={point}>
-                      {getCancellationPointDisplayName(point)}
-                    </option>
-                  ))}
-                </select>
+                {/* Cancellation Point Dropdown - Required for Cash */}
+                <div>
+                  <label className="block text-sm font-medium text-orange-800 dark:text-orange-300 mb-1">
+                    Checkpoint (where fuel was purchased) *
+                  </label>
+                  <select
+                    required
+                    value={cancellationPoint}
+                    onChange={(e) => setCancellationPoint(e.target.value as CancellationPoint)}
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                      !cancellationPoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
+                    }`}
+                  >
+                    <option value="">Select checkpoint (required)...</option>
+                    {getAvailableCancellationPoints('CASH')[cancellationDirection].map((point) => (
+                      <option key={point} value={point}>
+                        {getCancellationPointDisplayName(point)}
+                      </option>
+                    ))}
+                  </select>
+                  {!cancellationPoint && (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                      ⚠ Please select the checkpoint where cash was used. This determines which fuel record column gets updated.
+                    </p>
+                  )}
+                </div>
 
                 {/* Zambia Returning Note */}
                 {cancellationDirection === 'returning' && (
