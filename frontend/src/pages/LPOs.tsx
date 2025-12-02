@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar } from 'lucide-react';
+import XLSX from 'xlsx-js-style';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
 import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
 import LPODetailForm from '../components/LPODetailForm';
@@ -17,6 +18,7 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
+
 
 const LPOs = () => {
   const { user } = useAuth();
@@ -483,41 +485,83 @@ const LPOs = () => {
   };
 
   const handleExport = () => {
-    const headers = [
-      'S/No',
-      'Date',
-      'LPO No.',
-      'Diesel @',
-      'DO/SDO',
-      'Truck No.',
-      'Ltrs',
-      'Price per Ltr',
-      'Destinations',
+    // Create worksheet data with headers
+    const headers = ['S/No', 'Date', 'LPO No.', 'Station', 'DO/SDO', 'Truck No.', 'Ltrs', 'Price/Ltr', 'Dest.', 'Amount'];
+    
+    const data = filteredLpos.map((lpo) => [
+      lpo.sn,
+      lpo.date,
+      lpo.lpoNo,
+      lpo.dieselAt,
+      lpo.doSdo,
+      lpo.truckNo,
+      lpo.ltrs,
+      lpo.pricePerLtr,
+      lpo.destinations,
+      lpo.ltrs * lpo.pricePerLtr
+    ]);
+
+    // Create worksheet with headers
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 6 },   // S/No
+      { wch: 12 },  // Date
+      { wch: 10 },  // LPO No.
+      { wch: 15 },  // Station
+      { wch: 10 },  // DO/SDO
+      { wch: 12 },  // Truck No.
+      { wch: 8 },   // Ltrs
+      { wch: 10 },  // Price/Ltr
+      { wch: 12 },  // Dest.
+      { wch: 15 },  // Amount
     ];
 
-    const csvContent = [
-      headers.join(','),
-      ...filteredLpos.map((lpo) =>
-        [
-          lpo.sn,
-          lpo.date,
-          lpo.lpoNo,
-          lpo.dieselAt,
-          lpo.doSdo,
-          lpo.truckNo,
-          lpo.ltrs,
-          lpo.pricePerLtr,
-          lpo.destinations,
-        ].join(',')
-      ),
-    ].join('\n');
+    // Define border and center alignment styles
+    const borderStyle = {
+      top: { style: 'thin', color: { rgb: '000000' } },
+      bottom: { style: 'thin', color: { rgb: '000000' } },
+      left: { style: 'thin', color: { rgb: '000000' } },
+      right: { style: 'thin', color: { rgb: '000000' } }
+    };
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `lpos-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+    const cellStyle = {
+      border: borderStyle,
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      border: borderStyle,
+      alignment: { horizontal: 'center', vertical: 'center' },
+      font: { bold: true },
+      fill: { fgColor: { rgb: 'E0E0E0' } }
+    };
+
+    // Get the range of the worksheet
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+    // Apply styles to all cells
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellRef]) {
+          ws[cellRef] = { v: '' };
+        }
+        // Apply header style to first row, cell style to others
+        ws[cellRef].s = row === 0 ? headerStyle : cellStyle;
+      }
+    }
+
+    // Create workbook and add worksheet
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'LPOs');
+
+    // Generate filename with current date
+    const filename = `LPOs_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    // Write file
+    XLSX.writeFile(wb, filename);
   };
 
   // Calculate totals for display

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle } from 'lucide-react';
 import { LPOEntry, DriverAccountEntry } from '../types';
 import { driverAccountAPI } from '../services/api';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 
 // Extended LPO entry type that includes driver account flag
 interface ExtendedLPOEntry extends LPOEntry {
@@ -257,6 +257,57 @@ const LPOSummary = ({
     });
   };
 
+  // Helper function to apply borders and center alignment to worksheet
+  const applyExcelStyles = (ws: XLSX.WorkSheet) => {
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    
+    const borderStyle = {
+      top: { style: 'thin', color: { rgb: '000000' } },
+      bottom: { style: 'thin', color: { rgb: '000000' } },
+      left: { style: 'thin', color: { rgb: '000000' } },
+      right: { style: 'thin', color: { rgb: '000000' } }
+    };
+
+    const cellStyle = {
+      border: borderStyle,
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      border: borderStyle,
+      alignment: { horizontal: 'center', vertical: 'center' },
+      font: { bold: true },
+      fill: { fgColor: { rgb: 'E0E0E0' } }
+    };
+
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellRef]) {
+          ws[cellRef] = { v: '', t: 's' };
+        }
+        ws[cellRef].s = row === 0 ? headerStyle : cellStyle;
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 6 },   // S/N
+      { wch: 12 },  // Date
+      { wch: 10 },  // LPO No.
+      { wch: 15 },  // Diesel At
+      { wch: 10 },  // DO/SDO
+      { wch: 12 },  // Truck No.
+      { wch: 10 },  // Liters
+      { wch: 12 },  // Price per Liter
+      { wch: 15 },  // Total Amount
+      { wch: 12 },  // Destinations
+      { wch: 15 },  // Type
+      { wch: 12 },  // Payment Mode
+      { wch: 15 },  // Paybill/Mobile
+    ];
+  };
+
   const handleExportMonth = () => {
     if (!summary) return;
 
@@ -277,6 +328,7 @@ const LPOSummary = ({
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
+    applyExcelStyles(ws);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${selectedMonth}_${selectedYear}`);
     XLSX.writeFile(wb, `LPO_Summary_${selectedMonth}_${selectedYear}.xlsx`);
@@ -309,6 +361,7 @@ const LPOSummary = ({
         }));
 
         const ws = XLSX.utils.json_to_sheet(exportData);
+        applyExcelStyles(ws);
         XLSX.utils.book_append_sheet(wb, ws, `${month}_${selectedYear}`);
       }
     });
@@ -332,6 +385,7 @@ const LPOSummary = ({
     });
 
     const summaryWs = XLSX.utils.json_to_sheet(yearSummary);
+    applyExcelStyles(summaryWs);
     XLSX.utils.book_append_sheet(wb, summaryWs, `${selectedYear}_Summary`);
 
     XLSX.writeFile(wb, `LPO_Summary_${selectedYear}.xlsx`);

@@ -953,6 +953,20 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     excelWorkbook.creator = 'Fuel Order System';
     excelWorkbook.created = new Date();
 
+    // Define border style for all cells
+    const thinBorder: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FF000000' } },
+      left: { style: 'thin', color: { argb: 'FF000000' } },
+      bottom: { style: 'thin', color: { argb: 'FF000000' } },
+      right: { style: 'thin', color: { argb: 'FF000000' } },
+    };
+
+    // Center alignment style
+    const centerAlignment: Partial<ExcelJS.Alignment> = {
+      horizontal: 'center',
+      vertical: 'middle',
+    };
+
     // Create a summary sheet first
     const summarySheet = excelWorkbook.addWorksheet('Summary');
     summarySheet.columns = [
@@ -964,21 +978,32 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       { header: 'Entries', key: 'entries', width: 10 },
     ];
 
-    summarySheet.getRow(1).font = { bold: true };
-    summarySheet.getRow(1).fill = {
+    // Style header row
+    const summaryHeaderRow = summarySheet.getRow(1);
+    summaryHeaderRow.font = { bold: true };
+    summaryHeaderRow.fill = {
       type: 'pattern',
       pattern: 'solid',
       fgColor: { argb: 'FFE0E0E0' },
     };
+    summaryHeaderRow.alignment = centerAlignment;
+    summaryHeaderRow.eachCell((cell) => {
+      cell.border = thinBorder;
+    });
 
     lpoDocuments.forEach((lpo) => {
-      summarySheet.addRow({
+      const row = summarySheet.addRow({
         lpoNo: lpo.lpoNo,
         date: lpo.date,
         station: lpo.station,
         orderOf: lpo.orderOf,
         total: lpo.total,
         entries: lpo.entries.length,
+      });
+      // Apply borders and center alignment to each data cell
+      row.alignment = centerAlignment;
+      row.eachCell((cell) => {
+        cell.border = thinBorder;
       });
     });
 
@@ -991,9 +1016,11 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       sheet.mergeCells('A1:F1');
       sheet.getCell('A1').value = `LPO No: ${lpo.lpoNo}`;
       sheet.getCell('A1').font = { bold: true, size: 14 };
+      sheet.getCell('A1').alignment = centerAlignment;
 
       sheet.mergeCells('A2:F2');
       sheet.getCell('A2').value = `Date: ${lpo.date} | Station: ${lpo.station} | Order Of: ${lpo.orderOf}`;
+      sheet.getCell('A2').alignment = centerAlignment;
 
       // Column headers at row 4
       const headerRow = sheet.getRow(4);
@@ -1004,6 +1031,10 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
         pattern: 'solid',
         fgColor: { argb: 'FFE0E0E0' },
       };
+      headerRow.alignment = centerAlignment;
+      headerRow.eachCell((cell) => {
+        cell.border = thinBorder;
+      });
 
       // Set column widths
       sheet.getColumn(1).width = 15;
@@ -1025,6 +1056,10 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
           entry.amount,
           entry.dest,
         ];
+        row.alignment = centerAlignment;
+        row.eachCell((cell) => {
+          cell.border = thinBorder;
+        });
         rowNum++;
       }
 
@@ -1032,6 +1067,12 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       const totalRow = sheet.getRow(rowNum);
       totalRow.values = ['', '', '', 'TOTAL:', lpo.total, ''];
       totalRow.font = { bold: true };
+      totalRow.alignment = centerAlignment;
+      totalRow.eachCell((cell, colNumber) => {
+        if (colNumber >= 4 && colNumber <= 5) {
+          cell.border = thinBorder;
+        }
+      });
     }
 
     // Set response headers

@@ -8,7 +8,7 @@ import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary
 import { useAuth } from '../contexts/AuthContext';
 import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 
 interface DriverAccountWorkbookProps {
   initialYear?: number;
@@ -189,6 +189,57 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     return matchesSearch && matchesDateFrom && matchesDateTo;
   }) || [];
 
+  // Helper function to apply borders and center alignment to worksheet
+  const applyExcelStyles = (ws: XLSX.WorkSheet) => {
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    
+    const borderStyle = {
+      top: { style: 'thin', color: { rgb: '000000' } },
+      bottom: { style: 'thin', color: { rgb: '000000' } },
+      left: { style: 'thin', color: { rgb: '000000' } },
+      right: { style: 'thin', color: { rgb: '000000' } }
+    };
+
+    const cellStyle = {
+      border: borderStyle,
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      border: borderStyle,
+      alignment: { horizontal: 'center', vertical: 'center' },
+      font: { bold: true },
+      fill: { fgColor: { rgb: 'E0E0E0' } }
+    };
+
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellRef]) {
+          ws[cellRef] = { v: '', t: 's' };
+        }
+        ws[cellRef].s = row === 0 ? headerStyle : cellStyle;
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 6 },   // S/N
+      { wch: 12 },  // Date
+      { wch: 12 },  // Truck No
+      { wch: 15 },  // Driver Name
+      { wch: 12 },  // Original DO
+      { wch: 10 },  // Liters
+      { wch: 10 },  // Rate
+      { wch: 15 },  // Amount
+      { wch: 15 },  // Station
+      { wch: 10 },  // Status
+      { wch: 10 },  // LPO No
+      { wch: 12 },  // Created By
+      { wch: 20 },  // Notes
+    ];
+  };
+
   // Export functions
   const exportToExcel = () => {
     if (!workbook || filteredEntries.length === 0) return;
@@ -210,6 +261,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
+    applyExcelStyles(ws);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Driver Accounts ${selectedYear}`);
     XLSX.writeFile(wb, `DRIVER_ACCOUNTS_${selectedYear}.xlsx`);
