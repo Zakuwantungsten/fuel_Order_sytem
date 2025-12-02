@@ -1421,6 +1421,99 @@ export const getAvailableYears = async (req: AuthRequest, res: Response): Promis
 };
 
 /**
+ * Check if a truck already has an active fuel allocation at a specific station
+ * Used to prevent duplicate allocations (except for CASH which is always allowed)
+ * Returns existing LPOs where the truck has an active (non-cancelled) entry at the station
+ * Note: If the new liters amount differs from existing, it's allowed (top-up/adjustment scenario)
+ */
+export const checkDuplicateAllocation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo, station, excludeLpoId, liters } = req.query;
+
+    if (!truckNo || !station) {
+      throw new ApiError(400, 'Truck number and station are required');
+    }
+
+    const stationUpper = (station as string).toUpperCase().trim();
+    const newLiters = liters ? Number(liters) : null;
+    
+    // CASH is always allowed - no duplicate check needed
+    if (stationUpper === 'CASH') {
+      res.status(200).json({
+        success: true,
+        message: 'CASH station - duplicate check not required',
+        data: {
+          hasDuplicate: false,
+          existingLpos: [],
+          allowOverride: true,
+          isDifferentAmount: false
+        },
+      });
+      return;
+    }
+
+    // Build query to find LPOs at this station with this truck's active entries
+    const query: any = {
+      isDeleted: false,
+      station: { $regex: new RegExp(`^${stationUpper}$`, 'i') },
+      'entries.truckNo': truckNo,
+      'entries.isCancelled': { $ne: true }
+    };
+
+    // Exclude current LPO if editing
+    if (excludeLpoId) {
+      query._id = { $ne: excludeLpoId };
+    }
+
+    const lpos = await LPOSummary.find(query).lean();
+
+    // Filter to get only the matching active entries for this truck
+    const matchingLpos = lpos.map(lpo => ({
+      id: lpo._id,
+      lpoNo: lpo.lpoNo,
+      date: lpo.date,
+      station: lpo.station,
+      entries: lpo.entries.filter((e: any) => 
+        e.truckNo === truckNo && !e.isCancelled
+      )
+    })).filter(lpo => lpo.entries.length > 0);
+
+    const hasDuplicate = matchingLpos.length > 0;
+    
+    // Check if the new liters amount is different from all existing allocations
+    // If different, it's likely a top-up or adjustment - allow it
+    let isDifferentAmount = false;
+    let existingLiters: number[] = [];
+    
+    if (hasDuplicate && newLiters !== null) {
+      existingLiters = matchingLpos.flatMap(lpo => 
+        lpo.entries.map((e: any) => e.liters)
+      );
+      // If the new amount is different from ALL existing allocations, allow it
+      isDifferentAmount = existingLiters.every(existing => existing !== newLiters);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: hasDuplicate 
+        ? isDifferentAmount
+          ? `Truck ${truckNo} has existing allocation (${existingLiters.join(', ')}L) - different amount allowed`
+          : `Truck ${truckNo} already has same allocation (${existingLiters.join(', ')}L) at ${station}` 
+        : 'No duplicate allocation found',
+      data: {
+        hasDuplicate,
+        existingLpos: matchingLpos,
+        existingLiters,
+        isDifferentAmount,
+        allowOverride: isDifferentAmount // Allow if amount is different (top-up scenario)
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Find LPOs at a specific checkpoint/station that have a particular truck
  * Used for auto-cancellation when creating CASH LPOs
  */
@@ -1504,7 +1597,7 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
     // Mark the entry as cancelled
     lpo.entries[entryIndex].isCancelled = true;
     lpo.entries[entryIndex].cancellationPoint = cancellationPoint;
-    lpo.entries[entryIndex].cancellationReason = reason || 'Cash mode payment - station was out of fuel';
+    lpo.entries[entryIndex].cancellationReason = reason || 'Entry cancelled - fuel allocation reverted';
     lpo.entries[entryIndex].cancelledAt = new Date();
 
     // Recalculate total (excluding cancelled entries)

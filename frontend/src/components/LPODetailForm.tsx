@@ -128,6 +128,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const [existingLPOsForTrucks, setExistingLPOsForTrucks] = useState<Map<string, LPOSummary[]>>(new Map());
   const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
 
+  // Duplicate allocation warning state
+  const [duplicateWarnings, setDuplicateWarnings] = useState<Map<string, {
+    lpoNo: string;
+    date: string;
+    liters: number;
+    isDifferentAmount: boolean; // true if new amount differs from existing (allowed)
+    newLiters: number; // the new liters being entered
+  }>>(new Map());
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+
   // Cash currency conversion state
   const [cashConversion, setCashConversion] = useState<CashConversion>({
     localRate: 0,
@@ -191,6 +201,54 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
     fetchExistingLPOs();
   }, [formData.station, cancellationPoint, formData.entries?.map(e => e.truckNo).join(',')]);
+
+  // Check for duplicate allocations when station or entries change (for non-CASH stations)
+  useEffect(() => {
+    const checkDuplicates = async () => {
+      // Skip for CASH station - duplicates are handled differently there
+      if (!formData.station || formData.station.toUpperCase() === 'CASH' || !formData.entries || formData.entries.length === 0) {
+        setDuplicateWarnings(new Map());
+        return;
+      }
+
+      setIsCheckingDuplicates(true);
+      const warnings = new Map<string, { lpoNo: string; date: string; liters: number; isDifferentAmount: boolean; newLiters: number }>();
+
+      try {
+        for (const entry of formData.entries) {
+          if (entry.truckNo && entry.truckNo.length >= 4) {
+            const result = await lpoDocumentsAPI.checkDuplicateAllocation(
+              entry.truckNo, 
+              formData.station,
+              initialData?.id?.toString(),
+              entry.liters // Pass the new liters amount to check
+            );
+            
+            if (result.hasDuplicate && result.existingLpos.length > 0) {
+              const existingLpo = result.existingLpos[0];
+              const existingEntry = existingLpo.entries[0];
+              warnings.set(entry.truckNo, {
+                lpoNo: existingLpo.lpoNo,
+                date: existingLpo.date,
+                liters: existingEntry?.liters || 0,
+                isDifferentAmount: result.isDifferentAmount || false,
+                newLiters: entry.liters
+              });
+            }
+          }
+        }
+        setDuplicateWarnings(warnings);
+      } catch (error) {
+        console.error('Error checking duplicates:', error);
+      } finally {
+        setIsCheckingDuplicates(false);
+      }
+    };
+
+    // Debounce the check to avoid too many API calls
+    const timeoutId = setTimeout(checkDuplicates, 500);
+    return () => clearTimeout(timeoutId);
+  }, [formData.station, formData.entries?.map(e => `${e.truckNo}:${e.liters}`).join(','), initialData?.id]);
 
   useEffect(() => {
     if (initialData) {
@@ -753,6 +811,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return;
     }
 
+    // Block submission if there are exact duplicate allocations (same liters at same station)
+    // Different amounts are allowed (top-up/adjustment scenario)
+    if (formData.station?.toUpperCase() !== 'CASH' && duplicateWarnings.size > 0) {
+      // Filter to only get exact duplicates (same liters)
+      const exactDuplicates = Array.from(duplicateWarnings.entries())
+        .filter(([_, info]) => !info.isDifferentAmount);
+      
+      if (exactDuplicates.length > 0) {
+        const duplicateTrucks = exactDuplicates.map(([truckNo, info]) => 
+          `${truckNo} (${info.liters}L in LPO #${info.lpoNo})`
+        ).join('\n');
+        alert(`Cannot create LPO: The following trucks already have the SAME fuel amount allocated at ${formData.station}:\n\n${duplicateTrucks}\n\nThis looks like a duplicate entry. If you need to add extra fuel, please change the liters amount.`);
+        return;
+      }
+    }
+
     // Validate each entry has required fields
     const invalidEntries = formData.entries.filter(
       (entry) => !entry.truckNo || !entry.truckNo.trim()
@@ -825,6 +899,69 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
+          {/* Duplicate Allocation Warning Banner */}
+          {duplicateWarnings.size > 0 && formData.station?.toUpperCase() !== 'CASH' && (() => {
+            const exactDuplicates = Array.from(duplicateWarnings.entries()).filter(([_, info]) => !info.isDifferentAmount);
+            const differentAmounts = Array.from(duplicateWarnings.entries()).filter(([_, info]) => info.isDifferentAmount);
+            
+            return (
+              <>
+                {/* Exact duplicates - ERROR (blocks submission) */}
+                {exactDuplicates.length > 0 && (
+                  <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-300 dark:border-red-700">
+                    <div className="flex items-start space-x-3">
+                      <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h3 className="font-medium text-red-800 dark:text-red-200">
+                          Duplicate Allocation - Blocked
+                        </h3>
+                        <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                          These trucks already have the <strong>same fuel amount</strong> at <strong>{formData.station}</strong>:
+                        </p>
+                        <ul className="mt-2 text-sm text-red-600 dark:text-red-400 space-y-1">
+                          {exactDuplicates.map(([truckNo, info]) => (
+                            <li key={truckNo} className="flex items-center space-x-2">
+                              <span className="font-mono font-medium">{truckNo}</span>
+                              <span>→ Already has {info.liters}L in LPO #{info.lpoNo}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                          ⚠️ This looks like a duplicate entry. Remove these trucks or change the liters amount if adding extra fuel.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Different amounts - INFO (allowed, just informational) */}
+                {differentAmounts.length > 0 && (
+                  <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-300 dark:border-blue-700">
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h3 className="font-medium text-blue-800 dark:text-blue-200">
+                          Additional Fuel Allocation
+                        </h3>
+                        <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                          These trucks have existing allocations but with <strong>different amounts</strong> (top-up allowed):
+                        </p>
+                        <ul className="mt-2 text-sm text-blue-600 dark:text-blue-400 space-y-1">
+                          {differentAmounts.map(([truckNo, info]) => (
+                            <li key={truckNo} className="flex items-center space-x-2">
+                              <span className="font-mono font-medium">{truckNo}</span>
+                              <span>→ Existing: {info.liters}L (LPO #{info.lpoNo}) + New: {info.newLiters}L</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
           {/* Auto-Forward Notice - Shows when trucks are loaded from previous station (Zambia Return) */}
           {!initialData && selectedSourceLpo && (
             <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
@@ -1156,6 +1293,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 <Plus className="w-4 h-4 mr-2" />
                 Add Entry
               </button>
+              {isCheckingDuplicates && (
+                <span className="ml-3 text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                  Checking for duplicates...
+                </span>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -1192,8 +1335,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   {formData.entries && formData.entries.length > 0 ? (
                     formData.entries.map((entry, index) => {
                       const autoFill = entryAutoFillData[index] || { direction: 'going', loading: false, fetched: false };
+                      const duplicateInfo = duplicateWarnings.get(entry.truckNo);
+                      const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
+                      const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
+                      const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
                       return (
-                        <tr key={index} className={autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : 'dark:bg-gray-800'}>
+                        <tr key={index} className={`${autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : 'dark:bg-gray-800'} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
                           <td className="px-3 py-3">
                             <div className="relative">
                               <input
@@ -1201,15 +1348,32 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 value={entry.truckNo}
                                 onChange={(e) => handleTruckNoChange(index, e.target.value)}
                                 placeholder="T762 DWK"
-                                className="w-28 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                className={`w-28 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isExactDuplicate ? 'border-red-500 dark:border-red-400' : ''} ${isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : ''} ${!hasDuplicate ? 'border-gray-300 dark:border-gray-600' : ''}`}
                               />
                               {autoFill.loading && (
                                 <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
                               )}
-                              {autoFill.fetched && !autoFill.loading && (
+                              {autoFill.fetched && !autoFill.loading && !hasDuplicate && (
                                 <CheckCircle className="absolute right-1 top-1.5 w-4 h-4 text-green-500" />
                               )}
+                              {isExactDuplicate && (
+                                <AlertTriangle className="absolute right-1 top-1.5 w-4 h-4 text-red-500" />
+                              )}
+                              {isDifferentAmount && (
+                                <CheckCircle className="absolute right-1 top-1.5 w-4 h-4 text-blue-500" />
+                              )}
                             </div>
+                            {/* Duplicate allocation warning */}
+                            {isExactDuplicate && duplicateInfo && (
+                              <div className="mt-1 text-xs text-red-600 dark:text-red-400" title={`Blocked: Same amount in LPO ${duplicateInfo.lpoNo}`}>
+                                ⛔ Same amount in LPO #{duplicateInfo.lpoNo} ({duplicateInfo.liters}L)
+                              </div>
+                            )}
+                            {isDifferentAmount && duplicateInfo && (
+                              <div className="mt-1 text-xs text-blue-600 dark:text-blue-400" title={`Top-up allowed: Different amount from LPO ${duplicateInfo.lpoNo}`}>
+                                ➕ Top-up: +{duplicateInfo.newLiters}L (existing: {duplicateInfo.liters}L)
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex flex-col">

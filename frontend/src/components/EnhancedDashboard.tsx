@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   FileText, 
   Fuel, 
@@ -36,19 +36,60 @@ interface EnhancedDashboardProps {
   onLogout: () => void;
 }
 
-export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
-  // Check if user is a yard-specific role
-  const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard'].includes(user.role);
+// Helper function to get initial tab based on user role and localStorage
+const getInitialTab = (userRole: string): string => {
+  const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard'].includes(userRole);
+  const isDriver = userRole === 'driver';
   
+  // Get stored tab from localStorage
+  const storedTab = localStorage.getItem('fuel_order_active_tab');
+  
+  // Define valid tabs for each role type
+  const getValidTabs = () => {
+    if (isDriver) return ['driver_portal'];
+    if (isYardRole || userRole === 'yard_personnel') return ['yard_fuel'];
+    if (userRole === 'super_admin' || userRole === 'admin' || userRole === 'boss') {
+      return ['overview', 'do', 'fuel_records', 'lpo', 'reports', 'admin'];
+    }
+    if (userRole === 'fuel_order_maker') {
+      return ['overview', 'do', 'fuel_records', 'lpo', 'reports'];
+    }
+    if (userRole === 'payment_manager') {
+      return ['overview', 'payments'];
+    }
+    if (userRole === 'fuel_attendant' || userRole === 'station_manager') {
+      return ['overview', 'station_view'];
+    }
+    return ['overview'];
+  };
+  
+  const validTabs = getValidTabs();
+  
+  // If stored tab is valid for this role, use it
+  if (storedTab && validTabs.includes(storedTab)) {
+    return storedTab;
+  }
+  
+  // Default based on role
+  if (isYardRole || userRole === 'yard_personnel') return 'yard_fuel';
+  if (isDriver) return 'driver_portal';
+  return 'overview';
+};
+
+export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   // Check if user is a driver
   const isDriver = user.role === 'driver';
   
   // For drivers, default to driver_portal, no overview
-  const [activeTab, setActiveTab] = useState(
-    isYardRole ? 'yard_fuel' : isDriver ? 'driver_portal' : 'overview'
-  );
+  // Now reads from localStorage to persist across refreshes
+  const [activeTab, setActiveTab] = useState(() => getInitialTab(user.role));
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { logout, toggleTheme, isDark } = useAuth();
+
+  // Persist active tab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('fuel_order_active_tab', activeTab);
+  }, [activeTab]);
 
   const getMenuItems = () => {
     // Drivers only see their portal, no overview

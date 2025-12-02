@@ -217,7 +217,7 @@ export const createCancellationInfo = (
     cancellationStation,
     cancelledAt: new Date().toISOString(),
     cancelledBy,
-    reason: reason || 'Station out of fuel - bought cash from other station',
+    reason: reason || 'Entry cancelled - fuel allocation reverted',
     originalLpoNo,
     cashLpoNo
   };
@@ -236,12 +236,12 @@ export const generateCancellationReport = (lpo: LPOSummary): CancellationReport 
   let reportText = '';
   
   if (isFullyCancelled) {
-    reportText = `LPO ${lpo.lpoNo} is fully cancelled - all trucks got cash mode payment.`;
+    reportText = `LPO ${lpo.lpoNo} is fully cancelled - all ${cancelledEntries.length} entries have been reverted.`;
   } else if (cancelledEntries.length > 0) {
     const cancelledTrucksList = cancelledEntries
       .map(e => e.truckNo)
       .join(', ');
-    reportText = `In LPO ${lpo.lpoNo}: Trucks ${cancelledTrucksList} are cancelled (cash mode payment).`;
+    reportText = `In LPO ${lpo.lpoNo}: Trucks ${cancelledTrucksList} cancelled (${cancelledEntries.length} of ${lpo.entries.length} entries).`;
   } else {
     reportText = `LPO ${lpo.lpoNo} has no cancelled entries.`;
   }

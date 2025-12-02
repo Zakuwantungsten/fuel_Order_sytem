@@ -295,6 +295,29 @@ export const lpoDocumentsAPI = {
     }
   },
 
+  // Check if a truck already has an active allocation at a specific station
+  // Returns duplicate info - used to prevent accidentally creating duplicate fuel orders
+  // If liters is provided and differs from existing allocation, it's allowed (top-up scenario)
+  checkDuplicateAllocation: async (truckNo: string, station: string, excludeLpoId?: string, liters?: number): Promise<{
+    hasDuplicate: boolean;
+    existingLpos: Array<{
+      id: string;
+      lpoNo: string;
+      date: string;
+      station: string;
+      entries: Array<{ truckNo: string; liters: number; doNo: string }>;
+    }>;
+    existingLiters?: number[];
+    isDifferentAmount: boolean;
+    allowOverride: boolean;
+  }> => {
+    const params: any = { truckNo, station };
+    if (excludeLpoId) params.excludeLpoId = excludeLpoId;
+    if (liters !== undefined) params.liters = liters;
+    const response = await apiClient.get('/lpo-documents/check-duplicate', { params });
+    return response.data.data || { hasDuplicate: false, existingLpos: [], allowOverride: true, isDifferentAmount: false };
+  },
+
   // Find LPOs at a checkpoint for a specific truck (for auto-cancellation)
   findAtCheckpoint: async (truckNo: string, station?: string): Promise<LPOSummary[]> => {
     const params: any = { truckNo };

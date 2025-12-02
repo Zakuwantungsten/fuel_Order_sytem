@@ -101,6 +101,23 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
+  // Apply initial theme immediately on mount (before React hydration)
+  useEffect(() => {
+    const storedTheme = localStorage.getItem('fuel_order_theme');
+    if (storedTheme === 'dark' || storedTheme === 'light') {
+      // Apply theme to DOM immediately
+      if (storedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      // Update state if different from initial
+      if (storedTheme !== state.theme) {
+        dispatch({ type: 'SET_THEME', payload: storedTheme });
+      }
+    }
+  }, []);
+
   // Check for existing session on mount
   useEffect(() => {
     const checkExistingSession = () => {
@@ -114,11 +131,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
             permissions,
           };
           dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
-          
-          // Restore theme if it exists in stored data
-          if (authData.theme && (authData.theme === 'light' || authData.theme === 'dark')) {
-            dispatch({ type: 'SET_THEME', payload: authData.theme });
-          }
         }
       } catch (error) {
         console.error('Error checking existing session:', error);
