@@ -3,6 +3,7 @@ import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, Ma
 import { LPOEntry, CancellationPoint, LPOSummary } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
 import { lpoDocumentsAPI } from '../services/api';
+import { formatTruckNumber } from '../utils/dataCleanup';
 import { 
   getAvailableCancellationPoints, 
   getCancellationPointDisplayName,
@@ -145,7 +146,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
       ...prev,
       [name]: ['sn', 'ltrs', 'pricePerLtr'].includes(name)
         ? parseFloat(value) || 0
-        : value,
+        : name === 'truckNo' ? formatTruckNumber(value) : value,
     }));
     
     // When CASH station is selected, enable cash mode
@@ -529,15 +530,22 @@ const LPOForm: React.FC<LPOFormProps> = ({
                           The following LPOs have truck {formData.truckNo} at checkpoint stations. They will be automatically cancelled when you create this CASH LPO:
                         </p>
                         <ul className="mt-2 space-y-1">
-                          {existingLPOsAtCheckpoint.map((lpo, idx) => (
-                            <li key={idx} className="text-xs text-red-700 dark:text-red-300 flex items-center space-x-2">
-                              <span className="font-medium">LPO #{lpo.lpoNo}</span>
-                              <span>-</span>
-                              <span>{lpo.station}</span>
-                              <span>-</span>
-                              <span>{lpo.entries.find(e => e.truckNo === formData.truckNo)?.liters || 0}L</span>
-                            </li>
-                          ))}
+                          {existingLPOsAtCheckpoint.map((lpo, idx) => {
+                            // Case-insensitive truck number matching
+                            const formTruckNormalized = (formData.truckNo || '').replace(/\s+/g, '').toUpperCase();
+                            const matchingEntry = lpo.entries.find(e => 
+                              (e.truckNo || '').replace(/\s+/g, '').toUpperCase() === formTruckNormalized
+                            );
+                            return (
+                              <li key={idx} className="text-xs text-red-700 dark:text-red-300 flex items-center space-x-2">
+                                <span className="font-medium">LPO #{lpo.lpoNo}</span>
+                                <span>-</span>
+                                <span>{lpo.station}</span>
+                                <span>-</span>
+                                <span>{matchingEntry?.liters || 0}L</span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     </div>

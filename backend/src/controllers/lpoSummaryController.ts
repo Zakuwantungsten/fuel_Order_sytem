@@ -1554,11 +1554,15 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
       return;
     }
 
+    // Normalize truck number for case-insensitive matching
+    const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
+    
     // Build query to find LPOs at this station with this truck's active entries
+    // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
     const query: any = {
       isDeleted: false,
       station: { $regex: new RegExp(`^${stationUpper}$`, 'i') },
-      'entries.truckNo': truckNo,
+      'entries.truckNo': { $regex: new RegExp(`^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'), 'i') },
       'entries.isCancelled': { $ne: true }
     };
 
@@ -1569,15 +1573,16 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
 
     const lpos = await LPOSummary.find(query).lean();
 
-    // Filter to get only the matching active entries for this truck
+    // Filter to get only the matching active entries for this truck (case-insensitive)
     const matchingLpos = lpos.map(lpo => ({
       id: lpo._id,
       lpoNo: lpo.lpoNo,
       date: lpo.date,
       station: lpo.station,
-      entries: lpo.entries.filter((e: any) => 
-        e.truckNo === truckNo && !e.isCancelled
-      )
+      entries: lpo.entries.filter((e: any) => {
+        const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
+        return entryTruckNormalized === truckNoNormalized && !e.isCancelled;
+      })
     })).filter(lpo => lpo.entries.length > 0);
 
     const hasDuplicate = matchingLpos.length > 0;
@@ -1627,10 +1632,14 @@ export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Pro
       throw new ApiError(400, 'Truck number is required');
     }
 
+    // Normalize truck number for case-insensitive matching
+    const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
+    
     // Find LPOs where this truck has an active (non-cancelled) entry at the given station
+    // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
     const query: any = {
       isDeleted: false,
-      'entries.truckNo': truckNo,
+      'entries.truckNo': { $regex: new RegExp(`^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'), 'i') },
       'entries.isCancelled': { $ne: true }
     };
 
@@ -1641,12 +1650,13 @@ export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Pro
 
     const lpos = await LPOSummary.find(query).lean();
 
-    // Filter entries to only include matching truck entries that are not cancelled
+    // Filter entries to only include matching truck entries that are not cancelled (case-insensitive)
     const matchingLpos = lpos.map(lpo => ({
       ...lpo,
-      entries: lpo.entries.filter((e: any) => 
-        e.truckNo === truckNo && !e.isCancelled
-      )
+      entries: lpo.entries.filter((e: any) => {
+        const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
+        return entryTruckNormalized === truckNoNormalized && !e.isCancelled;
+      })
     })).filter(lpo => lpo.entries.length > 0);
 
     res.status(200).json({
@@ -1677,10 +1687,12 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
       throw new ApiError(404, 'LPO not found');
     }
 
-    // Find the entry for this truck
-    const entryIndex = lpo.entries.findIndex((e: any) => 
-      e.truckNo === truckNo && !e.isCancelled
-    );
+    // Find the entry for this truck (case-insensitive matching)
+    const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
+    const entryIndex = lpo.entries.findIndex((e: any) => {
+      const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
+      return entryTruckNormalized === truckNoNormalized && !e.isCancelled;
+    });
 
     if (entryIndex === -1) {
       throw new ApiError(404, 'Active entry for this truck not found in the LPO');
