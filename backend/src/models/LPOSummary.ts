@@ -1,7 +1,23 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { ILPOSummary, ILPODetail } from '../types';
+import { ILPOSummary, ILPODetail, CancellationPoint } from '../types';
 
 export interface ILPOSummaryDocument extends ILPOSummary, Document {}
+
+const CANCELLATION_POINTS: CancellationPoint[] = [
+  'DAR_GOING',
+  'MORO_GOING',
+  'MBEYA_GOING',
+  'INFINITY_GOING',
+  'TDM_GOING',
+  'ZAMBIA_GOING',
+  'ZAMBIA_NDOLA',
+  'ZAMBIA_KAPIRI',
+  'TDM_RETURN',
+  'MBEYA_RETURN',
+  'MORO_RETURN',
+  'DAR_RETURN',
+  'TANGA_RETURN'
+];
 
 const lpoDetailSchema = new Schema<ILPODetail>(
   {
@@ -47,6 +63,30 @@ const lpoDetailSchema = new Schema<ILPODetail>(
     amendedAt: {
       type: Date,
       default: null,
+    },
+    // Cancellation and Driver Account fields
+    isCancelled: {
+      type: Boolean,
+      default: false,
+    },
+    isDriverAccount: {
+      type: Boolean,
+      default: false,
+    },
+    cancellationPoint: {
+      type: String,
+      enum: CANCELLATION_POINTS,
+    },
+    originalDoNo: {
+      type: String,
+      trim: true,
+    },
+    cancellationReason: {
+      type: String,
+      trim: true,
+    },
+    cancelledAt: {
+      type: Date,
     },
   },
   { _id: true }

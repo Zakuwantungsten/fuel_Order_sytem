@@ -180,20 +180,37 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
           </tr>
         </thead>
         <tbody>
-          {data.entries.map((entry, index) => (
-            <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#fafafa' }}>
+          {data.entries.map((entry, index) => {
+            const isCancelled = entry.isCancelled;
+            const isDriverAccount = entry.isDriverAccount;
+            const displayDoNo = isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo;
+            const displayDest = isDriverAccount ? 'NIL' : entry.dest;
+            
+            // Styling for cancelled and driver account entries
+            const rowBgColor = isCancelled 
+              ? '#ffe6e6' // Light red for cancelled
+              : isDriverAccount 
+                ? '#fff3e6' // Light orange for driver account
+                : (index % 2 === 0 ? '#fff' : '#fafafa');
+            
+            const textColor = isCancelled ? '#cc0000' : '#000';
+            const textDecoration = isCancelled ? 'line-through' : 'none';
+            
+            return (
+            <tr key={index} style={{ backgroundColor: rowBgColor }}>
               <td style={{ 
                 border: '1px solid #000',
                 padding: '8px',
-                color: '#000',
-                fontWeight: '500'
+                color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#000',
+                fontWeight: '500',
+                textDecoration: isCancelled ? 'line-through' : 'none'
               }}>
-                {entry.doNo}
+                {displayDoNo}
               </td>
               <td style={{ 
                 border: '1px solid #000',
                 padding: '8px',
-                color: '#000',
+                color: textColor,
                 fontWeight: '500'
               }}>
                 {entry.truckNo}
@@ -202,8 +219,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
                 border: '1px solid #000',
                 padding: '8px',
                 textAlign: 'right',
-                color: '#000',
-                fontWeight: '500'
+                color: textColor,
+                fontWeight: '500',
+                textDecoration
               }}>
                 {entry.liters.toLocaleString()}
               </td>
@@ -211,7 +229,8 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
                 border: '1px solid #000',
                 padding: '8px',
                 textAlign: 'right',
-                color: '#333'
+                color: isCancelled ? '#cc0000' : '#333',
+                textDecoration
               }}>
                 {entry.rate.toLocaleString('en-US', {
                   minimumFractionDigits: 1,
@@ -222,8 +241,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
                 border: '1px solid #000',
                 padding: '8px',
                 textAlign: 'right',
-                color: '#000',
-                fontWeight: '500'
+                color: textColor,
+                fontWeight: '500',
+                textDecoration
               }}>
                 ${entry.amount.toLocaleString('en-US', {
                   minimumFractionDigits: 2,
@@ -233,12 +253,14 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
               <td style={{ 
                 border: '1px solid #000',
                 padding: '8px',
-                color: '#333'
+                color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#333',
+                textDecoration: isCancelled ? 'line-through' : 'none'
               }}>
-                {entry.dest}
+                {displayDest}
               </td>
             </tr>
-          ))}
+            );
+          })}
           
           {/* Total Row */}
           <tr style={{ backgroundColor: '#e8e8e8' }}>
@@ -259,7 +281,10 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
               fontSize: '13px',
               color: '#000'
             }}>
-              {data.entries.reduce((sum, entry) => sum + entry.liters, 0).toLocaleString()}
+              {data.entries
+                .filter(entry => !entry.isCancelled)
+                .reduce((sum, entry) => sum + entry.liters, 0)
+                .toLocaleString()}
             </td>
             <td style={{ 
               border: '1px solid #000',
@@ -273,10 +298,13 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy }
               fontSize: '13px',
               color: '#000'
             }}>
-              ${data.total.toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })}
+              ${data.entries
+                .filter(entry => !entry.isCancelled)
+                .reduce((sum, entry) => sum + entry.amount, 0)
+                .toLocaleString('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                })}
             </td>
             <td style={{ 
               border: '1px solid #000',

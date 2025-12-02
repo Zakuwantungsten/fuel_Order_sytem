@@ -137,6 +137,11 @@ export interface LPODetail {
   amount: number;
   dest: string;
   sortOrder?: number; // For maintaining order in the sheet
+  // Cancellation and payment mode fields
+  isCancelled?: boolean;
+  cancellationPoint?: CancellationPoint;
+  isDriverAccount?: boolean;
+  paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';
 }
 
 // Fuel Record Types
@@ -345,4 +350,114 @@ export interface YardFuelDispense {
   linkedDONumber?: string;
   autoLinked?: boolean;
   status?: 'pending' | 'linked' | 'manual'; // pending = waiting for DO, linked = auto-matched, manual = manually entered
+}
+
+// Cash Mode Cancellation Types
+export type CancellationPoint = 
+  | 'DAR_GOING' 
+  | 'MORO_GOING' 
+  | 'MBEYA_GOING' 
+  | 'TDM_GOING' 
+  | 'ZAMBIA_GOING'
+  | 'INFINITY_GOING'  // Mbeya going station
+  | 'ZAMBIA_NDOLA'    // Returning - first part (50 liters)
+  | 'ZAMBIA_KAPIRI'   // Returning - second part (350 liters)
+  | 'TUNDUMA_RETURN'
+  | 'MBEYA_RETURN'
+  | 'MORO_RETURN'
+  | 'DAR_RETURN'
+  | 'TANGA_RETURN';
+
+export interface CancellationInfo {
+  isCancelled: boolean;
+  cancellationPoint?: CancellationPoint;
+  cancellationStation?: string;  // The station where order was cancelled
+  cancelledAt?: string;          // Timestamp
+  cancelledBy?: string;          // Username
+  reason?: string;               // e.g., "Station out of fuel - bought cash from other station"
+  originalLpoNo?: string;        // The LPO that was supposed to be used
+  cashLpoNo?: string;            // The new cash LPO created
+}
+
+// Stations grouped by journey direction
+export interface StationsByDirection {
+  going: string[];
+  returning: string[];
+  zambiaReturning: {
+    ndola: string;    // First filling point - 50 liters
+    kapiri: string;   // Second filling point - 350 liters
+  };
+}
+
+// Extended LPO Detail with cancellation support
+export interface LPODetailExtended extends LPODetail {
+  isCancelled?: boolean;
+  cancellationInfo?: CancellationInfo;
+  isDriverAccount?: boolean;     // For driver's account (misuse/theft) entries
+  paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';
+}
+
+// Driver's Account Entry - for fuel given due to misuse/theft
+export interface DriverAccountEntry {
+  id?: string | number;
+  date: string;
+  month?: string;
+  year?: number;
+  truckNo: string;
+  driverName?: string;
+  doNo?: string;          // Reference DO for the journey (not shown in exports)
+  liters: number;
+  rate: number;
+  amount: number;
+  station: string;        // Station where fuel was given
+  cancellationPoint?: CancellationPoint; // Where fuel was cancelled
+  originalDoNo?: string;  // Original DO before cancellation
+  lpoNo: string;          // Reference LPO number
+  status?: 'pending' | 'settled' | 'disputed';
+  settledAt?: string;
+  settledBy?: string;
+  notes?: string;         // Additional notes
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Driver's Account Workbook
+export interface DriverAccountWorkbook {
+  id?: string | number;
+  year: number;
+  name: string;           // e.g., "DRIVER ACCOUNTS 2025"
+  entries: DriverAccountEntry[];
+  totalLiters: number;
+  totalAmount: number;
+  sheetCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Cancellation Report - for displaying cancelled orders
+export interface CancellationReport {
+  lpoNo: string;
+  date: string;
+  station: string;
+  isFullyCancelled: boolean;  // All trucks in LPO cancelled
+  cancelledTrucks: Array<{
+    truckNo: string;
+    doNo: string;
+    cancellationPoint: CancellationPoint;
+    liters: number;
+  }>;
+  activeTrucks: Array<{
+    truckNo: string;
+    doNo: string;
+    liters: number;
+  }>;
+  reportText: string;         // Copyable cancellation statement
+}
+
+// LPO Summary Extended with cancellation tracking
+export interface LPOSummaryExtended extends LPOSummary {
+  hasCancelledEntries?: boolean;
+  cancellationReport?: CancellationReport;
+  hasDriverAccountEntries?: boolean;
 }

@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock } from 'lucide-react';
-import { LPOSheet, LPODetail, LPOSummary } from '../types';
+import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard } from 'lucide-react';
+import { LPOSheet, LPODetail, LPOSummary, CancellationReport } from '../types';
 import { lpoWorkbookAPI } from '../services/api';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import { 
+  generateCancellationReport, 
+  formatEntryForDisplay,
+  saveCancellationToHistory 
+} from '../services/cancellationService';
 
 interface LPOSheetViewProps {
   sheet: LPOSheet;
@@ -20,14 +25,26 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [isSaving, setIsSaving] = useState(false); // Prevent double submissions
+  const [cancellationReport, setCancellationReport] = useState<CancellationReport | null>(null);
+  const [showCancellationReport, setShowCancellationReport] = useState(false);
 
   useEffect(() => {
     setEditedSheet(sheet);
+    // Check for cancelled entries and generate report
+    const hasCancelled = sheet.entries.some(e => e.isCancelled);
+    if (hasCancelled) {
+      const report = generateCancellationReport(sheet);
+      setCancellationReport(report);
+    } else {
+      setCancellationReport(null);
+    }
   }, [sheet]);
 
   useEffect(() => {
-    // Calculate total when entries change
-    const total = editedSheet.entries.reduce((sum, entry) => sum + entry.amount, 0);
+    // Calculate total when entries change (excluding cancelled entries)
+    const total = editedSheet.entries
+      .filter(entry => !entry.isCancelled)
+      .reduce((sum, entry) => sum + entry.amount, 0);
     if (editedSheet.total !== total) {
       setEditedSheet(prev => ({ ...prev, total }));
     }
@@ -46,6 +63,19 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Copy cancellation report to clipboard
+  const handleCopyCancellationReport = async () => {
+    if (!cancellationReport) return;
+    try {
+      await navigator.clipboard.writeText(cancellationReport.reportText);
+      saveCancellationToHistory(cancellationReport);
+      alert('Cancellation report copied to clipboard!');
+    } catch (error) {
+      console.error('Error copying cancellation report:', error);
+      alert('Failed to copy. Please try again.');
+    }
+  };
 
   const handleHeaderEdit = (field: keyof LPOSheet, value: string) => {
     setEditedSheet(prev => ({ ...prev, [field]: value }));
@@ -396,6 +426,77 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         </div>
       </div>
 
+      {/* Cancellation Report Banner */}
+      {cancellationReport && cancellationReport.cancelledTrucks.length > 0 && (
+        <div className="bg-red-50 border-b border-red-200 px-6 py-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start space-x-3">
+                <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-red-800">
+                    {cancellationReport.isFullyCancelled 
+                      ? 'LPO Fully Cancelled' 
+                      : 'Partial Cancellation'}
+                  </h4>
+                  <p className="text-sm text-red-600 mt-1">
+                    {cancellationReport.reportText}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleCopyCancellationReport}
+                  className="flex items-center px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm"
+                >
+                  <Clipboard className="w-4 h-4 mr-1" />
+                  Copy Report
+                </button>
+                <button
+                  onClick={() => setShowCancellationReport(!showCancellationReport)}
+                  className="text-red-600 hover:text-red-800 text-sm underline"
+                >
+                  {showCancellationReport ? 'Hide' : 'Show'} Details
+                </button>
+              </div>
+            </div>
+            
+            {showCancellationReport && (
+              <div className="mt-4 bg-white rounded-lg border border-red-200 p-4">
+                <h5 className="font-medium text-red-800 mb-2">Cancelled Trucks:</h5>
+                <ul className="space-y-1 text-sm text-red-700">
+                  {cancellationReport.cancelledTrucks.map((truck, idx) => (
+                    <li key={idx} className="flex items-center space-x-2">
+                      <span className="font-medium">{truck.truckNo}</span>
+                      <span className="text-red-500">-</span>
+                      <span>DO: {truck.doNo}</span>
+                      <span className="text-red-500">-</span>
+                      <span>{truck.liters}L</span>
+                    </li>
+                  ))}
+                </ul>
+                {cancellationReport.activeTrucks.length > 0 && (
+                  <>
+                    <h5 className="font-medium text-green-800 mt-4 mb-2">Active Trucks:</h5>
+                    <ul className="space-y-1 text-sm text-green-700">
+                      {cancellationReport.activeTrucks.map((truck, idx) => (
+                        <li key={idx} className="flex items-center space-x-2">
+                          <span className="font-medium">{truck.truckNo}</span>
+                          <span>-</span>
+                          <span>DO: {truck.doNo}</span>
+                          <span>-</span>
+                          <span>{truck.liters}L</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Sheet Content - Excel-like Table */}
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-6xl mx-auto">
@@ -414,8 +515,20 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
 
             {/* Table Body - Existing Entries */}
-            {editedSheet.entries.map((entry, index) => (
-              <div key={index} className="border-b border-gray-200 hover:bg-gray-50">
+            {editedSheet.entries.map((entry, index) => {
+              const displayData = formatEntryForDisplay(entry);
+              const isCancelled = entry.isCancelled;
+              const isDriverAccount = entry.isDriverAccount;
+              
+              // Row styling based on entry state
+              const rowClass = isCancelled 
+                ? 'bg-red-50 border-b border-red-200' 
+                : isDriverAccount 
+                  ? 'bg-orange-50 border-b border-orange-200'
+                  : 'border-b border-gray-200 hover:bg-gray-50';
+              
+              return (
+              <div key={index} className={rowClass}>
                 <div className="grid grid-cols-7 gap-0">
                   <div className="px-3 py-2 border-r border-gray-300">
                     {editingRow === index ? (
@@ -426,7 +539,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className="w-full px-1 py-0 text-sm border rounded"
                       />
                     ) : (
-                      <span className="text-sm">{entry.doNo}</span>
+                      <span className={`text-sm ${displayData.displayClass}`}>
+                        {isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo}
+                      </span>
                     )}
                   </div>
                   
@@ -439,7 +554,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className="w-full px-1 py-0 text-sm border rounded"
                       />
                     ) : (
-                      <span className="text-sm font-medium">{entry.truckNo}</span>
+                      <span className={`text-sm font-medium ${isCancelled ? 'text-red-600' : ''}`}>{entry.truckNo}</span>
                     )}
                   </div>
                   
@@ -452,7 +567,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className="w-full px-1 py-0 text-sm border rounded text-right"
                       />
                     ) : (
-                      <span className="text-sm">{entry.liters}</span>
+                      <span className={`text-sm ${isCancelled ? 'text-red-600 line-through' : ''}`}>{entry.liters}</span>
                     )}
                   </div>
                   
@@ -466,12 +581,14 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className="w-full px-1 py-0 text-sm border rounded text-right"
                       />
                     ) : (
-                      <span className="text-sm">{entry.rate}</span>
+                      <span className={`text-sm ${isCancelled ? 'text-red-600 line-through' : ''}`}>{entry.rate}</span>
                     )}
                   </div>
                   
                   <div className="px-3 py-2 border-r border-gray-300 text-right">
-                    <span className="text-sm font-medium">{formatCurrency(entry.amount)}</span>
+                    <span className={`text-sm font-medium ${isCancelled ? 'text-red-600 line-through' : ''}`}>
+                      {formatCurrency(entry.amount)}
+                    </span>
                   </div>
                   
                   <div className="px-3 py-2 border-r border-gray-300">
@@ -483,13 +600,21 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className="w-full px-1 py-0 text-sm border rounded"
                       />
                     ) : (
-                      <span className="text-sm">{entry.dest}</span>
+                      <span className={`text-sm ${displayData.displayClass}`}>
+                        {isCancelled ? entry.dest : isDriverAccount ? 'NIL' : entry.dest}
+                      </span>
                     )}
                   </div>
                   
                   <div className="px-3 py-2 text-center">
                     <div className="flex items-center justify-center space-x-1">
-                      {editingRow === index ? (
+                      {isCancelled && (
+                        <span className="text-xs text-red-600 font-medium">CANCELLED</span>
+                      )}
+                      {isDriverAccount && (
+                        <span className="text-xs text-orange-600 font-medium">DRIVER A/C</span>
+                      )}
+                      {!isCancelled && !isDriverAccount && editingRow === index ? (
                         <>
                           <button
                             onClick={() => handleRowSave(index)}
@@ -506,7 +631,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                             <X className="w-3 h-3" />
                           </button>
                         </>
-                      ) : (
+                      ) : !isCancelled && !isDriverAccount ? (
                         <button
                           onClick={() => setEditingRow(index)}
                           className="p-1 text-blue-600 hover:text-blue-800"
@@ -514,12 +639,13 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {/* Locked Sheet Notice */}
             <div className="bg-amber-50 border-b border-gray-300">

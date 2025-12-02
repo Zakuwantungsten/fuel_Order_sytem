@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { LPOSummary, LPOWorkbook, FuelRecord } from '../models';
+import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
@@ -416,6 +416,7 @@ export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise
 
 /**
  * Create new LPO document (sheet in a workbook)
+ * Handles regular entries, cancelled entries, and driver account entries
  */
 export const createLPOSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -424,6 +425,7 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     // Extract year from date
     const dateObj = new Date(data.date);
     const year = dateObj.getFullYear();
+    const month = dateObj.toLocaleString('default', { month: 'long' });
 
     // Ensure workbook exists for this year
     await getOrCreateWorkbook(year);
@@ -434,9 +436,39 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       year,
     });
 
-    // Update fuel records for each entry
+    // Update fuel records for each entry (skip cancelled and driver account entries)
     if (lpoSummary.entries && lpoSummary.entries.length > 0) {
       for (const entry of lpoSummary.entries) {
+        // Skip fuel record update for cancelled entries
+        if (entry.isCancelled) {
+          logger.info(`Skipping fuel record update for cancelled entry: ${entry.truckNo}`);
+          continue;
+        }
+
+        // For driver account entries: skip fuel record but create driver account entry
+        if (entry.isDriverAccount) {
+          logger.info(`Creating driver account entry for: ${entry.truckNo}`);
+          
+          await DriverAccountEntry.create({
+            date: data.date,
+            month,
+            year,
+            lpoNo: lpoSummary.lpoNo,
+            truckNo: entry.truckNo,
+            liters: entry.liters,
+            rate: entry.rate,
+            amount: entry.amount,
+            station: lpoSummary.station,
+            cancellationPoint: entry.cancellationPoint || 'DAR_GOING',
+            originalDoNo: entry.originalDoNo || entry.doNo,
+            status: 'pending',
+            createdBy: req.user?.username || 'system',
+          });
+          
+          continue; // Skip fuel record update
+        }
+
+        // Regular entry - update fuel record
         await updateFuelRecordForLPOEntry(
           entry.doNo,
           entry.liters,
@@ -486,6 +518,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       dest: string;
       originalLiters?: number | null;
       amendedAt?: Date | null;
+      isCancelled?: boolean;
+      isDriverAccount?: boolean;
+      cancellationPoint?: string;
+      originalDoNo?: string;
+      cancellationReason?: string;
+      cancelledAt?: Date;
       _id?: any;
     }
 
@@ -504,9 +542,20 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     // Track entries that need fuel record updates and amendment tracking
     const entriesToUpdate: EntryType[] = [];
 
+    // Get date info for driver account entries
+    const dateObj = new Date(newData.date || existingLpo.date);
+    const month = dateObj.toLocaleString('default', { month: 'long' });
+    const year = dateObj.getFullYear();
+
     // Revert old entries that are removed or changed
     for (const [key, oldEntry] of oldEntriesMap) {
       const newEntry = newEntriesMap.get(key);
+      
+      // Skip if old entry was already cancelled or driver account (no fuel record to revert)
+      if (oldEntry.isCancelled || oldEntry.isDriverAccount) {
+        continue;
+      }
+      
       if (!newEntry) {
         // Entry was removed - revert the fuel deduction
         logger.info(`Entry removed: ${key}, reverting ${oldEntry.liters}L`);
@@ -516,6 +565,44 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           existingLpo.station,
           oldEntry.truckNo
         );
+      } else if (newEntry.isCancelled && !oldEntry.isCancelled) {
+        // Entry was just marked as cancelled - revert the fuel deduction
+        logger.info(`Entry cancelled: ${key}, reverting ${oldEntry.liters}L`);
+        await updateFuelRecordForLPOEntry(
+          oldEntry.doNo,
+          -oldEntry.liters,
+          existingLpo.station,
+          oldEntry.truckNo
+        );
+        
+        // Mark cancellation time
+        newEntry.cancelledAt = new Date();
+      } else if (newEntry.isDriverAccount && !oldEntry.isDriverAccount) {
+        // Entry was converted to driver account - revert fuel and create driver account entry
+        logger.info(`Entry converted to driver account: ${key}, reverting ${oldEntry.liters}L`);
+        await updateFuelRecordForLPOEntry(
+          oldEntry.doNo,
+          -oldEntry.liters,
+          existingLpo.station,
+          oldEntry.truckNo
+        );
+        
+        // Create driver account entry
+        await DriverAccountEntry.create({
+          date: newData.date || existingLpo.date,
+          month,
+          year,
+          lpoNo: existingLpo.lpoNo,
+          truckNo: newEntry.truckNo,
+          liters: newEntry.liters,
+          rate: newEntry.rate,
+          amount: newEntry.amount,
+          station: newData.station || existingLpo.station,
+          cancellationPoint: newEntry.cancellationPoint || 'DAR_GOING',
+          originalDoNo: newEntry.originalDoNo || oldEntry.doNo,
+          status: 'pending',
+          createdBy: req.user?.username || 'system',
+        });
       } else if (newEntry.liters !== oldEntry.liters) {
         // Entry liters changed - adjust the difference
         const difference = newEntry.liters - oldEntry.liters;
@@ -547,6 +634,36 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     // Add new entries that didn't exist before
     for (const [key, newEntry] of newEntriesMap) {
       if (!oldEntriesMap.has(key)) {
+        // Skip fuel record update for cancelled entries
+        if (newEntry.isCancelled) {
+          logger.info(`New cancelled entry: ${key}, skipping fuel record update`);
+          continue;
+        }
+        
+        // For driver account entries: skip fuel record but create driver account entry
+        if (newEntry.isDriverAccount) {
+          logger.info(`New driver account entry: ${key}, creating driver account record`);
+          
+          await DriverAccountEntry.create({
+            date: newData.date || existingLpo.date,
+            month,
+            year,
+            lpoNo: existingLpo.lpoNo,
+            truckNo: newEntry.truckNo,
+            liters: newEntry.liters,
+            rate: newEntry.rate,
+            amount: newEntry.amount,
+            station: newData.station || existingLpo.station,
+            cancellationPoint: newEntry.cancellationPoint || 'DAR_GOING',
+            originalDoNo: newEntry.originalDoNo || newEntry.doNo,
+            status: 'pending',
+            createdBy: req.user?.username || 'system',
+          });
+          
+          continue;
+        }
+        
+        // Regular new entry - update fuel record
         logger.info(`New entry: ${key}, adding ${newEntry.liters}L`);
         await updateFuelRecordForLPOEntry(
           newEntry.doNo,

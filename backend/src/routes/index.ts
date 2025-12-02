@@ -8,6 +8,7 @@ import yardFuelRoutes from './yardFuelRoutes';
 import dashboardRoutes from './dashboardRoutes';
 import userRoutes from './userRoutes';
 import adminRoutes from './adminRoutes';
+import driverAccountRoutes from './driverAccountRoutes';
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use('/yard-fuel', yardFuelRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/users', userRoutes);
 router.use('/admin', adminRoutes);
+router.use('/driver-accounts', driverAccountRoutes);
 
 export default router;

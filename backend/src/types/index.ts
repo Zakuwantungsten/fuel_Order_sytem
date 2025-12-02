@@ -97,6 +97,68 @@ export interface ILPODetail {
   // Amendment tracking
   originalLiters?: number | null;
   amendedAt?: Date | null;
+  // Cancellation and Driver Account fields
+  isCancelled?: boolean;
+  isDriverAccount?: boolean;
+  cancellationPoint?: CancellationPoint;
+  originalDoNo?: string;
+  cancellationReason?: string;
+  cancelledAt?: Date;
+}
+
+// Cancellation Point Types
+export type CancellationPoint = 
+  | 'DAR_GOING'
+  | 'MORO_GOING'
+  | 'MBEYA_GOING'
+  | 'INFINITY_GOING'
+  | 'TDM_GOING'
+  | 'ZAMBIA_GOING'
+  | 'ZAMBIA_NDOLA'
+  | 'ZAMBIA_KAPIRI'
+  | 'TDM_RETURN'
+  | 'MBEYA_RETURN'
+  | 'MORO_RETURN'
+  | 'DAR_RETURN'
+  | 'TANGA_RETURN';
+
+// Cancellation Entry
+export interface ICancellationEntry {
+  lpoNo: string;
+  truckNo: string;
+  originalDoNo: string;
+  cancellationPoint: CancellationPoint;
+  liters: number;
+  rate: number;
+  reason?: string;
+  isDriverAccount: boolean;
+  cancelledAt: Date;
+  cancelledBy: string;
+}
+
+// Driver Account Entry
+export interface IDriverAccountEntry {
+  date: string;
+  month: string;
+  year: number;
+  lpoNo: string;
+  truckNo: string;
+  driverName?: string;
+  liters: number;
+  rate: number;
+  amount: number;
+  station: string;
+  cancellationPoint: CancellationPoint;
+  originalDoNo?: string;
+  status: 'pending' | 'settled' | 'disputed';
+  settledAt?: Date;
+  settledBy?: string;
+  notes?: string;
+  createdBy: string;
+  isDeleted: boolean;
+  deletedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // LPO Summary/Document (Sheet in workbook)

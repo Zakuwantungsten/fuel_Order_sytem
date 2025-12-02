@@ -1,12 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertCircle, CheckCircle } from 'lucide-react';
-import { LPOEntry } from '../types';
+import { X, AlertCircle, CheckCircle, User, Ban, Info } from 'lucide-react';
+import { LPOEntry, CancellationPoint } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
+import { 
+  getAvailableCancellationPoints, 
+  getCancellationPointDisplayName,
+  ZAMBIA_RETURNING_PARTS
+} from '../services/cancellationService';
 
 interface LPOFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Partial<LPOEntry>) => void;
+  onSubmit: (data: Partial<LPOEntry> & { 
+    isCashMode?: boolean;
+    cancellationPoint?: CancellationPoint;
+    isDriverAccount?: boolean;
+    paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';
+  }) => void;
   initialData?: LPOEntry;
 }
 
@@ -27,6 +37,13 @@ const LPOForm: React.FC<LPOFormProps> = ({
     pricePerLtr: 0,
     destinations: '',
   });
+
+  // Cash mode and cancellation states
+  const [isCashMode, setIsCashMode] = useState(false);
+  const [cancellationDirection, setCancellationDirection] = useState<'going' | 'returning'>('going');
+  const [cancellationPoint, setCancellationPoint] = useState<CancellationPoint | ''>('');
+  const [isDriverAccount, setIsDriverAccount] = useState(false);
+  const [showCancellationInfo, setShowCancellationInfo] = useState(false);
 
   const [isAutoFetching, setIsAutoFetching] = useState(false);
   const [autoFillResult, setAutoFillResult] = useState<{
@@ -88,11 +105,51 @@ const LPOForm: React.FC<LPOFormProps> = ({
         ? parseFloat(value) || 0
         : value,
     }));
+    
+    // When CASH station is selected, enable cash mode
+    if (name === 'dieselAt') {
+      if (value === 'CASH') {
+        setIsCashMode(true);
+        setUseCustom(true); // Cash mode requires manual entry of liters
+      } else {
+        setIsCashMode(false);
+        setIsDriverAccount(false);
+        setCancellationPoint('');
+      }
+    }
+  };
+
+  // Handle driver's account toggle
+  const handleDriverAccountToggle = () => {
+    const newDriverAccount = !isDriverAccount;
+    setIsDriverAccount(newDriverAccount);
+    if (newDriverAccount) {
+      // Driver's account entries show NIL for DO and destination
+      setFormData(prev => ({
+        ...prev,
+        // Keep the DO reference internally but it won't be displayed
+      }));
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    
+    // Determine payment mode
+    let paymentMode: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' = 'STATION';
+    if (isDriverAccount) {
+      paymentMode = 'DRIVER_ACCOUNT';
+    } else if (isCashMode || formData.dieselAt === 'CASH') {
+      paymentMode = 'CASH';
+    }
+    
+    onSubmit({
+      ...formData,
+      isCashMode: isCashMode || formData.dieselAt === 'CASH',
+      cancellationPoint: cancellationPoint || undefined,
+      isDriverAccount,
+      paymentMode
+    });
     onClose();
   };
 
@@ -248,7 +305,128 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 ))}
               </select>
             </div>
+          </div>
 
+          {/* Cash Mode & Driver's Account Section */}
+          {(formData.dieselAt === 'CASH' || isCashMode) && (
+            <div className="mt-4 p-4 border-2 border-orange-300 dark:border-orange-700 rounded-lg bg-orange-50 dark:bg-orange-900/20">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-2">
+                  <Ban className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                  <span className="font-medium text-orange-800 dark:text-orange-300">
+                    Cash Mode Payment
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCancellationInfo(!showCancellationInfo)}
+                  className="text-sm text-orange-600 hover:text-orange-800 flex items-center"
+                >
+                  <Info className="w-4 h-4 mr-1" />
+                  {showCancellationInfo ? 'Hide' : 'Show'} Info
+                </button>
+              </div>
+              
+              {showCancellationInfo && (
+                <div className="mb-4 p-3 bg-orange-100 dark:bg-orange-900/30 rounded-md text-sm text-orange-700 dark:text-orange-300">
+                  <p className="mb-2">
+                    <strong>Cash Mode:</strong> Used when assigned station is out of fuel and fuel is bought from another station through cash.
+                  </p>
+                  <p className="mb-2">
+                    When you select a cancellation point, the truck's order at that station will be cancelled in the original LPO.
+                  </p>
+                  <p>
+                    <strong>Driver's Account:</strong> Check this for fuel given due to misuse or theft. DO and destination will show as NIL.
+                  </p>
+                </div>
+              )}
+
+              {/* Cancellation Point Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">
+                  Cancellation Point (Where to cancel original order)
+                </label>
+                
+                {/* Direction Toggle */}
+                <div className="flex space-x-4 mb-3">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancellationDirection"
+                      value="going"
+                      checked={cancellationDirection === 'going'}
+                      onChange={() => {
+                        setCancellationDirection('going');
+                        setCancellationPoint('');
+                      }}
+                      className="w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Going</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancellationDirection"
+                      value="returning"
+                      checked={cancellationDirection === 'returning'}
+                      onChange={() => {
+                        setCancellationDirection('returning');
+                        setCancellationPoint('');
+                      }}
+                      className="w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Returning</span>
+                  </label>
+                </div>
+
+                {/* Cancellation Point Dropdown */}
+                <select
+                  value={cancellationPoint}
+                  onChange={(e) => setCancellationPoint(e.target.value as CancellationPoint)}
+                  className="w-full px-3 py-2 border border-orange-300 dark:border-orange-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="">Select cancellation point...</option>
+                  {getAvailableCancellationPoints('CASH')[cancellationDirection].map((point) => (
+                    <option key={point} value={point}>
+                      {getCancellationPointDisplayName(point)}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Zambia Returning Note */}
+                {cancellationDirection === 'returning' && (
+                  <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                    Note: Zambia returning has two parts - Ndola ({ZAMBIA_RETURNING_PARTS.ndola.liters}L) and Kapiri ({ZAMBIA_RETURNING_PARTS.kapiri.liters}L). Select which part to cancel.
+                  </p>
+                )}
+              </div>
+
+              {/* Driver's Account Checkbox */}
+              <div className="border-t border-orange-300 dark:border-orange-600 pt-4">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isDriverAccount}
+                    onChange={handleDriverAccountToggle}
+                    className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                  />
+                  <div className="flex items-center space-x-2">
+                    <User className="w-5 h-5 text-red-600 dark:text-red-400" />
+                    <span className="font-medium text-red-700 dark:text-red-400">
+                      Driver's Account (Misuse/Theft)
+                    </span>
+                  </div>
+                </label>
+                {isDriverAccount && (
+                  <p className="mt-2 ml-8 text-sm text-red-600 dark:text-red-400">
+                    ⚠️ Fuel record will NOT be updated. DO and destination will show as NIL in exports.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 DO/SDO *

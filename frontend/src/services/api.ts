@@ -509,6 +509,138 @@ export interface FuelStation {
   isActive: boolean;
 }
 
+// Driver Account API
+import type { DriverAccountEntry, DriverAccountWorkbook, CancellationReport } from '../types';
+
+const CANCELLATION_HISTORY_KEY = 'fuel_order_cancellation_history';
+
+export const driverAccountAPI = {
+  // Get all entries with optional filters
+  getAll: async (filters?: { year?: number; month?: string; truckNo?: string; status?: string }): Promise<DriverAccountEntry[]> => {
+    const response = await apiClient.get('/driver-accounts', { params: filters });
+    return response.data.data?.data || response.data.data || [];
+  },
+
+  // Get available years
+  getAvailableYears: async (): Promise<number[]> => {
+    const response = await apiClient.get('/driver-accounts/years');
+    return response.data.data || [new Date().getFullYear()];
+  },
+
+  // Get entries by year (grouped by month)
+  getByYear: async (year: number): Promise<DriverAccountWorkbook | null> => {
+    try {
+      const response = await apiClient.get(`/driver-accounts/year/${year}`);
+      const data = response.data.data;
+      if (!data) return null;
+      
+      // Convert backend response to DriverAccountWorkbook format
+      const allEntries: DriverAccountEntry[] = [];
+      Object.values(data.entriesByMonth as Record<string, any[]>).forEach(monthEntries => {
+        allEntries.push(...monthEntries);
+      });
+      
+      return {
+        id: `da-${year}`,
+        year: data.year,
+        name: `DRIVER ACCOUNTS ${year}`,
+        entries: allEntries,
+        totalLiters: data.totalLiters,
+        totalAmount: data.totalAmount,
+        createdAt: new Date().toISOString()
+      };
+    } catch (error: any) {
+      if (error.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
+  // Get entry by ID
+  getById: async (id: string): Promise<DriverAccountEntry> => {
+    const response = await apiClient.get(`/driver-accounts/${id}`);
+    return response.data.data;
+  },
+
+  // Create entry
+  create: async (entry: Omit<DriverAccountEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<DriverAccountEntry> => {
+    const response = await apiClient.post('/driver-accounts', entry);
+    return response.data.data;
+  },
+
+  // Create batch entries
+  createBatch: async (entries: Omit<DriverAccountEntry, 'id' | 'createdAt' | 'updatedAt'>[]): Promise<DriverAccountEntry[]> => {
+    const response = await apiClient.post('/driver-accounts/batch', { entries });
+    return response.data.data;
+  },
+
+  // Update entry
+  update: async (id: string, updates: Partial<DriverAccountEntry>): Promise<DriverAccountEntry> => {
+    const response = await apiClient.put(`/driver-accounts/${id}`, updates);
+    return response.data.data;
+  },
+
+  // Update entry status
+  updateStatus: async (id: string, status: 'pending' | 'settled' | 'disputed', notes?: string): Promise<DriverAccountEntry> => {
+    const response = await apiClient.patch(`/driver-accounts/${id}/status`, { status, notes });
+    return response.data.data;
+  },
+
+  // Delete entry
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/driver-accounts/${id}`);
+  },
+
+  // Get summary statistics
+  getSummary: async (year?: number, month?: string): Promise<any> => {
+    const response = await apiClient.get('/driver-accounts/summary', { 
+      params: { year, month } 
+    });
+    return response.data.data;
+  },
+
+  // Export workbook to Excel
+  exportWorkbook: async (year: number): Promise<void> => {
+    const response = await apiClient.get(`/driver-accounts/year/${year}/export`, {
+      responseType: 'blob'
+    });
+    
+    const blob = new Blob([response.data], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `DRIVER_ACCOUNT_${year}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  // Get cancellation history (still uses local storage for now)
+  getCancellationHistory: async (): Promise<(CancellationReport & { savedAt: string })[]> => {
+    const stored = localStorage.getItem(CANCELLATION_HISTORY_KEY);
+    return stored ? JSON.parse(stored) : [];
+  },
+
+  // Save cancellation to history
+  saveCancellationToHistory: async (report: CancellationReport): Promise<void> => {
+    const history = await driverAccountAPI.getCancellationHistory();
+    history.unshift({
+      ...report,
+      savedAt: new Date().toISOString()
+    });
+    // Keep only last 100 reports
+    const trimmedHistory = history.slice(0, 100);
+    localStorage.setItem(CANCELLATION_HISTORY_KEY, JSON.stringify(trimmedHistory));
+  },
+
+  // Clear cancellation history
+  clearCancellationHistory: async (): Promise<void> => {
+    localStorage.removeItem(CANCELLATION_HISTORY_KEY);
+  }
+};
+
 export interface RouteConfig {
   destination: string;
   totalLiters: number;

@@ -8,3 +8,4 @@ export * as yardFuelController from './yardFuelController';
 export * as dashboardController from './dashboardController';
 export * as userController from './userController';
 export * as adminController from './adminController';
+export * as driverAccountController from './driverAccountController';

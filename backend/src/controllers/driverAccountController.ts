@@ -1,0 +1,521 @@
+import { Response } from 'express';
+import { DriverAccountEntry } from '../models';
+import { ApiError } from '../middleware/errorHandler';
+import { AuthRequest } from '../middleware/auth';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import ExcelJS from 'exceljs';
+
+/**
+ * Get all driver account entries with pagination and filtering
+ */
+export const getAllDriverAccountEntries = async (req: AuthRequest, res: Response) => {
+  const { page, limit, sort, order } = getPaginationParams(req.query);
+  const { year, month, truckNo, status, search } = req.query;
+
+  const query: any = { isDeleted: false };
+
+  // Apply filters
+  if (year) {
+    query.year = parseInt(year as string);
+  }
+  if (month) {
+    query.month = month;
+  }
+  if (truckNo) {
+    query.truckNo = { $regex: truckNo, $options: 'i' };
+  }
+  if (status) {
+    query.status = status;
+  }
+  if (search) {
+    query.$or = [
+      { truckNo: { $regex: search, $options: 'i' } },
+      { lpoNo: { $regex: search, $options: 'i' } },
+      { driverName: { $regex: search, $options: 'i' } },
+      { station: { $regex: search, $options: 'i' } },
+    ];
+  }
+
+  const skip = calculateSkip(page, limit);
+  const sortOptions: any = { [sort]: order === 'asc' ? 1 : -1 };
+
+  const [entries, total] = await Promise.all([
+    DriverAccountEntry.find(query)
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    DriverAccountEntry.countDocuments(query),
+  ]);
+
+  const response = createPaginatedResponse(entries, total, page, limit);
+  res.json(response);
+};
+
+/**
+ * Get driver account entry by ID
+ */
+export const getDriverAccountEntryById = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  const entry = await DriverAccountEntry.findOne({ _id: id, isDeleted: false });
+
+  if (!entry) {
+    throw new ApiError(404, 'Driver account entry not found');
+  }
+
+  res.json({
+    success: true,
+    data: entry,
+  });
+};
+
+/**
+ * Get driver account entries by year (for workbook view)
+ */
+export const getDriverAccountEntriesByYear = async (req: AuthRequest, res: Response) => {
+  const { year } = req.params;
+
+  const entries = await DriverAccountEntry.find({
+    year: parseInt(year),
+    isDeleted: false,
+  })
+    .sort({ date: -1, createdAt: -1 })
+    .lean();
+
+  // Group entries by month
+  const entriesByMonth: Record<string, any[]> = {};
+  entries.forEach((entry) => {
+    if (!entriesByMonth[entry.month]) {
+      entriesByMonth[entry.month] = [];
+    }
+    entriesByMonth[entry.month].push(entry);
+  });
+
+  res.json({
+    success: true,
+    data: {
+      year: parseInt(year),
+      entriesByMonth,
+      totalEntries: entries.length,
+      totalAmount: entries.reduce((sum, e) => sum + e.amount, 0),
+      totalLiters: entries.reduce((sum, e) => sum + e.liters, 0),
+    },
+  });
+};
+
+/**
+ * Get available years for driver account workbooks
+ */
+export const getAvailableYears = async (req: AuthRequest, res: Response) => {
+  const years = await DriverAccountEntry.distinct('year', { isDeleted: false });
+  
+  // Sort years in descending order
+  years.sort((a, b) => b - a);
+
+  // If no years exist, return current year
+  if (years.length === 0) {
+    years.push(new Date().getFullYear());
+  }
+
+  res.json({
+    success: true,
+    data: years,
+  });
+};
+
+/**
+ * Create a new driver account entry
+ */
+export const createDriverAccountEntry = async (req: AuthRequest, res: Response) => {
+  const {
+    date,
+    lpoNo,
+    truckNo,
+    driverName,
+    liters,
+    rate,
+    station,
+    cancellationPoint,
+    originalDoNo,
+    notes,
+  } = req.body;
+
+  // Parse date to extract month and year
+  const dateObj = new Date(date);
+  const month = dateObj.toLocaleString('default', { month: 'long' });
+  const year = dateObj.getFullYear();
+
+  const entry = new DriverAccountEntry({
+    date,
+    month,
+    year,
+    lpoNo,
+    truckNo,
+    driverName,
+    liters,
+    rate,
+    amount: liters * rate,
+    station,
+    cancellationPoint,
+    originalDoNo,
+    notes,
+    status: 'pending',
+    createdBy: req.user?.username || 'system',
+  });
+
+  await entry.save();
+
+  logger.info(`Driver account entry created: ${entry._id} for truck ${truckNo}`);
+
+  res.status(201).json({
+    success: true,
+    message: 'Driver account entry created successfully',
+    data: entry,
+  });
+};
+
+/**
+ * Create multiple driver account entries (batch)
+ */
+export const createBatchDriverAccountEntries = async (req: AuthRequest, res: Response) => {
+  const { entries } = req.body;
+
+  if (!entries || !Array.isArray(entries) || entries.length === 0) {
+    throw new ApiError(400, 'Entries array is required');
+  }
+
+  const createdEntries = [];
+
+  for (const entryData of entries) {
+    const dateObj = new Date(entryData.date);
+    const month = dateObj.toLocaleString('default', { month: 'long' });
+    const year = dateObj.getFullYear();
+
+    const entry = new DriverAccountEntry({
+      ...entryData,
+      month,
+      year,
+      amount: entryData.liters * entryData.rate,
+      status: 'pending',
+      createdBy: req.user?.username || 'system',
+    });
+
+    await entry.save();
+    createdEntries.push(entry);
+  }
+
+  logger.info(`Batch created ${createdEntries.length} driver account entries`);
+
+  res.status(201).json({
+    success: true,
+    message: `${createdEntries.length} driver account entries created successfully`,
+    data: createdEntries,
+  });
+};
+
+/**
+ * Update a driver account entry
+ */
+export const updateDriverAccountEntry = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body;
+
+  const entry = await DriverAccountEntry.findOne({ _id: id, isDeleted: false });
+
+  if (!entry) {
+    throw new ApiError(404, 'Driver account entry not found');
+  }
+
+  // If liters or rate changed, recalculate amount
+  if (updates.liters !== undefined || updates.rate !== undefined) {
+    const liters = updates.liters ?? entry.liters;
+    const rate = updates.rate ?? entry.rate;
+    updates.amount = liters * rate;
+  }
+
+  // If date changed, update month and year
+  if (updates.date) {
+    const dateObj = new Date(updates.date);
+    updates.month = dateObj.toLocaleString('default', { month: 'long' });
+    updates.year = dateObj.getFullYear();
+  }
+
+  Object.assign(entry, updates);
+  await entry.save();
+
+  logger.info(`Driver account entry updated: ${id}`);
+
+  res.json({
+    success: true,
+    message: 'Driver account entry updated successfully',
+    data: entry,
+  });
+};
+
+/**
+ * Update driver account entry status (settle/dispute)
+ */
+export const updateDriverAccountStatus = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const { status, notes } = req.body;
+
+  const entry = await DriverAccountEntry.findOne({ _id: id, isDeleted: false });
+
+  if (!entry) {
+    throw new ApiError(404, 'Driver account entry not found');
+  }
+
+  if (!['pending', 'settled', 'disputed'].includes(status)) {
+    throw new ApiError(400, 'Invalid status. Must be pending, settled, or disputed');
+  }
+
+  entry.status = status;
+  if (notes) {
+    entry.notes = notes;
+  }
+
+  if (status === 'settled') {
+    entry.settledAt = new Date();
+    entry.settledBy = req.user?.username;
+  }
+
+  await entry.save();
+
+  logger.info(`Driver account entry ${id} status updated to ${status}`);
+
+  res.json({
+    success: true,
+    message: `Entry marked as ${status}`,
+    data: entry,
+  });
+};
+
+/**
+ * Delete a driver account entry (soft delete)
+ */
+export const deleteDriverAccountEntry = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  const entry = await DriverAccountEntry.findOne({ _id: id, isDeleted: false });
+
+  if (!entry) {
+    throw new ApiError(404, 'Driver account entry not found');
+  }
+
+  entry.isDeleted = true;
+  entry.deletedAt = new Date();
+  await entry.save();
+
+  logger.info(`Driver account entry deleted: ${id}`);
+
+  res.json({
+    success: true,
+    message: 'Driver account entry deleted successfully',
+  });
+};
+
+/**
+ * Get summary statistics for driver accounts
+ */
+export const getDriverAccountSummary = async (req: AuthRequest, res: Response) => {
+  const { year, month } = req.query;
+
+  const matchQuery: any = { isDeleted: false };
+  if (year) {
+    matchQuery.year = parseInt(year as string);
+  }
+  if (month) {
+    matchQuery.month = month;
+  }
+
+  const summary = await DriverAccountEntry.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: { status: '$status' },
+        count: { $sum: 1 },
+        totalLiters: { $sum: '$liters' },
+        totalAmount: { $sum: '$amount' },
+      },
+    },
+  ]);
+
+  // Also get by month if year is specified
+  let monthlyBreakdown = [];
+  if (year) {
+    monthlyBreakdown = await DriverAccountEntry.aggregate([
+      { $match: { year: parseInt(year as string), isDeleted: false } },
+      {
+        $group: {
+          _id: '$month',
+          count: { $sum: 1 },
+          totalLiters: { $sum: '$liters' },
+          totalAmount: { $sum: '$amount' },
+          pendingCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] },
+          },
+          settledCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'settled'] }, 1, 0] },
+          },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+  }
+
+  res.json({
+    success: true,
+    data: {
+      summary,
+      monthlyBreakdown,
+    },
+  });
+};
+
+/**
+ * Export driver account workbook to Excel
+ */
+export const exportDriverAccountWorkbook = async (req: AuthRequest, res: Response) => {
+  const { year } = req.params;
+
+  const entries = await DriverAccountEntry.find({
+    year: parseInt(year),
+    isDeleted: false,
+  })
+    .sort({ date: 1, createdAt: 1 })
+    .lean();
+
+  if (entries.length === 0) {
+    throw new ApiError(404, `No driver account entries found for year ${year}`);
+  }
+
+  // Create workbook
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Fuel Order System';
+  workbook.created = new Date();
+
+  // Group entries by month
+  const entriesByMonth: Record<string, any[]> = {};
+  entries.forEach((entry) => {
+    if (!entriesByMonth[entry.month]) {
+      entriesByMonth[entry.month] = [];
+    }
+    entriesByMonth[entry.month].push(entry);
+  });
+
+  // Create a sheet for each month
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  months.forEach((month) => {
+    const monthEntries = entriesByMonth[month] || [];
+    const sheet = workbook.addWorksheet(month);
+
+    // Header
+    sheet.addRow([`Driver Account - ${month} ${year}`]);
+    sheet.mergeCells('A1:I1');
+    sheet.getCell('A1').font = { bold: true, size: 14 };
+    sheet.getCell('A1').alignment = { horizontal: 'center' };
+
+    // Column headers
+    sheet.addRow([]);
+    sheet.addRow([
+      'Date',
+      'LPO No',
+      'Truck No',
+      'Driver',
+      'Liters',
+      'Rate',
+      'Amount',
+      'Station',
+      'Status',
+    ]);
+
+    const headerRow = sheet.getRow(3);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { horizontal: 'center' };
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    // Data rows
+    let totalLiters = 0;
+    let totalAmount = 0;
+
+    monthEntries.forEach((entry) => {
+      sheet.addRow([
+        entry.date,
+        entry.lpoNo,
+        entry.truckNo,
+        entry.driverName || '-',
+        entry.liters,
+        entry.rate,
+        entry.amount,
+        entry.station,
+        entry.status.toUpperCase(),
+      ]);
+      totalLiters += entry.liters;
+      totalAmount += entry.amount;
+    });
+
+    // Total row
+    const totalRowNum = sheet.rowCount + 1;
+    sheet.addRow(['', '', '', 'TOTAL', totalLiters, '', totalAmount, '', '']);
+    const totalRow = sheet.getRow(totalRowNum);
+    totalRow.font = { bold: true };
+    totalRow.getCell(4).alignment = { horizontal: 'right' };
+
+    // Set column widths
+    sheet.getColumn(1).width = 12;
+    sheet.getColumn(2).width = 10;
+    sheet.getColumn(3).width = 12;
+    sheet.getColumn(4).width = 15;
+    sheet.getColumn(5).width = 10;
+    sheet.getColumn(6).width = 10;
+    sheet.getColumn(7).width = 12;
+    sheet.getColumn(8).width = 15;
+    sheet.getColumn(9).width = 10;
+  });
+
+  // Generate buffer
+  const buffer = await workbook.xlsx.writeBuffer();
+
+  // Set response headers
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename=DRIVER_ACCOUNT_${year}.xlsx`
+  );
+
+  res.send(buffer);
+};
+
+export const driverAccountController = {
+  getAllDriverAccountEntries,
+  getDriverAccountEntryById,
+  getDriverAccountEntriesByYear,
+  getAvailableYears,
+  createDriverAccountEntry,
+  createBatchDriverAccountEntries,
+  updateDriverAccountEntry,
+  updateDriverAccountStatus,
+  deleteDriverAccountEntry,
+  getDriverAccountSummary,
+  exportDriverAccountWorkbook,
+};

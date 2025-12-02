@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet } from 'lucide-react';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
 import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
 import LPODetailForm from '../components/LPODetailForm';
 import LPOWorkbook from '../components/LPOWorkbook';
 import LPOSummaryComponent from '../components/LPOSummary';
+import DriverAccountWorkbook from '../components/DriverAccountWorkbook';
 import { PermissionGuard } from '../components/ProtectedRoute';
 import { RESOURCES, ACTIONS } from '../utils/permissions';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
@@ -23,7 +24,7 @@ const LPOs = () => {
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
   const [stationFilter, setStationFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
-  const VIEW_MODES = ['list', 'workbook', 'summary'] as const;
+  const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account'] as const;
   type ViewMode = typeof VIEW_MODES[number];
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedWorkbookId, setSelectedWorkbookId] = useState<string | number | null>(null);
@@ -441,6 +442,56 @@ const LPOs = () => {
     );
   }
 
+  // Show driver account workbook view if selected
+  if (viewMode === 'driver_account') {
+    return (
+      <div>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Driver's Account Workbook</h1>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              Track fuel entries charged to driver accounts
+            </p>
+          </div>
+          <div className="mt-4 sm:mt-0 flex flex-wrap gap-3">
+            {/* View Mode Toggle */}
+            <div className="inline-flex rounded-md shadow-sm">
+              <button
+                onClick={() => setViewMode('list')}
+                className="px-3 py-2 text-sm font-medium rounded-l-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <List className="w-4 h-4 mr-1 inline" />
+                List
+              </button>
+              <button
+                onClick={() => setViewMode('summary' as ViewMode)}
+                className="px-3 py-2 text-sm font-medium border-t border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <BarChart3 className="w-4 h-4 mr-1 inline" />
+                Summary
+              </button>
+              <button
+                onClick={() => setViewMode('workbook')}
+                className="px-3 py-2 text-sm font-medium border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <Grid className="w-4 h-4 mr-1 inline" />
+                Workbook
+              </button>
+              <button
+                onClick={() => setViewMode('driver_account')}
+                className="px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b bg-blue-600 text-white border-blue-600"
+              >
+                <Wallet className="w-4 h-4 mr-1 inline" />
+                Driver Acc
+              </button>
+            </div>
+          </div>
+        </div>
+        <DriverAccountWorkbook />
+      </div>
+    );
+  }
+
   // Show summary view if selected
   if (viewMode === 'summary') {
     return (
@@ -471,10 +522,17 @@ const LPOs = () => {
               </button>
               <button
                 onClick={() => setViewMode('workbook')}
-                className="px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="px-3 py-2 text-sm font-medium border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <Grid className="w-4 h-4 mr-1 inline" />
                 Workbook
+              </button>
+              <button
+                onClick={() => setViewMode('driver_account')}
+                className="px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Wallet className="w-4 h-4 mr-1 inline" />
+                Driver Acc
               </button>
             </div>
           </div>
@@ -526,7 +584,7 @@ const LPOs = () => {
             </button>
             <button
               onClick={() => setViewMode('workbook')}
-              className={`px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b ${
+              className={`px-3 py-2 text-sm font-medium border ${
                 viewMode === 'workbook'
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -534,6 +592,17 @@ const LPOs = () => {
             >
               <Grid className="w-4 h-4 mr-1 inline" />
               Workbook
+            </button>
+            <button
+              onClick={() => setViewMode('driver_account')}
+              className={`px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b ${
+                (viewMode as ViewMode) === 'driver_account'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Wallet className="w-4 h-4 mr-1 inline" />
+              Driver Acc
             </button>
           </div>
           
