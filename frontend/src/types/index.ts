@@ -244,7 +244,7 @@ export interface MasterDOTemplate {
 }
 
 // User Types with Role-Based Authentication (Enhanced with new roles)
-export type UserRole = 'super_admin' | 'admin' | 'manager' | 'supervisor' | 'clerk' | 'driver' | 'viewer' | 'fuel_order_maker' | 'boss' | 'yard_personnel' | 'fuel_attendant' | 'station_manager' | 'payment_manager' | 'dar_yard' | 'tanga_yard' | 'mmsa_yard';
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'super_manager' | 'supervisor' | 'clerk' | 'driver' | 'viewer' | 'fuel_order_maker' | 'boss' | 'yard_personnel' | 'fuel_attendant' | 'station_manager' | 'payment_manager' | 'dar_yard' | 'tanga_yard' | 'mmsa_yard';
 
 export interface Permission {
   resource: string;

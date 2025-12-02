@@ -3,6 +3,7 @@ export type UserRole =
   | 'super_admin' 
   | 'admin' 
   | 'manager' 
+  | 'super_manager'
   | 'supervisor' 
   | 'clerk' 
   | 'driver' 

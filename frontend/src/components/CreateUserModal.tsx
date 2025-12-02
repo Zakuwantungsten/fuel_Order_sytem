@@ -35,10 +35,25 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }: Crea
     truckNo: '',
   });
 
+  // Fuel stations for manager role assignment
+  const FUEL_STATIONS = [
+    'INFINITY',
+    'LAKE CHILABOMBWE',
+    'LAKE NDOLA',
+    'LAKE KAPIRI',
+    'LAKE KITWE',
+    'LAKE KABANGWA',
+    'LAKE CHINGOLA',
+    'LAKE TUNDUMA',
+    'GBP MOROGORO',
+    'GBP KANGE',
+  ];
+
   const roles: { value: UserRole; label: string; description: string }[] = [
     { value: 'super_admin', label: 'Super Admin', description: 'Full system access' },
     { value: 'admin', label: 'Admin', description: 'Administrative access' },
-    { value: 'manager', label: 'Manager', description: 'Management operations' },
+    { value: 'super_manager', label: 'Super Manager', description: 'View all station LPOs (except Lake Tunduma)' },
+    { value: 'manager', label: 'Station Manager (LPO View)', description: 'View LPOs for assigned station only' },
     { value: 'supervisor', label: 'Supervisor', description: 'Supervisory access' },
     { value: 'clerk', label: 'Clerk', description: 'Data entry' },
     { value: 'driver', label: 'Driver', description: 'Driver portal' },
@@ -47,18 +62,27 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }: Crea
     { value: 'boss', label: 'Boss', description: 'Executive view' },
     { value: 'yard_personnel', label: 'Yard Personnel', description: 'Yard operations' },
     { value: 'fuel_attendant', label: 'Fuel Attendant', description: 'Fuel station operations' },
-    { value: 'station_manager', label: 'Station Manager', description: 'Station management' },
+    { value: 'station_manager', label: 'Station Manager (Operations)', description: 'Station fuel operations' },
     { value: 'payment_manager', label: 'Payment Manager', description: 'Payment operations' },
     { value: 'dar_yard', label: 'DAR Yard', description: 'DAR yard dispense' },
     { value: 'tanga_yard', label: 'Tanga Yard', description: 'Tanga yard dispense' },
     { value: 'mmsa_yard', label: 'MMSA Yard', description: 'MMSA yard dispense' },
   ];
 
+  // Check if station selection is required for this role
+  const requiresStationSelection = formData.role === 'manager';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.username || !formData.email || !formData.password || !formData.firstName || !formData.lastName) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    // Validate station selection for manager role
+    if (requiresStationSelection && !formData.station) {
+      setError('Please select a station for the manager');
       return;
     }
 
@@ -220,7 +244,7 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }: Crea
               <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
               <select
                 value={formData.role}
-                onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}
+                onChange={e => setFormData({ ...formData, role: e.target.value as UserRole, station: '' })}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-colors"
                 required
               >
@@ -232,6 +256,41 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }: Crea
               </select>
             </div>
           </div>
+
+          {/* Station Selection for Manager Role */}
+          {requiresStationSelection && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Assigned Station <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.station}
+                onChange={e => setFormData({ ...formData, station: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                required
+              >
+                <option value="">Select a station...</option>
+                {FUEL_STATIONS.map(station => (
+                  <option key={station} value={station}>
+                    {station}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                This manager will only see LPOs for the selected station
+              </p>
+            </div>
+          )}
+
+          {/* Super Manager Info */}
+          {formData.role === 'super_manager' && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-lg">
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                <strong>Super Manager:</strong> This user will have read-only access to view all station LPOs 
+                except Lake Tunduma (Tanzania). They can filter by station and search by truck/LPO number.
+              </p>
+            </div>
+          )}
 
           {/* Additional Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -250,18 +309,21 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }: Crea
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Station
-              </label>
-              <input
-                type="text"
-                value={formData.station}
-                onChange={e => setFormData({ ...formData, station: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                placeholder="DAR ES SALAAM"
-              />
-            </div>
+            {/* Only show station input for non-manager roles */}
+            {!requiresStationSelection && formData.role !== 'super_manager' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Station
+                </label>
+                <input
+                  type="text"
+                  value={formData.station}
+                  onChange={e => setFormData({ ...formData, station: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  placeholder="DAR ES SALAAM"
+                />
+              </div>
+            )}
           </div>
 
           {/* Driver-specific field */}

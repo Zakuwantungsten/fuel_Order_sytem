@@ -46,6 +46,7 @@ const userSchema = new Schema<IUserDocument>(
         'super_admin',
         'admin',
         'manager',
+        'super_manager',
         'supervisor',
         'clerk',
         'driver',

@@ -43,6 +43,37 @@ Password: mmsa123
 Role: mmsa_yard
 Yard: MMSA YARD
 
+📍 Each station manager can ONLY view LPOs for their assigned station.
+
+----------------------------------------------------------------------
+| Station            | Username         | Password          |
+----------------------------------------------------------------------
+| LAKE CHILABOMBWE   | mgr_chilabombwe  | Chilabombwe@2025  |
+| LAKE NDOLA         | mgr_ndola        | Ndola@2025        |
+| LAKE KAPIRI        | mgr_kapiri       | Kapiri@2025       |
+| LAKE KITWE         | mgr_kitwe        | Kitwe@2025        |
+| LAKE KABANGWA      | mgr_kabangwa     | Kabangwa@2025     |
+| LAKE CHINGOLA      | mgr_chingola     | Chingola@2025     |
+| LAKE TUNDUMA       | mgr_tunduma      | Tunduma@2025      |
+| GBP MOROGORO       | mgr_morogoro     | Morogoro@2025     |
+| GBP KANGE          | mgr_kange        | Kange@2025        |
+| INFINITY           | mgr_infinity     | Infinity@2025     |
+----------------------------------------------------------------------
+
+
+======================================================================
+                    SUPER MANAGER CREDENTIALS
+======================================================================
+
+👑 Super Manager can view ALL Zambian LAKE stations (excludes Tanzania & Infinity).
+
+----------------------------------------------------------------------
+| Role               | Username         | Password          |
+----------------------------------------------------------------------
+| Super Manager      | super_manager    | SuperMgr@2025     |
+----------------------------------------------------------------------
+
+
 
 things to work on 
 put an excel like interface exactlly to my codes for easy lpo making and 

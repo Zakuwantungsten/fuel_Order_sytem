@@ -23,6 +23,7 @@ import DriverPortal from './DriverPortal';
 import StationView from './StationView';
 import PaymentManager from './PaymentManager';
 import AdminDashboard from './AdminDashboard';
+import ManagerView from './ManagerView';
 import { useAuth } from '../contexts/AuthContext';
 
 // Import your existing components
@@ -40,6 +41,7 @@ interface EnhancedDashboardProps {
 const getInitialTab = (userRole: string): string => {
   const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard'].includes(userRole);
   const isDriver = userRole === 'driver';
+  const isManager = userRole === 'manager' || userRole === 'super_manager' || userRole === 'station_manager';
   
   // Get stored tab from localStorage
   const storedTab = localStorage.getItem('fuel_order_active_tab');
@@ -57,8 +59,11 @@ const getInitialTab = (userRole: string): string => {
     if (userRole === 'payment_manager') {
       return ['overview', 'payments'];
     }
-    if (userRole === 'fuel_attendant' || userRole === 'station_manager') {
+    if (userRole === 'fuel_attendant') {
       return ['overview', 'station_view'];
+    }
+    if (isManager) {
+      return ['manager_view'];
     }
     return ['overview'];
   };
@@ -73,12 +78,14 @@ const getInitialTab = (userRole: string): string => {
   // Default based on role
   if (isYardRole || userRole === 'yard_personnel') return 'yard_fuel';
   if (isDriver) return 'driver_portal';
+  if (isManager) return 'manager_view';
   return 'overview';
 };
 
 export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   // Check if user is a driver
   const isDriver = user.role === 'driver';
+  const isManager = user.role === 'manager' || user.role === 'super_manager' || user.role === 'station_manager';
   
   // For drivers, default to driver_portal, no overview
   // Now reads from localStorage to persist across refreshes
@@ -96,6 +103,19 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     if (isDriver) {
       return [
         { id: 'driver_portal', label: 'My Orders', icon: TruckIcon },
+      ];
+    }
+
+    // Manager/Super Manager/Station Manager - only see LPO view
+    if (isManager) {
+      let label = 'Station LPOs';
+      if (user.role === 'super_manager') {
+        label = 'All Stations LPOs';
+      } else if (user.role === 'station_manager') {
+        label = `${user.station || 'My Station'} LPOs`;
+      }
+      return [
+        { id: 'manager_view', label, icon: ClipboardList },
       ];
     }
 
@@ -180,6 +200,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <Reports user={user} />;
       case 'admin':
         return <AdminDashboard user={user} />;
+      case 'manager_view':
+        return <ManagerView user={user} />;
       default:
         return <Dashboard />;
     }

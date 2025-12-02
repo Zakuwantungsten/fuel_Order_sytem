@@ -58,7 +58,9 @@ const Login: React.FC = () => {
   const demoAccounts = [
     { username: 'superadmin', role: 'super_admin', password: 'admin123' },
     { username: 'admin', role: 'admin', password: 'admin123' },
-    { username: 'manager', role: 'manager', password: 'manager123' },
+    { username: 'supermanager', role: 'super_manager', password: 'manager123' },
+    { username: 'mgr_infinity', role: 'manager', password: 'manager123', station: 'INFINITY' },
+    { username: 'mgr_ndola', role: 'manager', password: 'manager123', station: 'LAKE NDOLA' },
     { username: 'supervisor', role: 'supervisor', password: 'super123' },
     { username: 'clerk', role: 'clerk', password: 'clerk123' },
     { username: 'driver1', role: 'driver', password: 'driver123' },

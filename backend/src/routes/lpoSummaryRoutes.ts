@@ -11,12 +11,13 @@ const router = Router();
 router.use(authenticate);
 
 // Workbook routes (must be before /:id routes to avoid conflicts)
+// manager and super_manager have read access to workbooks
 router.get('/workbooks', asyncHandler(lpoSummaryController.getAllWorkbooks));
 router.get('/workbooks/years', asyncHandler(lpoSummaryController.getAvailableYears));
 router.get('/workbooks/:year', asyncHandler(lpoSummaryController.getWorkbookByYear));
 router.get('/workbooks/:year/export', asyncHandler(lpoSummaryController.exportWorkbook));
 
-// Get routes
+// Get routes - all authenticated users can read
 router.get('/next-number', asyncHandler(lpoSummaryController.getNextLPONumber));
 router.get('/find-at-checkpoint', asyncHandler(lpoSummaryController.findLPOsAtCheckpoint));
 router.get('/check-duplicate', asyncHandler(lpoSummaryController.checkDuplicateAllocation));
@@ -24,34 +25,34 @@ router.get('/', commonValidation.pagination, validate, asyncHandler(lpoSummaryCo
 router.get('/lpo/:lpoNo', asyncHandler(lpoSummaryController.getLPOSummaryByLPONo));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(lpoSummaryController.getLPOSummaryById));
 
-// Create route
+// Create route - managers (manager/super_manager) have READ-ONLY access
 router.post(
   '/',
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'station_manager'),
+  authorize('super_admin', 'admin', 'fuel_order_maker', 'station_manager'),
   lpoSummaryValidation.create,
   validate,
   asyncHandler(lpoSummaryController.createLPOSummary)
 );
 
-// Cancel truck in LPO route
+// Cancel truck in LPO route - managers have READ-ONLY access
 router.post(
   '/cancel-truck',
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'station_manager'),
+  authorize('super_admin', 'admin', 'fuel_order_maker', 'station_manager'),
   asyncHandler(lpoSummaryController.cancelTruckInLPO)
 );
 
-// Forward LPO to another station route
+// Forward LPO to another station route - managers have READ-ONLY access
 router.post(
   '/forward',
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'station_manager'),
+  authorize('super_admin', 'admin', 'fuel_order_maker', 'station_manager'),
   asyncHandler(lpoSummaryController.forwardLPO)
 );
 
-// Update route
+// Update route - managers have READ-ONLY access
 router.put(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'station_manager'),
+  authorize('super_admin', 'admin', 'fuel_order_maker', 'station_manager'),
   validate,
   asyncHandler(lpoSummaryController.updateLPOSummary)
 );
