@@ -138,6 +138,57 @@ export const getCancellationPointDisplayName = (point: CancellationPoint): strin
   return displayNames[point] || point;
 };
 
+/**
+ * Auto-detect cancellation point based on station and direction
+ * This eliminates the need for user to manually select the checkpoint
+ * @param station - The LPO station (e.g., 'CASH', 'LAKE CHILABOMBWE', etc.)
+ * @param direction - The direction of the journey ('going' or 'returning')
+ * @returns The appropriate cancellation point
+ */
+export const getAutoCancellationPoint = (station: string, direction: 'going' | 'returning'): CancellationPoint => {
+  const stationUpper = station.toUpperCase().trim();
+  
+  // Direct mapping for specific stations
+  const stationMapping = STATION_TO_CANCELLATION_POINT[stationUpper];
+  if (stationMapping) {
+    return stationMapping;
+  }
+  
+  // For CASH station, determine based on direction
+  if (stationUpper === 'CASH') {
+    // Default cancellation points for CASH based on direction
+    return direction === 'going' ? 'ZAMBIA_GOING' : 'ZAMBIA_KAPIRI';
+  }
+  
+  // For stations containing "LAKE" (Zambian stations)
+  if (stationUpper.includes('LAKE')) {
+    if (stationUpper.includes('CHILABOMBWE')) return 'ZAMBIA_GOING';
+    if (stationUpper.includes('NDOLA')) return 'ZAMBIA_NDOLA';
+    if (stationUpper.includes('KAPIRI')) return 'ZAMBIA_KAPIRI';
+    if (stationUpper.includes('TUNDUMA')) return direction === 'going' ? 'TDM_GOING' : 'TDM_RETURN';
+    // Default for other LAKE stations based on direction
+    return direction === 'going' ? 'ZAMBIA_GOING' : 'ZAMBIA_KAPIRI';
+  }
+  
+  // For INFINITY (Mbeya area)
+  if (stationUpper.includes('INFINITY')) {
+    return direction === 'going' ? 'MBEYA_GOING' : 'MBEYA_RETURN';
+  }
+  
+  // For GBP/GPB stations
+  if (stationUpper.includes('GBP') || stationUpper.includes('GPB')) {
+    if (stationUpper.includes('MOROGORO') || stationUpper.includes('MORO')) {
+      return direction === 'going' ? 'MORO_GOING' : 'MORO_RETURN';
+    }
+    if (stationUpper.includes('KANGE') || stationUpper.includes('TANGA')) {
+      return 'TANGA_RETURN';
+    }
+  }
+  
+  // Default fallback based on direction
+  return direction === 'going' ? 'DAR_GOING' : 'DAR_RETURN';
+};
+
 // Get available cancellation points (checkpoints) based on journey direction
 export const getAvailableCancellationPoints = (_paymentMode: 'CASH' | 'DRIVER_ACCOUNT'): {
   going: CancellationPoint[];
@@ -362,6 +413,7 @@ export default {
   getCancellationPointDisplayName,
   getAvailableCancellationPoints,
   getFuelRecordFieldFromCancellationPoint,
+  getAutoCancellationPoint,
   createCancellationInfo,
   generateCancellationReport,
   generateCancellationStatement,

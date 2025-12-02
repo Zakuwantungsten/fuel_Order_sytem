@@ -114,25 +114,44 @@ export const getFuelRecordsByTruck = async (req: AuthRequest, res: Response): Pr
 };
 
 /**
- * Get fuel record by going DO number
+ * Get fuel record by DO number (searches both goingDo and returnDo)
+ * Returns the fuel record along with the detected direction
  */
 export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { doNumber } = req.params;
 
-    const fuelRecord = await FuelRecord.findOne({
+    // First try to find by goingDo
+    let fuelRecord = await FuelRecord.findOne({
       goingDo: doNumber,
       isDeleted: false,
     });
+
+    let direction: 'going' | 'returning' = 'going';
+
+    // If not found as goingDo, try returnDo
+    if (!fuelRecord) {
+      fuelRecord = await FuelRecord.findOne({
+        returnDo: doNumber,
+        isDeleted: false,
+      });
+      direction = 'returning';
+    }
 
     if (!fuelRecord) {
       throw new ApiError(404, 'Fuel record not found');
     }
 
+    // Include direction in the response
+    const responseData = {
+      ...fuelRecord.toObject(),
+      detectedDirection: direction
+    };
+
     res.status(200).json({
       success: true,
       message: 'Fuel record retrieved successfully',
-      data: fuelRecord,
+      data: responseData,
     });
   } catch (error: any) {
     throw error;

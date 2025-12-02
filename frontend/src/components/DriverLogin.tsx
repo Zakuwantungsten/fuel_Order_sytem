@@ -57,17 +57,17 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4 transition-colors">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl dark:shadow-gray-900/50 p-8 w-full max-w-md transition-colors">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-indigo-600 rounded-full mb-4">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-indigo-600 dark:bg-indigo-500 rounded-full mb-4">
             <Truck className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
             Driver Access
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 dark:text-gray-400">
             Enter your truck number to view orders
           </p>
         </div>
@@ -75,7 +75,7 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="truckNo" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="truckNo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Truck Number
             </label>
             <input
@@ -84,23 +84,23 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
               value={truckNo}
               onChange={(e) => handleTruckNoChange(e.target.value)}
               placeholder="e.g., T699 DXY"
-              className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors uppercase"
+              className="w-full px-4 py-3 text-lg border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
               disabled={loading}
               autoFocus
             />
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-2">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-start space-x-2">
+              <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
             </div>
           )}
 
           <button
             type="submit"
             disabled={loading || !truckNo.trim()}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
           >
             {loading ? (
               <>
@@ -117,14 +117,14 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
         </form>
 
         {/* Info */}
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <p className="text-xs text-gray-500 text-center">
+        <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+          <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
             This portal is for drivers only. If you're not a driver, please use the main login portal.
           </p>
           <div className="mt-4 text-center">
             <a 
               href="/" 
-              className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+              className="text-sm text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium"
             >
               ← Back to Main Login
             </a>

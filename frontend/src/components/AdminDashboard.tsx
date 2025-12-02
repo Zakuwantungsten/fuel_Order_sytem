@@ -637,25 +637,25 @@ function StationsTab({
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {stations.map(station => (
-              <tr key={station.id} className={!station.isActive ? 'bg-gray-50' : ''}>
-                <td className="px-4 py-3 font-medium text-gray-900">{station.name}</td>
-                <td className="px-4 py-3 text-gray-600">{station.location}</td>
+              <tr key={station.id} className={!station.isActive ? 'bg-gray-50 dark:bg-gray-700/50' : ''}>
+                <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{station.name}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{station.location}</td>
                 <td className="px-4 py-3">
                   {editing === station.id ? (
                     <input
                       type="number"
                       value={editPrice}
                       onChange={e => setEditPrice(Number(e.target.value))}
-                      className="w-24 px-2 py-1 border rounded focus:ring-2 focus:ring-indigo-500"
+                      className="w-24 px-2 py-1 border dark:border-gray-600 rounded focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       autoFocus
                     />
                   ) : (
-                    <span className="font-mono">{station.pricePerLiter.toLocaleString()}</span>
+                    <span className="font-mono text-gray-900 dark:text-gray-100">{station.pricePerLiter.toLocaleString()}</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded text-xs ${
-                    station.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    station.isActive ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300'
                   }`}>
                     {station.isActive ? 'Active' : 'Inactive'}
                   </span>
@@ -738,7 +738,7 @@ function RoutesTab({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">Route Total Liters Configuration</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Route Total Liters Configuration</h3>
         <button
           onClick={() => setShowAdd(!showAdd)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
@@ -750,22 +750,22 @@ function RoutesTab({
 
       {/* Add Route Form */}
       {showAdd && (
-        <div className="bg-gray-50 rounded-lg p-4 border">
-          <h4 className="font-medium text-gray-900 mb-3">Add New Route</h4>
+        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border dark:border-gray-600">
+          <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3">Add New Route</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
               type="text"
               placeholder="Destination (e.g., KOLWEZI)"
               value={newRoute.destination}
               onChange={e => setNewRoute({ ...newRoute, destination: e.target.value.toUpperCase() })}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
             <input
               type="number"
               placeholder="Total Liters"
               value={newRoute.totalLiters}
               onChange={e => setNewRoute({ ...newRoute, totalLiters: Number(e.target.value) })}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
           <div className="flex gap-2 mt-3">
@@ -778,7 +778,7 @@ function RoutesTab({
             </button>
             <button
               onClick={() => setShowAdd(false)}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500"
             >
               Cancel
             </button>
@@ -791,10 +791,10 @@ function RoutesTab({
         {routes.map(route => (
           <div
             key={route.destination}
-            className={`bg-white border rounded-lg p-4 ${!route.isActive ? 'opacity-50' : ''}`}
+            className={`bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4 ${!route.isActive ? 'opacity-50' : ''}`}
           >
             <div className="flex items-center justify-between mb-2">
-              <h4 className="font-semibold text-gray-900">{route.destination}</h4>
+              <h4 className="font-semibold text-gray-900 dark:text-gray-100">{route.destination}</h4>
               <div className="flex gap-1">
                 <button
                   onClick={() => {
@@ -805,7 +805,7 @@ function RoutesTab({
                       setEditLiters(route.totalLiters);
                     }
                   }}
-                  className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                  className="p-1 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded"
                 >
                   {editing === route.destination ? <Save className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
                 </button>
@@ -875,7 +875,7 @@ function TrucksTab({
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">Truck Extra Fuel Batches</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Truck Extra Fuel Batches</h3>
         <button
           onClick={() => setShowAdd(!showAdd)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
@@ -887,27 +887,27 @@ function TrucksTab({
 
       {/* Add Truck Form */}
       {showAdd && (
-        <div className="bg-gray-50 rounded-lg p-4 border">
-          <h4 className="font-medium text-gray-900 mb-3">Add New Truck to Batch</h4>
+        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border dark:border-gray-600">
+          <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3">Add New Truck to Batch</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <input
               type="text"
               placeholder="Truck Suffix (e.g., xyz)"
               value={newTruck.truckSuffix}
               onChange={e => setNewTruck({ ...newTruck, truckSuffix: e.target.value.toLowerCase() })}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
             <input
               type="text"
               placeholder="Full Truck Number (optional)"
               value={newTruck.truckNumber}
               onChange={e => setNewTruck({ ...newTruck, truckNumber: formatTruckNumber(e.target.value) })}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
             <select
               value={newTruck.extraLiters}
               onChange={e => setNewTruck({ ...newTruck, extraLiters: Number(e.target.value) })}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             >
               <option value={60}>60L Extra</option>
               <option value={80}>80L Extra</option>
@@ -924,7 +924,7 @@ function TrucksTab({
             </button>
             <button
               onClick={() => setShowAdd(false)}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500"
             >
               Cancel
             </button>
@@ -934,29 +934,29 @@ function TrucksTab({
 
       {/* Batch Groups */}
       {batchGroups.map(group => (
-        <div key={group.key} className="bg-white border rounded-lg overflow-hidden">
+        <div key={group.key} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg overflow-hidden">
           <div className={`${group.color} text-white px-4 py-3 flex items-center justify-between`}>
             <h4 className="font-semibold">{group.label} Batch</h4>
             <span className="text-sm opacity-90">{group.trucks.length} trucks</span>
           </div>
           <div className="p-4">
             {group.trucks.length === 0 ? (
-              <p className="text-gray-500 text-sm">No trucks in this batch</p>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">No trucks in this batch</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {group.trucks.map(truck => (
                   <div
                     key={truck.truckSuffix}
-                    className="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded-lg"
+                    className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded-lg"
                   >
-                    <Truck className="w-4 h-4 text-gray-600" />
-                    <span className="font-mono font-medium uppercase">{truck.truckSuffix}</span>
+                    <Truck className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    <span className="font-mono font-medium uppercase text-gray-900 dark:text-gray-100">{truck.truckSuffix}</span>
                     {truck.truckNumber && (
-                      <span className="text-xs text-gray-500">({truck.truckNumber})</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">({truck.truckNumber})</span>
                     )}
                     <button
                       onClick={() => onRemove(truck.truckSuffix)}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded ml-1"
+                      className="p-1 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded ml-1"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -996,7 +996,7 @@ function AllocationsTab({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">Standard Fuel Allocations</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Standard Fuel Allocations</h3>
         {!editing ? (
           <button
             onClick={() => {
@@ -1022,7 +1022,7 @@ function AllocationsTab({
             </button>
             <button
               onClick={() => setEditing(false)}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500"
             >
               Cancel
             </button>
@@ -1032,18 +1032,18 @@ function AllocationsTab({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {fields.map(field => (
-          <div key={field.key} className="bg-white border rounded-lg p-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-            <p className="text-xs text-gray-500 mb-2">{field.description}</p>
+          <div key={field.key} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{field.label}</label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{field.description}</p>
             {editing ? (
               <input
                 type="number"
                 value={(formData as any)[field.key]}
                 onChange={e => setFormData({ ...formData, [field.key]: Number(e.target.value) })}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             ) : (
-              <p className="text-2xl font-bold text-indigo-600">
+              <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
                 {((allocations as any)[field.key] || 0).toLocaleString()}L
               </p>
             )}
@@ -1147,26 +1147,26 @@ function UsersTab({
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {filteredUsers.map(user => (
-              <tr key={user.id} className={!user.isActive ? 'bg-gray-50' : ''}>
+              <tr key={user.id} className={!user.isActive ? 'bg-gray-50 dark:bg-gray-700/50' : ''}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <span className="text-indigo-600 font-medium text-sm">
+                    <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center">
+                      <span className="text-indigo-600 dark:text-indigo-400 font-medium text-sm">
                         {user.firstName?.[0]}{user.lastName?.[0]}
                       </span>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">{user.firstName} {user.lastName}</p>
-                      <p className="text-sm text-gray-500">{user.email}</p>
+                      <p className="font-medium text-gray-900 dark:text-gray-100">{user.firstName} {user.lastName}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
                     </div>
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className="px-2 py-1 bg-gray-100 rounded text-xs capitalize">
+                  <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs capitalize text-gray-900 dark:text-gray-100">
                     {user.role?.replace(/_/g, ' ')}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-gray-600">{user.department || '-'}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{user.department || '-'}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded text-xs ${
                     user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'

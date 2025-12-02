@@ -1243,7 +1243,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               value={entry.doNo}
                               onChange={(e) => handleEntryChange(index, 'doNo', e.target.value)}
                               placeholder="NIL"
-                              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
                           </td>
                           <td className="px-3 py-3">
@@ -1251,7 +1251,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               type="number"
                               value={entry.liters}
                               onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
-                              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
                           </td>
                           <td className="px-3 py-3">
@@ -1260,7 +1260,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               value={entry.rate}
                               onChange={(e) => handleEntryChange(index, 'rate', parseFloat(e.target.value) || 0)}
                               step="0.01"
-                              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
                           </td>
                           <td className="px-3 py-3">
@@ -1268,7 +1268,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               type="number"
                               value={entry.amount.toFixed(2)}
                               readOnly
-                              className="w-24 px-2 py-1 border border-gray-300 rounded text-sm bg-gray-50"
+                              className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-gray-100"
                             />
                           </td>
                           <td className="px-3 py-3">
@@ -1277,14 +1277,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               value={entry.dest}
                               onChange={(e) => handleEntryChange(index, 'dest', e.target.value)}
                               placeholder="NIL"
-                              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
                           </td>
                           <td className="px-3 py-3">
                             <button
                               type="button"
                               onClick={() => handleRemoveEntry(index)}
-                              className="text-red-600 hover:text-red-800"
+                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1294,7 +1294,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     })
                   ) : (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">
+                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                         No entries added. Click "Add Entry" to add fuel supply details.
                       </td>
                     </tr>

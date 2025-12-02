@@ -412,6 +412,26 @@ export const fuelRecordsAPI = {
     const response = await apiClient.get(`/fuel-records/${id}/details`);
     return response.data.data;
   },
+
+  // Get fuel record by DO number and determine direction
+  getByDoNumber: async (doNumber: string): Promise<{ fuelRecord: FuelRecord; direction: 'going' | 'returning' } | null> => {
+    try {
+      const response = await apiClient.get(`/fuel-records/do/${doNumber}`);
+      if (response.data.data) {
+        const fuelRecord = response.data.data;
+        // Use the detected direction from the backend
+        const direction = fuelRecord.detectedDirection || (fuelRecord.goingDo === doNumber ? 'going' : 'returning');
+        return { fuelRecord, direction };
+      }
+      return null;
+    } catch (error: any) {
+      // If not found, return null
+      if (error.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  },
   
   create: async (data: Partial<FuelRecord>): Promise<FuelRecord> => {
     const response = await apiClient.post('/fuel-records', data);

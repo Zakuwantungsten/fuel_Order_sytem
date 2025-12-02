@@ -165,10 +165,10 @@ export function DriverPortal({ user }: DriverPortalProps) {
 
       <div className="px-4 py-4 space-y-4">
         {/* Notifications Section */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 px-4 py-3 border-b">
-            <h3 className="font-semibold text-gray-900 flex items-center text-lg">
-              <Bell className="w-5 h-5 mr-2 text-indigo-600" />
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transition-colors">
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 px-4 py-3 border-b dark:border-gray-700">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center text-lg">
+              <Bell className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
               Delivery Orders
               {unreadCount > 0 && (
                 <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
@@ -177,7 +177,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
               )}
             </h3>
           </div>
-          <div className="divide-y">
+          <div className="divide-y dark:divide-gray-700">
             {notifications.length === 0 ? (
               <div className="p-8 text-center">
                 <Info className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
@@ -189,19 +189,19 @@ export function DriverPortal({ user }: DriverPortalProps) {
                   key={notification.id}
                   onClick={() => markNotificationRead(notification.id)}
                   className={`p-4 transition-colors ${
-                    notification.read ? 'bg-white' : 'bg-blue-50'
+                    notification.read ? 'bg-white dark:bg-gray-800' : 'bg-blue-50 dark:bg-blue-900/20'
                   }`}
                 >
                   <div className="flex items-start space-x-3">
                     <div
                       className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
                         notification.type === 'import'
-                          ? 'bg-green-100'
+                          ? 'bg-green-100 dark:bg-green-900/30'
                           : notification.type === 'export'
-                          ? 'bg-blue-100'
+                          ? 'bg-blue-100 dark:bg-blue-900/30'
                           : notification.type === 'return'
-                          ? 'bg-orange-100'
-                          : 'bg-gray-100'
+                          ? 'bg-orange-100 dark:bg-orange-900/30'
+                          : 'bg-gray-100 dark:bg-gray-700'
                       }`}
                     >
                       {notification.type === 'import' || notification.type === 'export' ? (
@@ -221,12 +221,12 @@ export function DriverPortal({ user }: DriverPortalProps) {
                         <span
                           className={`text-xs font-semibold px-2 py-1 rounded ${
                             notification.type === 'import'
-                              ? 'bg-green-100 text-green-800'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                               : notification.type === 'export'
-                              ? 'bg-blue-100 text-blue-800'
+                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
                               : notification.type === 'return'
-                              ? 'bg-orange-100 text-orange-800'
-                              : 'bg-gray-100 text-gray-800'
+                              ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
                           }`}
                         >
                           {notification.type.toUpperCase()}
@@ -235,15 +235,15 @@ export function DriverPortal({ user }: DriverPortalProps) {
                           <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-900 font-medium mb-2">
+                      <p className="text-sm text-gray-900 dark:text-gray-100 font-medium mb-2">
                         {notification.message}
                       </p>
                       {notification.doNo && (
-                        <div className="text-xs text-gray-600 mb-1">
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                           DO: <span className="font-semibold">{notification.doNo}</span>
                         </div>
                       )}
-                      <div className="flex items-center text-xs text-gray-500 mt-2">
+                      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mt-2">
                         <Clock className="w-3 h-3 mr-1" />
                         {new Date(notification.timestamp).toLocaleString()}
                       </div>
@@ -256,14 +256,14 @@ export function DriverPortal({ user }: DriverPortalProps) {
         </div>
 
         {/* Fuel Orders Section */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="bg-gradient-to-r from-orange-50 to-yellow-50 px-4 py-3 border-b">
-            <h3 className="font-semibold text-gray-900 flex items-center text-lg">
-              <Fuel className="w-5 h-5 mr-2 text-orange-600" />
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transition-colors">
+          <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/30 dark:to-yellow-900/30 px-4 py-3 border-b dark:border-gray-700">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center text-lg">
+              <Fuel className="w-5 h-5 mr-2 text-orange-600 dark:text-orange-400" />
               Fuel Orders at Stations
             </h3>
           </div>
-          <div className="divide-y">
+          <div className="divide-y dark:divide-gray-700">
             {fuelOrders.length === 0 ? (
               <div className="p-8 text-center">
                 <Fuel className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
@@ -271,41 +271,41 @@ export function DriverPortal({ user }: DriverPortalProps) {
               </div>
             ) : (
               fuelOrders.map((order) => (
-                <div key={order.id} className="p-4">
+                <div key={order.id} className="p-4 dark:bg-gray-800">
                   <div className="flex items-start space-x-3">
-                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <MapPin className="w-5 h-5 text-orange-600" />
+                    <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <div className="font-semibold text-gray-900 text-base">
+                        <div className="font-semibold text-gray-900 dark:text-gray-100 text-base">
                           {order.station}
                         </div>
                         <span
                           className={`text-xs font-semibold px-2 py-1 rounded ${
                             order.status === 'completed'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-yellow-100 text-yellow-800'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                              : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
                           }`}
                         >
                           {order.status === 'completed' ? 'Completed' : 'Pending'}
                         </span>
                       </div>
-                      <div className="text-2xl font-bold text-orange-600 mb-2">
+                      <div className="text-2xl font-bold text-orange-600 dark:text-orange-400 mb-2">
                         {order.liters} Liters
                       </div>
                       <div className="space-y-1">
                         {order.lpoNumber && (
-                          <div className="text-xs text-gray-600">
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
                             LPO: <span className="font-semibold">{order.lpoNumber}</span>
                           </div>
                         )}
                         {order.doNo && (
-                          <div className="text-xs text-gray-600">
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
                             DO: <span className="font-semibold">{order.doNo}</span>
                           </div>
                         )}
-                        <div className="flex items-center text-xs text-gray-500 mt-2">
+                        <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mt-2">
                           <Clock className="w-3 h-3 mr-1" />
                           {new Date(order.createdAt).toLocaleString()}
                         </div>
@@ -319,10 +319,10 @@ export function DriverPortal({ user }: DriverPortalProps) {
         </div>
 
         {/* Info Card */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-xl p-4 border border-blue-200 dark:border-blue-800 transition-colors">
           <div className="flex items-start space-x-3">
-            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-gray-700">
+            <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-gray-700 dark:text-gray-300">
               <p className="font-semibold mb-1">Information</p>
               <p>
                 This page shows your delivery orders and fuel station orders. No action needed

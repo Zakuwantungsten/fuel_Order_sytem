@@ -3,6 +3,7 @@ import { Eye, EyeOff, LogIn, User, Lock, AlertCircle, Sun, Moon } from 'lucide-r
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo } from '../utils/permissions';
 import tahmeedLogo from '../assets/logo.png';
+import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
 
 const Login: React.FC = () => {
   const [credentials, setCredentials] = useState({
@@ -94,7 +95,8 @@ const Login: React.FC = () => {
             {/* Logo and Title */}
             <div className="text-center mb-8">
               <div className="w-40 h-24 mx-auto mb-4">
-                <img src={tahmeedLogo} alt="Tahmeed Logo" className="w-full h-full object-contain" />
+                <img src={tahmeedLogo} alt="Tahmeed Logo" className="w-full h-full object-contain dark:hidden" />
+                <img src={tahmeedLogoDark} alt="Tahmeed Logo" className="w-full h-full object-contain hidden dark:block" />
               </div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
                 Welcome Back

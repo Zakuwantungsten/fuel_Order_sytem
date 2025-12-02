@@ -125,13 +125,13 @@ const YardFuel: React.FC = () => {
       {/* Main Content */}
       <div className="max-w-2xl mx-auto p-4">
         {/* Entry Form */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Record Fuel Dispense</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-gray-900/30 p-6 mb-6 transition-colors">
+          <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-gray-100">Record Fuel Dispense</h2>
           
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Truck Number */}
             <div>
-              <label htmlFor="truckNo" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="truckNo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Truck Number *
               </label>
               <input
@@ -141,7 +141,7 @@ const YardFuel: React.FC = () => {
                 value={formData.truckNo}
                 onChange={handleInputChange}
                 placeholder="e.g., T123ABC"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg uppercase"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 required
                 autoComplete="off"
               />
@@ -149,7 +149,7 @@ const YardFuel: React.FC = () => {
 
             {/* Liters */}
             <div>
-              <label htmlFor="liters" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="liters" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Liters *
               </label>
               <input
@@ -161,14 +161,14 @@ const YardFuel: React.FC = () => {
                 placeholder="0"
                 step="0.01"
                 min="0"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 required
               />
             </div>
 
             {/* Date */}
             <div>
-              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Date *
               </label>
               <input
@@ -177,14 +177,14 @@ const YardFuel: React.FC = () => {
                 name="date"
                 value={formData.date}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 required
               />
             </div>
 
             {/* Notes (Optional) */}
             <div>
-              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Notes (Optional)
               </label>
               <textarea
@@ -194,7 +194,7 @@ const YardFuel: React.FC = () => {
                 onChange={handleInputChange}
                 placeholder="Any additional notes..."
                 rows={2}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
               />
             </div>
 
@@ -210,42 +210,42 @@ const YardFuel: React.FC = () => {
         </div>
 
         {/* Recent Entries */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Recent Entries</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-gray-900/30 p-6 transition-colors">
+          <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-gray-100">Recent Entries</h2>
           
           {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading...</div>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">Loading...</div>
           ) : recentEntries.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No recent entries</div>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">No recent entries</div>
           ) : (
             <div className="space-y-3">
               {recentEntries.map((entry, index) => (
                 <div 
                   key={entry._id || index} 
-                  className="border border-gray-200 rounded-lg p-4 bg-gray-50"
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <p className="font-semibold text-lg text-gray-800">{entry.truckNo}</p>
-                      <p className="text-sm text-gray-600">{entry.date}</p>
+                      <p className="font-semibold text-lg text-gray-800 dark:text-gray-100">{entry.truckNo}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{entry.date}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold text-blue-600">{entry.liters}L</p>
+                      <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{entry.liters}L</p>
                       <span className={`text-xs px-2 py-1 rounded-full ${
                         entry.status === 'linked' 
-                          ? 'bg-green-100 text-green-800' 
+                          ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300' 
                           : entry.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
+                          ? 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-300'
+                          : 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-300'
                       }`}>
                         {entry.status}
                       </span>
                     </div>
                   </div>
                   {entry.notes && (
-                    <p className="text-sm text-gray-600 mt-2">Note: {entry.notes}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Note: {entry.notes}</p>
                   )}
-                  <p className="text-xs text-gray-500 mt-2">
+                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
                     by {entry.enteredBy} • {new Date(entry.timestamp).toLocaleString()}
                   </p>
                 </div>
