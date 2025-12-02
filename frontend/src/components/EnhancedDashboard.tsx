@@ -16,7 +16,6 @@ import {
   Sun,
   Moon
 } from 'lucide-react';
-import YardFuelEntry from './YardFuelEntry';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
 import DriverPortal from './DriverPortal';
@@ -172,9 +171,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   };
 
   const renderActiveComponent = () => {
-    // Check if user is a yard-specific role
-    const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard'].includes(user.role);
-
     switch (activeTab) {
       case 'overview':
         return <Dashboard />;
@@ -185,11 +181,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       case 'lpo':
         return <LPOs />;
       case 'yard_fuel':
-        // Use simple mobile UI for yard-specific roles
-        if (isYardRole) {
-          return <YardFuelSimple user={user} />;
-        }
-        return <YardFuelEntry user={user} />;
+        return <YardFuelSimple user={user} />;
       case 'driver_portal':
         return <DriverPortal user={user} />;
       case 'station_view':
@@ -208,6 +200,9 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   };
 
   const menuItems = getMenuItems();
+  
+  // Check if user is a yard-specific role
+  const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard', 'yard_personnel'].includes(user.role);
 
   // For drivers, show full-screen mobile layout
   if (isDriver) {
@@ -238,6 +233,30 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
         {/* Driver Content */}
         <main className="flex-1 overflow-y-auto">
+          {renderActiveComponent()}
+        </main>
+      </div>
+    );
+  }
+
+  // For station managers (station_manager, manager, super_manager), show full-screen layout without sidebar
+  if (isManager) {
+    return (
+      <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden transition-colors">
+        {/* Main Content - Full screen without sidebar */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+          {renderActiveComponent()}
+        </main>
+      </div>
+    );
+  }
+
+  // For yard personnel (dar_yard, tanga_yard, mmsa_yard, yard_personnel), show full-screen layout without sidebar
+  if (isYardRole) {
+    return (
+      <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden transition-colors">
+        {/* Main Content - Full screen without sidebar */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
           {renderActiveComponent()}
         </main>
       </div>

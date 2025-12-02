@@ -8,8 +8,6 @@ import {
   Truck,
   MapPin,
   DollarSign,
-  ChevronDown,
-  ChevronUp,
   RefreshCw,
   Download,
   Eye,
@@ -304,16 +302,6 @@ export function ManagerView({ user }: ManagerViewProps) {
     return { totalLPOs, uniqueLPONos, totalLiters, totalAmount, uniqueTrucks, byStation };
   }, [filteredEntries]);
 
-  // Handle sort
-  const handleSort = (field: typeof sortField) => {
-    if (sortField === field) {
-      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('desc');
-    }
-  };
-
   // Export to Excel
   const handleExport = () => {
     const exportData = filteredEntries.map((entry, index) => ({
@@ -337,14 +325,6 @@ export function ManagerView({ user }: ManagerViewProps) {
       : `LPO_Summary_${userStation}.xlsx`;
     
     XLSX.writeFile(wb, filename.replace(/\s+/g, '_'));
-  };
-
-  // Sort icon component
-  const SortIcon = ({ field }: { field: typeof sortField }) => {
-    if (sortField !== field) return null;
-    return sortDirection === 'asc' ? 
-      <ChevronUp className="w-3 h-3 inline ml-1" /> : 
-      <ChevronDown className="w-3 h-3 inline ml-1" />;
   };
 
   // Loading state
@@ -709,138 +689,28 @@ export function ManagerView({ user }: ManagerViewProps) {
           )}
         </div>
 
-        {/* Desktop Table View */}
-        <div className="hidden lg:block px-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      #
-                    </th>
-                    <th 
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                      onClick={() => handleSort('date')}
-                    >
-                      Date <SortIcon field="date" />
-                    </th>
-                    <th 
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                      onClick={() => handleSort('lpoNo')}
-                    >
-                      LPO No. <SortIcon field="lpoNo" />
-                    </th>
-                    <th 
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                      onClick={() => handleSort('station')}
-                    >
-                      Diesel @ <SortIcon field="station" />
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      DO/SDI
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Truck No.
-                    </th>
-                    <th 
-                      className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                      onClick={() => handleSort('ltrs')}
-                    >
-                      Ltrs <SortIcon field="ltrs" />
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Rate
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Dest
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
-                  {filteredEntries.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center">
-                        <FileText className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-                        <p className="text-gray-500 dark:text-gray-400">No entries found</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredEntries.map((entry, index) => (
-                      <tr 
-                        key={entry.id || `${entry.lpoNo}-${index}`}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                      >
-                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                          {index + 1}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                          {entry.date}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                          {entry.lpoNo}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                          {entry.dieselAt}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                          {entry.doSdo}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {entry.truckNo}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right font-semibold text-green-600 dark:text-green-400">
-                          {entry.ltrs}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">
-                          {entry.pricePerLtr}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                          {entry.destinations}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* Table Footer */}
-            {filteredEntries.length > 0 && (
-              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700">
-                <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-                  <span className="text-gray-600 dark:text-gray-300">
-                    Total: <strong>{filteredEntries.length}</strong> entries
-                  </span>
-                  <div className="flex items-center space-x-6">
-                    <span className="text-gray-600 dark:text-gray-300">
-                      Liters: <strong className="text-indigo-600 dark:text-indigo-400">{stats.totalLiters.toLocaleString()}</strong>
-                    </span>
-                    <span className="text-gray-600 dark:text-gray-300">
-                      Value: <strong className="text-green-600 dark:text-green-400">${stats.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Mobile Summary Footer */}
+        {/* Summary Footer - Fixed at bottom */}
         {filteredEntries.length > 0 && (
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-3 shadow-lg">
-            <div className="flex items-center justify-around text-center">
+          <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-3 sm:px-4 py-2 sm:py-3 shadow-lg z-30">
+            <div className="flex items-center justify-around text-center max-w-lg mx-auto">
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Total Liters</p>
-                <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                <p className="text-base sm:text-lg font-bold text-indigo-600 dark:text-indigo-400">
                   {stats.totalLiters.toLocaleString()}L
                 </p>
               </div>
-              <div className="h-8 w-px bg-gray-200 dark:bg-gray-700" />
+              <div className="h-6 sm:h-8 w-px bg-gray-200 dark:bg-gray-700" />
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Est. Value</p>
-                <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                <p className="text-base sm:text-lg font-bold text-green-600 dark:text-green-400">
                   ${stats.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                </p>
+              </div>
+              <div className="h-6 sm:h-8 w-px bg-gray-200 dark:bg-gray-700" />
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Entries</p>
+                <p className="text-base sm:text-lg font-bold text-purple-600 dark:text-purple-400">
+                  {filteredEntries.length}
                 </p>
               </div>
             </div>
