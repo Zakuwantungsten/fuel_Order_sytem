@@ -11,6 +11,7 @@ export const yardFuelService = {
   /**
    * Search for active fuel records by truck number
    * Returns fuel records that might need yard fuel
+   * Excludes cancelled fuel records
    */
   searchActiveFuelRecords: async (truckNo: string): Promise<FuelRecord[]> => {
     try {
@@ -26,7 +27,8 @@ export const yardFuelService = {
         dateTo
       });
       
-      return fuelRecords;
+      // Filter out cancelled fuel records
+      return fuelRecords.filter((r: FuelRecord) => !r.isCancelled);
     } catch (error) {
       console.error('Error searching active fuel records:', error);
       return [];

@@ -108,13 +108,17 @@ export function getStationFuelDefaults(station: string, doType: 'going' | 'retur
 
 /**
  * Check if truck has already taken fuel at Zambia Going checkpoint
+ * Only considers active (non-cancelled) fuel records
  */
 async function hasTakenZambiaGoingFuel(truckNo: string, doNumber: string): Promise<boolean> {
   try {
     const fuelRecords = await fuelRecordsAPI.getAll({ truckNo });
     
-    // Find fuel record for this DO
-    const record = fuelRecords.find(
+    // Filter out cancelled fuel records
+    const activeFuelRecords = fuelRecords.filter((r: FuelRecord) => !r.isCancelled);
+    
+    // Find fuel record for this DO (only from active records)
+    const record = activeFuelRecords.find(
       (r: FuelRecord) => r.goingDo === doNumber || r.returnDo === doNumber
     );
     
@@ -154,9 +158,19 @@ export async function findCorrectDOForTruck(
     // Get fuel records for this truck
     const fuelRecords = await fuelRecordsAPI.getAll({ truckNo });
     
-    // Separate going (IMPORT) and returning (EXPORT) DOs
-    const goingDOs = allDOs.filter((do_: DeliveryOrder) => do_.importOrExport === 'IMPORT');
-    const returningDOs = allDOs.filter((do_: DeliveryOrder) => do_.importOrExport === 'EXPORT');
+    // Filter out cancelled DOs - only work with active DOs
+    const activeDOs = allDOs.filter((do_: DeliveryOrder) => !do_.isCancelled);
+    
+    // Filter out cancelled fuel records - ignore cancelled records as if they don't exist
+    const activeFuelRecords = fuelRecords.filter((r: FuelRecord) => !r.isCancelled);
+    
+    if (activeDOs.length === 0) {
+      return null;
+    }
+    
+    // Separate going (IMPORT) and returning (EXPORT) DOs from active DOs only
+    const goingDOs = activeDOs.filter((do_: DeliveryOrder) => do_.importOrExport === 'IMPORT');
+    const returningDOs = activeDOs.filter((do_: DeliveryOrder) => do_.importOrExport === 'EXPORT');
     
     // Get station info
     const stationInfo = STATION_CHECKPOINT_MAP[station];
@@ -183,7 +197,7 @@ export async function findCorrectDOForTruck(
     // 1. If station is ONLY for returning trucks
     if (direction === 'returning') {
       if (returningDOs.length > 0) {
-        const fuelRecord = fuelRecords.find((r: FuelRecord) => r.returnDo === returningDOs[0].doNumber);
+        const fuelRecord = activeFuelRecords.find((r: FuelRecord) => r.returnDo === returningDOs[0].doNumber);
         return {
           doNumber: returningDOs[0].doNumber,
           doType: 'returning',
@@ -199,7 +213,7 @@ export async function findCorrectDOForTruck(
     // 2. If station is ONLY for going trucks
     if (direction === 'going') {
       if (goingDOs.length > 0) {
-        const fuelRecord = fuelRecords.find((r: FuelRecord) => r.goingDo === goingDOs[0].doNumber);
+        const fuelRecord = activeFuelRecords.find((r: FuelRecord) => r.goingDo === goingDOs[0].doNumber);
         return {
           doNumber: goingDOs[0].doNumber,
           doType: 'going',
@@ -226,7 +240,7 @@ export async function findCorrectDOForTruck(
       // If truck is below Zambia Going stations (e.g., at Mbeya or Tunduma)
       if (isStationBelowZambiaGoing(station)) {
         // Use going DO
-        const fuelRecord = fuelRecords.find((r: FuelRecord) => r.goingDo === goingDO.doNumber);
+        const fuelRecord = activeFuelRecords.find((r: FuelRecord) => r.goingDo === goingDO.doNumber);
         return {
           doNumber: goingDO.doNumber,
           doType: 'going',
@@ -240,7 +254,7 @@ export async function findCorrectDOForTruck(
       // If at Zambia Going stations
       if (hasTakenGoingFuel) {
         // Truck already took fuel on going journey, so this is return
-        const fuelRecord = fuelRecords.find((r: FuelRecord) => r.returnDo === returningDO.doNumber);
+        const fuelRecord = activeFuelRecords.find((r: FuelRecord) => r.returnDo === returningDO.doNumber);
         return {
           doNumber: returningDO.doNumber,
           doType: 'returning',
@@ -251,7 +265,7 @@ export async function findCorrectDOForTruck(
         };
       } else {
         // Truck hasn't taken fuel yet, so this is going
-        const fuelRecord = fuelRecords.find((r: FuelRecord) => r.goingDo === goingDO.doNumber);
+        const fuelRecord = activeFuelRecords.find((r: FuelRecord) => r.goingDo === goingDO.doNumber);
         return {
           doNumber: goingDO.doNumber,
           doType: 'going',
@@ -265,7 +279,7 @@ export async function findCorrectDOForTruck(
     
     // Only has going DO
     if (goingDOs.length > 0) {
-      const fuelRecord = fuelRecords.find((r: FuelRecord) => r.goingDo === goingDOs[0].doNumber);
+      const fuelRecord = activeFuelRecords.find((r: FuelRecord) => r.goingDo === goingDOs[0].doNumber);
       return {
         doNumber: goingDOs[0].doNumber,
         doType: 'going',
@@ -278,7 +292,7 @@ export async function findCorrectDOForTruck(
     
     // Only has returning DO
     if (returningDOs.length > 0) {
-      const fuelRecord = fuelRecords.find((r: FuelRecord) => r.returnDo === returningDOs[0].doNumber);
+      const fuelRecord = activeFuelRecords.find((r: FuelRecord) => r.returnDo === returningDOs[0].doNumber);
       return {
         doNumber: returningDOs[0].doNumber,
         doType: 'returning',
@@ -386,12 +400,15 @@ export async function deductFuelFromRecord(
       truckNo: lpoEntry.truckNo 
     });
     
-    const record = fuelRecords.find(
+    // Filter out cancelled fuel records - only work with active records
+    const activeFuelRecords = fuelRecords.filter((r: FuelRecord) => !r.isCancelled);
+    
+    const record = activeFuelRecords.find(
       (r: FuelRecord) => r.goingDo === doNumber || r.returnDo === doNumber
     );
     
     if (!record) {
-      console.warn('No fuel record found for DO:', doNumber);
+      console.warn('No active fuel record found for DO:', doNumber);
       return null;
     }
     

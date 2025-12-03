@@ -80,6 +80,7 @@ interface TruckFetchResult {
   balance: number;
   message: string;
   success: boolean;
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | null;
 }
 
 interface EntryAutoFillData {
@@ -89,6 +90,9 @@ interface EntryAutoFillData {
   fuelRecord: FuelRecord | null;
   goingDestination?: string;  // Store original going destination for proper fuel allocation
   returnDoMissing?: boolean;  // Track if return DO is not yet inputted
+  // Warning states for trucks without valid fuel records
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | null;
+  warningMessage?: string;
 }
 
 // Cash currency conversion state
@@ -304,7 +308,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // Fetch all fuel records for this truck
       const fuelRecords = await fuelRecordsAPI.getAll({ truckNo: truckNo.trim() });
       
-      if (!fuelRecords || fuelRecords.length === 0) {
+      // Filter out cancelled fuel records - ignore them as if they don't exist
+      const activeFuelRecords = (fuelRecords || []).filter((r: FuelRecord) => !r.isCancelled);
+      
+      if (!activeFuelRecords || activeFuelRecords.length === 0) {
         return {
           fuelRecord: null,
           goingDo: 'NIL',
@@ -312,8 +319,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           destination: 'NIL',
           goingDestination: 'NIL',
           balance: 0,
-          message: 'No fuel record found for this truck - truck number may be invalid',
-          success: false
+          message: '⚠️ No fuel record found - truck may not be on a journey. You can still add fuel manually.',
+          success: false,
+          warningType: 'not_found' as const
         };
       }
 
@@ -331,7 +339,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       };
 
       // Sort records by date descending (most recent first)
-      const sortedRecords = [...fuelRecords].sort((a: FuelRecord, b: FuelRecord) => 
+      const sortedRecords = [...activeFuelRecords].sort((a: FuelRecord, b: FuelRecord) => 
         new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 
@@ -375,8 +383,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             destination: mostRecent.to || 'NIL',
             goingDestination: goingDest,
             balance: 0,
-            message: `⚠️ Journey completed - Balance is 0. Last trip: ${mostRecent.goingDo} (${mostRecent.from} → ${mostRecent.to})`,
-            success: false  // Mark as not successful since no fuel allocation is needed
+            message: `⚠️ Journey completed (Balance: 0L). Last trip: ${mostRecent.goingDo}. You can still add fuel manually if needed.`,
+            success: false,  // Mark as not successful since no fuel allocation is needed
+            warningType: 'journey_completed' as const
           };
         }
 
@@ -388,8 +397,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           destination: 'NIL',
           goingDestination: 'NIL',  // Added: original going destination
           balance: 0,
-          message: 'No active fuel record found for this truck in the last 3 months',
-          success: false
+          message: '⚠️ No active journey found in last 3 months. You can still add fuel manually.',
+          success: false,
+          warningType: 'no_active_record' as const
         };
       }
 
@@ -694,7 +704,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           fetched: result.success, 
           fuelRecord: result.fuelRecord,
           goingDestination: result.goingDestination,  // Store for later use when toggling direction
-          returnDoMissing  // Track if return DO is missing
+          returnDoMissing,  // Track if return DO is missing
+          warningType: result.warningType || null,
+          warningMessage: result.message
         }
       }));
     }
@@ -1555,8 +1567,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
                       const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
                       const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
+                      const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && entry.truckNo.length >= 5;
                       return (
-                        <tr key={index} className={`${autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : 'dark:bg-gray-800'} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                        <tr key={index} className={`${autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : ''} ${hasNoRecordWarning ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${!autoFill.fetched && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'dark:bg-gray-800' : ''}`}>
                           <td className="px-3 py-3">
                             <div className="relative">
                               <input
@@ -1564,13 +1577,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 value={entry.truckNo}
                                 onChange={(e) => handleTruckNoChange(index, e.target.value)}
                                 placeholder="T762 DWK"
-                                className={`w-28 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isExactDuplicate ? 'border-red-500 dark:border-red-400' : ''} ${isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : ''} ${!hasDuplicate ? 'border-gray-300 dark:border-gray-600' : ''}`}
+                                className={`w-28 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isExactDuplicate ? 'border-red-500 dark:border-red-400' : ''} ${isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : ''} ${hasNoRecordWarning ? 'border-amber-500 dark:border-amber-400' : ''} ${!hasDuplicate && !hasNoRecordWarning ? 'border-gray-300 dark:border-gray-600' : ''}`}
                               />
                               {autoFill.loading && (
                                 <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
                               )}
                               {autoFill.fetched && !autoFill.loading && !hasDuplicate && (
                                 <CheckCircle className="absolute right-1 top-1.5 w-4 h-4 text-green-500" />
+                              )}
+                              {hasNoRecordWarning && !autoFill.loading && (
+                                <AlertTriangle className="absolute right-1 top-1.5 w-4 h-4 text-amber-500" />
                               )}
                               {isExactDuplicate && (
                                 <AlertTriangle className="absolute right-1 top-1.5 w-4 h-4 text-red-500" />
@@ -1579,6 +1595,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 <CheckCircle className="absolute right-1 top-1.5 w-4 h-4 text-blue-500" />
                               )}
                             </div>
+                            {/* No fuel record warning - allow manual entry */}
+                            {hasNoRecordWarning && (
+                              <div className="mt-1 text-xs text-amber-600 dark:text-amber-400" title={autoFill.warningMessage}>
+                                {autoFill.warningType === 'not_found' && '⚠️ No record found'}
+                                {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
+                                {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
+                                <span className="block text-[10px] text-gray-500 dark:text-gray-400">Manual entry allowed</span>
+                              </div>
+                            )}
                             {/* Duplicate allocation warning */}
                             {isExactDuplicate && duplicateInfo && (
                               <div className="mt-1 text-xs text-red-600 dark:text-red-400" title={`Blocked: Same amount in LPO ${duplicateInfo.lpoNo}`}>
