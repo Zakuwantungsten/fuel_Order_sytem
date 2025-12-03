@@ -166,6 +166,55 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const [customGoingCheckpoint, setCustomGoingCheckpoint] = useState('');
   const [customReturnCheckpoint, setCustomReturnCheckpoint] = useState('');
 
+  // Reset all form state to initial values
+  const resetForm = () => {
+    setFormData({
+      lpoNo: '',
+      date: new Date().toISOString().split('T')[0],
+      station: '',
+      orderOf: 'TAHMEED',
+      entries: [],
+      total: 0,
+    });
+    setEntryAutoFillData({});
+    setCancellationDirection('going');
+    setCancellationPoint('');
+    setExistingLPOsForTrucks(new Map());
+    setDuplicateWarnings(new Map());
+    setCashConversion({
+      localRate: 0,
+      conversionRate: 1,
+      currency: 'ZMW',
+      calculatedRate: 0,
+    });
+    setSelectedSourceLpo(null);
+    setForwardDefaultLiters(0);
+    setForwardRate(0);
+    setCustomStationName('');
+    setCustomGoingEnabled(false);
+    setCustomReturnEnabled(false);
+    setCustomGoingCheckpoint('');
+    setCustomReturnCheckpoint('');
+  };
+
+  // Reset form when modal opens (if not editing) or closes
+  useEffect(() => {
+    if (isOpen) {
+      if (!initialData) {
+        // Reset form when opening a new LPO modal
+        resetForm();
+        // Fetch new LPO number after reset
+        fetchNextLpoNumber();
+      }
+    }
+  }, [isOpen]);
+
+  // Handle cancel button click - reset and close
+  const handleCancel = () => {
+    resetForm();
+    onClose();
+  };
+
   // Calculate TZS rate when cash conversion values change
   useEffect(() => {
     if (formData.station === 'CASH' && cashConversion.localRate > 0 && cashConversion.conversionRate > 0) {
@@ -264,12 +313,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     return () => clearTimeout(timeoutId);
   }, [formData.station, formData.entries?.map(e => `${e.truckNo}:${e.liters}`).join(','), initialData?.id]);
 
+  // Load initial data when editing an existing LPO
   useEffect(() => {
     if (initialData) {
       setFormData(initialData);
-    } else {
-      // Fetch the next LPO number
-      fetchNextLpoNumber();
     }
   }, [initialData]);
 
@@ -948,14 +995,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto transition-colors">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={handleCancel}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto transition-colors" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             {initialData ? 'Edit LPO Document' : 'New LPO Document'}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
           >
             <X className="w-6 h-6" />
@@ -1728,7 +1775,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           <div className="flex justify-end space-x-3 pt-4 border-t dark:border-gray-700">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleCancel}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
             >
               Cancel
