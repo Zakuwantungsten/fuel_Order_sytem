@@ -10,6 +10,7 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  Ban,
 } from 'lucide-react';
 import { FuelRecordDetails, fuelRecordsAPI } from '../services/api';
 
@@ -83,17 +84,28 @@ export default function FuelRecordDetailsModal({
         {/* Modal */}
         <div className="relative w-full max-w-4xl bg-white dark:bg-gray-800 rounded-lg shadow-xl max-h-[90vh] overflow-hidden flex flex-col transition-colors">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+          <div className={`flex items-center justify-between p-4 border-b dark:border-gray-700 ${record?.isCancelled ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
-                <Fuel className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+              <div className={`p-2 rounded-lg ${record?.isCancelled ? 'bg-red-100 dark:bg-red-900/30' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
+                {record?.isCancelled ? (
+                  <Ban className="w-6 h-6 text-red-600 dark:text-red-400" />
+                ) : (
+                  <Fuel className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+                )}
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Fuel Record Details
-                </h2>
+                <div className="flex items-center space-x-2">
+                  <h2 className={`text-lg font-semibold ${record?.isCancelled ? 'text-red-800 dark:text-red-300' : 'text-gray-900 dark:text-gray-100'}`}>
+                    Fuel Record Details
+                  </h2>
+                  {record?.isCancelled && (
+                    <span className="px-2 py-0.5 bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200 text-xs font-medium rounded-full">
+                      CANCELLED
+                    </span>
+                  )}
+                </div>
                 {record && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className={`text-sm ${record?.isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-500 dark:text-gray-400'}`}>
                     <span className="font-medium">{record.truckNo}</span> • {record.goingDo}
                     {record.returnDo && ` / ${record.returnDo}`}
                   </p>
@@ -124,29 +136,66 @@ export default function FuelRecordDetailsModal({
               </div>
             ) : details ? (
               <>
+                {/* Cancelled Banner */}
+                {record?.isCancelled && (
+                  <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
+                    <div className="flex flex-col items-center space-y-3">
+                      <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-full">
+                        <Ban className="w-8 h-8 text-red-600 dark:text-red-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-red-800 dark:text-red-300">
+                        This Fuel Record Has Been Cancelled
+                      </h3>
+                      <div className="text-sm text-red-600 dark:text-red-400 space-y-1">
+                        {record.cancelledAt && (
+                          <p>
+                            Cancelled on: {new Date(record.cancelledAt).toLocaleDateString('en-US', {
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        )}
+                        {record.cancellationReason && (
+                          <p className="italic">Reason: {record.cancellationReason}</p>
+                        )}
+                        {record.cancelledBy && (
+                          <p>Cancelled by: {record.cancelledBy}</p>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        The fuel allocation data below is preserved for historical reference only.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg">
-                    <div className="text-sm text-blue-600 dark:text-blue-400 font-medium">Total Fuel</div>
-                    <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 ${record?.isCancelled ? 'opacity-60' : ''}`}>
+                  <div className={`p-4 rounded-lg ${record?.isCancelled ? 'bg-gray-100 dark:bg-gray-700' : 'bg-blue-50 dark:bg-blue-900/30'}`}>
+                    <div className={`text-sm font-medium ${record?.isCancelled ? 'text-gray-500 dark:text-gray-400' : 'text-blue-600 dark:text-blue-400'}`}>Total Fuel</div>
+                    <div className={`text-2xl font-bold ${record?.isCancelled ? 'text-gray-600 dark:text-gray-300 line-through' : 'text-blue-700 dark:text-blue-300'}`}>
                       {allocations?.total.toLocaleString()} L
                     </div>
                   </div>
-                  <div className="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg">
-                    <div className="text-sm text-green-600 dark:text-green-400 font-medium">Extra Fuel</div>
-                    <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                  <div className={`p-4 rounded-lg ${record?.isCancelled ? 'bg-gray-100 dark:bg-gray-700' : 'bg-green-50 dark:bg-green-900/30'}`}>
+                    <div className={`text-sm font-medium ${record?.isCancelled ? 'text-gray-500 dark:text-gray-400' : 'text-green-600 dark:text-green-400'}`}>Extra Fuel</div>
+                    <div className={`text-2xl font-bold ${record?.isCancelled ? 'text-gray-600 dark:text-gray-300 line-through' : 'text-green-700 dark:text-green-300'}`}>
                       {allocations?.extra || 0} L
                     </div>
                   </div>
-                  <div className="bg-orange-50 dark:bg-orange-900/30 p-4 rounded-lg">
-                    <div className="text-sm text-orange-600 dark:text-orange-400 font-medium">Total LPOs</div>
-                    <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
+                  <div className={`p-4 rounded-lg ${record?.isCancelled ? 'bg-gray-100 dark:bg-gray-700' : 'bg-orange-50 dark:bg-orange-900/30'}`}>
+                    <div className={`text-sm font-medium ${record?.isCancelled ? 'text-gray-500 dark:text-gray-400' : 'text-orange-600 dark:text-orange-400'}`}>Total LPOs</div>
+                    <div className={`text-2xl font-bold ${record?.isCancelled ? 'text-gray-600 dark:text-gray-300 line-through' : 'text-orange-700 dark:text-orange-300'}`}>
                       {details.summary.totalLPOs}
                     </div>
                   </div>
-                  <div className="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-lg">
-                    <div className="text-sm text-purple-600 dark:text-purple-400 font-medium">Balance</div>
-                    <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                  <div className={`p-4 rounded-lg ${record?.isCancelled ? 'bg-gray-100 dark:bg-gray-700' : 'bg-purple-50 dark:bg-purple-900/30'}`}>
+                    <div className={`text-sm font-medium ${record?.isCancelled ? 'text-gray-500 dark:text-gray-400' : 'text-purple-600 dark:text-purple-400'}`}>Balance</div>
+                    <div className={`text-2xl font-bold ${record?.isCancelled ? 'text-gray-600 dark:text-gray-300 line-through' : 'text-purple-700 dark:text-purple-300'}`}>
                       {allocations?.balance.toLocaleString()} L
                     </div>
                   </div>
