@@ -5,7 +5,7 @@ import { fuelRecordsAPI, lposAPI } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
-import { exportToXLSX } from '../utils/csvParser';
+import { exportToXLSXMultiSheet } from '../utils/csvParser';
 
 // Standard fuel allocations - used to highlight extra fuel (fuel exceeding standard allocation)
 const STANDARD_ALLOCATIONS = {
@@ -196,12 +196,29 @@ const FuelRecords = () => {
       return recordDate.getFullYear() === year;
     });
     
-    // Prepare data for XLSX export - match FUEL RECORD.csv format exactly
-    // Use \n in headers for two-word columns to wrap text (word on top, word on bottom)
-    const exportData = yearlyRecords.map((record) => {
-      const isCancelled = record.isCancelled === true;
+    // Group records by month
+    const recordsByMonth: { [key: string]: typeof yearlyRecords } = {};
+    const monthOrder: string[] = []; // To maintain order
+    
+    yearlyRecords.forEach(record => {
+      const recordDate = new Date(record.date);
+      const monthName = recordDate.toLocaleDateString('en-US', { month: 'long' }); // e.g., "January", "February"
       
-      // Format date as d-Mon (e.g., "6-Oct")
+      if (!recordsByMonth[monthName]) {
+        recordsByMonth[monthName] = [];
+        monthOrder.push(monthName);
+      }
+      recordsByMonth[monthName].push(record);
+    });
+    
+    // Sort months chronologically
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    monthOrder.sort((a, b) => monthNames.indexOf(a) - monthNames.indexOf(b));
+    
+    // Helper function to format record for export
+    const formatRecordForExport = (record: FuelRecord) => {
+      const isCancelled = record.isCancelled === true;
       const recordDate = new Date(record.date);
       const formattedDate = `${recordDate.getDate()}-${recordDate.toLocaleDateString('en-US', { month: 'short' })}`;
       
@@ -231,19 +248,33 @@ const FuelRecords = () => {
         'Dar\nReturn': record.darReturn || '',
         'Tanga\nReturn': record.tangaReturn || '',
         'Balance': record.balance,
-        '_isCancelled': isCancelled, // Hidden field for styling
+        '_isCancelled': isCancelled,
       };
-    });
+    };
     
-    exportToXLSX(exportData, `FUEL RECORD ${year}.xlsx`, {
-      sheetName: 'Fuel Records',
+    // Create sheets array - one sheet per month
+    const sheets = monthOrder.map(monthName => ({
+      sheetName: monthName,
+      data: recordsByMonth[monthName].map(formatRecordForExport),
+    }));
+    
+    // If no records, create an empty sheet with the current month
+    if (sheets.length === 0) {
+      const currentMonthName = new Date().toLocaleDateString('en-US', { month: 'long' });
+      sheets.push({
+        sheetName: currentMonthName,
+        data: [],
+      });
+    }
+    
+    exportToXLSXMultiSheet(sheets, `FUEL RECORD ${year}.xlsx`, {
       headerColor: 'FFECD5', // Light orange/peach color for headers
       headerTextColor: '000000', // Black text
       addBorders: true,
       wrapHeader: true,
       centerAllCells: true,
       columnWidths: [8, 10, 8, 8, 6, 8, 10, 8, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10, 8, 8, 8, 8, 8],
-      strikethroughCancelledRows: true, // Custom option for cancelled rows
+      strikethroughCancelledRows: true,
     });
   };
 

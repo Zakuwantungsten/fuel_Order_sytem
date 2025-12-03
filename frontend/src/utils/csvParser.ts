@@ -267,3 +267,158 @@ export const exportToXLSX = (
   // Generate and download file
   XLSX.writeFile(wb, filename);
 };
+
+// Interface for multi-sheet export
+interface SheetData {
+  sheetName: string;
+  data: any[];
+}
+
+// Helper to export data as XLSX with multiple sheets (one per month)
+export const exportToXLSXMultiSheet = (
+  sheets: SheetData[],
+  filename: string,
+  options: ExportToXLSXOptions = {}
+) => {
+  const {
+    headerColor = '4472C4',
+    headerTextColor = 'FFFFFF',
+    addBorders = true,
+    columnWidths,
+    wrapHeader = false,
+    centerAllCells = false,
+    strikethroughCancelledRows = false,
+  } = options;
+
+  // Create workbook
+  const wb = XLSX.utils.book_new();
+
+  // Process each sheet
+  sheets.forEach(({ sheetName, data }) => {
+    // Track which rows are cancelled (for strikethrough styling)
+    const cancelledRows: Set<number> = new Set();
+    let processedData = data;
+    
+    if (strikethroughCancelledRows) {
+      data.forEach((row, index) => {
+        if (row._isCancelled) {
+          cancelledRows.add(index + 1); // +1 because row 0 is header
+        }
+      });
+      // Remove the _isCancelled field from data before creating sheet
+      processedData = data.map(row => {
+        const { _isCancelled, ...rest } = row;
+        return rest;
+      });
+    }
+
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(processedData);
+
+    // Get the range of the worksheet
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+    // Style the header row
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (ws[cellRef]) {
+        ws[cellRef].s = {
+          fill: {
+            fgColor: { rgb: headerColor },
+          },
+          font: {
+            bold: true,
+            color: { rgb: headerTextColor },
+            sz: 10,
+          },
+          alignment: {
+            horizontal: 'center',
+            vertical: 'center',
+            wrapText: wrapHeader,
+          },
+          border: addBorders ? {
+            top: { style: 'thin', color: { rgb: '000000' } },
+            bottom: { style: 'thin', color: { rgb: '000000' } },
+            left: { style: 'thin', color: { rgb: '000000' } },
+            right: { style: 'thin', color: { rgb: '000000' } },
+          } : undefined,
+        };
+      }
+    }
+
+    // Set row height for header if wrapping
+    if (wrapHeader) {
+      ws['!rows'] = [{ hpt: 40 }];
+    }
+
+    // Style data cells with borders and strikethrough for cancelled rows
+    for (let row = 1; row <= range.e.r; row++) {
+      const isCancelledRow = cancelledRows.has(row);
+      
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+        if (ws[cellRef]) {
+          ws[cellRef].s = {
+            ...ws[cellRef].s,
+            font: isCancelledRow ? {
+              strike: true,
+              color: { rgb: 'FF0000' },
+            } : undefined,
+            border: addBorders ? {
+              top: { style: 'thin', color: { rgb: '000000' } },
+              bottom: { style: 'thin', color: { rgb: '000000' } },
+              left: { style: 'thin', color: { rgb: '000000' } },
+              right: { style: 'thin', color: { rgb: '000000' } },
+            } : undefined,
+            alignment: {
+              horizontal: centerAllCells ? 'center' : undefined,
+              vertical: 'center',
+            },
+          };
+        } else if (addBorders) {
+          ws[cellRef] = {
+            v: '',
+            s: {
+              font: isCancelledRow ? {
+                strike: true,
+                color: { rgb: 'FF0000' },
+              } : undefined,
+              border: {
+                top: { style: 'thin', color: { rgb: '000000' } },
+                bottom: { style: 'thin', color: { rgb: '000000' } },
+                left: { style: 'thin', color: { rgb: '000000' } },
+                right: { style: 'thin', color: { rgb: '000000' } },
+              },
+              alignment: centerAllCells ? { horizontal: 'center', vertical: 'center' } : undefined,
+            },
+          };
+        }
+      }
+    }
+
+    // Set column widths
+    if (columnWidths && columnWidths.length > 0) {
+      ws['!cols'] = columnWidths.map(width => ({ wch: width }));
+    } else {
+      const colWidths: { wch: number }[] = [];
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        let maxWidth = 8;
+        for (let row = range.s.r; row <= range.e.r; row++) {
+          const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+          if (ws[cellRef] && ws[cellRef].v) {
+            const cellValue = String(ws[cellRef].v);
+            maxWidth = Math.max(maxWidth, Math.min(cellValue.length + 2, 15));
+          }
+        }
+        colWidths.push({ wch: maxWidth });
+      }
+      ws['!cols'] = colWidths;
+    }
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  // Generate and download file
+  XLSX.writeFile(wb, filename);
+};
