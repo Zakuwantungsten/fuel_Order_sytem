@@ -1,4 +1,5 @@
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx-js-style';
 import { DeliveryOrder, LPOEntry, FuelRecord } from '../types';
 
 export const parseCSV = <T>(csvText: string): Promise<T[]> => {
@@ -109,4 +110,160 @@ export const exportToCSV = (data: any[], filename: string) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+};
+
+// Helper to export data as XLSX with formatting
+interface ExportToXLSXOptions {
+  sheetName?: string;
+  headerColor?: string;
+  headerTextColor?: string;
+  addBorders?: boolean;
+  columnWidths?: number[];
+  wrapHeader?: boolean;
+  centerAllCells?: boolean;
+  strikethroughCancelledRows?: boolean; // Apply red strikethrough to cancelled rows (uses _isCancelled field)
+}
+
+export const exportToXLSX = (
+  data: any[], 
+  filename: string, 
+  options: ExportToXLSXOptions = {}
+) => {
+  const {
+    sheetName = 'Sheet1',
+    headerColor = '4472C4',
+    headerTextColor = 'FFFFFF',
+    addBorders = true,
+    columnWidths,
+    wrapHeader = false,
+    centerAllCells = false,
+    strikethroughCancelledRows = false,
+  } = options;
+
+  // Track which rows are cancelled (for strikethrough styling)
+  const cancelledRows: Set<number> = new Set();
+  if (strikethroughCancelledRows) {
+    data.forEach((row, index) => {
+      if (row._isCancelled) {
+        cancelledRows.add(index + 1); // +1 because row 0 is header
+      }
+    });
+    // Remove the _isCancelled field from data before creating sheet
+    data = data.map(row => {
+      const { _isCancelled, ...rest } = row;
+      return rest;
+    });
+  }
+
+  // Create workbook and worksheet
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+
+  // Get the range of the worksheet
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+  // Style the header row
+  for (let col = range.s.c; col <= range.e.c; col++) {
+    const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+    if (ws[cellRef]) {
+      ws[cellRef].s = {
+        fill: {
+          fgColor: { rgb: headerColor },
+        },
+        font: {
+          bold: true,
+          color: { rgb: headerTextColor },
+          sz: 10,
+        },
+        alignment: {
+          horizontal: 'center',
+          vertical: 'center',
+          wrapText: wrapHeader,
+        },
+        border: addBorders ? {
+          top: { style: 'thin', color: { rgb: '000000' } },
+          bottom: { style: 'thin', color: { rgb: '000000' } },
+          left: { style: 'thin', color: { rgb: '000000' } },
+          right: { style: 'thin', color: { rgb: '000000' } },
+        } : undefined,
+      };
+    }
+  }
+
+  // Set row height for header if wrapping
+  if (wrapHeader) {
+    ws['!rows'] = [{ hpt: 40 }]; // Header row height - taller to fit two lines of wrapped text
+  }
+
+  // Style data cells with borders and strikethrough for cancelled rows
+  for (let row = 1; row <= range.e.r; row++) {
+    const isCancelledRow = cancelledRows.has(row);
+    
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+      if (ws[cellRef]) {
+        ws[cellRef].s = {
+          ...ws[cellRef].s,
+          font: isCancelledRow ? {
+            strike: true,
+            color: { rgb: 'FF0000' }, // Red text for cancelled
+          } : undefined,
+          border: addBorders ? {
+            top: { style: 'thin', color: { rgb: '000000' } },
+            bottom: { style: 'thin', color: { rgb: '000000' } },
+            left: { style: 'thin', color: { rgb: '000000' } },
+            right: { style: 'thin', color: { rgb: '000000' } },
+          } : undefined,
+          alignment: {
+            horizontal: centerAllCells ? 'center' : undefined,
+            vertical: 'center',
+          },
+        };
+      } else if (addBorders) {
+        // Create empty cell with border (and strikethrough if cancelled)
+        ws[cellRef] = {
+          v: '',
+          s: {
+            font: isCancelledRow ? {
+              strike: true,
+              color: { rgb: 'FF0000' },
+            } : undefined,
+            border: {
+              top: { style: 'thin', color: { rgb: '000000' } },
+              bottom: { style: 'thin', color: { rgb: '000000' } },
+              left: { style: 'thin', color: { rgb: '000000' } },
+              right: { style: 'thin', color: { rgb: '000000' } },
+            },
+            alignment: centerAllCells ? { horizontal: 'center', vertical: 'center' } : undefined,
+          },
+        };
+      }
+    }
+  }
+
+  // Set column widths
+  if (columnWidths && columnWidths.length > 0) {
+    ws['!cols'] = columnWidths.map(width => ({ wch: width }));
+  } else {
+    // Auto-calculate column widths based on content
+    const colWidths: { wch: number }[] = [];
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      let maxWidth = 8; // minimum width
+      for (let row = range.s.r; row <= range.e.r; row++) {
+        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+        if (ws[cellRef] && ws[cellRef].v) {
+          const cellValue = String(ws[cellRef].v);
+          maxWidth = Math.max(maxWidth, Math.min(cellValue.length + 2, 15));
+        }
+      }
+      colWidths.push({ wch: maxWidth });
+    }
+    ws['!cols'] = colWidths;
+  }
+
+  // Add worksheet to workbook
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  // Generate and download file
+  XLSX.writeFile(wb, filename);
 };

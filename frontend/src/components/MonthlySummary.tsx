@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Download, Calendar, Filter, Fuel, DollarSign } from 'lucide-react';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../types';
-import { exportToCSV } from '../utils/csvParser';
+import { exportToXLSX } from '../utils/csvParser';
 
 interface MonthlySummaryProps {
   orders: DeliveryOrder[];
@@ -131,7 +131,11 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
       'RATE': order.tonnages * order.ratePerTon,
     }));
 
-    exportToCSV(exportData, `DO_Summary_${summary.month}_2025.csv`);
+    exportToXLSX(exportData, `DO_Summary_${summary.month}_2025.xlsx`, {
+      sheetName: `DO Summary ${summary.month}`,
+      headerColor: '4472C4',
+      addBorders: true,
+    });
   };
 
   const getMonthOrders = (): DeliveryOrder[] => {

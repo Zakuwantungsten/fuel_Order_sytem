@@ -5,6 +5,7 @@ import { fuelRecordsAPI, lposAPI } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
+import { exportToXLSX } from '../utils/csvParser';
 
 // Standard fuel allocations - used to highlight extra fuel (fuel exceeding standard allocation)
 const STANDARD_ALLOCATIONS = {
@@ -186,77 +187,64 @@ const FuelRecords = () => {
   };
 
   const handleExport = () => {
-    // Convert to CSV
-    const headers = [
-      'SN',
-      'Date',
-      'Truck No.',
-      'Going DO',
-      'Return DO',
-      'Start',
-      'From',
-      'To',
-      'Total Lts',
-      'Extra',
-      'MMSA Yard',
-      'Tanga Yard',
-      'Dar Yard',
-      'Dar Going',
-      'Moro Going',
-      'Mbeya Going',
-      'Tdm Going',
-      'Zambia Going',
-      'Congo Fuel',
-      'Zambia Return',
-      'Tunduma Return',
-      'Mbeya Return',
-      'Moro Return',
-      'Dar Return',
-      'Tanga Return',
-      'Balance',
-    ];
-
-    const csvContent = [
-      headers.join(','),
-      ...filteredRecords.map((record, index) =>
-        [
-          index + 1,
-          record.date,
-          record.truckNo,
-          record.goingDo,
-          record.returnDo || '',
-          record.start,
-          record.from,
-          record.to,
-          record.totalLts,
-          record.extra || '',
-          record.mmsaYard || '',
-          record.tangaYard || '',
-          record.darYard || '',
-          record.darGoing || '',
-          record.moroGoing || '',
-          record.mbeyaGoing || '',
-          record.tdmGoing || '',
-          record.zambiaGoing || '',
-          record.congoFuel || '',
-          record.zambiaReturn || '',
-          record.tundumaReturn || '',
-          record.mbeyaReturn || '',
-          record.moroReturn || '',
-          record.darReturn || '',
-          record.tangaReturn || '',
-          record.balance,
-        ].join(',')
-      ),
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const monthName = new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    a.download = `fuel-records-${monthName.replace(' ', '-')}.csv`;
-    a.click();
+    // Get the year from selected month
+    const year = new Date(selectedMonth + '-01').getFullYear();
+    
+    // Filter all records for the selected year (yearly export)
+    const yearlyRecords = records.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate.getFullYear() === year;
+    });
+    
+    // Prepare data for XLSX export - match FUEL RECORD.csv format exactly
+    // Use \n in headers for two-word columns to wrap text (word on top, word on bottom)
+    const exportData = yearlyRecords.map((record) => {
+      const isCancelled = record.isCancelled === true;
+      
+      // Format date as d-Mon (e.g., "6-Oct")
+      const recordDate = new Date(record.date);
+      const formattedDate = `${recordDate.getDate()}-${recordDate.toLocaleDateString('en-US', { month: 'short' })}`;
+      
+      return {
+        'Date': formattedDate,
+        'Truck\nNo.': record.truckNo,
+        'Going\nDo': record.goingDo,
+        'Return\nDo': record.returnDo || '',
+        'Start': record.start,
+        'From': record.from,
+        'To': record.to,
+        'Total\nLts': record.totalLts,
+        'Extra': record.extra || '',
+        'MMSA\nYard': record.mmsaYard || '',
+        'Tanga\nYard': record.tangaYard || '',
+        'Dar\nYard': record.darYard || '',
+        'Dar\nGoing': record.darGoing || '',
+        'Moro\nGoing': record.moroGoing || '',
+        'Mbeya\nGoing': record.mbeyaGoing || '',
+        'Tdm\nGoing': record.tdmGoing || '',
+        'Zambia\nGoing': record.zambiaGoing || '',
+        'Congo\nFuel': record.congoFuel || '',
+        'Zambia\nReturn': record.zambiaReturn || '',
+        'Tunduma\nReturn': record.tundumaReturn || '',
+        'Mbeya\nReturn': record.mbeyaReturn || '',
+        'Moro\nReturn': record.moroReturn || '',
+        'Dar\nReturn': record.darReturn || '',
+        'Tanga\nReturn': record.tangaReturn || '',
+        'Balance': record.balance,
+        '_isCancelled': isCancelled, // Hidden field for styling
+      };
+    });
+    
+    exportToXLSX(exportData, `FUEL RECORD ${year}.xlsx`, {
+      sheetName: 'Fuel Records',
+      headerColor: 'FFECD5', // Light orange/peach color for headers
+      headerTextColor: '000000', // Black text
+      addBorders: true,
+      wrapHeader: true,
+      centerAllCells: true,
+      columnWidths: [8, 10, 8, 8, 6, 8, 10, 8, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10, 8, 8, 8, 8, 8],
+      strikethroughCancelledRows: true, // Custom option for cancelled rows
+    });
   };
 
   // Month navigation helpers
@@ -456,13 +444,13 @@ const FuelRecords = () => {
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
                 <tr>
-                  <td colSpan={27} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <td colSpan={26} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                     Loading data...
                   </td>
                 </tr>
               ) : filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={27} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <td colSpan={26} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                     No fuel records found for {getMonthName(selectedMonth)}
                   </td>
                 </tr>
@@ -480,7 +468,7 @@ const FuelRecords = () => {
                       <td 
                         className={`px-2 py-2 whitespace-nowrap text-center ${
                           isCancelled 
-                            ? 'text-gray-400 dark:text-gray-500 line-through'
+                            ? 'text-red-500 dark:text-red-400 line-through'
                             : hasExtraFuel 
                               ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 font-semibold relative' 
                               : 'text-gray-600 dark:text-gray-400'
@@ -502,58 +490,55 @@ const FuelRecords = () => {
                       key={recordId || `record-${index}`} 
                       className={`cursor-pointer transition-colors ${
                         isCancelled 
-                          ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 opacity-60' 
+                          ? 'hover:bg-red-100 dark:hover:bg-red-900/30' 
                           : 'hover:bg-blue-50 dark:hover:bg-blue-900/20'
                       }`}
                       onClick={() => handleRowClick(record)}
                       title={isCancelled ? 'This fuel record has been cancelled' : 'Click to view full details'}
                     >
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
                         {index + 1}
-                        {isCancelled && <span className="ml-1 text-red-500 text-[10px]">✗</span>}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap font-medium ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-gray-100'}`} title={record.truckNo}>{record.truckNo}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.goingDo}>{record.goingDo}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.returnDo || 'N/A'}>
+                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap font-medium ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} title={record.truckNo}>{record.truckNo}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.goingDo}>{record.goingDo}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.returnDo || 'N/A'}>
                         {isCancelled ? (
-                          <span className="text-gray-400 dark:text-gray-500">{record.returnDo || '-'}</span>
+                          <span>{record.returnDo || '-'}</span>
                         ) : record.returnDo ? (
                           <span className="text-green-600 dark:text-green-400">{record.returnDo}</span>
                         ) : (
                           <span className="text-orange-500 dark:text-orange-400">-</span>
                         )}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.start}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
+                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.start}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
                         {record.from}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
+                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
                         {record.to}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.totalLts.toLocaleString()}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.extra || '-'}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.mmsaYard || '-'}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.totalLts.toLocaleString()}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.extra || '-'}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.mmsaYard || '-'}</td>
                       {renderFuelCell('tangaYard', record.tangaYard)}
                       {renderFuelCell('darYard', record.darYard)}
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darGoing || '-'}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.moroGoing || '-'}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darGoing || '-'}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.moroGoing || '-'}</td>
                       {renderFuelCell('mbeyaGoing', record.mbeyaGoing)}
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.tdmGoing || '-'}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.zambiaGoing || '-'}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.congoFuel || '-'}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.tdmGoing || '-'}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.zambiaGoing || '-'}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.congoFuel || '-'}</td>
                       {renderFuelCell('zambiaReturn', record.zambiaReturn)}
                       {renderFuelCell('tundumaReturn', record.tundumaReturn)}
                       {renderFuelCell('mbeyaReturn', record.mbeyaReturn)}
                       {renderFuelCell('moroReturn', record.moroReturn)}
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darReturn || '-'}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darReturn || '-'}</td>
                       {renderFuelCell('tangaReturn', record.tangaReturn)}
-                      <td className={`px-2 py-2 whitespace-nowrap text-center font-semibold ${isCancelled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.balance.toLocaleString()}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center font-semibold ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.balance.toLocaleString()}</td>
                       <td className="px-2 py-2 whitespace-nowrap">
                         <div className="flex space-x-1 justify-center">
-                          {isCancelled ? (
-                            <span className="text-xs text-red-500 dark:text-red-400 font-medium px-2">CANCELLED</span>
-                          ) : (
+                          {!isCancelled && (
                             <>
                               <button
                                 onClick={(e) => handleEdit(record, e)}
