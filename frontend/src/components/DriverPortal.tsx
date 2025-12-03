@@ -62,6 +62,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
     totalFuel: 0,
     usedFuel: 0,
     remainingFuel: 0,
+    journeyPhase: 'none' as 'none' | 'going' | 'returning' | 'completed',
   });
 
   // Online/Offline status monitoring
@@ -86,23 +87,15 @@ export function DriverPortal({ user }: DriverPortalProps) {
         setIsRefreshing(true);
       }
 
-      // Fetch delivery orders for this truck
-      const doResponse = await api.get(`/delivery-orders/truck/${truck}`);
-      const deliveryOrders = doResponse.data.data || [];
-
-      // Find current journey DOs (most recent IMPORT for going, most recent EXPORT for returning)
-      // A journey consists of a going DO (IMPORT) and returning DO (EXPORT)
-      const importDOs = deliveryOrders.filter((d: any) => d.importOrExport === 'IMPORT');
-      const exportDOs = deliveryOrders.filter((d: any) => d.importOrExport === 'EXPORT');
+      // Fetch current journey for this truck (backend handles the logic)
+      const journeyResponse = await api.get(`/delivery-orders/truck/${truck}/current-journey`);
+      const journeyData = journeyResponse.data.data || {};
       
-      // Get the most recent of each (current journey)
-      const currentGoingDO = importDOs.length > 0 ? importDOs[0] : null;
-      const currentReturningDO = exportDOs.length > 0 ? exportDOs[0] : null;
-      
-      // Get the DO numbers for the current journey
-      const journeyDONumbers: string[] = [];
-      if (currentGoingDO?.doNumber) journeyDONumbers.push(currentGoingDO.doNumber);
-      if (currentReturningDO?.doNumber) journeyDONumbers.push(currentReturningDO.doNumber);
+      const currentGoingDO = journeyData.goingDO;
+      const currentReturningDO = journeyData.returningDO;
+      const journeyDONumbers: string[] = journeyData.journeyDONumbers || [];
+      const deliveryOrders = journeyData.allDeliveryOrders || [];
+      const backendJourneyPhase = journeyData.journeyPhase || 'none';
 
       // Fetch fuel records for this truck
       const fuelResponse = await api.get(`/fuel-records?truckNo=${truck}&limit=100`);
@@ -205,6 +198,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
           totalFuel: 0,
           usedFuel: 0,
           remainingFuel: 0,
+          journeyPhase: 'none',
         });
         setLastUpdated(new Date());
         return;
@@ -263,6 +257,9 @@ export function DriverPortal({ user }: DriverPortalProps) {
 
       setNotifications(allNotifications);
 
+      // Use journey phase from backend (already computed)
+      const journeyPhase = backendJourneyPhase as 'none' | 'going' | 'returning' | 'completed';
+
       // Update driver data from current journey DOs
       // Calculate fuel data from LPO entries for current journey
       const totalFuel = lpoEntriesData.reduce((sum, e) => sum + (e.liters || 0), 0);
@@ -280,6 +277,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
         totalFuel: totalFuel,
         usedFuel: usedFuel,
         remainingFuel: totalFuel - usedFuel,
+        journeyPhase,
       });
       
       setLastUpdated(new Date());
@@ -489,7 +487,24 @@ export function DriverPortal({ user }: DriverPortalProps) {
             <div>
               <div className="text-sm opacity-90">Your Truck</div>
               <div className="text-xl sm:text-2xl font-bold">{driverData.truckNo}</div>
-              <div className="text-xs opacity-75 mt-1">Current Journey</div>
+              {/* Journey Phase Indicator */}
+              <div className="mt-1">
+                {driverData.journeyPhase === 'going' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500 text-white">
+                    🟢 Going to Destination
+                  </span>
+                )}
+                {driverData.journeyPhase === 'returning' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500 text-white">
+                    🔵 Returning Journey
+                  </span>
+                )}
+                {driverData.journeyPhase === 'none' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-500 text-white">
+                    ⏳ Awaiting Assignment
+                  </span>
+                )}
+              </div>
             </div>
             <div className="sm:text-right">
               <div className="text-sm opacity-90">Loading Point</div>
@@ -499,12 +514,12 @@ export function DriverPortal({ user }: DriverPortalProps) {
 
           {/* Going & Returning DO Info */}
           <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-indigo-400">
-            <div className="bg-indigo-400/30 rounded-lg p-3">
+            <div className={`rounded-lg p-3 ${driverData.journeyPhase === 'going' ? 'bg-green-500/40 ring-2 ring-green-300' : 'bg-indigo-400/30'}`}>
               <div className="text-xs opacity-75 mb-1">🟢 GOING</div>
               <div className="text-sm font-semibold">DO: {driverData.goingDoNo}</div>
               <div className="text-xs opacity-90">→ {driverData.goingDestination}</div>
             </div>
-            <div className="bg-indigo-400/30 rounded-lg p-3">
+            <div className={`rounded-lg p-3 ${driverData.journeyPhase === 'returning' ? 'bg-blue-500/40 ring-2 ring-blue-300' : 'bg-indigo-400/30'}`}>
               <div className="text-xs opacity-75 mb-1">🔵 RETURNING</div>
               <div className="text-sm font-semibold">DO: {driverData.returningDoNo}</div>
               <div className="text-xs opacity-90">→ {driverData.returningDestination}</div>

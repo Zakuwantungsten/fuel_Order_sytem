@@ -22,6 +22,7 @@ router.get('/', commonValidation.pagination, validate, asyncHandler(deliveryOrde
 router.get('/next-do-number', asyncHandler(deliveryOrderController.getNextDONumber));
 router.get('/trucks', asyncHandler(deliveryOrderController.getAllTrucks));
 router.get('/truck/:truckNo', asyncHandler(deliveryOrderController.getDeliveryOrdersByTruck));
+router.get('/truck/:truckNo/current-journey', asyncHandler(deliveryOrderController.getCurrentJourneyByTruck));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(deliveryOrderController.getDeliveryOrderById));
 
 // Create route (requires appropriate role)

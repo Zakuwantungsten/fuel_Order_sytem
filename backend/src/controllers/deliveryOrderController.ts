@@ -193,6 +193,84 @@ export const getDeliveryOrdersByTruck = async (req: AuthRequest, res: Response):
 };
 
 /**
+ * Get current journey for a truck
+ * Returns the most recent journey (going DO + returning DO if available)
+ */
+export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo } = req.params;
+
+    // Get all DOs for this truck, sorted by date descending (most recent first)
+    const deliveryOrders = await DeliveryOrder.find({
+      truckNo: { $regex: truckNo, $options: 'i' },
+      isDeleted: false,
+    }).sort({ date: -1 }).lean();
+
+    if (deliveryOrders.length === 0) {
+      res.status(200).json({
+        success: true,
+        message: 'No journey found for this truck',
+        data: {
+          currentJourney: null,
+          journeyPhase: 'none',
+          goingDO: null,
+          returningDO: null,
+        },
+      });
+      return;
+    }
+
+    // Determine current journey based on most recent DO
+    const mostRecentDO = deliveryOrders[0];
+    let goingDO: any = null;
+    let returningDO: any = null;
+    let journeyPhase: 'going' | 'returning' | 'none' = 'none';
+
+    if (mostRecentDO.importOrExport === 'IMPORT') {
+      // Most recent is IMPORT - driver is on the going leg
+      goingDO = mostRecentDO;
+      journeyPhase = 'going';
+    } else if (mostRecentDO.importOrExport === 'EXPORT') {
+      // Most recent is EXPORT - driver is on the returning leg
+      returningDO = mostRecentDO;
+      journeyPhase = 'returning';
+      
+      // Find the associated IMPORT (the most recent IMPORT before or on the same date as this EXPORT)
+      const mostRecentExportDate = new Date(mostRecentDO.date);
+      const associatedImport = deliveryOrders.find((d: any) => {
+        if (d.importOrExport !== 'IMPORT') return false;
+        const importDate = new Date(d.date);
+        // IMPORT should be on or before the EXPORT date
+        return importDate <= mostRecentExportDate;
+      });
+      
+      if (associatedImport) {
+        goingDO = associatedImport;
+      }
+    }
+
+    // Get the DO numbers for the current journey
+    const journeyDONumbers: string[] = [];
+    if (goingDO?.doNumber) journeyDONumbers.push(goingDO.doNumber);
+    if (returningDO?.doNumber) journeyDONumbers.push(returningDO.doNumber);
+
+    res.status(200).json({
+      success: true,
+      message: 'Current journey retrieved successfully',
+      data: {
+        journeyPhase,
+        goingDO,
+        returningDO,
+        journeyDONumbers,
+        allDeliveryOrders: deliveryOrders, // Include all for reference
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Get next DO number
  */
 export const getNextDONumber = async (req: AuthRequest, res: Response): Promise<void> => {
