@@ -1,17 +1,26 @@
-import { useState, useEffect } from 'react';
-import { MapPin, Fuel, Bell, CheckCircle, Navigation, Clock, ArrowRight, Info } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { MapPin, Fuel, Bell, Navigation, Clock, ArrowRight, Info, LogOut, Sun, Moon, RefreshCw, Truck, Wifi, WifiOff, FileText, Calendar } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { lposAPI } from '../services/api';
 
-interface DriverOrder {
+// Real-time update interval (30 seconds)
+const REALTIME_UPDATE_INTERVAL = 30000;
+
+interface LPOEntryData {
   id: string;
+  date: string;
+  lpoNo: string;
   station: string;
+  doNo: string;
+  truckNo: string;
   liters: number;
-  status: 'pending' | 'completed' | 'upcoming';
-  distance: string;
-  eta: string;
-  lpoNumber?: string;
-  doNo?: string;
+  rate: number;
+  amount: number;
+  destination: string;
+  isCancelled?: boolean;
+  isDriverAccount?: boolean;
 }
 
 interface DriverNotification {
@@ -33,40 +42,128 @@ interface DriverPortalProps {
 }
 
 export function DriverPortal({ user }: DriverPortalProps) {
-  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [notifications, setNotifications] = useState<DriverNotification[]>([]);
+  const [lpoEntries, setLpoEntries] = useState<LPOEntryData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { logout, toggleTheme, isDark } = useAuth();
 
   const [driverData, setDriverData] = useState({
     truckNo: user.truckNo || 'N/A',
-    doNo: user.currentDO || 'N/A',
-    currentLocation: 'N/A',
+    goingDoNo: 'N/A',
+    returningDoNo: 'N/A',
+    goingDestination: 'N/A',
+    returningDestination: 'N/A',
     loadingPoint: 'N/A',
-    offloadingPoint: 'N/A',
-    destination: 'N/A',
     totalFuel: 0,
-    extraFuel: 0,
     usedFuel: 0,
     remainingFuel: 0,
   });
 
-  const [currentOrders, setCurrentOrders] = useState<DriverOrder[]>([]);
-  const [completedOrders, setCompletedOrders] = useState<DriverOrder[]>([]);
+  // Online/Offline status monitoring
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
-  const fetchDriverData = async (truck: string) => {
+  const fetchDriverData = useCallback(async (truck: string, silent: boolean = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
 
       // Fetch delivery orders for this truck
       const doResponse = await api.get(`/delivery-orders/truck/${truck}`);
       const deliveryOrders = doResponse.data.data || [];
 
+      // Find current journey DOs (most recent IMPORT for going, most recent EXPORT for returning)
+      // A journey consists of a going DO (IMPORT) and returning DO (EXPORT)
+      const importDOs = deliveryOrders.filter((d: any) => d.importOrExport === 'IMPORT');
+      const exportDOs = deliveryOrders.filter((d: any) => d.importOrExport === 'EXPORT');
+      
+      // Get the most recent of each (current journey)
+      const currentGoingDO = importDOs.length > 0 ? importDOs[0] : null;
+      const currentReturningDO = exportDOs.length > 0 ? exportDOs[0] : null;
+      
+      // Get the DO numbers for the current journey
+      const journeyDONumbers: string[] = [];
+      if (currentGoingDO?.doNumber) journeyDONumbers.push(currentGoingDO.doNumber);
+      if (currentReturningDO?.doNumber) journeyDONumbers.push(currentReturningDO.doNumber);
+
       // Fetch fuel records for this truck
       const fuelResponse = await api.get(`/fuel-records?truckNo=${truck}&limit=100`);
       const fuelRecords = fuelResponse.data.data?.items || [];
 
+      // Fetch LPO entries for this truck's CURRENT JOURNEY only (by DO numbers)
+      let lpoEntriesData: LPOEntryData[] = [];
+      try {
+        // First get all LPO entries for this truck
+        const lpoData = await lposAPI.getAll({ truckNo: truck });
+        
+        // Filter to only include entries for the current journey's DOs
+        const filteredLpoData = (lpoData || []).filter((entry: any) => {
+          // Include if doNo matches one of the journey DO numbers
+          // Also include driver account entries (doNo = 'NIL') that match by date range
+          if (journeyDONumbers.length === 0) return true; // No DOs yet, show all
+          
+          const entryDoNo = entry.doNo?.toString()?.toUpperCase() || '';
+          
+          // Check if this entry's DO matches any of the current journey DOs
+          const matchesJourneyDO = journeyDONumbers.some(doNo => 
+            entryDoNo === doNo?.toString()?.toUpperCase()
+          );
+          
+          // For driver account entries (NIL DO), include them if they're recent
+          if (entry.isDriverAccount || entryDoNo === 'NIL') {
+            // Include driver account entries from the last 30 days
+            const entryDate = new Date(entry.date);
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            return entryDate >= thirtyDaysAgo;
+          }
+          
+          return matchesJourneyDO;
+        });
+        
+        lpoEntriesData = filteredLpoData.map((entry: any) => ({
+          id: entry._id || entry.id,
+          date: entry.date,
+          lpoNo: entry.lpoNo,
+          station: entry.station,
+          doNo: entry.doNo || 'N/A',
+          truckNo: entry.truckNo,
+          liters: entry.liters,
+          rate: entry.rate || 0,
+          amount: entry.amount || (entry.liters * (entry.rate || 0)),
+          destination: entry.dest || entry.destination || 'N/A',
+          isCancelled: entry.isCancelled,
+          isDriverAccount: entry.isDriverAccount,
+        }));
+        
+        // Sort by date descending (newest first)
+        lpoEntriesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setLpoEntries(lpoEntriesData);
+      } catch (lpoError) {
+        console.error('Failed to fetch LPO entries:', lpoError);
+        setLpoEntries([]);
+      }
+
       // Check if driver has any assignments
-      if (deliveryOrders.length === 0 && fuelRecords.length === 0) {
+      if (deliveryOrders.length === 0 && fuelRecords.length === 0 && lpoEntriesData.length === 0) {
         // No assignments yet
         setNotifications([{
           id: 'no-assignment',
@@ -75,35 +172,33 @@ export function DriverPortal({ user }: DriverPortalProps) {
           timestamp: new Date().toISOString(),
           read: false,
         }]);
-        setCurrentOrders([]);
-        setCompletedOrders([]);
         setDriverData({
           truckNo: truck,
-          doNo: 'N/A',
-          currentLocation: 'N/A',
+          goingDoNo: 'N/A',
+          returningDoNo: 'N/A',
+          goingDestination: 'N/A',
+          returningDestination: 'N/A',
           loadingPoint: 'N/A',
-          offloadingPoint: 'N/A',
-          destination: 'N/A',
           totalFuel: 0,
-          extraFuel: 0,
           usedFuel: 0,
           remainingFuel: 0,
         });
-        setLoading(false);
+        setLastUpdated(new Date());
         return;
       }
 
-      // Process delivery orders into notifications
-      const doNotifications: DriverNotification[] = deliveryOrders.slice(0, 10).map((order: any) => {
+      // Process delivery orders into notifications (only current journey)
+      const currentJourneyDOs = [currentGoingDO, currentReturningDO].filter(Boolean);
+      const doNotifications: DriverNotification[] = currentJourneyDOs.map((order: any) => {
         let type: 'import' | 'export' | 'return' | 'info' = 'info';
         let message = '';
 
         if (order.importOrExport === 'IMPORT') {
           type = 'import';
-          message = `🟢 IMPORT: Load at ${order.loadingPoint}, deliver to ${order.destination}`;
+          message = `🟢 GOING: Load at ${order.loadingPoint}, deliver to ${order.destination}`;
         } else if (order.importOrExport === 'EXPORT') {
           type = 'export';
-          message = `🔵 EXPORT: Load at ${order.loadingPoint}, deliver to ${order.destination}`;
+          message = `🔵 RETURNING: Load at ${order.loadingPoint}, deliver to ${order.destination}`;
         }
 
         // Check for return DO (if there's a border entry or specific offloading point)
@@ -126,7 +221,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
         };
       });
 
-      // Process fuel records into notifications and orders
+      // Process fuel records into notifications
       const fuelNotifications: DriverNotification[] = fuelRecords.slice(0, 5).map((record: any) => ({
         id: `fuel-${record._id}`,
         type: 'fuel' as const,
@@ -145,79 +240,74 @@ export function DriverPortal({ user }: DriverPortalProps) {
 
       setNotifications(allNotifications);
 
-      // Process fuel orders for current/history tabs
-      const currentFuelOrders: DriverOrder[] = fuelRecords
-        .filter((r: any) => r.status !== 'completed')
-        .map((record: any) => ({
-          id: record._id,
-          station: record.fuelStation,
-          liters: record.liters,
-          status: 'upcoming' as const,
-          distance: 'N/A',
-          eta: 'En route',
-          lpoNumber: record.lpoNumber,
-          doNo: record.doNo,
-        }));
+      // Update driver data from current journey DOs
+      // Calculate fuel data from LPO entries for current journey
+      const totalFuel = lpoEntriesData.reduce((sum, e) => sum + (e.liters || 0), 0);
+      const usedFuel = lpoEntriesData
+        .filter(e => !e.isCancelled)
+        .reduce((sum, e) => sum + (e.liters || 0), 0);
 
-      const completedFuelOrders: DriverOrder[] = fuelRecords
-        .filter((r: any) => r.status === 'completed')
-        .map((record: any) => ({
-          id: record._id,
-          station: record.fuelStation,
-          liters: record.liters,
-          status: 'completed' as const,
-          distance: '0 km',
-          eta: 'Completed',
-          lpoNumber: record.lpoNumber,
-          doNo: record.doNo,
-        }));
-
-      setCurrentOrders(currentFuelOrders);
-      setCompletedOrders(completedFuelOrders);
-
-      // Update driver data from latest DO
-      if (deliveryOrders.length > 0) {
-        const latestDO = deliveryOrders[0];
-        
-        // Calculate fuel data from fuel records
-        const totalFuel = fuelRecords.reduce((sum: number, r: any) => sum + (r.liters || 0), 0);
-        const usedFuel = fuelRecords
-          .filter((r: any) => r.status === 'completed')
-          .reduce((sum: number, r: any) => sum + (r.liters || 0), 0);
-
-        setDriverData({
-          truckNo: truck,
-          doNo: latestDO.doNumber,
-          currentLocation: latestDO.loadingPoint,
-          loadingPoint: latestDO.loadingPoint,
-          offloadingPoint: latestDO.destination,
-          destination: latestDO.destination,
-          totalFuel: totalFuel,
-          extraFuel: 0,
-          usedFuel: usedFuel,
-          remainingFuel: totalFuel - usedFuel,
-        });
-      }
+      setDriverData({
+        truckNo: truck,
+        goingDoNo: currentGoingDO?.doNumber || 'N/A',
+        returningDoNo: currentReturningDO?.doNumber || 'N/A',
+        goingDestination: currentGoingDO?.destination || 'N/A',
+        returningDestination: currentReturningDO?.destination || 'N/A',
+        loadingPoint: currentGoingDO?.loadingPoint || currentReturningDO?.loadingPoint || 'N/A',
+        totalFuel: totalFuel,
+        usedFuel: usedFuel,
+        remainingFuel: totalFuel - usedFuel,
+      });
+      
+      setLastUpdated(new Date());
     } catch (error: any) {
       console.error('Failed to fetch driver data:', error);
-      toast.error('Failed to load driver information');
+      if (!silent) {
+        toast.error('Failed to load driver information');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      } else {
+        setIsRefreshing(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
     const activeTruckNo = user.truckNo;
     
     if (activeTruckNo) {
       fetchDriverData(activeTruckNo);
-      // Auto-refresh every 30 seconds
-      const interval = setInterval(() => fetchDriverData(activeTruckNo), 30000);
-      return () => clearInterval(interval);
+      
+      // Set up real-time polling
+      updateIntervalRef.current = setInterval(() => {
+        if (isOnline) {
+          fetchDriverData(activeTruckNo, true);
+        }
+      }, REALTIME_UPDATE_INTERVAL);
+      
+      return () => {
+        if (updateIntervalRef.current) {
+          clearInterval(updateIntervalRef.current);
+        }
+      };
     } else {
       setLoading(false);
     }
-  }, [user.truckNo]);
+  }, [user.truckNo, fetchDriverData, isOnline]);
+
+  const handleManualRefresh = () => {
+    if (user.truckNo && isOnline) {
+      fetchDriverData(user.truckNo, true);
+    }
+  };
+
+  const handleLogout = () => {
+    if (window.confirm('Are you sure you want to logout?')) {
+      logout();
+    }
+  };
 
   const markNotificationRead = (id: string) => {
     setNotifications(prev =>
@@ -230,16 +320,44 @@ export function DriverPortal({ user }: DriverPortalProps) {
   // Check if truck number is missing
   if (!user.truckNo) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 max-w-md transition-colors">
-          <div className="text-center">
-            <Info className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Truck Number Required</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Your account doesn't have a truck number assigned. Please contact your supervisor to set up your truck number.
-            </p>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              User: {user.firstName} {user.lastName}
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+        {/* Header - Fixed */}
+        <div className="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10">
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold">Driver Portal</h1>
+              <p className="text-sm opacity-90">{user.firstName} {user.lastName}</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
+                title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-full bg-red-500 hover:bg-red-400 transition-colors"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-center p-4" style={{ minHeight: 'calc(100vh - 80px)' }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full transition-colors">
+            <div className="text-center">
+              <Info className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Truck Number Required</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Your account doesn't have a truck number assigned. Please contact your supervisor to set up your truck number.
+              </p>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                User: {user.firstName} {user.lastName}
+              </div>
             </div>
           </div>
         </div>
@@ -249,122 +367,192 @@ export function DriverPortal({ user }: DriverPortalProps) {
 
   if (loading && notifications.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading your information...</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+        {/* Header - Fixed */}
+        <div className="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10">
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold">Driver Portal</h1>
+              <p className="text-sm opacity-90">{user.firstName} {user.lastName}</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
+                title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-full bg-red-500 hover:bg-red-400 transition-colors"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-center p-4" style={{ minHeight: 'calc(100vh - 80px)' }}>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Loading your information...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Driver Portal</h1>
-        <p className="text-gray-600 dark:text-gray-400">Welcome back! Here's your journey information.</p>
-      </div>
-
-      {/* Truck Info Card */}
-      <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-6 text-white mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="text-sm opacity-90">Your Truck</div>
-            <div className="text-2xl font-bold">{driverData.truckNo}</div>
-            <div className="text-sm opacity-75">DO: {driverData.doNo}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-sm opacity-90">Destination</div>
-            <div className="text-xl font-bold">{driverData.destination}</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-indigo-400">
-          <div>
-            <div className="text-xs opacity-75">Loading Point</div>
-            <div className="text-sm">{driverData.loadingPoint}</div>
-          </div>
-          <div>
-            <div className="text-xs opacity-75">Offloading Point</div>
-            <div className="text-sm">{driverData.offloadingPoint}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Fuel Status */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-6 transition-colors">
+      {/* Header - Fixed */}
+      <div className="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total Fuel</div>
-              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.totalFuel}L</div>
+              <h1 className="text-xl font-bold flex items-center">
+                <Truck className="w-5 h-5 mr-2" />
+                Driver Portal
+              </h1>
+              <p className="text-sm opacity-90">{user.firstName} {user.lastName}</p>
             </div>
-            <Fuel className="w-8 h-8 text-blue-500" />
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Extra Fuel</div>
-              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.extraFuel}L</div>
+            <div className="flex items-center space-x-2">
+              {/* Connection Status */}
+              <div className={`p-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} title={isOnline ? 'Online' : 'Offline'}>
+                {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+              </div>
+              {/* Refresh Button */}
+              <button
+                onClick={handleManualRefresh}
+                disabled={isRefreshing || !isOnline}
+                className={`p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors ${isRefreshing ? 'animate-spin' : ''}`}
+                title="Refresh data"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+              {/* Theme Toggle */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
+                title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-full bg-red-500 hover:bg-red-400 transition-colors"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
             </div>
-            <Fuel className="w-8 h-8 text-green-500" />
           </div>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Used Fuel</div>
-              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.usedFuel}L</div>
-            </div>
-            <Fuel className="w-8 h-8 text-orange-500" />
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Remaining</div>
-              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.remainingFuel}L</div>
-            </div>
-            <Fuel className="w-8 h-8 text-red-500" />
-          </div>
+          {/* Last Updated */}
+          {lastUpdated && (
+            <p className="text-xs opacity-75 mt-1">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Notifications */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-6 transition-colors">
-        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 px-6 py-4 border-b dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-            <Bell className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
-            Notifications & Orders
-            {unreadCount > 0 && (
-              <span className="ml-3 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
-                {unreadCount} New
-              </span>
-            )}
-          </h3>
+      {/* Main Content */}
+      <div className="max-w-2xl mx-auto p-4">
+        {/* Truck Info Card - Current Journey */}
+        <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-4 sm:p-6 text-white mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 space-y-2 sm:space-y-0">
+            <div>
+              <div className="text-sm opacity-90">Your Truck</div>
+              <div className="text-xl sm:text-2xl font-bold">{driverData.truckNo}</div>
+              <div className="text-xs opacity-75 mt-1">Current Journey</div>
+            </div>
+            <div className="sm:text-right">
+              <div className="text-sm opacity-90">Loading Point</div>
+              <div className="text-lg sm:text-xl font-bold">{driverData.loadingPoint}</div>
+            </div>
+          </div>
+
+          {/* Going & Returning DO Info */}
+          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-indigo-400">
+            <div className="bg-indigo-400/30 rounded-lg p-3">
+              <div className="text-xs opacity-75 mb-1">🟢 GOING</div>
+              <div className="text-sm font-semibold">DO: {driverData.goingDoNo}</div>
+              <div className="text-xs opacity-90">→ {driverData.goingDestination}</div>
+            </div>
+            <div className="bg-indigo-400/30 rounded-lg p-3">
+              <div className="text-xs opacity-75 mb-1">🔵 RETURNING</div>
+              <div className="text-sm font-semibold">DO: {driverData.returningDoNo}</div>
+              <div className="text-xs opacity-90">→ {driverData.returningDestination}</div>
+            </div>
+          </div>
         </div>
-        <div className="divide-y dark:divide-gray-700 max-h-96 overflow-y-auto">
+
+        {/* Fuel Status - Mobile Responsive Grid */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Fuel</div>
+                <div className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.totalFuel}L</div>
+              </div>
+              <Fuel className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Used</div>
+                <div className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.usedFuel}L</div>
+              </div>
+              <Fuel className="w-6 h-6 sm:w-8 sm:h-8 text-orange-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Remaining</div>
+                <div className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">{driverData.remainingFuel}L</div>
+              </div>
+              <Fuel className="w-6 h-6 sm:w-8 sm:h-8 text-green-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Notifications */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-4 transition-colors">
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 px-4 sm:px-6 py-3 sm:py-4 border-b dark:border-gray-700">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+              <Bell className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
+              Notifications & Orders
+              {unreadCount > 0 && (
+                <span className="ml-2 sm:ml-3 bg-red-500 text-white text-xs px-2 py-0.5 sm:py-1 rounded-full font-bold">
+                  {unreadCount} New
+                </span>
+              )}
+            </h3>
+          </div>
+          <div className="divide-y dark:divide-gray-700 max-h-72 sm:max-h-96 overflow-y-auto">
           {notifications.length === 0 ? (
-            <div className="p-8 text-center">
-              <Info className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-500 dark:text-gray-400">No notifications yet</p>
+            <div className="p-6 sm:p-8 text-center">
+              <Info className="w-10 h-10 sm:w-12 sm:h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base">No notifications yet</p>
             </div>
           ) : (
             notifications.map((notification) => (
               <div
                 key={notification.id}
                 onClick={() => markNotificationRead(notification.id)}
-                className={`p-4 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                className={`p-3 sm:p-4 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
                   notification.read ? 'bg-white dark:bg-gray-800' : 'bg-blue-50 dark:bg-blue-900/20'
                 }`}
               >
-                <div className="flex items-start space-x-3">
+                <div className="flex items-start space-x-2 sm:space-x-3">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
                       notification.type === 'import'
                         ? 'bg-green-100 dark:bg-green-900/30'
                         : notification.type === 'export'
@@ -378,22 +566,22 @@ export function DriverPortal({ user }: DriverPortalProps) {
                   >
                     {notification.type === 'import' || notification.type === 'export' ? (
                       <Navigation
-                        className={`w-5 h-5 ${
+                        className={`w-4 h-4 sm:w-5 sm:h-5 ${
                           notification.type === 'import' ? 'text-green-600' : 'text-blue-600'
                         }`}
                       />
                     ) : notification.type === 'return' ? (
-                      <ArrowRight className="w-5 h-5 text-orange-600" />
+                      <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
                     ) : notification.type === 'fuel' ? (
-                      <Fuel className="w-5 h-5 text-yellow-600" />
+                      <Fuel className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
                     ) : (
-                      <Info className="w-5 h-5 text-gray-600" />
+                      <Info className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span
-                        className={`text-xs font-semibold px-2 py-1 rounded ${
+                        className={`text-xs font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded ${
                           notification.type === 'import'
                             ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                             : notification.type === 'export'
@@ -411,7 +599,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
                         <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-900 dark:text-gray-100 font-medium mb-1">
+                    <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 font-medium mb-1">
                       {notification.message}
                     </p>
                     {notification.doNo && (
@@ -431,90 +619,90 @@ export function DriverPortal({ user }: DriverPortalProps) {
         </div>
       </div>
 
-      {/* Orders Tabs */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow transition-colors">
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex space-x-8 px-6">
-            <button
-              onClick={() => setActiveTab('current')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'current'
-                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
-              }`}
-            >
-              Current Orders ({currentOrders.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'history'
-                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
-              }`}
-            >
-              History ({completedOrders.length})
-            </button>
-          </nav>
-        </div>
+        {/* LPO Entries / Fuel Orders */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow transition-colors">
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 px-4 sm:px-6 py-3 sm:py-4 border-b dark:border-gray-700">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
+              Fuel Orders / LPOs
+              <span className="ml-2 sm:ml-3 bg-indigo-500 text-white text-xs px-2 py-0.5 sm:py-1 rounded-full font-bold">
+                {lpoEntries.length}
+              </span>
+            </h3>
+          </div>
 
-        <div className="p-6">
-          {activeTab === 'current' && (
-            <div className="space-y-4">
-              {currentOrders.map((order) => (
-                <div key={order.id} className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-lg border dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
-                        <MapPin className="w-6 h-6 text-white" />
+          <div className="p-4 sm:p-6 max-h-96 overflow-y-auto">
+            <div className="space-y-3 sm:space-y-4">
+              {lpoEntries.length === 0 ? (
+                <div className="text-center py-8">
+                  <Fuel className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">No fuel orders yet</p>
+                  <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">LPO entries will appear here once created</p>
+                </div>
+              ) : (
+                lpoEntries.map((entry) => (
+                  <div 
+                    key={entry.id} 
+                    className={`p-3 sm:p-4 rounded-lg border transition-colors ${
+                      entry.isCancelled
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                        : entry.isDriverAccount
+                        ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-gray-200 dark:border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-3 sm:space-x-4">
+                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          entry.isCancelled
+                            ? 'bg-red-500'
+                            : entry.isDriverAccount
+                            ? 'bg-orange-500'
+                            : 'bg-blue-500'
+                        }`}>
+                          {entry.isCancelled ? (
+                            <span className="text-white text-xs font-bold">X</span>
+                          ) : (
+                            <MapPin className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm sm:text-base">{entry.station}</div>
+                            {entry.isCancelled && (
+                              <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded">
+                                CANCELLED
+                              </span>
+                            )}
+                            {entry.isDriverAccount && (
+                              <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded">
+                                DRIVER ACC
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                            <span className="font-medium">{entry.liters}L</span> @ {entry.rate} = <span className="font-medium">{entry.amount?.toLocaleString()}</span>
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                            LPO: <span className="font-medium">{entry.lpoNo}</span> • DO: <span className="font-medium">{entry.doNo}</span>
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-500">
+                            Dest: {entry.destination}
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-semibold text-gray-900 dark:text-gray-100">{order.station}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">{order.liters} liters • LPO: {order.lpoNumber}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-500">DO: {order.doNo}</div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          {new Date(entry.date).toLocaleDateString()}
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{order.distance}</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center">
-                        <Clock className="w-3 h-3 mr-1" />
-                        ETA: {order.eta}
-                      </div>
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 mt-1">
-                        Upcoming
-                      </span>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
-          )}
-
-          {activeTab === 'history' && (
-            <div className="space-y-4">
-              {completedOrders.map((order) => (
-                <div key={order.id} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border dark:border-gray-600">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
-                        <CheckCircle className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <div className="font-semibold text-gray-900 dark:text-gray-100">{order.station}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">{order.liters} liters • LPO: {order.lpoNumber}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-500">DO: {order.doNo}</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                        Completed
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

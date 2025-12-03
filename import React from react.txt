@@ -204,3 +204,9 @@ Now I need to remove the cancellation point dropdown UI and the availableCancell
 
 
 forward values to the next station - for zambia return for ndola and kapiri and tunduma and infinity withch is mbeya return 
+
+
+YardFuelEntry.tsx - The older, more complex component - this needs to be deleted
+
+
+
