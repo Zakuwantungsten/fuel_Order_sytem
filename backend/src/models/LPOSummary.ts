@@ -90,6 +90,11 @@ const lpoDetailSchema = new Schema<ILPODetail>(
     cancelledAt: {
       type: Date,
     },
+    // Reference DO for NIL entries to link to a journey
+    referenceDo: {
+      type: String,
+      trim: true,
+    },
     // Custom station fields (for unlisted stations like small lake stations in Zambia)
     isCustomStation: {
       type: Boolean,

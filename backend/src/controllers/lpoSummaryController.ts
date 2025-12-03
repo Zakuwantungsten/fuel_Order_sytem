@@ -548,6 +548,14 @@ const syncLPOEntriesToList = async (
         continue;
       }
 
+      // Determine payment mode
+      let paymentMode: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' = 'STATION';
+      if (entry.isDriverAccount) {
+        paymentMode = 'DRIVER_ACCOUNT';
+      } else if (lpoSummary.station?.toUpperCase() === 'CASH' || entry.cancellationPoint) {
+        paymentMode = 'CASH';
+      }
+
       // Create the LPOEntry record
       await LPOEntry.create({
         sn: nextSn++,
@@ -561,6 +569,10 @@ const syncLPOEntriesToList = async (
         destinations: entry.dest || 'PENDING',
         originalLtrs: entry.originalLiters || null,
         amendedAt: entry.amendedAt || null,
+        // New fields for driver account / cash tracking
+        isDriverAccount: entry.isDriverAccount || false,
+        referenceDo: entry.referenceDo || null,
+        paymentMode,
       });
     }
 

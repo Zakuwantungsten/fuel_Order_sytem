@@ -82,6 +82,10 @@ export interface ILPOEntry {
   amendedAt?: Date | null;
   isDeleted: boolean;
   deletedAt?: Date;
+  // Driver Account / Cash fields
+  isDriverAccount?: boolean;  // True for driver's account (misuse/theft) or cash entries
+  referenceDo?: string;       // Reference DO for NIL entries to link to a journey
+  paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';  // Payment method
   createdAt: Date;
   updatedAt: Date;
 }
@@ -105,6 +109,8 @@ export interface ILPODetail {
   originalDoNo?: string;
   cancellationReason?: string;
   cancelledAt?: Date;
+  // Reference DO for NIL entries to link to a journey
+  referenceDo?: string;
   // Custom station fields (for unlisted stations like small lake stations in Zambia)
   isCustomStation?: boolean;
   customStationName?: string;

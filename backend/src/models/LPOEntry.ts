@@ -64,6 +64,21 @@ const lpoEntrySchema = new Schema<ILPOEntryDocument>(
     deletedAt: {
       type: Date,
     },
+    // Driver Account / Cash fields
+    isDriverAccount: {
+      type: Boolean,
+      default: false,
+    },
+    referenceDo: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    paymentMode: {
+      type: String,
+      enum: ['STATION', 'CASH', 'DRIVER_ACCOUNT'],
+      default: 'STATION',
+    },
   },
   {
     timestamps: true,
@@ -78,9 +93,13 @@ lpoEntrySchema.index({ truckNo: 1 });
 lpoEntrySchema.index({ dieselAt: 1 });
 lpoEntrySchema.index({ doSdo: 1 });
 lpoEntrySchema.index({ isDeleted: 1 });
+lpoEntrySchema.index({ isDriverAccount: 1 });
+lpoEntrySchema.index({ referenceDo: 1 });
+lpoEntrySchema.index({ paymentMode: 1 });
 
 // Compound indexes for common queries
 lpoEntrySchema.index({ lpoNo: 1, date: -1 });
 lpoEntrySchema.index({ dieselAt: 1, date: -1 });
+lpoEntrySchema.index({ truckNo: 1, referenceDo: 1 }); // For fetching NIL entries by journey
 
 export const LPOEntry = mongoose.model<ILPOEntryDocument>('LPOEntry', lpoEntrySchema);

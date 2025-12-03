@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, MapPin } from 'lucide-react';
+import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, MapPin, FileText } from 'lucide-react';
 import { LPOEntry, CancellationPoint, LPOSummary } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
 import { lpoDocumentsAPI } from '../services/api';
@@ -53,6 +53,9 @@ const LPOForm: React.FC<LPOFormProps> = ({
   const [cancellationPoint, setCancellationPoint] = useState<CancellationPoint | ''>('');
   const [isDriverAccount, setIsDriverAccount] = useState(false);
   const [showCancellationInfo, setShowCancellationInfo] = useState(false);
+  // Reference DO for CASH/Driver Account entries (links to journey even though DO shows NIL)
+  const [useDoReference, setUseDoReference] = useState(false);
+  const [referenceDo, setReferenceDo] = useState('');
 
   // Custom station states
   const [isCustomStation, setIsCustomStation] = useState(false);
@@ -248,6 +251,8 @@ const LPOForm: React.FC<LPOFormProps> = ({
       customStationName: isCustomStation ? customStationName : undefined,
       customGoingCheckpoint: customGoingEnabled ? customGoingCheckpoint : undefined,
       customReturnCheckpoint: customReturnEnabled ? customReturnCheckpoint : undefined,
+      // Reference DO for CASH/Driver Account entries (links to journey even with NIL DO)
+      referenceDo: useDoReference && referenceDo ? referenceDo : undefined,
     };
     
     onSubmit(submissionData);
@@ -580,6 +585,42 @@ const LPOForm: React.FC<LPOFormProps> = ({
                   <p className="mt-2 ml-8 text-sm text-red-600 dark:text-red-400">
                     ⚠️ Fuel record will NOT be updated. DO and destination will show as NIL in exports.
                   </p>
+                )}
+              </div>
+
+              {/* Reference DO Option - For linking NIL entries to a journey */}
+              <div className="border-t border-orange-300 dark:border-orange-600 pt-4 mt-4">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useDoReference}
+                    onChange={() => {
+                      setUseDoReference(!useDoReference);
+                      if (useDoReference) setReferenceDo('');
+                    }}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <div className="flex items-center space-x-2">
+                    <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <span className="font-medium text-blue-700 dark:text-blue-400">
+                      Use DO Reference (Optional)
+                    </span>
+                  </div>
+                </label>
+                
+                {useDoReference && (
+                  <div className="mt-3 ml-8">
+                    <p className="text-sm text-blue-600 dark:text-blue-400 mb-2">
+                      💡 Enter a reference DO to link this entry to a specific journey. DO/Destination will still show as NIL, but this helps track which journey this entry belongs to.
+                    </p>
+                    <input
+                      type="text"
+                      value={referenceDo}
+                      onChange={(e) => setReferenceDo(e.target.value.toUpperCase())}
+                      placeholder="e.g., DO-12345 or SDO-67890"
+                      className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 )}
               </div>
             </div>

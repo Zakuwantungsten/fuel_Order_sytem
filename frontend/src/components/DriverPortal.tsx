@@ -108,51 +108,74 @@ export function DriverPortal({ user }: DriverPortalProps) {
       const fuelResponse = await api.get(`/fuel-records?truckNo=${truck}&limit=100`);
       const fuelRecords = fuelResponse.data.data?.items || [];
 
-      // Fetch LPO entries for this truck's CURRENT JOURNEY only (by DO numbers)
+      // Fetch LPO entries for this truck's CURRENT JOURNEY
+      // Include:
+      // 1. Entries matching current journey DOs (going/returning)
+      // 2. NIL DO/destination entries (driver's account/cash) with referenceDo matching journey
+      // 3. NIL entries without referenceDo (legacy entries - include all for this truck)
       let lpoEntriesData: LPOEntryData[] = [];
       try {
-        // First get all LPO entries for this truck
+        // Get all LPO entries for this truck
         const lpoData = await lposAPI.getAll({ truckNo: truck });
         
-        // Filter to only include entries for the current journey's DOs
+        // Filter entries for this journey
         const filteredLpoData = (lpoData || []).filter((entry: any) => {
-          // Include if doNo matches one of the journey DO numbers
-          // Also include driver account entries (doNo = 'NIL') that match by date range
-          if (journeyDONumbers.length === 0) return true; // No DOs yet, show all
+          const entryDoNo = entry.doNo?.toString()?.trim()?.toUpperCase() || '';
+          const entryDest = entry.dest?.toString()?.trim()?.toUpperCase() || entry.destination?.toString()?.trim()?.toUpperCase() || '';
+          const entryReferenceDo = entry.referenceDo?.toString()?.trim()?.toUpperCase() || '';
           
-          const entryDoNo = entry.doNo?.toString()?.toUpperCase() || '';
+          // Check if this is a NIL DO/destination entry (driver's account or cash)
+          const isNilDO = entryDoNo === 'NIL' || entryDoNo === '' || entryDoNo === 'N/A';
+          const isNilDest = entryDest === 'NIL' || entryDest === '' || entryDest === 'N/A';
+          const isDriverAccountOrCash = entry.isDriverAccount || isNilDO || isNilDest;
           
-          // Check if this entry's DO matches any of the current journey DOs
-          const matchesJourneyDO = journeyDONumbers.some(doNo => 
-            entryDoNo === doNo?.toString()?.toUpperCase()
-          );
-          
-          // For driver account entries (NIL DO), include them if they're recent
-          if (entry.isDriverAccount || entryDoNo === 'NIL') {
-            // Include driver account entries from the last 30 days
-            const entryDate = new Date(entry.date);
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            return entryDate >= thirtyDaysAgo;
+          // NIL entries (driver's account/cash)
+          if (isDriverAccountOrCash) {
+            // If referenceDo exists, check if it matches current journey
+            if (entryReferenceDo && journeyDONumbers.length > 0) {
+              const matchesJourneyRef = journeyDONumbers.some(doNo => 
+                entryReferenceDo === doNo?.toString()?.trim()?.toUpperCase()
+              );
+              return matchesJourneyRef;
+            }
+            // No referenceDo - include all NIL entries for this truck (legacy behavior)
+            return true;
           }
+          
+          // If no journey DOs found yet, show all entries
+          if (journeyDONumbers.length === 0) {
+            return true;
+          }
+          
+          // Regular entries - match by current journey DO numbers
+          const matchesJourneyDO = journeyDONumbers.some(doNo => 
+            entryDoNo === doNo?.toString()?.trim()?.toUpperCase()
+          );
           
           return matchesJourneyDO;
         });
         
-        lpoEntriesData = filteredLpoData.map((entry: any) => ({
-          id: entry._id || entry.id,
-          date: entry.date,
-          lpoNo: entry.lpoNo,
-          station: entry.station,
-          doNo: entry.doNo || 'N/A',
-          truckNo: entry.truckNo,
-          liters: entry.liters,
-          rate: entry.rate || 0,
-          amount: entry.amount || (entry.liters * (entry.rate || 0)),
-          destination: entry.dest || entry.destination || 'N/A',
-          isCancelled: entry.isCancelled,
-          isDriverAccount: entry.isDriverAccount,
-        }));
+        lpoEntriesData = filteredLpoData.map((entry: any) => {
+          const entryDoNo = entry.doNo?.toString()?.trim()?.toUpperCase() || '';
+          const entryDest = entry.dest?.toString()?.trim()?.toUpperCase() || entry.destination?.toString()?.trim()?.toUpperCase() || '';
+          const isNilDO = entryDoNo === 'NIL' || entryDoNo === '' || entryDoNo === 'N/A';
+          const isNilDest = entryDest === 'NIL' || entryDest === '' || entryDest === 'N/A';
+          
+          return {
+            id: entry._id || entry.id,
+            date: entry.date,
+            lpoNo: entry.lpoNo,
+            station: entry.station,
+            doNo: isNilDO ? 'NIL' : (entry.doNo || 'N/A'),
+            truckNo: entry.truckNo,
+            liters: entry.liters,
+            rate: entry.rate || 0,
+            amount: entry.amount || (entry.liters * (entry.rate || 0)),
+            destination: isNilDest ? 'NIL' : (entry.dest || entry.destination || 'N/A'),
+            isCancelled: entry.isCancelled,
+            isDriverAccount: entry.isDriverAccount || isNilDO, // Mark NIL DO as driver account type
+          };
+        });
         
         // Sort by date descending (newest first)
         lpoEntriesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -667,7 +690,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center flex-wrap gap-1">
                             <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm sm:text-base">{entry.station}</div>
                             {entry.isCancelled && (
                               <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded">
@@ -679,15 +702,20 @@ export function DriverPortal({ user }: DriverPortalProps) {
                                 DRIVER ACC
                               </span>
                             )}
+                            {(entry.doNo === 'NIL' || entry.doNo === 'N/A' || !entry.doNo) && !entry.isDriverAccount && (
+                              <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded">
+                                CASH
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                            <span className="font-medium">{entry.liters}L</span> @ {entry.rate} = <span className="font-medium">{entry.amount?.toLocaleString()}</span>
+                            <span className="font-medium">{entry.liters}L</span> @ {entry.rate} = <span className="font-medium">KES {entry.amount?.toLocaleString()}</span>
                           </div>
                           <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-                            LPO: <span className="font-medium">{entry.lpoNo}</span> • DO: <span className="font-medium">{entry.doNo}</span>
+                            LPO: <span className="font-medium">{entry.lpoNo}</span> • DO: <span className={`font-medium ${entry.doNo === 'NIL' ? 'text-orange-500' : ''}`}>{entry.doNo}</span>
                           </div>
                           <div className="text-xs text-gray-500 dark:text-gray-500">
-                            Dest: {entry.destination}
+                            Dest: <span className={entry.destination === 'NIL' ? 'text-orange-500' : ''}>{entry.destination}</span>
                           </div>
                         </div>
                       </div>
