@@ -208,5 +208,35 @@ forward values to the next station - for zambia return for ndola and kapiri and 
 
 YardFuelEntry.tsx - The older, more complex component - this needs to be deleted
 
+Database monitor  in real time - notify kwa email - everything critical kwa system - Database queries 
+Pagination to every page yenye iko na list 
+Soft delete - don't hard delete to everything deleted or published 
+deletion confirmation
 
+jumped to or search in do - hosting, database - domain - - vercel and render - 
+do integration and unit test - 
+Look at my system and see the loops in system security and stuff
+
+
+backup kwa cloudfair - r2
+
+list kwa kwa admin - backup - 
+most critical things database -
+ban user for admin - soft delete 
+admin - the site itself - 
+
+
+trucks 
+pol
+des
+rate
+tonnage 
+trailer 
+
+do 
+
+sdo - 
+
+
+summary - sdo - should be in summary 
 

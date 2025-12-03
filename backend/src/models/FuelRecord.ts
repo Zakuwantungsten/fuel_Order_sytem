@@ -127,6 +127,22 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       type: String,
       trim: true,
     },
+    // Cancellation fields
+    isCancelled: {
+      type: Boolean,
+      default: false,
+    },
+    cancelledAt: {
+      type: Date,
+    },
+    cancellationReason: {
+      type: String,
+      trim: true,
+    },
+    cancelledBy: {
+      type: String,
+      trim: true,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

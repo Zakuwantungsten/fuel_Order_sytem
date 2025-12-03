@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Download, Eye, Edit, Trash2, Printer, FileSpreadsheet, List, BarChart3, FileDown } from 'lucide-react';
+import { Search, Filter, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
 import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
@@ -10,6 +10,9 @@ import BulkDOForm from '../components/BulkDOForm';
 import MonthlySummary from '../components/MonthlySummary';
 import BatchDOPrint from '../components/BatchDOPrint';
 import DOWorkbook from '../components/DOWorkbook';
+import CancelDOModal from '../components/CancelDOModal';
+import AmendedDOsModal from '../components/AmendedDOsModal';
+import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup';
 
 const DeliveryOrders = () => {
@@ -17,14 +20,22 @@ const DeliveryOrders = () => {
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'cancelled'>('all');
   const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isBulkFormOpen, setIsBulkFormOpen] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isAmendedDOsModalOpen, setIsAmendedDOsModalOpen] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState<DeliveryOrder | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'summary' | 'workbook'>('list');
   const [selectedOrders, setSelectedOrders] = useState<(string | number)[]>([]);
   const [batchPrintOrders, setBatchPrintOrders] = useState<DeliveryOrder[]>([]);
+  
+  // Amended DOs context for session tracking
+  const { addAmendedDO, count: amendedDOsCount } = useAmendedDOs();
   
   // Workbook state
   const [workbooks, setWorkbooks] = useState<DOWorkbookType[]>([]);
@@ -122,11 +133,20 @@ const DeliveryOrders = () => {
     fetchWorkbooks(); // Refresh workbooks list
   };
 
-  const filteredOrders = Array.isArray(orders) ? orders.filter(order =>
-    order.doNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.truckNo.toLowerCase().includes(searchTerm.toLowerCase())
-  ) : [];
+  // Filter orders by search term and status
+  const filteredOrders = Array.isArray(orders) ? orders.filter(order => {
+    // Search filter
+    const matchesSearch = order.doNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.truckNo.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Status filter
+    const matchesStatus = filterStatus === 'all' ||
+      (filterStatus === 'active' && !order.isCancelled) ||
+      (filterStatus === 'cancelled' && order.isCancelled);
+    
+    return matchesSearch && matchesStatus;
+  }) : [];
 
   const handleViewOrder = (order: DeliveryOrder) => {
     setSelectedOrder(order);
@@ -148,6 +168,8 @@ const DeliveryOrders = () => {
   };
 
   const handleEditOrder = (order: DeliveryOrder) => {
+    console.log('Editing order:', order);
+    console.log('Order ID:', order.id, 'Order _id:', (order as any)._id);
     setEditingOrder(order);
     setIsFormOpen(true);
   };
@@ -155,24 +177,61 @@ const DeliveryOrders = () => {
   const handleSaveOrder = async (orderData: Partial<DeliveryOrder>): Promise<DeliveryOrder | void> => {
     try {
       console.log('Saving order:', orderData);
+      console.log('editingOrder:', editingOrder);
+      console.log('editingOrder?.id:', editingOrder?.id);
       
       // Save the DO first
       let savedOrder: DeliveryOrder;
-      if (editingOrder?.id) {
-        // Update existing DO
-        savedOrder = await deliveryOrdersAPI.update(editingOrder.id, orderData);
+      let fieldsChanged: string[] = [];
+      
+      // Check for id in multiple formats
+      const orderId = editingOrder?.id || (editingOrder as any)?._id;
+      
+      if (orderId) {
+        // Track which fields changed for amended DOs tracking
+        const originalOrder = editingOrder!;
+        const editableFields = ['truckNo', 'trailerNo', 'destination', 'loadingPoint', 'tonnages', 'ratePerTon', 'driverName', 'clientName', 'haulier', 'containerNo', 'invoiceNos', 'cargoType'];
+        
+        editableFields.forEach(field => {
+          const oldValue = originalOrder[field as keyof DeliveryOrder];
+          const newValue = orderData[field as keyof DeliveryOrder];
+          if (oldValue !== newValue && newValue !== undefined) {
+            fieldsChanged.push(field);
+          }
+        });
+        
+        // Update existing DO - now returns { order, cascadeResults }
+        const result = await deliveryOrdersAPI.update(orderId, orderData);
+        savedOrder = result.order;
+        
+        // Add to amended DOs session list if any fields changed
+        if (fieldsChanged.length > 0) {
+          addAmendedDO(savedOrder, fieldsChanged);
+          console.log(`DO ${savedOrder.doNumber} added to amended list. Changed fields:`, fieldsChanged);
+        }
+        
+        // Log cascade results if any
+        if (result.cascadeResults) {
+          console.log('Cascade update results:', result.cascadeResults);
+          if (result.cascadeResults.fuelRecordUpdated) {
+            console.log('Fuel record updated with changes:', result.cascadeResults.fuelRecordChanges);
+          }
+          if (result.cascadeResults.lpoEntriesUpdated > 0) {
+            console.log(`${result.cascadeResults.lpoEntriesUpdated} LPO entries updated`);
+          }
+        }
       } else {
         // Create new DO
         savedOrder = await deliveryOrdersAPI.create(orderData);
-      }
-      
-      // Handle fuel record creation/update based on import/export
-      if (savedOrder.importOrExport === 'IMPORT') {
-        // IMPORT = Going journey = Create new fuel record
-        await handleCreateFuelRecordForImport(savedOrder);
-      } else if (savedOrder.importOrExport === 'EXPORT') {
-        // EXPORT = Return journey = Update existing fuel record
-        await handleUpdateFuelRecordForExport(savedOrder);
+        
+        // Handle fuel record creation/update based on import/export (only for new DOs)
+        if (savedOrder.importOrExport === 'IMPORT') {
+          // IMPORT = Going journey = Create new fuel record
+          await handleCreateFuelRecordForImport(savedOrder);
+        } else if (savedOrder.importOrExport === 'EXPORT') {
+          // EXPORT = Return journey = Update existing fuel record
+          await handleUpdateFuelRecordForExport(savedOrder);
+        }
       }
       
       loadOrders();
@@ -180,6 +239,51 @@ const DeliveryOrders = () => {
     } catch (error) {
       console.error('Failed to save order:', error);
       alert('Failed to save delivery order');
+    }
+  };
+
+  // Cancel DO handler
+  const handleOpenCancelModal = (order: DeliveryOrder) => {
+    setCancellingOrder(order);
+    setIsCancelModalOpen(true);
+  };
+
+  const handleCloseCancelModal = () => {
+    setIsCancelModalOpen(false);
+    setCancellingOrder(null);
+  };
+
+  const handleConfirmCancel = async () => {
+    const orderId = cancellingOrder?.id || (cancellingOrder as any)?._id;
+    if (!orderId) return;
+    
+    setIsCancelling(true);
+    try {
+      const result = await deliveryOrdersAPI.cancel(orderId);
+      
+      console.log('DO cancelled:', result.order.doNumber);
+      console.log('Cascade results:', result.cascadeResults);
+      
+      // Show success message with cascade info
+      let message = `Delivery Order ${result.order.doType}-${result.order.doNumber} has been cancelled.`;
+      if (result.cascadeResults) {
+        if (result.cascadeResults.fuelRecordCancelled) {
+          message += '\n• Associated fuel record cancelled';
+        }
+        if (result.cascadeResults.lpoEntriesCancelled > 0) {
+          message += `\n• ${result.cascadeResults.lpoEntriesCancelled} LPO entries cancelled`;
+        }
+      }
+      
+      alert(message);
+      handleCloseCancelModal();
+      loadOrders();
+    } catch (error: any) {
+      console.error('Failed to cancel order:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to cancel delivery order';
+      alert(errorMessage);
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -371,6 +475,19 @@ const DeliveryOrders = () => {
             Export
           </button>
           <button 
+            onClick={() => setIsAmendedDOsModalOpen(true)}
+            className="relative inline-flex items-center px-4 py-2 border border-orange-300 dark:border-orange-600 rounded-md shadow-sm text-sm font-medium text-orange-700 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40"
+            title="Download amended DOs as PDF"
+          >
+            <FileEdit className="w-4 h-4 mr-2" />
+            Amended DOs
+            {amendedDOsCount > 0 && (
+              <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-orange-600 rounded-full">
+                {amendedDOsCount}
+              </span>
+            )}
+          </button>
+          <button 
             onClick={() => setIsBulkFormOpen(true)}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
           >
@@ -552,6 +669,15 @@ const DeliveryOrders = () => {
                 <option value="IMPORT">Import</option>
                 <option value="EXPORT">Export</option>
               </select>
+              <select 
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'cancelled')}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
               <input
                 type="date"
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
@@ -580,6 +706,7 @@ const DeliveryOrders = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO Number</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Destination</th>
@@ -590,44 +717,88 @@ const DeliveryOrders = () => {
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {loading ? (
                     <tr key="loading-row">
-                      <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <td colSpan={10} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                         Loading data...
                       </td>
                     </tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr key="empty-row">
-                      <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <td colSpan={10} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                         No delivery orders found
                       </td>
                     </tr>
                   ) : (
                     filteredOrders.map((order) => (
-                      <tr key={order.id || `order-${order.doNumber}`} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                      <tr 
+                        key={order.id || `order-${order.doNumber}`} 
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                          order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
+                        }`}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={order.id ? selectedOrders.includes(order.id) : false}
                             onChange={() => order.id && handleSelectOrder(order.id)}
                             className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
+                            disabled={order.isCancelled}
                           />
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {order.doNumber}
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                          order.isCancelled 
+                            ? 'text-gray-400 dark:text-gray-500 line-through' 
+                            : 'text-gray-900 dark:text-gray-100'
+                        }`}>
+                          {order.doType}-{order.doNumber}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.date}</td>
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {order.date}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            order.importOrExport === 'IMPORT' 
-                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' 
-                              : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                            order.isCancelled
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                              : order.importOrExport === 'IMPORT' 
+                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' 
+                                : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                           }`}>
                             {order.importOrExport}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.clientName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.truckNo}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.destination}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.tonnages} tons</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {order.isCancelled ? (
+                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+                              <Ban className="w-3 h-3 mr-1" />
+                              Cancelled
+                            </span>
+                          ) : (
+                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">
+                              Active
+                            </span>
+                          )}
+                        </td>
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {order.clientName}
+                        </td>
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {order.truckNo}
+                        </td>
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {order.destination}
+                        </td>
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {order.tonnages} tons
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button 
                             onClick={() => handleViewOrder(order)}
@@ -636,16 +807,32 @@ const DeliveryOrders = () => {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button 
-                            onClick={() => handleEditOrder(order)}
-                            className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-3" 
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300" title="Delete">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!order.isCancelled && (
+                            <>
+                              <button 
+                                onClick={() => handleEditOrder(order)}
+                                className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-3" 
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => handleOpenCancelModal(order)}
+                                className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300" 
+                                title="Cancel DO"
+                              >
+                                <Ban className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          {order.isCancelled && order.cancellationReason && (
+                            <span 
+                              className="text-gray-400 dark:text-gray-500 cursor-help" 
+                              title={`Cancelled: ${order.cancellationReason}`}
+                            >
+                              <RotateCcw className="w-4 h-4 inline" />
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -694,6 +881,23 @@ const DeliveryOrders = () => {
         isOpen={isBulkFormOpen}
         onClose={() => setIsBulkFormOpen(false)}
         onSave={handleSaveBulkOrders}
+      />
+
+      {/* Cancel DO Modal */}
+      {cancellingOrder && (
+        <CancelDOModal
+          order={cancellingOrder}
+          isOpen={isCancelModalOpen}
+          onClose={handleCloseCancelModal}
+          onConfirm={handleConfirmCancel}
+          isLoading={isCancelling}
+        />
+      )}
+
+      {/* Amended DOs Modal */}
+      <AmendedDOsModal
+        isOpen={isAmendedDOsModalOpen}
+        onClose={() => setIsAmendedDOsModalOpen(false)}
       />
     </div>
   );

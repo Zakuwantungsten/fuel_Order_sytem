@@ -1,7 +1,30 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { IDeliveryOrder } from '../types';
+import { IDeliveryOrder, IDeliveryOrderEditHistory } from '../types';
 
 export interface IDeliveryOrderDocument extends IDeliveryOrder, Document {}
+
+// Sub-schema for edit history
+const editHistorySchema = new Schema<IDeliveryOrderEditHistory>(
+  {
+    editedAt: {
+      type: Date,
+      required: true,
+    },
+    editedBy: {
+      type: String,
+      required: true,
+    },
+    changes: [{
+      field: String,
+      oldValue: Schema.Types.Mixed,
+      newValue: Schema.Types.Mixed,
+    }],
+    reason: {
+      type: String,
+    },
+  },
+  { _id: false }
+);
 
 const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
   {
@@ -93,6 +116,37 @@ const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
       type: String,
       trim: true,
     },
+    // Status fields
+    status: {
+      type: String,
+      enum: ['active', 'cancelled'],
+      default: 'active',
+    },
+    isCancelled: {
+      type: Boolean,
+      default: false,
+    },
+    cancelledAt: {
+      type: Date,
+    },
+    cancellationReason: {
+      type: String,
+      trim: true,
+    },
+    cancelledBy: {
+      type: String,
+      trim: true,
+    },
+    // Edit history tracking
+    editHistory: [editHistorySchema],
+    lastEditedAt: {
+      type: Date,
+    },
+    lastEditedBy: {
+      type: String,
+      trim: true,
+    },
+    // Soft delete fields
     isDeleted: {
       type: Boolean,
       default: false,
@@ -123,10 +177,13 @@ deliveryOrderSchema.index({ importOrExport: 1 });
 deliveryOrderSchema.index({ isDeleted: 1 });
 deliveryOrderSchema.index({ clientName: 1 });
 deliveryOrderSchema.index({ destination: 1 });
+deliveryOrderSchema.index({ status: 1 });
+deliveryOrderSchema.index({ isCancelled: 1 });
 
 // Compound indexes for common queries
 deliveryOrderSchema.index({ truckNo: 1, date: -1 });
 deliveryOrderSchema.index({ date: -1, importOrExport: 1 });
+deliveryOrderSchema.index({ isDeleted: 1, isCancelled: 1 });
 
 export const DeliveryOrder = mongoose.model<IDeliveryOrderDocument>(
   'DeliveryOrder',

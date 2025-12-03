@@ -1,4 +1,4 @@
-import { X, Printer, Edit } from 'lucide-react';
+import { X, Printer, Edit, Ban } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import DeliveryNotePrint from './DeliveryNotePrint';
 
@@ -34,19 +34,23 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit, onPrint }: DODetailModa
         {/* Modal panel */}
         <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
           {/* Header */}
-          <div className="bg-primary-600 dark:bg-primary-700 px-6 py-4 flex items-center justify-between no-print">
-            <h3 className="text-lg font-semibold text-white">
-              {order.doType || 'DO'}-{order.doNumber}
-            </h3>
+          <div className={`${order.isCancelled ? 'bg-red-600 dark:bg-red-700' : 'bg-primary-600 dark:bg-primary-700'} px-6 py-4 flex items-center justify-between no-print`}>
+            <div className="flex items-center">
+              {order.isCancelled && <Ban className="w-5 h-5 text-white mr-2" />}
+              <h3 className="text-lg font-semibold text-white">
+                {order.doType || 'DO'}-{order.doNumber}
+                {order.isCancelled && ' (CANCELLED)'}
+              </h3>
+            </div>
             <div className="flex items-center space-x-2">
               <button
                 onClick={handlePrint}
-                className="p-2 text-white hover:bg-primary-700 rounded"
+                className={`p-2 text-white rounded ${order.isCancelled ? 'hover:bg-red-700' : 'hover:bg-primary-700'}`}
                 title="Print DO"
               >
                 <Printer className="w-5 h-5" />
               </button>
-              {onEdit && (
+              {onEdit && !order.isCancelled && (
                 <button
                   onClick={onEdit}
                   className="p-2 text-white hover:bg-primary-700 rounded"
@@ -57,12 +61,37 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit, onPrint }: DODetailModa
               )}
               <button
                 onClick={onClose}
-                className="p-2 text-white hover:bg-primary-700 rounded"
+                className={`p-2 text-white rounded ${order.isCancelled ? 'hover:bg-red-700' : 'hover:bg-primary-700'}`}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
+
+          {/* Cancellation Notice */}
+          {order.isCancelled && (
+            <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-700 px-6 py-3 no-print">
+              <div className="flex items-start">
+                <Ban className="w-5 h-5 text-red-500 dark:text-red-400 mr-2 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                    This delivery order has been cancelled
+                  </p>
+                  {order.cancellationReason && (
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                      Reason: {order.cancellationReason}
+                    </p>
+                  )}
+                  {order.cancelledAt && (
+                    <p className="text-xs text-red-500 dark:text-red-500 mt-1">
+                      Cancelled on: {new Date(order.cancelledAt).toLocaleString()}
+                      {order.cancelledBy && ` by ${order.cancelledBy}`}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Content - Show the actual DO form */}
           <div className="bg-white dark:bg-gray-800 px-6 py-6 print:p-0 transition-colors">
@@ -77,7 +106,7 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit, onPrint }: DODetailModa
             >
               Close
             </button>
-            {onEdit && (
+            {onEdit && !order.isCancelled && (
               <button
                 onClick={onEdit}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"

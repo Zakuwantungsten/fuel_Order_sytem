@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { DeliveryOrder } from '../models';
+import { DeliveryOrder, FuelRecord, LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
@@ -12,6 +12,233 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
+
+/**
+ * Helper: Cascade updates to related fuel records when DO is edited
+ */
+const cascadeUpdateToFuelRecord = async (
+  originalDO: any,
+  updatedData: any,
+  username: string
+): Promise<{ updated: boolean; fuelRecordId?: string; changes?: string[] }> => {
+  const changes: string[] = [];
+  
+  try {
+    // Find fuel record linked to this DO
+    let fuelRecord = null;
+    
+    if (originalDO.importOrExport === 'IMPORT') {
+      // Find fuel record where this DO is the goingDo
+      fuelRecord = await FuelRecord.findOne({
+        goingDo: originalDO.doNumber,
+        isDeleted: false,
+      });
+    } else if (originalDO.importOrExport === 'EXPORT') {
+      // Find fuel record where this DO is the returnDo
+      fuelRecord = await FuelRecord.findOne({
+        returnDo: originalDO.doNumber,
+        isDeleted: false,
+      });
+    }
+    
+    if (!fuelRecord) {
+      logger.info(`No fuel record found for DO ${originalDO.doNumber}`);
+      return { updated: false };
+    }
+    
+    const updates: any = {};
+    
+    // Track truck number changes
+    if (updatedData.truckNo && updatedData.truckNo !== originalDO.truckNo) {
+      updates.truckNo = updatedData.truckNo;
+      changes.push(`Truck: ${originalDO.truckNo} → ${updatedData.truckNo}`);
+    }
+    
+    // Track destination changes (affects 'to' field for IMPORT, 'from' for EXPORT)
+    if (updatedData.destination && updatedData.destination !== originalDO.destination) {
+      if (originalDO.importOrExport === 'IMPORT') {
+        updates.to = updatedData.destination;
+        changes.push(`Destination (to): ${originalDO.destination} → ${updatedData.destination}`);
+      } else {
+        updates.from = updatedData.destination;
+        changes.push(`Destination (from): ${originalDO.destination} → ${updatedData.destination}`);
+      }
+    }
+    
+    // Track loading point changes (affects 'from' field for IMPORT, 'to' for EXPORT)
+    if (updatedData.loadingPoint && updatedData.loadingPoint !== originalDO.loadingPoint) {
+      if (originalDO.importOrExport === 'IMPORT') {
+        updates.from = updatedData.loadingPoint;
+        changes.push(`Loading Point (from): ${originalDO.loadingPoint} → ${updatedData.loadingPoint}`);
+      } else {
+        updates.to = updatedData.loadingPoint;
+        changes.push(`Loading Point (to): ${originalDO.loadingPoint} → ${updatedData.loadingPoint}`);
+      }
+    }
+    
+    // Apply updates if any
+    if (Object.keys(updates).length > 0) {
+      await FuelRecord.findByIdAndUpdate(fuelRecord._id, updates);
+      logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
+      return { updated: true, fuelRecordId: fuelRecord._id.toString(), changes };
+    }
+    
+    return { updated: false };
+  } catch (error: any) {
+    logger.error(`Error cascading update to fuel record: ${error.message}`);
+    return { updated: false };
+  }
+};
+
+/**
+ * Helper: Cancel fuel record when DO is cancelled
+ */
+const cascadeCancelFuelRecord = async (
+  deliveryOrder: any,
+  cancellationReason: string,
+  username: string
+): Promise<{ cancelled: boolean; fuelRecordId?: string; action?: string }> => {
+  try {
+    // Find fuel record linked to this DO
+    let fuelRecord = null;
+    
+    if (deliveryOrder.importOrExport === 'IMPORT') {
+      // Find fuel record where this DO is the goingDo
+      fuelRecord = await FuelRecord.findOne({
+        goingDo: deliveryOrder.doNumber,
+        isDeleted: false,
+        isCancelled: { $ne: true },
+      });
+      
+      if (!fuelRecord) {
+        logger.info(`No fuel record found for cancelled IMPORT DO ${deliveryOrder.doNumber}`);
+        return { cancelled: false };
+      }
+      
+      // IMPORT DO (going DO) is cancelled - cancel the entire fuel record
+      // The going DO is the primary journey, without it the fuel record has no purpose
+      await FuelRecord.findByIdAndUpdate(fuelRecord._id, {
+        isCancelled: true,
+        cancelledAt: new Date(),
+        cancellationReason: `Going DO ${deliveryOrder.doNumber} cancelled: ${cancellationReason}`,
+        cancelledBy: username,
+      });
+      
+      logger.info(`Fuel record ${fuelRecord._id} fully cancelled due to going DO ${deliveryOrder.doNumber} cancellation. Reason: ${cancellationReason}`);
+      
+      return { cancelled: true, fuelRecordId: fuelRecord._id.toString(), action: 'fully_cancelled' };
+      
+    } else if (deliveryOrder.importOrExport === 'EXPORT') {
+      // Find fuel record where this DO is the returnDo
+      fuelRecord = await FuelRecord.findOne({
+        returnDo: deliveryOrder.doNumber,
+        isDeleted: false,
+        isCancelled: { $ne: true },
+      });
+      
+      if (!fuelRecord) {
+        logger.info(`No fuel record found for cancelled EXPORT DO ${deliveryOrder.doNumber}`);
+        return { cancelled: false };
+      }
+      
+      // EXPORT DO (return DO) is cancelled
+      // The fuel record still has the going DO, so we don't cancel the whole record
+      // Instead, we remove the return DO and revert from/to to use going DO values only
+      
+      // Get the original going journey values (stored when the return DO was added)
+      // If not available, we use the current goingDo to look up the original values
+      let revertFrom = fuelRecord.originalGoingFrom;
+      let revertTo = fuelRecord.originalGoingTo;
+      
+      // If original values weren't stored, try to get from the going DO
+      if (!revertFrom || !revertTo) {
+        const goingDO = await DeliveryOrder.findOne({
+          doNumber: fuelRecord.goingDo,
+          isDeleted: false,
+        });
+        
+        if (goingDO) {
+          revertFrom = goingDO.destination; // For IMPORT, from is destination (e.g., Zambia)
+          revertTo = goingDO.loadingPoint; // For IMPORT, to is loading point (e.g., Dar)
+        } else {
+          // Fallback: Keep current from, just remove to extension
+          revertFrom = fuelRecord.from;
+          revertTo = fuelRecord.to;
+        }
+      }
+      
+      // Clear all return fuel allocations
+      const updateData: any = {
+        returnDo: null, // Remove the return DO
+        from: revertFrom,
+        to: revertTo,
+        // Clear original going values since there's no return DO now
+        originalGoingFrom: null,
+        originalGoingTo: null,
+        // Clear return fuel allocations
+        zambiaReturn: 0,
+        tundumaReturn: 0,
+        mbeyaReturn: 0,
+        moroReturn: 0,
+        darReturn: 0,
+        tangaReturn: 0,
+      };
+      
+      await FuelRecord.findByIdAndUpdate(fuelRecord._id, updateData);
+      
+      logger.info(`Fuel record ${fuelRecord._id} return DO ${deliveryOrder.doNumber} removed and reverted to going-only journey. From: ${revertFrom}, To: ${revertTo}. Reason: ${cancellationReason}`);
+      
+      return { cancelled: true, fuelRecordId: fuelRecord._id.toString(), action: 'return_do_removed' };
+    }
+    
+    return { cancelled: false };
+  } catch (error: any) {
+    logger.error(`Error cascading cancel to fuel record: ${error.message}`);
+    return { cancelled: false };
+  }
+};
+
+/**
+ * Helper: Update LPO entries when DO is edited or cancelled
+ */
+const cascadeToLPOEntries = async (
+  doNumber: string,
+  action: 'update' | 'cancel',
+  updates?: { truckNo?: string; destination?: string }
+): Promise<{ count: number }> => {
+  try {
+    if (action === 'cancel') {
+      // Mark LPO entries as cancelled
+      const result = await LPOEntry.updateMany(
+        { doSdo: doNumber, isDeleted: false },
+        { 
+          isDeleted: true, 
+          deletedAt: new Date() 
+        }
+      );
+      logger.info(`Cancelled ${result.modifiedCount} LPO entries for DO ${doNumber}`);
+      return { count: result.modifiedCount };
+    } else if (action === 'update' && updates) {
+      // Update LPO entries with new values
+      const updateFields: any = {};
+      if (updates.truckNo) updateFields.truckNo = updates.truckNo;
+      if (updates.destination) updateFields.destinations = updates.destination;
+      
+      if (Object.keys(updateFields).length > 0) {
+        const result = await LPOEntry.updateMany(
+          { doSdo: doNumber, isDeleted: false },
+          updateFields
+        );
+        logger.info(`Updated ${result.modifiedCount} LPO entries for DO ${doNumber}`);
+        return { count: result.modifiedCount };
+      }
+    }
+    return { count: 0 };
+  } catch (error: any) {
+    logger.error(`Error cascading to LPO entries: ${error.message}`);
+    return { count: 0 };
+  }
+};
 
 /**
  * Get all delivery orders with pagination and filters
@@ -99,6 +326,11 @@ export const getDeliveryOrderById = async (req: AuthRequest, res: Response): Pro
  */
 export const createDeliveryOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    // If sn is not provided, derive it from doNumber
+    if (!req.body.sn && req.body.doNumber) {
+      req.body.sn = parseInt(req.body.doNumber.replace(/^0+/, '')) || 1;
+    }
+    
     const deliveryOrder = await DeliveryOrder.create(req.body);
 
     logger.info(`Delivery order created: ${deliveryOrder.doNumber} by ${req.user?.username}`);
@@ -114,15 +346,64 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 };
 
 /**
- * Update delivery order
+ * Update delivery order with cascade updates to related records
  */
 export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const username = req.user?.username || 'system';
 
+    // Get the original DO first to track changes
+    const originalDO = await DeliveryOrder.findOne({ _id: id, isDeleted: false }).lean();
+
+    if (!originalDO) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+
+    // Check if DO is cancelled
+    if (originalDO.isCancelled) {
+      throw new ApiError(400, 'Cannot edit a cancelled delivery order');
+    }
+
+    // Track changes for edit history
+    const trackableFields = ['truckNo', 'trailerNo', 'loadingPoint', 'destination', 'tonnages', 'ratePerTon', 'driverName', 'clientName', 'containerNo'];
+    const changes: { field: string; oldValue: any; newValue: any }[] = [];
+
+    for (const field of trackableFields) {
+      if (req.body[field] !== undefined && req.body[field] !== (originalDO as any)[field]) {
+        changes.push({
+          field,
+          oldValue: (originalDO as any)[field],
+          newValue: req.body[field],
+        });
+      }
+    }
+
+    // Prepare the update data with edit history
+    const updateData = {
+      ...req.body,
+      lastEditedAt: new Date(),
+      lastEditedBy: username,
+    };
+
+    // Add to edit history if there are changes
+    if (changes.length > 0) {
+      updateData.$push = {
+        editHistory: {
+          editedAt: new Date(),
+          editedBy: username,
+          changes,
+          reason: req.body.editReason || undefined,
+        },
+      };
+      // Remove editReason from the main update
+      delete updateData.editReason;
+    }
+
+    // Update the delivery order
     const deliveryOrder = await DeliveryOrder.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -130,12 +411,126 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       throw new ApiError(404, 'Delivery order not found');
     }
 
-    logger.info(`Delivery order updated: ${deliveryOrder.doNumber} by ${req.user?.username}`);
+    // Cascade updates to related records
+    const cascadeResults = {
+      fuelRecordUpdated: false,
+      fuelRecordChanges: [] as string[],
+      lpoEntriesUpdated: 0,
+    };
+
+    // Cascade to fuel records if relevant fields changed
+    if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
+      const fuelResult = await cascadeUpdateToFuelRecord(originalDO, req.body, username);
+      cascadeResults.fuelRecordUpdated = fuelResult.updated;
+      cascadeResults.fuelRecordChanges = fuelResult.changes || [];
+    }
+
+    // Cascade to LPO entries if truck or destination changed
+    if (changes.some(c => ['truckNo', 'destination'].includes(c.field))) {
+      const lpoResult = await cascadeToLPOEntries(originalDO.doNumber, 'update', {
+        truckNo: req.body.truckNo,
+        destination: req.body.destination,
+      });
+      cascadeResults.lpoEntriesUpdated = lpoResult.count;
+    }
+
+    logger.info(`Delivery order updated: ${deliveryOrder.doNumber} by ${username}. Changes: ${JSON.stringify(changes)}`);
 
     res.status(200).json({
       success: true,
       message: 'Delivery order updated successfully',
       data: deliveryOrder,
+      cascadeResults,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Cancel delivery order (not delete - keeps it in records)
+ */
+export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const username = req.user?.username || 'system';
+    const cancellationReason = reason?.trim() || 'Cancelled by user';
+
+    // Get the original DO
+    const originalDO = await DeliveryOrder.findOne({ _id: id, isDeleted: false });
+
+    if (!originalDO) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+
+    if (originalDO.isCancelled) {
+      throw new ApiError(400, 'Delivery order is already cancelled');
+    }
+
+    // Update the DO with cancellation status
+    const deliveryOrder = await DeliveryOrder.findByIdAndUpdate(
+      id,
+      {
+        status: 'cancelled',
+        isCancelled: true,
+        cancelledAt: new Date(),
+        cancellationReason: cancellationReason,
+        cancelledBy: username,
+        $push: {
+          editHistory: {
+            editedAt: new Date(),
+            editedBy: username,
+            changes: [{ field: 'status', oldValue: 'active', newValue: 'cancelled' }],
+            reason: cancellationReason,
+          },
+        },
+      },
+      { new: true }
+    );
+
+    if (!deliveryOrder) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+
+    // Cascade cancellation to related records
+    const cascadeResults: {
+      fuelRecordCancelled: boolean;
+      fuelRecordId: string;
+      fuelRecordAction: string;
+      lpoEntriesCancelled: number;
+    } = {
+      fuelRecordCancelled: false,
+      fuelRecordId: '',
+      fuelRecordAction: '', // 'fully_cancelled' or 'return_do_removed'
+      lpoEntriesCancelled: 0,
+    };
+
+    // Cancel related fuel record
+    const fuelResult = await cascadeCancelFuelRecord(deliveryOrder, cancellationReason, username);
+    cascadeResults.fuelRecordCancelled = fuelResult.cancelled;
+    cascadeResults.fuelRecordId = fuelResult.fuelRecordId || '';
+    cascadeResults.fuelRecordAction = fuelResult.action || '';
+
+    // Cancel related LPO entries
+    const lpoResult = await cascadeToLPOEntries(deliveryOrder.doNumber, 'cancel');
+    cascadeResults.lpoEntriesCancelled = lpoResult.count;
+
+    // Generate appropriate message based on what happened
+    let message = 'Delivery order cancelled successfully';
+    if (fuelResult.action === 'fully_cancelled') {
+      message += '. Associated fuel record was fully cancelled.';
+    } else if (fuelResult.action === 'return_do_removed') {
+      message += '. Return DO removed from fuel record (going journey preserved).';
+    }
+
+    logger.info(`Delivery order cancelled: ${deliveryOrder.doNumber} by ${username}. Reason: ${reason}. Fuel action: ${fuelResult.action}`);
+
+    res.status(200).json({
+      success: true,
+      message,
+      data: deliveryOrder,
+      cascadeResults,
     });
   } catch (error: any) {
     throw error;
@@ -271,11 +666,19 @@ export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response):
 };
 
 /**
- * Get next DO number
+ * Get next DO number based on type (DO or SDO)
+ * Returns the next sequential number after the highest existing one
  */
 export const getNextDONumber = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const lastDO = await DeliveryOrder.findOne()
+    const doType = (req.query.doType as string) || 'DO';
+    
+    // Find the last DO/SDO by doNumber (which is stored as padded string like "0001")
+    // Filter by doType to get separate sequences for DO and SDO
+    const lastDO = await DeliveryOrder.findOne({ 
+      doType,
+      isDeleted: false 
+    })
       .sort({ sn: -1 })
       .limit(1)
       .lean();
@@ -284,8 +687,8 @@ export const getNextDONumber = async (req: AuthRequest, res: Response): Promise<
 
     res.status(200).json({
       success: true,
-      message: 'Next DO number retrieved successfully',
-      data: { nextSN },
+      message: `Next ${doType} number retrieved successfully`,
+      data: { nextSN, doType },
     });
   } catch (error: any) {
     throw error;
@@ -504,8 +907,10 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
 
     // Create individual sheets for each DO FIRST (like LPO workbook)
     for (const order of deliveryOrders) {
-      // Sheet name: DO number (max 31 chars for Excel)
-      const sheetName = (order.doNumber || 'DO').substring(0, 31);
+      // Sheet name: DO number (max 31 chars for Excel) - add CANCELLED prefix if cancelled
+      const sheetName = order.isCancelled 
+        ? `X-${(order.doNumber || 'DO').substring(0, 28)}` 
+        : (order.doNumber || 'DO').substring(0, 31);
       const sheet = excelWorkbook.addWorksheet(sheetName);
 
       // Format date
@@ -533,22 +938,39 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
         });
       }
 
-      // Row 1-2: Company name
-      sheet.mergeCells('B1:D2');
-      sheet.getCell('B1').value = 'TAHMEED';
-      sheet.getCell('B1').font = { bold: true, size: 24, color: { argb: 'FFE67E22' } };
+      // Add CANCELLED watermark for cancelled orders
+      if (order.isCancelled) {
+        sheet.mergeCells('B1:G1');
+        sheet.getCell('B1').value = '*** CANCELLED ***';
+        sheet.getCell('B1').font = { bold: true, size: 16, color: { argb: 'FFDC2626' } };
+        sheet.getCell('B1').alignment = { horizontal: 'center' };
+        sheet.getCell('B1').fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFEE2E2' },
+        };
+      }
+
+      // Row 1-2: Company name (adjusted for cancelled orders)
+      const companyRow = order.isCancelled ? 'B2:D3' : 'B1:D2';
+      sheet.mergeCells(companyRow);
+      sheet.getCell(order.isCancelled ? 'B2' : 'B1').value = 'TAHMEED';
+      sheet.getCell(order.isCancelled ? 'B2' : 'B1').font = { bold: true, size: 24, color: { argb: 'FFE67E22' } };
 
       // Row 3: Website
-      sheet.getCell('B3').value = 'www.tahmeedcoach.co.ke';
-      sheet.getCell('B3').font = { size: 9 };
+      const websiteRow = order.isCancelled ? 4 : 3;
+      sheet.getCell(`B${websiteRow}`).value = 'www.tahmeedcoach.co.ke';
+      sheet.getCell(`B${websiteRow}`).font = { size: 9 };
 
       // Row 4: Email
-      sheet.getCell('B4').value = 'Email: info@tahmeedcoach.co.ke';
-      sheet.getCell('B4').font = { size: 9 };
+      const emailRow = order.isCancelled ? 5 : 4;
+      sheet.getCell(`B${emailRow}`).value = 'Email: info@tahmeedcoach.co.ke';
+      sheet.getCell(`B${emailRow}`).font = { size: 9 };
 
       // Row 5: Tel
-      sheet.getCell('B5').value = 'Tel: +254 700 000 000';
-      sheet.getCell('B5').font = { size: 9 };
+      const telRow = order.isCancelled ? 6 : 5;
+      sheet.getCell(`B${telRow}`).value = 'Tel: +254 700 000 000';
+      sheet.getCell(`B${telRow}`).font = { size: 9 };
 
       // Row 7: Title
       sheet.mergeCells('B7:G7');
@@ -733,6 +1155,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       { header: '', key: 'space', width: 5 },
       { header: 'DO Number', key: 'doNumber', width: 15 },
       { header: 'Date', key: 'date', width: 12 },
+      { header: 'Status', key: 'status', width: 12 },
       { header: 'Client', key: 'client', width: 25 },
       { header: 'Truck No', key: 'truckNo', width: 15 },
       { header: 'Destination', key: 'destination', width: 20 },
@@ -742,9 +1165,9 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
 
     // Add header row at row 5
     const summaryHeaderRow = summarySheet.getRow(5);
-    summaryHeaderRow.values = ['', '', 'DO Number', 'Date', 'Client', 'Truck No', 'Destination', 'Tonnage', 'Type'];
-    // Apply styling only to columns 3-9 (the actual data columns)
-    for (let col = 3; col <= 9; col++) {
+    summaryHeaderRow.values = ['', '', 'DO Number', 'Date', 'Status', 'Client', 'Truck No', 'Destination', 'Tonnage', 'Type'];
+    // Apply styling only to columns 3-10 (the actual data columns)
+    for (let col = 3; col <= 10; col++) {
       const cell = summaryHeaderRow.getCell(col);
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.alignment = { horizontal: 'center' };
@@ -759,19 +1182,36 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     let summaryRowNum = 6;
     deliveryOrders.forEach((order) => {
       const row = summarySheet.getRow(summaryRowNum);
+      const status = order.isCancelled ? 'CANCELLED' : 'ACTIVE';
       row.values = [
         '', '',
         order.doNumber,
         order.date,
+        status,
         order.clientName,
         order.truckNo,
         order.destination,
         order.tonnages,
         order.importOrExport,
       ];
-      // Apply alignment only to columns 3-9
-      for (let col = 3; col <= 9; col++) {
+      // Apply alignment only to columns 3-10
+      for (let col = 3; col <= 10; col++) {
         row.getCell(col).alignment = { horizontal: 'center' };
+      }
+      // Style cancelled rows
+      if (order.isCancelled) {
+        row.getCell(5).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFEE2E2' }, // Light red background
+        };
+        row.getCell(5).font = { color: { argb: 'FFDC2626' } }; // Red text
+        // Gray out the entire row
+        for (let col = 3; col <= 10; col++) {
+          if (col !== 5) { // Skip status column
+            row.getCell(col).font = { color: { argb: 'FF9CA3AF' } }; // Gray text
+          }
+        }
       }
       summaryRowNum++;
     });
@@ -859,9 +1299,9 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
     sheet.addRow([]);
     sheet.addRow([]);
 
-    // Column headers
+    // Column headers - updated to include Status
     const headerRow = sheet.addRow([
-      'S/N', 'Date', 'Type', 'DO Number', 'Client', 'Truck No', 
+      'S/N', 'Date', 'Type', 'Status', 'DO Number', 'Client', 'Truck No', 
       'Trailer No', 'Container', 'Destination', 'Tonnage', 'Rate/Ton', 'Amount'
     ]);
     headerRow.font = { bold: true };
@@ -881,19 +1321,20 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
       };
     });
 
-    // Set column widths
+    // Set column widths - adjusted for new Status column
     sheet.getColumn(1).width = 6;
     sheet.getColumn(2).width = 12;
     sheet.getColumn(3).width = 10;
-    sheet.getColumn(4).width = 15;
-    sheet.getColumn(5).width = 20;
-    sheet.getColumn(6).width = 12;
+    sheet.getColumn(4).width = 12;  // Status
+    sheet.getColumn(5).width = 15;
+    sheet.getColumn(6).width = 20;
     sheet.getColumn(7).width = 12;
-    sheet.getColumn(8).width = 15;
-    sheet.getColumn(9).width = 20;
-    sheet.getColumn(10).width = 10;
-    sheet.getColumn(11).width = 12;
-    sheet.getColumn(12).width = 15;
+    sheet.getColumn(8).width = 12;
+    sheet.getColumn(9).width = 15;
+    sheet.getColumn(10).width = 20;
+    sheet.getColumn(11).width = 10;
+    sheet.getColumn(12).width = 12;
+    sheet.getColumn(13).width = 15;
 
     // Add data
     let rowIndex = 1;
@@ -902,13 +1343,18 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
 
     for (const entry of deliveryOrders) {
       const amount = (entry.tonnages || 0) * (entry.ratePerTon || 0);
-      totalTonnage += entry.tonnages || 0;
-      totalAmount += amount;
+      // Only count active orders in totals
+      if (!entry.isCancelled) {
+        totalTonnage += entry.tonnages || 0;
+        totalAmount += amount;
+      }
 
+      const status = entry.isCancelled ? 'CANCELLED' : 'ACTIVE';
       const dataRow = sheet.addRow([
         rowIndex++,
         entry.date,
         entry.importOrExport,
+        status,
         entry.doNumber,
         entry.clientName,
         entry.truckNo,
@@ -920,7 +1366,8 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
         amount
       ]);
 
-      if (rowIndex % 2 === 0) {
+      // Apply base styling
+      if (rowIndex % 2 === 0 && !entry.isCancelled) {
         dataRow.fill = {
           type: 'pattern',
           pattern: 'solid',
@@ -928,19 +1375,33 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
         };
       }
 
-      const typeCell = dataRow.getCell(3);
-      if (entry.importOrExport === 'IMPORT') {
-        typeCell.fill = {
+      // Style cancelled rows
+      if (entry.isCancelled) {
+        dataRow.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFDCE6F1' },
+          fgColor: { argb: 'FFFEE2E2' }, // Light red background
         };
+        dataRow.eachCell((cell) => {
+          cell.font = { color: { argb: 'FF9CA3AF' } }; // Gray text
+        });
+        // Make status cell red text
+        dataRow.getCell(4).font = { color: { argb: 'FFDC2626' }, bold: true };
       } else {
-        typeCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFD4EDDA' },
-        };
+        const typeCell = dataRow.getCell(3);
+        if (entry.importOrExport === 'IMPORT') {
+          typeCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFDCE6F1' },
+          };
+        } else {
+          typeCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFD4EDDA' },
+          };
+        }
       }
 
       dataRow.eachCell((cell) => {
@@ -953,9 +1414,9 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
       });
     }
 
-    // Totals row
+    // Totals row (only counts active orders)
     const totalRow = sheet.addRow([
-      '', '', '', '', '', '', '', 'TOTAL:', '', totalTonnage, '', totalAmount
+      '', '', '', '', '', '', '', '', 'TOTAL:', '', totalTonnage, '', totalAmount
     ]);
     totalRow.font = { bold: true };
     totalRow.fill = {
@@ -978,6 +1439,147 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
     res.end();
 
     logger.info(`DO Month export for ${monthName} ${year} by ${req.user?.username}`);
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get all amended DOs (DOs with edit history)
+ */
+export const getAmendedDOs = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { startDate, endDate, doNumbers } = req.query;
+
+    // Build query for amended DOs
+    const query: any = {
+      isDeleted: false,
+      'editHistory.0': { $exists: true }, // Has at least one edit history entry
+    };
+
+    // Filter by date range if provided
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) query.date.$gte = startDate;
+      if (endDate) query.date.$lte = endDate;
+    }
+
+    // Filter by specific DO numbers if provided
+    if (doNumbers) {
+      const doList = (doNumbers as string).split(',').map(d => d.trim());
+      query.doNumber = { $in: doList };
+    }
+
+    const amendedDOs = await DeliveryOrder.find(query)
+      .sort({ 'editHistory.0.editedAt': -1, updatedAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      message: `Found ${amendedDOs.length} amended delivery orders`,
+      data: amendedDOs,
+      count: amendedDOs.length,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Download amended DOs as PDF
+ */
+export const downloadAmendedDOsPDF = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { doIds } = req.body;
+
+    if (!doIds || !Array.isArray(doIds) || doIds.length === 0) {
+      throw new ApiError(400, 'Please provide an array of DO IDs to download');
+    }
+
+    // Fetch the DOs with edit history
+    const deliveryOrders = await DeliveryOrder.find({
+      _id: { $in: doIds },
+      isDeleted: false,
+      'editHistory.0': { $exists: true }, // Ensure they have edit history
+    }).lean();
+
+    if (deliveryOrders.length === 0) {
+      throw new ApiError(404, 'No amended delivery orders found for the provided IDs');
+    }
+
+    // Import PDF generator
+    const { generateAmendedDOsPDF, generateAmendedDOsFilename } = await import('../utils/pdfGenerator');
+
+    // Generate PDF
+    const doc = generateAmendedDOsPDF(deliveryOrders as any, { includeEditHistory: true });
+
+    // Generate filename
+    const doNumbers = deliveryOrders.map(d => d.doNumber);
+    const filename = generateAmendedDOsFilename(doNumbers);
+
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Pipe the PDF to response
+    doc.pipe(res);
+    doc.end();
+
+    logger.info(`Amended DOs PDF downloaded: ${doNumbers.join(', ')} by ${req.user?.username}`);
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get summary of recent amendments
+ */
+export const getAmendmentsSummary = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { days = 30 } = req.query;
+    const daysNum = parseInt(days as string) || 30;
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysNum);
+
+    // Find DOs with recent amendments
+    const amendedDOs = await DeliveryOrder.find({
+      isDeleted: false,
+      'editHistory.editedAt': { $gte: cutoffDate },
+    })
+      .select('doNumber truckNo importOrExport date editHistory isCancelled status')
+      .sort({ 'editHistory.editedAt': -1 })
+      .lean();
+
+    // Process to get summary
+    const summary = amendedDOs.map(order => {
+      const latestEdit = order.editHistory && order.editHistory.length > 0
+        ? order.editHistory[order.editHistory.length - 1]
+        : null;
+
+      return {
+        id: order._id,
+        doNumber: order.doNumber,
+        truckNo: order.truckNo,
+        importOrExport: order.importOrExport,
+        date: order.date,
+        status: order.status,
+        isCancelled: order.isCancelled,
+        totalAmendments: order.editHistory?.length || 0,
+        lastAmendedAt: latestEdit?.editedAt,
+        lastAmendedBy: latestEdit?.editedBy,
+        lastAmendmentReason: latestEdit?.reason,
+        fieldsChanged: latestEdit?.changes?.map((c: any) => c.field) || [],
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Found ${summary.length} amended DOs in the last ${daysNum} days`,
+      data: summary,
+      count: summary.length,
+      periodDays: daysNum,
+    });
   } catch (error: any) {
     throw error;
   }

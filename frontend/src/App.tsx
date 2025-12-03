@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AmendedDOsProvider } from './contexts/AmendedDOsContext';
 import Login from './components/Login';
 import ProtectedRoute, { UnauthorizedPage } from './components/ProtectedRoute';
 import EnhancedDashboard from './components/EnhancedDashboard';
@@ -50,9 +51,11 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AppContent />
-      </Router>
+      <AmendedDOsProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </AmendedDOsProvider>
     </AuthProvider>
   );
 }

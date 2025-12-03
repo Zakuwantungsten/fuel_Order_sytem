@@ -70,9 +70,20 @@ export const deliveryOrdersAPI = {
     return response.data.data;
   },
   
-  update: async (id: string | number, data: Partial<DeliveryOrder>): Promise<DeliveryOrder> => {
+  update: async (id: string | number, data: Partial<DeliveryOrder>): Promise<{ order: DeliveryOrder; cascadeResults?: any }> => {
     const response = await apiClient.put(`/delivery-orders/${id}`, data);
-    return response.data.data;
+    return {
+      order: response.data.data,
+      cascadeResults: response.data.cascadeResults,
+    };
+  },
+  
+  cancel: async (id: string | number): Promise<{ order: DeliveryOrder; cascadeResults?: any }> => {
+    const response = await apiClient.put(`/delivery-orders/${id}/cancel`);
+    return {
+      order: response.data.data,
+      cascadeResults: response.data.cascadeResults,
+    };
   },
   
   delete: async (id: string | number): Promise<void> => {
@@ -143,6 +154,69 @@ export const doWorkbookAPI = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+};
+
+// Amended DOs API (for tracking and downloading amended delivery orders)
+export interface AmendedDOSummary {
+  id: string;
+  doNumber: string;
+  truckNo: string;
+  importOrExport: 'IMPORT' | 'EXPORT';
+  date: string;
+  status: 'active' | 'cancelled';
+  isCancelled: boolean;
+  totalAmendments: number;
+  lastAmendedAt: string;
+  lastAmendedBy: string;
+  lastAmendmentReason?: string;
+  fieldsChanged: string[];
+}
+
+export const amendedDOsAPI = {
+  // Get all amended DOs
+  getAll: async (filters?: { startDate?: string; endDate?: string; doNumbers?: string }): Promise<DeliveryOrder[]> => {
+    const response = await apiClient.get('/delivery-orders/amended', { params: filters });
+    return response.data.data || [];
+  },
+
+  // Get summary of recent amendments
+  getSummary: async (days?: number): Promise<{ data: AmendedDOSummary[]; count: number; periodDays: number }> => {
+    const response = await apiClient.get('/delivery-orders/amended/summary', { params: { days } });
+    return {
+      data: response.data.data || [],
+      count: response.data.count || 0,
+      periodDays: response.data.periodDays || 30,
+    };
+  },
+
+  // Download amended DOs as PDF
+  downloadPDF: async (doIds: string[]): Promise<{ filename: string }> => {
+    const response = await apiClient.post('/delivery-orders/amended/download-pdf', { doIds }, {
+      responseType: 'blob',
+    });
+    
+    // Extract filename from Content-Disposition header or generate one
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = 'Amended_DOs.pdf';
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+      }
+    }
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return { filename };
   },
 };
 

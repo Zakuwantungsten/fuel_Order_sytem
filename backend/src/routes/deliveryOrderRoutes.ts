@@ -17,6 +17,15 @@ router.get('/workbooks/:year', asyncHandler(deliveryOrderController.getWorkbookB
 router.get('/workbooks/:year/export', asyncHandler(deliveryOrderController.exportWorkbook));
 router.get('/workbooks/:year/month/:month/export', asyncHandler(deliveryOrderController.exportMonth));
 
+// Amended DOs routes (must be before /:id routes)
+router.get('/amended', asyncHandler(deliveryOrderController.getAmendedDOs));
+router.get('/amended/summary', asyncHandler(deliveryOrderController.getAmendmentsSummary));
+router.post(
+  '/amended/download-pdf',
+  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker'),
+  asyncHandler(deliveryOrderController.downloadAmendedDOsPDF)
+);
+
 // Get routes
 router.get('/', commonValidation.pagination, validate, asyncHandler(deliveryOrderController.getAllDeliveryOrders));
 router.get('/next-do-number', asyncHandler(deliveryOrderController.getNextDONumber));
@@ -42,6 +51,15 @@ router.put(
   deliveryOrderValidation.update,
   validate,
   asyncHandler(deliveryOrderController.updateDeliveryOrder)
+);
+
+// Cancel route (different from delete - keeps DO in records but marks as cancelled)
+router.put(
+  '/:id/cancel',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker'),
+  validate,
+  asyncHandler(deliveryOrderController.cancelDeliveryOrder)
 );
 
 // Delete route (requires appropriate role)

@@ -23,25 +23,45 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
     return `${year}-${month}-${day}`;
   };
 
-  const [formData, setFormData] = useState<Partial<DeliveryOrder>>(
-    order || {
-      date: getCurrentDate(),
-      importOrExport: 'IMPORT',
-      doType: 'DO',
-      clientName: '',
-      truckNo: '',
-      trailerNo: '',
-      containerNo: 'LOOSE CARGO',
-      loadingPoint: '',
-      destination: '',
-      haulier: '',
-      driverName: '',
-      tonnages: 0,
-      ratePerTon: 0,
-    }
-  );
+  const getDefaultFormData = (): Partial<DeliveryOrder> => ({
+    // Explicitly no id for new orders
+    date: getCurrentDate(),
+    importOrExport: 'IMPORT',
+    doType: 'DO',
+    clientName: '',
+    truckNo: '',
+    trailerNo: '',
+    containerNo: 'LOOSE CARGO',
+    loadingPoint: '',
+    destination: '',
+    haulier: '',
+    driverName: '',
+    tonnages: 0,
+    ratePerTon: 0,
+  });
+
+  const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
   const [createdOrder, setCreatedOrder] = useState<DeliveryOrder | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const isEditMode = !!order;
+
+  // Update form data when order prop changes (for edit mode)
+  useEffect(() => {
+    if (isOpen) {
+      if (order) {
+        // Edit mode - populate with existing order data
+        setFormData({
+          ...order,
+          // Ensure date is in correct format for input
+          date: order.date ? order.date.split('T')[0] : getCurrentDate(),
+        });
+      } else {
+        // Create mode - reset to defaults
+        setFormData(getDefaultFormData());
+      }
+      setCreatedOrder(null);
+    }
+  }, [isOpen, order]);
 
   // Fetch next DO/SDO number when component opens or doType changes
   useEffect(() => {
@@ -104,6 +124,12 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
     
     // Clean and validate data before saving
     const cleanedFormData = cleanDeliveryOrder(formData);
+    
+    // For new orders, remove id/_id to prevent MongoDB conflicts
+    if (!order) {
+      delete cleanedFormData.id;
+      delete (cleanedFormData as any)._id;
+    }
     
     const savedOrder = await onSave(cleanedFormData);
     if (!order && savedOrder) {
@@ -237,29 +263,36 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   Type *
                 </label>
                 <div className="flex items-center space-x-6">
-                  <label className="inline-flex items-center">
+                  <label className={`inline-flex items-center ${isEditMode ? 'opacity-60 cursor-not-allowed' : ''}`}>
                     <input
                       type="radio"
                       name="doType"
                       value="DO"
                       checked={formData.doType === 'DO'}
                       onChange={handleDOTypeChange}
+                      disabled={isEditMode}
                       className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600"
                     />
                     <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">DO (Delivery Order)</span>
                   </label>
-                  <label className="inline-flex items-center">
+                  <label className={`inline-flex items-center ${isEditMode ? 'opacity-60 cursor-not-allowed' : ''}`}>
                     <input
                       type="radio"
                       name="doType"
                       value="SDO"
                       checked={formData.doType === 'SDO'}
                       onChange={handleDOTypeChange}
+                      disabled={isEditMode}
                       className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600"
                     />
                     <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">SDO (Special Delivery Order)</span>
                   </label>
                 </div>
+                {isEditMode && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    DO type cannot be changed after creation
+                  </p>
+                )}
               </div>
 
               <div>
@@ -272,9 +305,18 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
                   value={formData.doNumber || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  readOnly={isEditMode}
+                  disabled={isEditMode}
+                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                    isEditMode ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''
+                  }`}
                   placeholder="e.g., 0001 or 1"
                 />
+                {isEditMode && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    DO number cannot be changed after creation
+                  </p>
+                )}
               </div>
 
               <div>

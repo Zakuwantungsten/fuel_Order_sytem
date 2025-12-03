@@ -1,4 +1,17 @@
 // Delivery Order (DO) Types
+export type DOStatus = 'active' | 'cancelled';
+
+export interface DeliveryOrderEditHistory {
+  editedAt: string;
+  editedBy: string;
+  changes: {
+    field: string;
+    oldValue: any;
+    newValue: any;
+  }[];
+  reason?: string;
+}
+
 export interface DeliveryOrder {
   id?: string | number;
   sn: number;
@@ -20,6 +33,16 @@ export interface DeliveryOrder {
   ratePerTon: number;
   rate?: string;
   cargoType?: string;
+  // Status fields
+  status?: DOStatus;
+  isCancelled?: boolean;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
+  // Edit history tracking
+  editHistory?: DeliveryOrderEditHistory[];
+  lastEditedAt?: string;
+  lastEditedBy?: string;
 }
 
 // Local Purchase Order (LPO) Types - Summary LPOS structure
@@ -226,6 +249,11 @@ export interface FuelRecord {
   // Original going journey locations (stored before EXPORT DO changes them)
   originalGoingFrom?: string;
   originalGoingTo?: string;
+  // Cancellation fields
+  isCancelled?: boolean;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
 }
 
 // Master DO template (for generating new DOs)

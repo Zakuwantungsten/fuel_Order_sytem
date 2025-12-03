@@ -40,6 +40,8 @@ export interface IUser {
 }
 
 // Delivery Order Types
+export type DOStatus = 'active' | 'cancelled';
+
 export interface IDeliveryOrder {
   sn: number;
   date: string;
@@ -60,10 +62,33 @@ export interface IDeliveryOrder {
   ratePerTon: number;
   rate?: string;
   cargoType?: string;
+  // Status fields
+  status: DOStatus;
+  isCancelled: boolean;
+  cancelledAt?: Date;
+  cancellationReason?: string;
+  cancelledBy?: string;
+  // Edit history tracking
+  editHistory?: IDeliveryOrderEditHistory[];
+  lastEditedAt?: Date;
+  lastEditedBy?: string;
+  // Soft delete fields
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Edit history interface to track changes
+export interface IDeliveryOrderEditHistory {
+  editedAt: Date;
+  editedBy: string;
+  changes: {
+    field: string;
+    oldValue: any;
+    newValue: any;
+  }[];
+  reason?: string;
 }
 
 // LPO Entry Types (Summary LPOS)
@@ -249,6 +274,11 @@ export interface IFuelRecord {
   // Original going journey locations (stored before EXPORT DO changes them)
   originalGoingFrom?: string;
   originalGoingTo?: string;
+  // Cancellation fields
+  isCancelled?: boolean;
+  cancelledAt?: Date;
+  cancellationReason?: string;
+  cancelledBy?: string;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;

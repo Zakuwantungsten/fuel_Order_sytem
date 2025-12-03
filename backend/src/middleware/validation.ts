@@ -57,7 +57,7 @@ export const userValidation = {
  */
 export const deliveryOrderValidation = {
   create: [
-    body('sn').isInt({ min: 1 }).withMessage('Serial number must be a positive integer'),
+    body('sn').optional().isInt({ min: 1 }).withMessage('Serial number must be a positive integer'),
     body('date').notEmpty().withMessage('Date is required'),
     body('importOrExport')
       .isIn(['IMPORT', 'EXPORT'])
