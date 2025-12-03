@@ -57,7 +57,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
   const summary = useMemo(() => {
     if (!selectedMonth || orders.length === 0) return null;
     
-    const monthOrders = orders.filter(o => o.date.includes(selectedMonth));
+    const monthOrders = orders.filter(o => o.date.includes(selectedMonth) && !o.isCancelled);
     
     // Calculate fuel metrics for the month
     const monthFuelRecords = fuelRecords.filter(r => r.date.includes(selectedMonth));
@@ -112,11 +112,11 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
     const monthOrders = getMonthOrders();
     
     // Export in Excel format similar to DAILY_DO CSV
-    const exportData = monthOrders.map((order) => ({
-      'S/N': order.doNumber,
+    const exportData = monthOrders.map((order, index) => ({
+      'S/N': index + 1,
       'DATE': order.date,
       'IMPORT OR EXPORT': order.importOrExport,
-      'D.O No.': `${order.doType || 'DO'}-${order.doNumber}`,
+      'D.O No.': order.doNumber,
       'Invoice Nos': order.invoiceNos || '',
       'CLIENT NAME': order.clientName,
       'TRUCK No.': order.truckNo,
@@ -135,7 +135,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
   };
 
   const getMonthOrders = (): DeliveryOrder[] => {
-    return orders.filter(o => o.date.includes(selectedMonth));
+    return orders.filter(o => o.date.includes(selectedMonth) && !o.isCancelled);
   };
 
   const getGroupedOrders = (): GroupedOrders => {
@@ -370,63 +370,63 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
                 </div>
               )}
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                <table className="min-w-full text-sm border border-gray-300 dark:border-gray-600">
+                  <thead>
+                    <tr className="bg-primary-600 dark:bg-primary-700">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         S/N
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Date
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Import/Export
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         D.O No.
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Client Name
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Truck No.
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Trailer No.
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Container No.
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Loading Point
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Destination
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Haulier
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Tonnages
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Rate/Ton
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-white uppercase tracking-wider border border-gray-300 dark:border-gray-500">
                         Total
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {groupOrders.map((order) => (
+                  <tbody className="bg-white dark:bg-gray-800">
+                    {groupOrders.map((order, index) => (
                       <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                          {order.doNumber}
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600">
+                          {index + 1}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600">
                           {order.date}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm border border-gray-300 dark:border-gray-600">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             order.importOrExport === 'IMPORT' 
                               ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' 
@@ -435,51 +435,51 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
                             {order.importOrExport}
                           </span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {order.doType || 'DO'}-{order.doNumber}
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600">
+                          {order.doNumber}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600">
                           {order.clientName}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600">
                           {order.truckNo}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600">
                           {order.trailerNo}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600">
                           {order.containerNo || 'LOOSE CARGO'}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600">
                           {order.loadingPoint || '-'}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600">
                           {order.destination}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600">
                           {order.haulier || '-'}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600">
                           {order.tonnages}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600">
                           ${order.ratePerTon}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-primary-600 dark:text-primary-400">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-primary-600 dark:text-primary-400 border border-gray-300 dark:border-gray-600">
                           ${(order.tonnages * order.ratePerTon).toFixed(2)}
                         </td>
                       </tr>
                     ))}
                     {/* Group Totals */}
-                    <tr className="bg-gray-50 dark:bg-gray-700 font-semibold">
-                      <td colSpan={11} className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
+                    <tr className="bg-gray-100 dark:bg-gray-700 font-semibold">
+                      <td colSpan={11} className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600">
                         Subtotal:
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600">
                         {groupOrders.reduce((sum, o) => sum + o.tonnages, 0).toFixed(1)}
                       </td>
-                      <td className="px-4 py-3"></td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-primary-600 dark:text-primary-400">
+                      <td className="px-4 py-3 border border-gray-300 dark:border-gray-600"></td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-primary-600 dark:text-primary-400 border border-gray-300 dark:border-gray-600">
                         ${groupOrders.reduce((sum, o) => sum + (o.tonnages * o.ratePerTon), 0).toFixed(2)}
                       </td>
                     </tr>
