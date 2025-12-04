@@ -36,7 +36,8 @@ interface LPOToGenerate {
  * Determine extra fuel allocation based on truck batch
  */
 export function calculateExtraFuel(truckNo: string): number {
-  return FuelConfigService.getExtraFuel(truckNo);
+  const result = FuelConfigService.getExtraFuel(truckNo);
+  return result.extraFuel;
 }
 
 /**
@@ -387,16 +388,81 @@ export function createFuelRecordFromDO(
  * IMPORTANT: Stores original going journey from/to before changing them for return
  * NOTE: Return checkpoint fields (zambiaReturn, tundumaReturn, mbeyaReturn, etc.) 
  *       remain at 0 until LPOs are actually created - same as going journey logic
+ * 
+ * FUEL DIFFERENCE CALCULATION LOGIC:
+ * - Calculates if additional fuel is needed for return journey based on loading point
+ * - Example: Original allocation 2300L, but return from point that requires 2400L total
+ * - Difference: 2400 - 2300 = 100L additional fuel needed
+ * - Adds extra fuel based on special loading points (Kamoa +40L, NMI +20L, Kalongwe +60L)
+ * - Adds extra fuel if final destination is Moshi/Msa (+170L)
  */
 export function updateFuelRecordWithReturnDO(
   existingRecord: FuelRecord,
   returnDeliveryOrder: DeliveryOrder
-): { updatedRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[] } {
+): { updatedRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[]; additionalFuelInfo?: any } {
   // IMPORTANT: Store the original going journey from/to BEFORE we change them
   // This is critical for LPO creation when the truck is still going
   // The originalGoingFrom and originalGoingTo preserve the original going journey details
   const originalGoingFrom = existingRecord.originalGoingFrom || existingRecord.from;
   const originalGoingTo = existingRecord.originalGoingTo || existingRecord.to;
+  
+  // Get the return journey loading point (where truck will load cargo)
+  // This is the destination from the EXPORT DO
+  const returnLoadingPoint = returnDeliveryOrder.destination || '';
+  
+  // Get the final destination (where truck returns to offload)
+  // This is typically the start location
+  const finalDestination = existingRecord.start || 'DAR';
+  
+  // Calculate required total liters for return journey with match information
+  // Based on the loading point (from) to the final destination
+  const destinationMatch = FuelConfigService.getTotalLitersByDestination(returnLoadingPoint);
+  const requiredTotalLiters = destinationMatch.liters;
+  
+  // Log if destination was not found or fuzzy matched
+  if (!destinationMatch.matched) {
+    console.warn(`⚠️ Return loading point "${returnLoadingPoint}" not in configured routes. Using default ${requiredTotalLiters}L`);
+    if (destinationMatch.suggestions && destinationMatch.suggestions.length > 0) {
+      console.log('  Suggestions:', destinationMatch.suggestions.map(s => `${s.route} (${s.liters}L)`).join(', '));
+    }
+  } else if (destinationMatch.matchType === 'fuzzy') {
+    console.log(`🔍 Fuzzy matched "${returnLoadingPoint}" → "${destinationMatch.matchedRoute}" (${requiredTotalLiters}L)`);
+  }
+  
+  // Get original total liters allocated for going journey
+  const originalTotalLiters = existingRecord.totalLts || 0;
+  
+  // Calculate fuel difference
+  let fuelDifference = requiredTotalLiters - originalTotalLiters;
+  
+  // Only add difference if positive (need more fuel)
+  let additionalFuelNeeded = fuelDifference > 0 ? fuelDifference : 0;
+  
+  // Add extra fuel based on special loading points (with fuzzy matching)
+  const loadingPointExtra = FuelConfigService.getLoadingPointExtraFuel(returnLoadingPoint);
+  additionalFuelNeeded += loadingPointExtra;
+  
+  // Add extra fuel if final destination is Moshi/Msa (with fuzzy matching)
+  const destinationExtra = FuelConfigService.getDestinationExtraFuel(finalDestination);
+  additionalFuelNeeded += destinationExtra;
+  
+  // Calculate new total liters and extra fuel
+  const newTotalLiters = originalTotalLiters + additionalFuelNeeded;
+  
+  // Log the calculation for tracking
+  const additionalFuelInfo = {
+    originalTotalLiters,
+    requiredTotalLiters,
+    fuelDifference: fuelDifference > 0 ? fuelDifference : 0,
+    loadingPointExtra,
+    destinationExtra,
+    totalAdditionalFuel: additionalFuelNeeded,
+    newTotalLiters,
+    returnLoadingPoint,
+    finalDestination,
+  };
+  
+  console.log('🔄 Return Journey Fuel Calculation:', additionalFuelInfo);
   
   // Update the from and to fields based on return journey
   // NOTE: Return checkpoint fields remain at their current values (0 or whatever was set by LPOs)
@@ -408,20 +474,23 @@ export function updateFuelRecordWithReturnDO(
     originalGoingFrom: originalGoingFrom,
     originalGoingTo: originalGoingTo,
     // Now update from/to for the current journey state (returning)
-    from: existingRecord.to, // Return journey reverses the route
-    to: existingRecord.start, // Back to start location
+    from: returnLoadingPoint, // Return journey: load from this point (EXPORT destination)
+    to: finalDestination, // Back to start location (final offloading point)
+    // Update total liters if additional fuel is needed
+    totalLts: newTotalLiters,
     // DO NOT pre-fill return checkpoint fields - they get filled when LPOs are created
     // zambiaReturn, tundumaReturn, mbeyaReturn, etc. remain unchanged (0 or existing value)
   };
   
-  // Balance remains unchanged - it will be updated when LPOs are created and fuel is deducted
-  // The existing balance already accounts for any going journey deductions
-  updatedRecord.balance = existingRecord.balance;
+  // Update balance if additional fuel was added
+  if (additionalFuelNeeded > 0) {
+    updatedRecord.balance = (existingRecord.balance || 0) + additionalFuelNeeded;
+  }
   
   // Don't generate any LPOs automatically - they will be created manually as needed
   const lposToGenerate: LPOToGenerate[] = [];
   
-  return { updatedRecord, lposToGenerate };
+  return { updatedRecord, lposToGenerate, additionalFuelInfo };
 }
 
 /**

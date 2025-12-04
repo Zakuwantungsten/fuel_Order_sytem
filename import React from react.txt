@@ -230,12 +230,6 @@ ban user for admin - soft delete
 admin - the site itself - 
 
 
-
-sdo - 
-
-
-summary - sdo - should be in summary 
-
 Implementations - 
 Containerised or loosecargo in do - and the total - logic 
 Trucks returning empty meaning nul returning do - test to use nil values - and use the custom 
@@ -243,5 +237,7 @@ sdo implementation - both in the lpo and its sdo workbook
 
 
 changes in total liters for trucks when an export do is created -
+and also handling when the system doesn't know the total liters for a truck on that route 
+ask lance about data archiving to improve performance
 
 Google app password - wszw ewxu bkfx gazt

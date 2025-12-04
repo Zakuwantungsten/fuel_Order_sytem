@@ -12,6 +12,8 @@ import BatchDOPrint from '../components/BatchDOPrint';
 import DOWorkbook from '../components/DOWorkbook';
 import CancelDOModal from '../components/CancelDOModal';
 import AmendedDOsModal from '../components/AmendedDOsModal';
+import { RouteManagement } from '../components/RouteManagement';
+import { TruckBatchManagement } from '../components/TruckBatchManagement';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup';
 import Pagination from '../components/Pagination';
@@ -29,6 +31,8 @@ const DeliveryOrders = () => {
   const [isBulkFormOpen, setIsBulkFormOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isAmendedDOsModalOpen, setIsAmendedDOsModalOpen] = useState(false);
+  const [isRouteManagementOpen, setIsRouteManagementOpen] = useState(false);
+  const [isTruckBatchManagementOpen, setIsTruckBatchManagementOpen] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState<DeliveryOrder | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
@@ -435,9 +439,111 @@ const DeliveryOrders = () => {
         throw new Error(message);
       }
       
-      // Get total liters based on destination
-      const totalLiters = FuelConfigService.getTotalLitersByDestination(deliveryOrder.destination);
-      console.log(`  → Destination: ${deliveryOrder.destination}, Total Liters: ${totalLiters}`);
+      // Get total liters based on destination with match information
+      const destinationMatch = FuelConfigService.getTotalLitersByDestination(deliveryOrder.destination);
+      let totalLiters = destinationMatch.liters;
+      
+      console.log(`  → Destination: ${deliveryOrder.destination}`);
+      console.log(`  → Match Type: ${destinationMatch.matchType}`);
+      
+      // Handle unknown/unlisted destinations
+      if (!destinationMatch.matched) {
+        let warningMessage = `⚠️ Destination "${deliveryOrder.destination}" is not in the configured routes.\n\n`;
+        warningMessage += `Using default allocation: ${totalLiters}L\n\n`;
+        
+        if (destinationMatch.suggestions && destinationMatch.suggestions.length > 0) {
+          warningMessage += `Did you mean one of these?\n`;
+          destinationMatch.suggestions.forEach(s => {
+            warningMessage += `  • ${s.route} (${s.liters}L) - ${Math.round(s.similarity * 100)}% match\n`;
+          });
+          warningMessage += `\n`;
+        }
+        
+        warningMessage += `You can:\n`;
+        warningMessage += `1. Continue with ${totalLiters}L (default)\n`;
+        warningMessage += `2. Enter custom liters for this journey\n`;
+        warningMessage += `3. Cancel and check the destination spelling\n\n`;
+        warningMessage += `Enter custom liters (or click Cancel to use ${totalLiters}L default):`;
+        
+        const customLiters = prompt(warningMessage);
+        
+        if (customLiters !== null && customLiters.trim() !== '') {
+          const parsed = parseInt(customLiters.trim());
+          if (!isNaN(parsed) && parsed > 0 && parsed <= 5000) {
+            totalLiters = parsed;
+            console.log(`  → User specified custom liters: ${totalLiters}L`);
+            
+            // Ask if they want to save this route
+            const shouldSave = confirm(
+              `Save "${deliveryOrder.destination}" → ${totalLiters}L to route configuration for future use?`
+            );
+            
+            if (shouldSave) {
+              FuelConfigService.addOrUpdateRoute(deliveryOrder.destination, totalLiters);
+              console.log(`  → Route saved to configuration`);
+            }
+          } else {
+            alert(`Invalid liters value. Using default ${totalLiters}L.`);
+          }
+        }
+      } else if (destinationMatch.matchType === 'fuzzy') {
+        // Fuzzy match - confirm with user
+        const confirmMessage = `Destination "${deliveryOrder.destination}" matched to "${destinationMatch.matchedRoute}" (${totalLiters}L).\n\nIs this correct?`;
+        if (!confirm(confirmMessage)) {
+          const customLiters = prompt(`Enter correct liters for "${deliveryOrder.destination}":`);
+          if (customLiters !== null && customLiters.trim() !== '') {
+            const parsed = parseInt(customLiters.trim());
+            if (!isNaN(parsed) && parsed > 0 && parsed <= 5000) {
+              totalLiters = parsed;
+            }
+          }
+        }
+      } else if (destinationMatch.matchType === 'partial') {
+        console.log(`  → Partial match found: ${destinationMatch.matchedRoute} → ${totalLiters}L`);
+      } else {
+        console.log(`  → Exact match found: ${totalLiters}L`);
+      }
+      
+      console.log(`  → Final Total Liters: ${totalLiters}L`);
+      
+      // Check truck batch configuration for extra fuel
+      const truckBatchInfo = FuelConfigService.getExtraFuel(deliveryOrder.truckNo);
+      console.log(`  → Truck: ${deliveryOrder.truckNo}, Suffix: ${truckBatchInfo.truckSuffix.toUpperCase()}`);
+      console.log(`  → Extra fuel: ${truckBatchInfo.extraFuel}L (${truckBatchInfo.matched ? truckBatchInfo.batchName : 'default - truck not in batches'})`);
+      
+      // Warn if truck suffix not in configured batches
+      if (!truckBatchInfo.matched && truckBatchInfo.truckSuffix) {
+        const suffix = truckBatchInfo.truckSuffix.toUpperCase();
+        let warningMessage = `⚠️ Truck suffix "${suffix}" (from ${deliveryOrder.truckNo}) is not configured in truck batches.\n\n`;
+        
+        // Add suggestions if available
+        if (truckBatchInfo.suggestions && truckBatchInfo.suggestions.length > 0) {
+          warningMessage += `Did you mean: ${truckBatchInfo.suggestions.map(s => s.toUpperCase()).join(', ')}?\n\n`;
+        }
+        
+        warningMessage += `Using default extra fuel: ${truckBatchInfo.extraFuel}L\n\n`;
+        warningMessage += `Current batches:\n`;
+        warningMessage += `  • 100L batch: DNH, DNY, DPN, DRE, DRF, etc.\n`;
+        warningMessage += `  • 80L batch: DVK, DVL, DWK\n`;
+        warningMessage += `  • 60L batch: DYY, DZY, EAG, ECQ, etc.\n\n`;
+        warningMessage += `Would you like to:\n`;
+        warningMessage += `1. Continue with ${truckBatchInfo.extraFuel}L (default)\n`;
+        warningMessage += `2. Assign "${suffix}" to a batch\n\n`;
+        warningMessage += `Enter batch (100, 80, or 60) to assign, or click Cancel to use default:`;
+        
+        const batchChoice = prompt(warningMessage);
+        
+        if (batchChoice !== null && batchChoice.trim() !== '') {
+          const batch = parseInt(batchChoice.trim());
+          if (batch === 100 || batch === 80 || batch === 60) {
+            FuelConfigService.updateTruckBatch(suffix, batch as 100 | 80 | 60);
+            console.log(`  → Truck suffix "${suffix}" assigned to ${batch}L batch`);
+            alert(`✓ Truck suffix "${suffix}" saved to ${batch}L batch for future use!`);
+          } else {
+            alert(`Invalid batch. Using default ${truckBatchInfo.extraFuel}L.`);
+          }
+        }
+      }
       
       // For now, use default loading point. Later, this can come from a configuration dialog
       const loadingPoint: 'DAR_YARD' | 'KISARAWE' | 'DAR_STATION' = 'DAR_YARD';
@@ -488,7 +594,8 @@ const DeliveryOrders = () => {
       }
       
       // Use the service function to properly update returnDo, from, and to fields
-      const { updatedRecord } = fuelRecordService.updateFuelRecordWithReturnDO(
+      // This now includes fuel difference calculation logic
+      const { updatedRecord, additionalFuelInfo } = fuelRecordService.updateFuelRecordWithReturnDO(
         matchingRecord,
         deliveryOrder
       );
@@ -509,7 +616,28 @@ const DeliveryOrders = () => {
       console.log('  - Updated to:', updatedRecord.to);
       console.log('  - Return DO:', updatedRecord.returnDo);
       
-      alert(`Fuel record updated with return DO-${deliveryOrder.doNumber}`);
+      // Display additional fuel information if any was added
+      if (additionalFuelInfo && additionalFuelInfo.totalAdditionalFuel > 0) {
+        const details = [];
+        if (additionalFuelInfo.fuelDifference > 0) {
+          details.push(`Base difference: ${additionalFuelInfo.fuelDifference}L (${additionalFuelInfo.requiredTotalLiters}L needed - ${additionalFuelInfo.originalTotalLiters}L original)`);
+        }
+        if (additionalFuelInfo.loadingPointExtra > 0) {
+          details.push(`Loading point extra (${additionalFuelInfo.returnLoadingPoint}): +${additionalFuelInfo.loadingPointExtra}L`);
+        }
+        if (additionalFuelInfo.destinationExtra > 0) {
+          details.push(`Destination extra (${additionalFuelInfo.finalDestination}): +${additionalFuelInfo.destinationExtra}L`);
+        }
+        
+        const message = `Fuel record updated with return DO-${deliveryOrder.doNumber}\n\n` +
+          `📊 Additional Fuel Allocated: ${additionalFuelInfo.totalAdditionalFuel}L\n` +
+          `New Total: ${additionalFuelInfo.newTotalLiters}L (was ${additionalFuelInfo.originalTotalLiters}L)\n\n` +
+          `Breakdown:\n${details.join('\n')}`;
+        
+        alert(message);
+      } else {
+        alert(`Fuel record updated with return DO-${deliveryOrder.doNumber}`);
+      }
     } catch (error) {
       console.error('❌ Failed to update fuel record:', error);
       alert('Delivery order saved, but fuel record update failed. Please update manually.');
@@ -623,6 +751,26 @@ const DeliveryOrders = () => {
                 Export
               </>
             )}
+          </button>
+          <button 
+            onClick={() => setIsRouteManagementOpen(true)}
+            className="inline-flex items-center px-4 py-2 border border-purple-300 dark:border-purple-600 rounded-md shadow-sm text-sm font-medium text-purple-700 dark:text-purple-200 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40"
+            title="Manage route configurations and fuel allocations"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+            Routes
+          </button>
+          <button 
+            onClick={() => setIsTruckBatchManagementOpen(true)}
+            className="inline-flex items-center px-4 py-2 border border-indigo-300 dark:border-indigo-600 rounded-md shadow-sm text-sm font-medium text-indigo-700 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40"
+            title="Manage truck batch configurations (extra fuel by truck suffix)"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+            </svg>
+            Trucks
           </button>
           <button 
             onClick={() => setIsAmendedDOsModalOpen(true)}
@@ -1247,6 +1395,16 @@ const DeliveryOrders = () => {
           onConfirm={handleConfirmCancel}
           isLoading={isCancelling}
         />
+      )}
+      
+      {/* Route Management Modal */}
+      {isRouteManagementOpen && (
+        <RouteManagement onClose={() => setIsRouteManagementOpen(false)} />
+      )}
+      
+      {/* Truck Batch Management Modal */}
+      {isTruckBatchManagementOpen && (
+        <TruckBatchManagement onClose={() => setIsTruckBatchManagementOpen(false)} />
       )}
 
       {/* Amended DOs Modal */}
