@@ -184,6 +184,32 @@ const DeliveryOrders = () => {
     }
   };
 
+  const handleExportMonthlySummaries = async (year: number, workbookType?: string) => {
+    try {
+      setExportingYear(year);
+      // Determine which API to use
+      const type = workbookType || filterDoType;
+      
+      if (type === 'SDO') {
+        await sdoWorkbookAPI.exportYearlyMonthlySummaries(year);
+        alert(`✓ SDO Monthly Summaries SDO_Monthly_Summaries_${year}.xlsx downloaded successfully!`);
+      } else {
+        await doWorkbookAPI.exportYearlyMonthlySummaries(year);
+        alert(`✓ Monthly Summaries DO_Monthly_Summaries_${year}.xlsx downloaded successfully!`);
+      }
+    } catch (error: any) {
+      console.error('Error exporting monthly summaries:', error);
+      const type = workbookType || filterDoType;
+      if (error.response?.status === 404) {
+        alert(`No ${type === 'SDO' ? 'SDO' : 'delivery'} orders found for year ${year}`);
+      } else {
+        alert('Failed to export monthly summaries. Please try again.');
+      }
+    } finally {
+      setExportingYear(null);
+    }
+  };
+
   const handleOpenWorkbook = (year: number, workbookType?: string) => {
     setSelectedYear(year);
     setSelectedWorkbookId(year);
@@ -786,7 +812,7 @@ const DeliveryOrders = () => {
                                 <p>Year: {workbook.year}</p>
                               </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex flex-col gap-2">
                               <button
                                 onClick={() => handleOpenWorkbook(workbook.year, workbook.type)}
                                 className="px-3 py-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
@@ -797,8 +823,17 @@ const DeliveryOrders = () => {
                                 onClick={() => handleExportWorkbook(workbook.year, workbook.type)}
                                 disabled={exportingYear === workbook.year}
                                 className="px-3 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                                title="Download individual DO sheets"
                               >
-                                {exportingYear === workbook.year ? '...' : 'Export'}
+                                {exportingYear === workbook.year ? '...' : 'DOs'}
+                              </button>
+                              <button
+                                onClick={() => handleExportMonthlySummaries(workbook.year, workbook.type)}
+                                disabled={exportingYear === workbook.year}
+                                className="px-3 py-1 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                                title="Download monthly summaries"
+                              >
+                                {exportingYear === workbook.year ? '...' : 'Months'}
                               </button>
                             </div>
                           </div>
@@ -840,7 +875,7 @@ const DeliveryOrders = () => {
                                 <p>Year: {workbook.year}</p>
                               </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex flex-col gap-2">
                               <button
                                 onClick={() => handleOpenWorkbook(workbook.year, workbook.type)}
                                 className="px-3 py-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
@@ -851,8 +886,17 @@ const DeliveryOrders = () => {
                                 onClick={() => handleExportWorkbook(workbook.year, workbook.type)}
                                 disabled={exportingYear === workbook.year}
                                 className="px-3 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                                title="Download individual SDO sheets"
                               >
-                                {exportingYear === workbook.year ? '...' : 'Export'}
+                                {exportingYear === workbook.year ? '...' : 'SDOs'}
+                              </button>
+                              <button
+                                onClick={() => handleExportMonthlySummaries(workbook.year, workbook.type)}
+                                disabled={exportingYear === workbook.year}
+                                className="px-3 py-1 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                                title="Download monthly summaries"
+                              >
+                                {exportingYear === workbook.year ? '...' : 'Months'}
                               </button>
                             </div>
                           </div>
@@ -895,7 +939,7 @@ const DeliveryOrders = () => {
                           <p>Year: {workbook.year}</p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2">
                         <button
                           onClick={() => handleOpenWorkbook(workbook.year, workbook.type)}
                           className="px-3 py-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
@@ -906,8 +950,17 @@ const DeliveryOrders = () => {
                           onClick={() => handleExportWorkbook(workbook.year, workbook.type)}
                           disabled={exportingYear === workbook.year}
                           className="px-3 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                          title={`Download individual ${workbook.type === 'SDO' ? 'SDO' : 'DO'} sheets`}
                         >
-                          {exportingYear === workbook.year ? '...' : 'Export'}
+                          {exportingYear === workbook.year ? '...' : (workbook.type === 'SDO' ? 'SDOs' : 'DOs')}
+                        </button>
+                        <button
+                          onClick={() => handleExportMonthlySummaries(workbook.year, workbook.type)}
+                          disabled={exportingYear === workbook.year}
+                          className="px-3 py-1 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                          title="Download monthly summaries"
+                        >
+                          {exportingYear === workbook.year ? '...' : 'Months'}
                         </button>
                       </div>
                     </div>

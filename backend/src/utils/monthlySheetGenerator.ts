@@ -32,6 +32,13 @@ export const addMonthlySummarySheets = (
       const monthOrders = ordersByMonth[monthName];
       const monthSheet = workbook.addWorksheet(`${monthName} Summary`);
 
+      // Helper to format dates
+      const formatDate = (dateString: string) => {
+        if (!dateString) return new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      };
+
       // Set column widths
       monthSheet.columns = [
         { key: 'sn', width: 6 },
@@ -87,7 +94,7 @@ export const addMonthlySummarySheets = (
         const row = monthSheet.getRow(rowNum);
         row.values = [
           index + 1,
-          order.date,
+          formatDate(order.date),
           order.importOrExport,
           order.doNumber,
           order.invoiceNos || '',

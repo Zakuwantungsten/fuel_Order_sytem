@@ -75,7 +75,7 @@ const FuelStationConfigSchema = new Schema<IFuelStationConfig>(
 );
 
 // Indexes
-FuelStationConfigSchema.index({ stationName: 1 });
+// Note: stationName index is created automatically by unique: true
 FuelStationConfigSchema.index({ isActive: 1 });
 
 export const FuelStationConfig = mongoose.model<IFuelStationConfig>(

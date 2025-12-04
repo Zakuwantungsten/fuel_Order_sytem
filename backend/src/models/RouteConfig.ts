@@ -52,7 +52,7 @@ const RouteConfigSchema = new Schema<IRouteConfig>(
 );
 
 // Indexes
-RouteConfigSchema.index({ routeName: 1 });
+// Note: routeName index is created automatically by unique: true
 RouteConfigSchema.index({ destination: 1 });
 RouteConfigSchema.index({ isActive: 1 });
 

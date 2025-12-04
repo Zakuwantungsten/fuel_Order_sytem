@@ -2254,3 +2254,117 @@ export const exportSDOMonth = async (req: AuthRequest, res: Response): Promise<v
     throw error;
   }
 };
+
+/**
+ * Export yearly monthly summaries workbook for DO - only monthly summary sheets
+ */
+export const exportYearlyMonthlySummaries = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const year = parseInt(req.params.year, 10);
+
+    if (isNaN(year)) {
+      throw new ApiError(400, 'Invalid year');
+    }
+
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+
+    // Get all DOs for the year
+    const deliveryOrders = await DeliveryOrder.find({
+      isDeleted: false,
+      doType: 'DO',
+      date: { $gte: yearStart, $lte: yearEnd }
+    }).sort({ date: 1, doNumber: 1 }).lean();
+
+    if (deliveryOrders.length === 0) {
+      throw new ApiError(404, 'No delivery orders found for this year');
+    }
+
+    // Create Excel workbook
+    const excelWorkbook = new ExcelJS.Workbook();
+    excelWorkbook.creator = 'Fuel Order System';
+    excelWorkbook.created = new Date();
+
+    // Add monthly summary sheets
+    addMonthlySummarySheets(excelWorkbook, deliveryOrders, year, 'DO');
+
+    // Send file to client
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=DO_Monthly_Summaries_${year}.xlsx`
+    );
+
+    await excelWorkbook.xlsx.write(res);
+    res.end();
+
+    logger.info(`DO monthly summaries ${year} exported by ${req.user?.username}`);
+  } catch (error: any) {
+    if (error instanceof ApiError) {
+      res.status(error.statusCode).json({ error: error.message });
+    } else {
+      logger.error('Error exporting DO monthly summaries:', error);
+      res.status(500).json({ error: 'Failed to export monthly summaries' });
+    }
+  }
+};
+
+/**
+ * Export yearly monthly summaries workbook for SDO - only monthly summary sheets
+ */
+export const exportSDOYearlyMonthlySummaries = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const year = parseInt(req.params.year, 10);
+
+    if (isNaN(year)) {
+      throw new ApiError(400, 'Invalid year');
+    }
+
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+
+    // Get all SDOs for the year
+    const sdoOrders = await DeliveryOrder.find({
+      isDeleted: false,
+      doType: 'SDO',
+      date: { $gte: yearStart, $lte: yearEnd }
+    }).sort({ date: 1, doNumber: 1 }).lean();
+
+    if (sdoOrders.length === 0) {
+      throw new ApiError(404, 'No SDO orders found for this year');
+    }
+
+    // Create Excel workbook
+    const excelWorkbook = new ExcelJS.Workbook();
+    excelWorkbook.creator = 'Fuel Order System';
+    excelWorkbook.created = new Date();
+
+    // Add monthly summary sheets
+    addMonthlySummarySheets(excelWorkbook, sdoOrders, year, 'SDO');
+
+    // Send file to client
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=SDO_Monthly_Summaries_${year}.xlsx`
+    );
+
+    await excelWorkbook.xlsx.write(res);
+    res.end();
+
+    logger.info(`SDO monthly summaries ${year} exported by ${req.user?.username}`);
+  } catch (error: any) {
+    if (error instanceof ApiError) {
+      res.status(error.statusCode).json({ error: error.message });
+    } else {
+      logger.error('Error exporting SDO monthly summaries:', error);
+      res.status(500).json({ error: 'Failed to export monthly summaries' });
+    }
+  }
+};

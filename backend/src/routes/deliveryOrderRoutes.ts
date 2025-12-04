@@ -15,6 +15,7 @@ router.get('/sdo/workbooks', asyncHandler(deliveryOrderController.getAllSDOWorkb
 router.get('/sdo/workbooks/years', asyncHandler(deliveryOrderController.getAvailableSDOYears));
 router.get('/sdo/workbooks/:year', asyncHandler(deliveryOrderController.getSDOWorkbookByYear));
 router.get('/sdo/workbooks/:year/export', asyncHandler(deliveryOrderController.exportSDOWorkbook));
+router.get('/sdo/workbooks/:year/monthly-summaries/export', asyncHandler(deliveryOrderController.exportSDOYearlyMonthlySummaries));
 router.get('/sdo/workbooks/:year/month/:month/export', asyncHandler(deliveryOrderController.exportSDOMonth));
 
 // DO Workbook routes (must be before /:id routes to avoid conflicts)
@@ -22,6 +23,7 @@ router.get('/workbooks', asyncHandler(deliveryOrderController.getAllWorkbooks));
 router.get('/workbooks/years', asyncHandler(deliveryOrderController.getAvailableYears));
 router.get('/workbooks/:year', asyncHandler(deliveryOrderController.getWorkbookByYear));
 router.get('/workbooks/:year/export', asyncHandler(deliveryOrderController.exportWorkbook));
+router.get('/workbooks/:year/monthly-summaries/export', asyncHandler(deliveryOrderController.exportYearlyMonthlySummaries));
 router.get('/workbooks/:year/month/:month/export', asyncHandler(deliveryOrderController.exportMonth));
 
 // Amended DOs routes (must be before /:id routes)
