@@ -56,4 +56,22 @@ router.patch(
   asyncHandler(userController.toggleUserStatus)
 );
 
+// Ban user route (Super Admin only)
+router.post(
+  '/:id/ban',
+  authorize('super_admin'),
+  commonValidation.mongoId,
+  validate,
+  asyncHandler(userController.banUser)
+);
+
+// Unban user route (Super Admin only)
+router.post(
+  '/:id/unban',
+  authorize('super_admin'),
+  commonValidation.mongoId,
+  validate,
+  asyncHandler(userController.unbanUser)
+);
+
 export default router;

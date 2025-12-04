@@ -28,6 +28,12 @@ export const config = {
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
   logFile: process.env.LOG_FILE || 'logs/app.log',
+
+  // Cloudflare R2 (S3-compatible storage)
+  r2Endpoint: process.env.R2_ENDPOINT || '',
+  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+  r2BucketName: process.env.R2_BUCKET_NAME || 'fuel-order-backups',
 };
 
 // Validate required environment variables

@@ -43,6 +43,11 @@ Password: mmsa123
 Role: mmsa_yard
 Yard: MMSA YARD
 
+ System admin user details:
+2025-12-04 07:40:13 [info]:   Username: sysadmin
+2025-12-04 07:40:13 [info]:   Password: sysadmin123
+2025-12-04 07:40:13 [info]:   Role: system_admin
+
 📍 Each station manager can ONLY view LPOs for their assigned station.
 
 ----------------------------------------------------------------------
@@ -209,7 +214,6 @@ forward values to the next station - for zambia return for ndola and kapiri and 
 YardFuelEntry.tsx - The older, more complex component - this needs to be deleted
 
 Database monitor  in real time - notify kwa email - everything critical kwa system - Database queries 
-Pagination to every page yenye iko na list 
 Soft delete - don't hard delete to everything deleted or published 
 deletion confirmation
 
@@ -226,22 +230,18 @@ ban user for admin - soft delete
 admin - the site itself - 
 
 
-trucks 
-pol
-des
-rate
-tonnage 
-trailer 
-
-do 
 
 sdo - 
 
 
 summary - sdo - should be in summary 
 
-Implementations - do
-Containerised or loosecargo in do
-Trucks returning empty meaning nul returning do 
+Implementations - 
+Containerised or loosecargo in do - and the total - logic 
+Trucks returning empty meaning nul returning do - test to use nil values - and use the custom 
 sdo implementation - both in the lpo and its sdo workbook
 
+
+changes in total liters for trucks when an export do is created -
+
+Google app password - wszw ewxu bkfx gazt

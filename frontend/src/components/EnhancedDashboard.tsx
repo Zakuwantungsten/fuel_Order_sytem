@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { 
+import {
   FileText, 
   Fuel, 
   ClipboardList, 
@@ -14,7 +14,14 @@ import {
   Truck,
   Settings,
   Sun,
-  Moon
+  Moon,
+  Shield,
+  Database,
+  FileSearch,
+  Trash2,
+  Users,
+  Zap,
+  TrendingUp
 } from 'lucide-react';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
@@ -22,6 +29,9 @@ import DriverPortal from './DriverPortal';
 import StationView from './StationView';
 import PaymentManager from './PaymentManager';
 import AdminDashboard from './AdminDashboard';
+import SystemAdminDashboard from './SystemAdminDashboard';
+import SuperAdminDashboard from './SuperAdminDashboard';
+import StandardAdminDashboard from './StandardAdminDashboard';
 import ManagerView from './ManagerView';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -49,8 +59,21 @@ const getInitialTab = (userRole: string): string => {
   const getValidTabs = () => {
     if (isDriver) return ['driver_portal'];
     if (isYardRole || userRole === 'yard_personnel') return ['yard_fuel'];
-    if (userRole === 'super_admin' || userRole === 'admin' || userRole === 'boss') {
-      return ['overview', 'do', 'fuel_records', 'lpo', 'reports', 'admin'];
+    if (userRole === 'super_admin') {
+      return [
+        'overview', 'do', 'fuel_records', 'lpo', 'reports',
+        'sa_overview', 'sa_database', 'sa_users', 'sa_config', 
+        'sa_audit', 'sa_security', 'sa_trash', 'sa_backup', 'sa_analytics'
+      ];
+    }
+    if (userRole === 'system_admin') {
+      return ['sys_database', 'sys_audit', 'sys_trash', 'sys_sessions', 'sys_quick'];
+    }
+    if (userRole === 'admin' || userRole === 'boss') {
+      return [
+        'overview', 'do', 'fuel_records', 'lpo', 'reports',
+        'admin_overview', 'admin_data', 'admin_users', 'admin_reports', 'admin_quick'
+      ];
     }
     if (userRole === 'fuel_order_maker') {
       return ['overview', 'do', 'fuel_records', 'lpo', 'reports'];
@@ -78,6 +101,7 @@ const getInitialTab = (userRole: string): string => {
   if (isYardRole || userRole === 'yard_personnel') return 'yard_fuel';
   if (isDriver) return 'driver_portal';
   if (isManager) return 'manager_view';
+  if (userRole === 'system_admin') return 'sys_database';
   return 'overview';
 };
 
@@ -125,15 +149,46 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     // Check if user is a yard-specific role
     const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard'].includes(user.role);
 
-    // Admin roles get admin dashboard
-    if (user.role === 'super_admin' || user.role === 'admin' || user.role === 'boss') {
+    // Super Admin gets only super admin specific sections
+    if (user.role === 'super_admin') {
+      return [
+        { id: 'sa_overview', label: 'Super Admin Overview', icon: Shield },
+        { id: 'sa_database', label: 'Database Monitor', icon: Database },
+        { id: 'sa_users', label: 'User Management', icon: Users },
+        { id: 'sa_config', label: 'Configuration', icon: Settings },
+        { id: 'sa_audit', label: 'Audit & Logs', icon: FileSearch },
+        { id: 'sa_security', label: 'Security', icon: Shield },
+        { id: 'sa_trash', label: 'Trash Management', icon: Trash2 },
+        { id: 'sa_backup', label: 'Backup & Recovery', icon: Database },
+        { id: 'sa_analytics', label: 'Analytics & Reports', icon: BarChart3 },
+      ];
+    }
+
+    // System Admin gets system monitoring sections directly in sidebar
+    if (user.role === 'system_admin') {
+      return [
+        { id: 'sys_database', label: 'Database Monitor', icon: Database },
+        { id: 'sys_audit', label: 'Audit Logs', icon: FileSearch },
+        { id: 'sys_trash', label: 'Trash Management', icon: Trash2 },
+        { id: 'sys_sessions', label: 'Active Sessions', icon: Users },
+        { id: 'sys_quick', label: 'Quick Actions', icon: Zap },
+      ];
+    }
+
+    // Admin and Boss roles get expanded admin dashboard sections
+    if (user.role === 'admin' || user.role === 'boss') {
       return [
         ...baseItems,
         { id: 'do', label: 'DO Management', icon: FileText },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: ClipboardList },
         { id: 'reports', label: 'Reports', icon: BarChart3 },
-        { id: 'admin', label: 'Admin Settings', icon: Settings },
+        // Admin sections - expanded in sidebar
+        { id: 'admin_overview', label: 'Operational Overview', icon: BarChart3 },
+        { id: 'admin_data', label: 'Data Management', icon: FileText },
+        { id: 'admin_users', label: 'User Support', icon: Users },
+        { id: 'admin_reports', label: 'Admin Reports', icon: TrendingUp },
+        { id: 'admin_quick', label: 'Quick Actions', icon: Zap },
       ];
     }
 
@@ -190,8 +245,51 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <PaymentManager user={user} />;
       case 'reports':
         return <Reports user={user} />;
-      case 'admin':
-        return <AdminDashboard user={user} />;
+      
+      // Super Admin sections
+      case 'sa_overview':
+        return <SuperAdminDashboard user={user} section="overview" />;
+      case 'sa_database':
+        return <SuperAdminDashboard user={user} section="database" />;
+      case 'sa_users':
+        return <SuperAdminDashboard user={user} section="users" />;
+      case 'sa_config':
+        return <SuperAdminDashboard user={user} section="config" />;
+      case 'sa_audit':
+        return <SuperAdminDashboard user={user} section="audit" />;
+      case 'sa_security':
+        return <SuperAdminDashboard user={user} section="security" />;
+      case 'sa_trash':
+        return <SuperAdminDashboard user={user} section="trash" />;
+      case 'sa_backup':
+        return <SuperAdminDashboard user={user} section="backup" />;
+      case 'sa_analytics':
+        return <SuperAdminDashboard user={user} section="analytics" />;
+      
+      // Standard Admin sections (admin/boss roles)
+      case 'admin_overview':
+        return <StandardAdminDashboard user={user} section="overview" />;
+      case 'admin_data':
+        return <StandardAdminDashboard user={user} section="data" />;
+      case 'admin_users':
+        return <StandardAdminDashboard user={user} section="users" />;
+      case 'admin_reports':
+        return <StandardAdminDashboard user={user} section="reports" />;
+      case 'admin_quick':
+        return <StandardAdminDashboard user={user} section="quick-actions" />;
+      
+      // System Admin sections  
+      case 'sys_database':
+        return <SystemAdminDashboard user={user} section="database" />;
+      case 'sys_audit':
+        return <SystemAdminDashboard user={user} section="audit" />;
+      case 'sys_trash':
+        return <SystemAdminDashboard user={user} section="trash" />;
+      case 'sys_sessions':
+        return <SystemAdminDashboard user={user} section="sessions" />;
+      case 'sys_quick':
+        return <SystemAdminDashboard user={user} section="quick" />;
+      
       case 'manager_view':
         return <ManagerView user={user} />;
       default:

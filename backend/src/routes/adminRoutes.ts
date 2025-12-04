@@ -9,7 +9,7 @@ const router = Router();
 
 // All routes require authentication and admin privileges
 router.use(authenticate);
-router.use(authorize('super_admin', 'admin', 'boss'));
+router.use(authorize('super_admin', 'system_admin', 'admin', 'boss'));
 
 // =====================
 // Dashboard Stats

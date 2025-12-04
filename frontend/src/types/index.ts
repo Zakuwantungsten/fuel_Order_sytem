@@ -283,7 +283,95 @@ export interface MasterDOTemplate {
 }
 
 // User Types with Role-Based Authentication (Enhanced with new roles)
-export type UserRole = 'super_admin' | 'admin' | 'manager' | 'super_manager' | 'supervisor' | 'clerk' | 'driver' | 'viewer' | 'fuel_order_maker' | 'boss' | 'yard_personnel' | 'fuel_attendant' | 'station_manager' | 'payment_manager' | 'dar_yard' | 'tanga_yard' | 'mmsa_yard';
+export type UserRole = 'super_admin' | 'system_admin' | 'admin' | 'manager' | 'super_manager' | 'supervisor' | 'clerk' | 'driver' | 'viewer' | 'fuel_order_maker' | 'boss' | 'yard_personnel' | 'fuel_attendant' | 'station_manager' | 'payment_manager' | 'dar_yard' | 'tanga_yard' | 'mmsa_yard';
+
+// Audit Log Types
+export type AuditAction = 
+  | 'CREATE' 
+  | 'UPDATE' 
+  | 'DELETE' 
+  | 'RESTORE' 
+  | 'PERMANENT_DELETE'
+  | 'LOGIN' 
+  | 'LOGOUT' 
+  | 'FAILED_LOGIN'
+  | 'PASSWORD_RESET'
+  | 'CONFIG_CHANGE'
+  | 'BULK_OPERATION'
+  | 'EXPORT';
+
+export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  userId?: string;
+  username: string;
+  action: AuditAction;
+  resourceType: string;
+  resourceId?: string;
+  previousValue?: any;
+  newValue?: any;
+  ipAddress?: string;
+  userAgent?: string;
+  details?: string;
+  severity: AuditSeverity;
+}
+
+// Database Metrics Types
+export interface DatabaseMetrics {
+  connections: {
+    current: number;
+    available: number;
+    totalCreated: number;
+  };
+  performance: {
+    queriesPerSecond: number;
+    averageResponseTime: number;
+    slowQueries: SlowQuery[];
+    failedQueries: number;
+  };
+  storage: {
+    totalSize: number;
+    dataSize: number;
+    indexSize: number;
+    freeSpace: number;
+    growthRate: number;
+  };
+  collections: CollectionStats[];
+  status: 'connected' | 'disconnected' | 'error';
+}
+
+export interface SlowQuery {
+  query: string;
+  collection: string;
+  executionTime: number;
+  timestamp: string;
+  user?: string;
+}
+
+export interface CollectionStats {
+  name: string;
+  documentCount: number;
+  size: number;
+  avgDocSize: number;
+  indexes: number;
+}
+
+// Trash Item Types
+export interface TrashItem {
+  id: string;
+  type: string;
+  data: any;
+  deletedBy: string;
+  deletedAt: string;
+}
+
+export interface TrashStats {
+  type: string;
+  count: number;
+  oldestItem?: { deletedAt: string };
+}
 
 export interface Permission {
   resource: string;
@@ -308,6 +396,10 @@ export interface User {
   truckNo?: string; // For drivers
   currentDO?: string; // For drivers - current delivery order
   isActive: boolean;
+  isBanned?: boolean;
+  bannedAt?: string;
+  bannedBy?: string;
+  bannedReason?: string;
   lastLogin?: string;
   createdAt: string;
   updatedAt: string;
@@ -552,4 +644,202 @@ export interface LPOSummaryExtended extends LPOSummary {
   hasCancelledEntries?: boolean;
   cancellationReport?: CancellationReport;
   hasDriverAccountEntries?: boolean;
+}
+
+// Backup & Recovery Types
+export interface Backup {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  status: 'in_progress' | 'completed' | 'failed';
+  type: 'manual' | 'scheduled';
+  collections: string[];
+  r2Key: string;
+  r2Url?: string;
+  createdBy: string;
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
+  metadata?: {
+    totalDocuments: number;
+    databaseSize: number;
+    compression: string;
+  };
+}
+
+export interface BackupSchedule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  frequency: 'daily' | 'weekly' | 'monthly';
+  time: string;
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  retentionDays: number;
+  lastRun?: string;
+  nextRun?: string;
+  createdBy: string;
+  updatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackupStats {
+  totalBackups: number;
+  completedBackups: number;
+  failedBackups: number;
+  totalSize: number;
+  oldestBackup?: string;
+  newestBackup?: string;
+}
+
+// Analytics & Reports Types
+export interface AnalyticsSummary {
+  totalRevenue: number;
+  revenueTrend: number;
+  fuelDispensed: number;
+  fuelTrend: number;
+  activeTrucks: number;
+  truckTrend: number;
+  totalOrders: number;
+}
+
+export interface RevenueByMonth {
+  _id: {
+    year: number;
+    month: number;
+  };
+  revenue: number;
+  orders: number;
+}
+
+export interface FuelByStation {
+  _id: string;
+  totalLiters: number;
+  totalAmount: number;
+}
+
+export interface TopTruck {
+  _id: string;
+  trips: number;
+  totalTonnage: number;
+  revenue: number;
+}
+
+export interface ActivityItem {
+  user: string;
+  action: string;
+  resource: string;
+  timestamp: string;
+}
+
+export interface DashboardAnalytics {
+  summary: AnalyticsSummary;
+  charts: {
+    revenueByMonth: RevenueByMonth[];
+    fuelByStation: FuelByStation[];
+    topTrucks: TopTruck[];
+  };
+  recentActivity: ActivityItem[];
+  period: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface RevenueReport {
+  revenueData: Array<{
+    _id: any;
+    totalRevenue: number;
+    orderCount: number;
+    avgTonnage: number;
+  }>;
+  summary: {
+    totalRevenue: number;
+    totalOrders: number;
+    averageOrderValue: number;
+  };
+  period: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface FuelReport {
+  byStation: Array<{
+    _id: string;
+    totalLiters: number;
+    totalAmount: number;
+    recordCount: number;
+  }>;
+  byTruck: Array<{
+    _id: string;
+    totalLiters: number;
+    totalAmount: number;
+    tripCount: number;
+  }>;
+  byFuelType: Array<{
+    _id: string;
+    totalLiters: number;
+    totalAmount: number;
+  }>;
+  timeline: Array<{
+    _id: any;
+    totalLiters: number;
+    totalAmount: number;
+  }>;
+  summary: {
+    totalLiters: number;
+    totalAmount: number;
+    averagePricePerLiter: number;
+  };
+  period: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface UserActivityReport {
+  activityByUser: Array<{
+    _id: string;
+    actionCount: number;
+    actions: string[];
+  }>;
+  activityByAction: Array<{
+    _id: string;
+    count: number;
+  }>;
+  timeline: Array<{
+    _id: any;
+    count: number;
+  }>;
+  topUsers: Array<{
+    _id: string;
+    actionCount: number;
+    lastActivity: string;
+  }>;
+  period: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface SystemPerformance {
+  database: any;
+  collections: Array<{
+    name: string;
+    count: number;
+  }>;
+  users: {
+    total: number;
+    active: number;
+    byRole: Array<{
+      _id: string;
+      count: number;
+    }>;
+  };
+  activity: {
+    last24h: number;
+    last7d: number;
+  };
 }

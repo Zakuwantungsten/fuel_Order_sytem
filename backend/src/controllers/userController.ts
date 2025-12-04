@@ -266,3 +266,84 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response): Promise
     throw error;
   }
 };
+
+/**
+ * Ban user (Super Admin only)
+ */
+export const banUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    // Prevent self-ban
+    if (req.user?.userId === id) {
+      throw new ApiError(400, 'Cannot ban your own account');
+    }
+
+    const user = await User.findOne({ _id: id, isDeleted: false }).select('-password -refreshToken');
+
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    if (user.isBanned) {
+      throw new ApiError(400, 'User is already banned');
+    }
+
+    // Ban user
+    user.isBanned = true;
+    user.bannedAt = new Date();
+    user.bannedBy = req.user?.username || 'system';
+    user.bannedReason = reason || 'No reason provided';
+    user.isActive = false; // Also deactivate when banned
+    user.refreshToken = undefined; // Clear refresh token to force logout
+    await user.save();
+
+    logger.warn(`User banned: ${user.username} by ${req.user?.username}. Reason: ${reason}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'User banned successfully',
+      data: user,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Unban user (Super Admin only)
+ */
+export const unbanUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findOne({ _id: id, isDeleted: false }).select('-password -refreshToken');
+
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    if (!user.isBanned) {
+      throw new ApiError(400, 'User is not banned');
+    }
+
+    // Unban user
+    user.isBanned = false;
+    user.bannedAt = undefined;
+    user.bannedBy = undefined;
+    user.bannedReason = undefined;
+    user.isActive = true; // Reactivate when unbanned
+    await user.save();
+
+    logger.info(`User unbanned: ${user.username} by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'User unbanned successfully',
+      data: user,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};

@@ -44,6 +44,7 @@ const userSchema = new Schema<IUserDocument>(
       type: String,
       enum: [
         'super_admin',
+        'system_admin',
         'admin',
         'manager',
         'super_manager',
@@ -87,6 +88,19 @@ const userSchema = new Schema<IUserDocument>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    isBanned: {
+      type: Boolean,
+      default: false,
+    },
+    bannedAt: {
+      type: Date,
+    },
+    bannedBy: {
+      type: String,
+    },
+    bannedReason: {
+      type: String,
     },
     lastLogin: {
       type: Date,

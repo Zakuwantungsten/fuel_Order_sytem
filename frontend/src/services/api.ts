@@ -626,6 +626,16 @@ export const usersAPI = {
     const response = await apiClient.patch(`/users/${id}/toggle-status`);
     return response.data.data;
   },
+
+  ban: async (id: string | number, reason: string): Promise<User> => {
+    const response = await apiClient.post(`/users/${id}/ban`, { reason });
+    return response.data.data;
+  },
+
+  unban: async (id: string | number): Promise<User> => {
+    const response = await apiClient.post(`/users/${id}/unban`);
+    return response.data.data;
+  },
 };
 
 // Yard Fuel API
@@ -944,6 +954,307 @@ export const adminAPI = {
 
   resetConfig: async (configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'all'): Promise<void> => {
     await apiClient.post(`/admin/config/reset/${configType}`);
+  },
+};
+
+// System Admin API
+export const systemAdminAPI = {
+  // Database Monitoring
+  getDatabaseMetrics: async () => {
+    const response = await apiClient.get('/system-admin/database/metrics');
+    return response.data.data;
+  },
+
+  getDatabaseHealth: async () => {
+    const response = await apiClient.get('/system-admin/database/health');
+    return response.data.data;
+  },
+
+  enableProfiling: async (level: number = 1, slowMs: number = 500) => {
+    const response = await apiClient.post('/system-admin/database/profiling', { level, slowMs });
+    return response.data;
+  },
+
+  // Audit Logs
+  getAuditLogs: async (params?: {
+    action?: string;
+    resourceType?: string;
+    username?: string;
+    severity?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await apiClient.get('/system-admin/audit-logs', { params });
+    return response.data;
+  },
+
+  getActivitySummary: async (days: number = 7) => {
+    const response = await apiClient.get('/system-admin/audit-logs/summary', { params: { days } });
+    return response.data.data;
+  },
+
+  getCriticalEvents: async (limit: number = 10) => {
+    const response = await apiClient.get('/system-admin/audit-logs/critical', { params: { limit } });
+    return response.data.data;
+  },
+
+  // System Stats
+  getSystemStats: async () => {
+    const response = await apiClient.get('/system-admin/stats');
+    return response.data.data;
+  },
+
+  // Session Management
+  getActiveSessions: async () => {
+    const response = await apiClient.get('/system-admin/sessions/active');
+    return response.data.data;
+  },
+
+  forceLogout: async (userId: string) => {
+    const response = await apiClient.post(`/system-admin/sessions/${userId}/force-logout`);
+    return response.data;
+  },
+
+  // Activity Feed
+  getActivityFeed: async (limit: number = 20) => {
+    const response = await apiClient.get('/system-admin/activity-feed', { params: { limit } });
+    return response.data.data;
+  },
+
+  getRecentActivity: async (limit: number = 10) => {
+    const response = await apiClient.get('/system-admin/recent-activity', { params: { limit } });
+    return response.data.data;
+  },
+
+  // Email Notifications
+  testEmailConfig: async () => {
+    const response = await apiClient.get('/system-admin/email/test-config');
+    return response.data;
+  },
+
+  sendTestEmail: async (recipient?: string) => {
+    const response = await apiClient.post('/system-admin/email/send-test', { recipient });
+    return response.data;
+  },
+
+  sendDailySummary: async () => {
+    const response = await apiClient.post('/system-admin/email/daily-summary');
+    return response.data;
+  },
+
+  sendWeeklySummary: async () => {
+    const response = await apiClient.post('/system-admin/email/weekly-summary');
+    return response.data;
+  },
+};
+
+// Backup & Recovery API
+export const backupAPI = {
+  // Get all backups
+  getBackups: async (params?: {
+    status?: 'in_progress' | 'completed' | 'failed';
+    type?: 'manual' | 'scheduled';
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await apiClient.get('/system-admin/backups', { params });
+    return response.data.data;
+  },
+
+  // Get backup by ID
+  getBackupById: async (id: string) => {
+    const response = await apiClient.get(`/system-admin/backups/${id}`);
+    return response.data.data;
+  },
+
+  // Create manual backup
+  createBackup: async () => {
+    const response = await apiClient.post('/system-admin/backups');
+    return response.data.data;
+  },
+
+  // Download backup
+  downloadBackup: async (id: string) => {
+    const response = await apiClient.get(`/system-admin/backups/${id}/download`);
+    return response.data.data;
+  },
+
+  // Restore backup
+  restoreBackup: async (id: string) => {
+    const response = await apiClient.post(`/system-admin/backups/${id}/restore`);
+    return response.data;
+  },
+
+  // Delete backup
+  deleteBackup: async (id: string) => {
+    const response = await apiClient.delete(`/system-admin/backups/${id}`);
+    return response.data;
+  },
+
+  // Get backup statistics
+  getStats: async () => {
+    const response = await apiClient.get('/system-admin/backups/stats');
+    return response.data.data;
+  },
+
+  // Cleanup old backups
+  cleanupBackups: async (retentionDays: number) => {
+    const response = await apiClient.post('/system-admin/backups/cleanup', { retentionDays });
+    return response.data;
+  },
+
+  // Backup schedules
+  getSchedules: async () => {
+    const response = await apiClient.get('/system-admin/backup-schedules');
+    return response.data.data;
+  },
+
+  createSchedule: async (data: {
+    name: string;
+    frequency: 'daily' | 'weekly' | 'monthly';
+    time: string;
+    dayOfWeek?: number;
+    dayOfMonth?: number;
+    retentionDays: number;
+  }) => {
+    const response = await apiClient.post('/system-admin/backup-schedules', data);
+    return response.data.data;
+  },
+
+  updateSchedule: async (id: string, data: any) => {
+    const response = await apiClient.put(`/system-admin/backup-schedules/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteSchedule: async (id: string) => {
+    const response = await apiClient.delete(`/system-admin/backup-schedules/${id}`);
+    return response.data;
+  },
+};
+
+// Analytics & Reports API
+export const analyticsAPI = {
+  // Get dashboard analytics
+  getDashboard: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    period?: number;
+  }) => {
+    const response = await apiClient.get('/system-admin/analytics/dashboard', { params });
+    return response.data.data;
+  },
+
+  // Get revenue report
+  getRevenueReport: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    groupBy?: 'hour' | 'day' | 'month' | 'year';
+  }) => {
+    const response = await apiClient.get('/system-admin/analytics/revenue', { params });
+    return response.data.data;
+  },
+
+  // Get fuel report
+  getFuelReport: async (params?: {
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const response = await apiClient.get('/system-admin/analytics/fuel', { params });
+    return response.data.data;
+  },
+
+  // Get user activity report
+  getUserActivityReport: async (params?: {
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const response = await apiClient.get('/system-admin/analytics/user-activity', { params });
+    return response.data.data;
+  },
+
+  // Get system performance
+  getSystemPerformance: async () => {
+    const response = await apiClient.get('/system-admin/analytics/system-performance');
+    return response.data.data;
+  },
+
+  // Export report
+  exportReport: async (data: {
+    reportType: 'revenue' | 'fuel' | 'user-activity' | 'comprehensive';
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const response = await apiClient.post('/system-admin/analytics/export', data, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+};
+
+// Trash Management API
+export const trashAPI = {
+  // Get trash statistics
+  getStats: async () => {
+    const response = await apiClient.get('/trash/stats');
+    return response.data.data;
+  },
+
+  // Get deleted items by type
+  getDeletedItems: async (
+    type: string,
+    params?: {
+      dateFrom?: string;
+      dateTo?: string;
+      deletedBy?: string;
+      page?: number;
+      limit?: number;
+    }
+  ) => {
+    const response = await apiClient.get(`/trash/${type}`, { params });
+    return response.data;
+  },
+
+  // Restore single item
+  restoreItem: async (type: string, id: string) => {
+    const response = await apiClient.post(`/trash/${type}/${id}/restore`);
+    return response.data;
+  },
+
+  // Bulk restore
+  bulkRestore: async (type: string, ids: string[]) => {
+    const response = await apiClient.post('/trash/bulk-restore', { type, ids });
+    return response.data;
+  },
+
+  // Permanent delete
+  permanentDelete: async (type: string, id: string) => {
+    const response = await apiClient.delete(`/trash/${type}/${id}/permanent`);
+    return response.data;
+  },
+
+  // Bulk permanent delete
+  bulkPermanentDelete: async (type: string, ids: string[]) => {
+    const response = await apiClient.post('/trash/bulk-permanent-delete', { type, ids });
+    return response.data;
+  },
+
+  // Empty trash for a type
+  emptyTrash: async (type: string) => {
+    const response = await apiClient.delete(`/trash/${type}/empty`);
+    return response.data;
+  },
+
+  // Retention settings
+  getRetentionSettings: async () => {
+    const response = await apiClient.get('/trash/settings/retention');
+    return response.data.data;
+  },
+
+  updateRetentionSettings: async (settings: { retentionDays: number; autoCleanupEnabled: boolean }) => {
+    const response = await apiClient.post('/trash/settings/retention', settings);
+    return response.data;
   },
 };
 

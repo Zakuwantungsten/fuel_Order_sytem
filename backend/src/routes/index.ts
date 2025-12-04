@@ -9,6 +9,10 @@ import dashboardRoutes from './dashboardRoutes';
 import userRoutes from './userRoutes';
 import adminRoutes from './adminRoutes';
 import driverAccountRoutes from './driverAccountRoutes';
+import systemAdminRoutes from './systemAdminRoutes';
+import trashRoutes from './trashRoutes';
+import backupRoutes from './backupRoutes';
+import analyticsRoutes from './analyticsRoutes';
 
 const router = Router();
 
@@ -23,5 +27,9 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/users', userRoutes);
 router.use('/admin', adminRoutes);
 router.use('/driver-accounts', driverAccountRoutes);
+router.use('/system-admin', systemAdminRoutes);
+router.use('/trash', trashRoutes);
+router.use('/system-admin', backupRoutes);
+router.use('/system-admin/analytics', analyticsRoutes);
 
 export default router;

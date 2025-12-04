@@ -145,6 +145,11 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       throw new ApiError(401, 'Invalid username or password');
     }
 
+    // Check if user is banned
+    if (user.isBanned) {
+      throw new ApiError(403, `Your account has been banned. Reason: ${user.bannedReason || 'Violation of terms'}. Please contact administrator.`);
+    }
+
     // Check if user is active
     if (!user.isActive) {
       throw new ApiError(403, 'Your account has been deactivated. Please contact administrator.');

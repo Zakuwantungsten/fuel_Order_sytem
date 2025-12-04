@@ -4,3 +4,5 @@ export * from './validate';
 export * from './pagination';
 export * from './formatters';
 export { default as logger } from './logger';
+export { default as AuditService } from './auditService';
+export { default as databaseMonitor } from './databaseMonitor';

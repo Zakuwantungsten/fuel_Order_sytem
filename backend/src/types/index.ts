@@ -1,6 +1,7 @@
 // User Types
 export type UserRole = 
   | 'super_admin' 
+  | 'system_admin'
   | 'admin' 
   | 'manager' 
   | 'super_manager'
@@ -18,6 +19,108 @@ export type UserRole =
   | 'tanga_yard'
   | 'mmsa_yard';
 
+// Audit Log Types
+export type AuditAction = 
+  | 'CREATE' 
+  | 'UPDATE' 
+  | 'DELETE' 
+  | 'RESTORE' 
+  | 'PERMANENT_DELETE'
+  | 'LOGIN' 
+  | 'LOGOUT' 
+  | 'FAILED_LOGIN'
+  | 'PASSWORD_RESET'
+  | 'CONFIG_CHANGE'
+  | 'BULK_OPERATION'
+  | 'EXPORT';
+
+export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface IAuditLog {
+  timestamp: Date;
+  userId?: string;
+  username: string;
+  action: AuditAction;
+  resourceType: string;
+  resourceId?: string;
+  previousValue?: any;
+  newValue?: any;
+  ipAddress?: string;
+  userAgent?: string;
+  details?: string;
+  severity: AuditSeverity;
+  createdAt: Date;
+}
+
+// Database Metrics Types
+export interface IDatabaseMetrics {
+  connections: {
+    current: number;
+    available: number;
+    totalCreated: number;
+  };
+  performance: {
+    queriesPerSecond: number;
+    averageResponseTime: number;
+    slowQueries: ISlowQuery[];
+    failedQueries: number;
+  };
+  storage: {
+    totalSize: number;
+    dataSize: number;
+    indexSize: number;
+    freeSpace: number;
+    growthRate: number;
+  };
+  collections: ICollectionStats[];
+}
+
+export interface ISlowQuery {
+  query: string;
+  collection: string;
+  executionTime: number;
+  timestamp: Date;
+  user?: string;
+}
+
+export interface ICollectionStats {
+  name: string;
+  documentCount: number;
+  size: number;
+  avgDocSize: number;
+  indexes: number;
+}
+
+// Notification Settings Types
+export interface INotificationSettings {
+  emailRecipients: string[];
+  alertThresholds: {
+    slowQueryMs: number;
+    storageWarningMB: number;
+    failedLoginAttempts: number;
+    cpuWarningPercent: number;
+    memoryWarningPercent: number;
+  };
+  frequency: 'immediate' | 'batched' | 'hourly';
+  dailySummary: {
+    enabled: boolean;
+    sendAt: string;
+  };
+  weeklyReport: {
+    enabled: boolean;
+    sendOnDay: string;
+  };
+}
+
+// Trash/Soft Delete Management Types
+export interface ITrashItem {
+  id: string;
+  type: string;
+  deletedBy: string;
+  deletedAt: Date;
+  data: any;
+}
+
 export interface IUser {
   username: string;
   email: string;
@@ -31,6 +134,10 @@ export interface IUser {
   truckNo?: string;
   currentDO?: string;
   isActive: boolean;
+  isBanned?: boolean;
+  bannedAt?: Date;
+  bannedBy?: string;
+  bannedReason?: string;
   lastLogin?: Date;
   refreshToken?: string;
   isDeleted: boolean;

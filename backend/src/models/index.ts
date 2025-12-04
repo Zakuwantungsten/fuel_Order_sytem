@@ -8,3 +8,4 @@ export { FuelRecord, IFuelRecordDocument } from './FuelRecord';
 export { YardFuelDispense, IYardFuelDispenseDocument } from './YardFuelDispense';
 export { SystemConfig, ISystemConfigDocument } from './SystemConfig';
 export { DriverAccountEntry, IDriverAccountEntryDocument } from './DriverAccountEntry';
+export { AuditLog, IAuditLogDocument } from './AuditLog';

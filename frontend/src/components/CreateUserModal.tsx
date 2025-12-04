@@ -18,9 +18,10 @@ interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUserCreated: () => void;
+  restrictedRoles?: string[]; // Roles that cannot be created
 }
 
-export default function CreateUserModal({ isOpen, onClose, onUserCreated }: CreateUserModalProps) {
+export default function CreateUserModal({ isOpen, onClose, onUserCreated, restrictedRoles = [] }: CreateUserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -49,25 +50,26 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated }: Crea
     'GBP KANGE',
   ];
 
-  const roles: { value: UserRole; label: string; description: string }[] = [
-    { value: 'super_admin', label: 'Super Admin', description: 'Full system access' },
-    { value: 'admin', label: 'Admin', description: 'Administrative access' },
-    { value: 'super_manager', label: 'Super Manager', description: 'View all station LPOs (except Lake Tunduma)' },
-    { value: 'manager', label: 'Station Manager (LPO View)', description: 'View LPOs for assigned station only' },
-    { value: 'supervisor', label: 'Supervisor', description: 'Supervisory access' },
-    { value: 'clerk', label: 'Clerk', description: 'Data entry' },
-    { value: 'driver', label: 'Driver', description: 'Driver portal' },
-    { value: 'viewer', label: 'Viewer', description: 'Read-only access' },
-    { value: 'fuel_order_maker', label: 'Fuel Order Maker', description: 'Create fuel orders' },
-    { value: 'boss', label: 'Boss', description: 'Executive view' },
-    { value: 'yard_personnel', label: 'Yard Personnel', description: 'Yard operations' },
-    { value: 'fuel_attendant', label: 'Fuel Attendant', description: 'Fuel station operations' },
-    { value: 'station_manager', label: 'Station Manager (Operations)', description: 'Station fuel operations' },
-    { value: 'payment_manager', label: 'Payment Manager', description: 'Payment operations' },
-    { value: 'dar_yard', label: 'DAR Yard', description: 'DAR yard dispense' },
-    { value: 'tanga_yard', label: 'Tanga Yard', description: 'Tanga yard dispense' },
-    { value: 'mmsa_yard', label: 'MMSA Yard', description: 'MMSA yard dispense' },
-  ];
+  const roles = [
+    { value: 'super_admin' as UserRole, label: 'Super Admin', description: 'Full system access with all privileges' },
+    { value: 'system_admin' as UserRole, label: 'System Admin', description: 'System monitoring and technical administration' },
+    { value: 'admin' as UserRole, label: 'Admin', description: 'Administrative access' },
+    { value: 'super_manager' as UserRole, label: 'Super Manager', description: 'View all station LPOs (except Lake Tunduma)' },
+    { value: 'manager' as UserRole, label: 'Station Manager (LPO View)', description: 'View LPOs for assigned station only' },
+    { value: 'supervisor' as UserRole, label: 'Supervisor', description: 'Supervisory access' },
+    { value: 'clerk' as UserRole, label: 'Clerk', description: 'Data entry' },
+    { value: 'driver' as UserRole, label: 'Driver', description: 'Driver portal' },
+    { value: 'viewer' as UserRole, label: 'Viewer', description: 'Read-only access' },
+    { value: 'fuel_order_maker' as UserRole, label: 'Fuel Order Maker', description: 'Create fuel orders' },
+    { value: 'boss' as UserRole, label: 'Boss', description: 'Executive view' },
+    { value: 'yard_personnel' as UserRole, label: 'Yard Personnel', description: 'Yard operations' },
+    { value: 'fuel_attendant' as UserRole, label: 'Fuel Attendant', description: 'Fuel station operations' },
+    { value: 'station_manager' as UserRole, label: 'Station Manager (Operations)', description: 'Station fuel operations' },
+    { value: 'payment_manager' as UserRole, label: 'Payment Manager', description: 'Payment operations' },
+    { value: 'dar_yard' as UserRole, label: 'DAR Yard', description: 'DAR yard dispense' },
+    { value: 'tanga_yard' as UserRole, label: 'Tanga Yard', description: 'Tanga yard dispense' },
+    { value: 'mmsa_yard' as UserRole, label: 'MMSA Yard', description: 'MMSA yard dispense' },
+  ].filter(role => !restrictedRoles.includes(role.value)); // Filter out restricted roles
 
   // Check if station selection is required for this role
   const requiresStationSelection = formData.role === 'manager';
