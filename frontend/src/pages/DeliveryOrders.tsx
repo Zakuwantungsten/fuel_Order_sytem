@@ -1144,7 +1144,7 @@ const DeliveryOrders = () => {
           </div>
         </>
       ) : activeTab === 'summary' ? (
-        <MonthlySummary orders={orders} />
+        <MonthlySummary orders={orders} doType={filterDoType} />
       ) : null}
 
       {/* DO Detail Modal */}

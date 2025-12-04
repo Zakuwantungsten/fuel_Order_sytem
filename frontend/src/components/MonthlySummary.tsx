@@ -7,6 +7,7 @@ interface MonthlySummaryProps {
   orders: DeliveryOrder[];
   fuelRecords?: FuelRecord[];
   lpoEntries?: LPOEntry[];
+  doType?: 'DO' | 'SDO' | 'ALL'; // Filter by order type
 }
 
 interface SummaryData {
@@ -31,16 +32,22 @@ interface GroupedOrders {
   [key: string]: DeliveryOrder[];
 }
 
-const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySummaryProps) => {
+const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'DO' }: MonthlySummaryProps) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
   const [groupBy, setGroupBy] = useState<'none' | 'client' | 'destination'>('none');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
 
+  // Filter orders by doType
+  const filteredOrders = useMemo(() => {
+    if (doType === 'ALL') return orders;
+    return orders.filter(o => o.doType === doType);
+  }, [orders, doType]);
+
   useEffect(() => {
-    if (orders.length > 0) {
+    if (filteredOrders.length > 0) {
       // Get unique months from orders
-      const months = [...new Set(orders.map(o => {
+      const months = [...new Set(filteredOrders.map(o => {
         // Extract month from date (e.g., "3-Oct" -> "Oct")
         const parts = o.date.split('-');
         return parts.length > 1 ? parts[1] : o.date;
@@ -52,12 +59,12 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
         setSelectedMonth(months[0]);
       }
     }
-  }, [orders, selectedMonth]);
+  }, [filteredOrders, selectedMonth]);
 
   const summary = useMemo(() => {
-    if (!selectedMonth || orders.length === 0) return null;
+    if (!selectedMonth || filteredOrders.length === 0) return null;
     
-    const monthOrders = orders.filter(o => o.date.includes(selectedMonth) && !o.isCancelled);
+    const monthOrders = filteredOrders.filter(o => o.date.includes(selectedMonth) && !o.isCancelled);
     
     // Calculate fuel metrics for the month
     const monthFuelRecords = fuelRecords.filter(r => r.date.includes(selectedMonth));
@@ -104,7 +111,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
     });
 
     return summaryData;
-  }, [selectedMonth, orders, fuelRecords, lpoEntries]);
+  }, [selectedMonth, filteredOrders, fuelRecords, lpoEntries]);
 
   const handleExportSummary = () => {
     if (!summary) return;
@@ -131,15 +138,18 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
       'RATE': order.tonnages * order.ratePerTon,
     }));
 
-    exportToXLSX(exportData, `DO_Summary_${summary.month}_2025.xlsx`, {
-      sheetName: `DO Summary ${summary.month}`,
+    const orderTypeLabel = doType === 'SDO' ? 'SDO' : doType === 'ALL' ? 'All_Orders' : 'DO';
+    const sheetLabel = doType === 'SDO' ? 'SDO Summary' : doType === 'ALL' ? 'All Orders Summary' : 'DO Summary';
+
+    exportToXLSX(exportData, `${orderTypeLabel}_Summary_${summary.month}_2025.xlsx`, {
+      sheetName: `${sheetLabel} ${summary.month}`,
       headerColor: '4472C4',
       addBorders: true,
     });
   };
 
   const getMonthOrders = (): DeliveryOrder[] => {
-    return orders.filter(o => o.date.includes(selectedMonth) && !o.isCancelled);
+    return filteredOrders.filter(o => o.date.includes(selectedMonth) && !o.isCancelled);
   };
 
   const getGroupedOrders = (): GroupedOrders => {
@@ -179,9 +189,16 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center space-x-3">
             <Calendar className="w-6 h-6 text-primary-600 dark:text-primary-400" />
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              DO Summary - {summary.month} 2025
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                {doType === 'SDO' ? 'SDO' : doType === 'ALL' ? 'All Orders' : 'DO'} Summary - {summary.month} 2025
+              </h3>
+              {doType !== 'ALL' && (
+                <span className={`px-2 py-0.5 text-xs font-semibold rounded ${doType === 'SDO' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'}`}>
+                  {doType}
+                </span>
+              )}
+            </div>
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
@@ -249,7 +266,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
       </div>
 
       {/* Key Metrics - Always visible */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
+      <div className={`grid grid-cols-1 md:grid-cols-3 ${doType === 'SDO' ? 'lg:grid-cols-5' : 'lg:grid-cols-7'} gap-4`}>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <p className="text-sm text-gray-600 dark:text-gray-400">Total Orders</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.totalOrders}</p>
@@ -270,24 +287,28 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [] }: MonthlySu
           <p className="text-sm text-primary-600 dark:text-primary-400">Total Revenue</p>
           <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">${summary.totalRevenue.toFixed(2)}</p>
         </div>
-        <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-orange-600 dark:text-orange-400">Fuel Consumed</p>
-            <Fuel className="w-5 h-5 text-orange-400 dark:text-orange-300" />
-          </div>
-          <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">{summary.totalFuelConsumed.toLocaleString()} L</p>
-          <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">Avg: {summary.avgFuelPerOrder.toFixed(0)} L/order</p>
-        </div>
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-yellow-600 dark:text-yellow-400">Fuel Cost</p>
-            <DollarSign className="w-5 h-5 text-yellow-400 dark:text-yellow-300" />
-          </div>
-          <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">TZS {summary.totalFuelCost.toLocaleString()}</p>
-          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-            {summary.totalFuelConsumed > 0 && `${(summary.totalFuelCost / summary.totalFuelConsumed).toFixed(2)} per L`}
-          </p>
-        </div>
+        {doType !== 'SDO' && (
+          <>
+            <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm text-orange-600 dark:text-orange-400">Fuel Consumed</p>
+                <Fuel className="w-5 h-5 text-orange-400 dark:text-orange-300" />
+              </div>
+              <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">{summary.totalFuelConsumed.toLocaleString()} L</p>
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">Avg: {summary.avgFuelPerOrder.toFixed(0)} L/order</p>
+            </div>
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm text-yellow-600 dark:text-yellow-400">Fuel Cost</p>
+                <DollarSign className="w-5 h-5 text-yellow-400 dark:text-yellow-300" />
+              </div>
+              <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">TZS {summary.totalFuelCost.toLocaleString()}</p>
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                {summary.totalFuelConsumed > 0 && `${(summary.totalFuelCost / summary.totalFuelConsumed).toFixed(2)} per L`}
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Summary View */}
