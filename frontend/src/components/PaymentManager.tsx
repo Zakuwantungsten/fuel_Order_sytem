@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search, XCircle, CheckCircle, AlertTriangle, DollarSign } from 'lucide-react';
+import Pagination from './Pagination';
 
 interface PaymentOrder {
   id: string;
@@ -18,6 +19,10 @@ export function PaymentManager({ user: _user }: { user: any }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<PaymentOrder | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [orders, setOrders] = useState<PaymentOrder[]>([
     {
@@ -79,6 +84,27 @@ export function PaymentManager({ user: _user }: { user: any }) {
       order.station.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
   const stats = {
     active: orders.filter((o) => o.status === 'active').length,
     cancelled: orders.filter((o) => o.status === 'cancelled').length,
@@ -139,7 +165,7 @@ export function PaymentManager({ user: _user }: { user: any }) {
             type="text"
             placeholder="Search by truck number, LPO, or station..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
           />
         </div>
@@ -178,7 +204,7 @@ export function PaymentManager({ user: _user }: { user: any }) {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredOrders.map((order) => (
+              {paginatedOrders.map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {order.lpoNumber}
@@ -241,6 +267,18 @@ export function PaymentManager({ user: _user }: { user: any }) {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination */}
+        {filteredOrders.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredOrders.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
+        )}
       </div>
 
       {/* Cancel Order Modal */}

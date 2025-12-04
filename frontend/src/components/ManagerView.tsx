@@ -25,6 +25,7 @@ import {
 import { lposAPI } from '../services/api';
 import { LPOEntry } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import Pagination from './Pagination';
 
 // Real-time update interval in milliseconds (30 seconds)
 const REALTIME_UPDATE_INTERVAL = 30000;
@@ -98,6 +99,10 @@ export function ManagerView({ user }: ManagerViewProps) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   
   const { toggleTheme, isDark, logout } = useAuth();
 
@@ -279,6 +284,27 @@ export function ManagerView({ user }: ManagerViewProps) {
     
     return filtered;
   }, [lpoEntries, searchTerm, selectedStation, sortField, sortDirection, isSuperManager]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredEntries.length / itemsPerPage);
+  const paginatedEntries = filteredEntries.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedStation, sortField, sortDirection]);
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -649,7 +675,7 @@ export function ManagerView({ user }: ManagerViewProps) {
               )}
             </div>
           ) : (
-            filteredEntries.map((entry, index) => (
+            paginatedEntries.map((entry, index) => (
               <button
                 key={entry.id || `${entry.lpoNo}-${index}`}
                 onClick={() => setSelectedEntry(entry)}
@@ -688,6 +714,22 @@ export function ManagerView({ user }: ManagerViewProps) {
             ))
           )}
         </div>
+
+        {/* Pagination */}
+        {filteredEntries.length > 0 && (
+          <div className="px-3 sm:px-4 pb-24">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredEntries.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={handlePageChange}
+                onItemsPerPageChange={handleItemsPerPageChange}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Summary Footer - Fixed at bottom */}
         {filteredEntries.length > 0 && (

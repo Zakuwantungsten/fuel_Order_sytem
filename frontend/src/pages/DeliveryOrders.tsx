@@ -14,6 +14,7 @@ import CancelDOModal from '../components/CancelDOModal';
 import AmendedDOsModal from '../components/AmendedDOsModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup';
+import Pagination from '../components/Pagination';
 
 const DeliveryOrders = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,6 +34,10 @@ const DeliveryOrders = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'summary' | 'workbook'>('list');
   const [selectedOrders, setSelectedOrders] = useState<(string | number)[]>([]);
   const [batchPrintOrders, setBatchPrintOrders] = useState<DeliveryOrder[]>([]);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   
   // Amended DOs context for session tracking
   const { addAmendedDO, count: amendedDOsCount } = useAmendedDOs();
@@ -147,6 +152,34 @@ const DeliveryOrders = () => {
     
     return matchesSearch && matchesStatus;
   }) : [];
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset to page 1 when filters change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  // Reset page when search or filters change
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
+  const handleFilterStatusChange = (value: 'all' | 'active' | 'cancelled') => {
+    setFilterStatus(value);
+    setCurrentPage(1);
+  };
 
   const handleViewOrder = (order: DeliveryOrder) => {
     setSelectedOrder(order);
@@ -672,7 +705,7 @@ const DeliveryOrders = () => {
                   type="text"
                   placeholder="Search by DO#, Truck, Client..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
@@ -687,7 +720,7 @@ const DeliveryOrders = () => {
               </select>
               <select 
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'cancelled')}
+                onChange={(e) => handleFilterStatusChange(e.target.value as 'all' | 'active' | 'cancelled')}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
                 <option value="all">All Status</option>
@@ -744,7 +777,7 @@ const DeliveryOrders = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredOrders.map((order) => (
+                    paginatedOrders.map((order) => (
                       <tr 
                         key={order.id || `order-${order.doNumber}`} 
                         className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
@@ -856,6 +889,18 @@ const DeliveryOrders = () => {
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination */}
+            {!loading && filteredOrders.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredOrders.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={handlePageChange}
+                onItemsPerPageChange={handleItemsPerPageChange}
+              />
+            )}
           </div>
         </>
       ) : activeTab === 'summary' ? (

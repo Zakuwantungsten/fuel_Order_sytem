@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search, CheckCircle, XCircle, Fuel, Truck, MapPin } from 'lucide-react';
+import Pagination from './Pagination';
 
 interface StationOrder {
   id: string;
@@ -21,6 +22,10 @@ interface StationViewProps {
 export function StationView({ user }: StationViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'fulfilled'>('all');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const stationName = user.station || 'LAKE KAPIRI';
 
@@ -101,6 +106,32 @@ export function StationView({ user }: StationViewProps) {
     return matchesSearch && matchesStatus && order.status !== 'cancelled';
   });
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
+  const handleFilterStatusChange = (value: 'all' | 'pending' | 'fulfilled') => {
+    setFilterStatus(value);
+    setCurrentPage(1);
+  };
+
   const stats = {
     pending: orders.filter((o) => o.status === 'pending').length,
     fulfilled: orders.filter((o) => o.status === 'fulfilled').length,
@@ -166,14 +197,14 @@ export function StationView({ user }: StationViewProps) {
               type="text"
               placeholder="Search by truck, DO, LPO, or driver..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
             />
           </div>
           <div className="flex space-x-2">
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'pending' | 'fulfilled')}
+              onChange={(e) => handleFilterStatusChange(e.target.value as 'all' | 'pending' | 'fulfilled')}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
             >
               <option value="all">All Status</option>
@@ -214,7 +245,7 @@ export function StationView({ user }: StationViewProps) {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredOrders.map((order) => (
+              {paginatedOrders.map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -282,6 +313,18 @@ export function StationView({ user }: StationViewProps) {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination */}
+        {filteredOrders.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredOrders.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
+        )}
       </div>
     </div>
   );

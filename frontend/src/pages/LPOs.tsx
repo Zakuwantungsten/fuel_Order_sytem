@@ -12,6 +12,7 @@ import { RESOURCES, ACTIONS } from '../utils/permissions';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
+import Pagination from '../components/Pagination';
 
 // Month names for display
 const MONTH_NAMES = [
@@ -48,6 +49,10 @@ const LPOs = () => {
   const [dropdownPosition, setDropdownPosition] = useState<{top: number, left: number}>({top: 0, left: 0});
   const [exportingYear, setExportingYear] = useState<number | null>(null);
   const [selectedLpoNo, setSelectedLpoNo] = useState<string | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   useEffect(() => {
     fetchLpos();
@@ -374,6 +379,23 @@ const LPOs = () => {
     }
 
     setFilteredLpos(filtered);
+    setCurrentPage(1); // Reset to page 1 when filters change
+  };
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredLpos.length / itemsPerPage);
+  const paginatedLpos = filteredLpos.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
   };
 
   const handleCreateDetailed = () => {
@@ -1019,7 +1041,7 @@ const LPOs = () => {
                   </td>
                 </tr>
               ) : (
-                filteredLpos.map((lpo, index) => {
+                paginatedLpos.map((lpo, index) => {
                   const rowKey = lpo.id ?? `lpo-${index}`;
                   return (
                   <tr 
@@ -1146,6 +1168,18 @@ const LPOs = () => {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination */}
+        {!loading && filteredLpos.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredLpos.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
+        )}
       </div>
 
       <LPODetailForm

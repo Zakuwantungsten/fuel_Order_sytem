@@ -31,6 +31,7 @@ import {
 import { User } from '../types';
 import CreateUserModal, { BatchTruckCreation } from './CreateUserModal';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import Pagination from './Pagination';
 
 interface AdminDashboardProps {
   user: any;
@@ -1071,6 +1072,10 @@ function UsersTab({
   const [filter, setFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [showBatchCreate, setShowBatchCreate] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = 
@@ -1083,6 +1088,32 @@ function UsersTab({
     
     return matchesSearch && matchesRole;
   });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  const handleFilterChange = (value: string) => {
+    setFilter(value);
+    setCurrentPage(1);
+  };
+
+  const handleRoleFilterChange = (value: string) => {
+    setRoleFilter(value);
+    setCurrentPage(1);
+  };
 
   const uniqueRoles = [...new Set(users.map(u => u.role))].sort();
 
@@ -1117,12 +1148,12 @@ function UsersTab({
           type="text"
           placeholder="Search users..."
           value={filter}
-          onChange={e => setFilter(e.target.value)}
+          onChange={e => handleFilterChange(e.target.value)}
           className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
         />
         <select
           value={roleFilter}
-          onChange={e => setRoleFilter(e.target.value)}
+          onChange={e => handleRoleFilterChange(e.target.value)}
           className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
         >
           <option value="">All Roles</option>
@@ -1134,7 +1165,7 @@ function UsersTab({
         </select>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
@@ -1146,7 +1177,7 @@ function UsersTab({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
-            {filteredUsers.map(user => (
+            {paginatedUsers.map(user => (
               <tr key={user.id} className={!user.isActive ? 'bg-gray-50 dark:bg-gray-700/50' : ''}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -1198,6 +1229,18 @@ function UsersTab({
             ))}
           </tbody>
         </table>
+        
+        {/* Pagination */}
+        {filteredUsers.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredUsers.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
+        )}
       </div>
     </div>
   );
