@@ -12,9 +12,10 @@ interface DOFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (order: Partial<DeliveryOrder>) => void;
+  defaultDoType?: 'DO' | 'SDO'; // Default DO type when creating new order
 }
 
-const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
+const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOFormProps) => {
   const getCurrentDate = () => {
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
@@ -27,7 +28,7 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
     // Explicitly no id for new orders
     date: getCurrentDate(),
     importOrExport: 'IMPORT',
-    doType: 'DO',
+    doType: defaultDoType, // Use the passed default type
     clientName: '',
     truckNo: '',
     trailerNo: '',
@@ -56,12 +57,14 @@ const DOForm = ({ order, isOpen, onClose, onSave }: DOFormProps) => {
           date: order.date ? order.date.split('T')[0] : getCurrentDate(),
         });
       } else {
-        // Create mode - reset to defaults
-        setFormData(getDefaultFormData());
+        // Create mode - reset to defaults with correct doType
+        const defaults = getDefaultFormData();
+        defaults.doType = defaultDoType; // Ensure we use the passed default
+        setFormData(defaults);
       }
       setCreatedOrder(null);
     }
-  }, [isOpen, order]);
+  }, [isOpen, order, defaultDoType]);
 
   // Fetch next DO/SDO number when component opens or doType changes
   useEffect(() => {

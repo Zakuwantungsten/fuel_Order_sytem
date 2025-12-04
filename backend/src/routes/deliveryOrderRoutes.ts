@@ -10,7 +10,14 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-// Workbook routes (must be before /:id routes to avoid conflicts)
+// SDO Workbook routes (must be before /:id routes to avoid conflicts)
+router.get('/sdo/workbooks', asyncHandler(deliveryOrderController.getAllSDOWorkbooks));
+router.get('/sdo/workbooks/years', asyncHandler(deliveryOrderController.getAvailableSDOYears));
+router.get('/sdo/workbooks/:year', asyncHandler(deliveryOrderController.getSDOWorkbookByYear));
+router.get('/sdo/workbooks/:year/export', asyncHandler(deliveryOrderController.exportSDOWorkbook));
+router.get('/sdo/workbooks/:year/month/:month/export', asyncHandler(deliveryOrderController.exportSDOMonth));
+
+// DO Workbook routes (must be before /:id routes to avoid conflicts)
 router.get('/workbooks', asyncHandler(deliveryOrderController.getAllWorkbooks));
 router.get('/workbooks/years', asyncHandler(deliveryOrderController.getAvailableYears));
 router.get('/workbooks/:year', asyncHandler(deliveryOrderController.getWorkbookByYear));

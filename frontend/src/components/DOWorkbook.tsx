@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, FileSpreadsheet, Edit2 } from 'lucide-react';
 import type { DOWorkbook as DOWorkbookType, DeliveryOrder } from '../types';
-import { doWorkbookAPI } from '../services/api';
+import { doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import DOSheetView from './DOSheetView';
 
 interface DOWorkbookProps {
   workbookId?: string | number; // Can be year number or ID
+  workbookType?: 'DO' | 'SDO'; // Type of workbook to fetch
   onClose?: () => void;
   initialDoNumber?: string; // DO number to open by default
 }
 
-const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoNumber }) => {
+const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, workbookType = 'DO', onClose, initialDoNumber }) => {
   const [workbook, setWorkbook] = useState<DOWorkbookType | null>(null);
   const [activeDoNumber, setActiveDoNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,7 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
       // Use current year
       fetchWorkbook(new Date().getFullYear());
     }
-  }, [workbookId]);
+  }, [workbookId, workbookType]);
 
   const fetchWorkbook = async (idOrYear: string | number) => {
     try {
@@ -35,7 +36,9 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
         ? idOrYear 
         : new Date().getFullYear();
       
-      const data = await doWorkbookAPI.getByYear(year);
+      // Use the appropriate API based on workbookType
+      const api = workbookType === 'SDO' ? sdoWorkbookAPI : doWorkbookAPI;
+      const data = await api.getByYear(year);
       setWorkbook(data);
       setWorkbookName(data.name);
       
@@ -65,8 +68,10 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
     
     try {
       setExporting(true);
-      await doWorkbookAPI.exportWorkbook(workbook.year);
-      alert(`✓ Workbook DELIVERY_ORDERS_${workbook.year}.xlsx downloaded successfully!`);
+      const api = workbookType === 'SDO' ? sdoWorkbookAPI : doWorkbookAPI;
+      await api.exportWorkbook(workbook.year);
+      const filename = workbookType === 'SDO' ? `SDO_${workbook.year}.xlsx` : `DELIVERY_ORDERS_${workbook.year}.xlsx`;
+      alert(`✓ Workbook ${filename} downloaded successfully!`);
     } catch (error) {
       console.error('Error exporting workbook:', error);
       alert('Error exporting workbook. Please try again.');
@@ -93,7 +98,9 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <FileSpreadsheet className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-          <p className="text-gray-500 dark:text-gray-400">No delivery orders found for this year</p>
+          <p className="text-gray-500 dark:text-gray-400">
+            No {workbookType === 'SDO' ? 'special delivery orders' : 'delivery orders'} found for this year
+          </p>
           {onClose && (
             <button
               onClick={onClose}
@@ -115,7 +122,7 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
       <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <FileSpreadsheet className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <FileSpreadsheet className={`w-6 h-6 ${workbookType === 'SDO' ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'}`} />
             {isRenamingWorkbook ? (
               <div className="flex items-center space-x-2">
                 <input
@@ -133,6 +140,9 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
             ) : (
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{workbook.name}</h1>
+                <span className={`px-2 py-0.5 text-xs font-semibold rounded ${workbookType === 'SDO' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'}`}>
+                  {workbookType}
+                </span>
                 <button
                   onClick={() => setIsRenamingWorkbook(true)}
                   className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -142,7 +152,7 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, onClose, initialDoN
               </div>
             )}
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              ({workbook.sheets?.length || 0} DOs)
+              ({workbook.sheets?.length || 0} {workbookType === 'SDO' ? 'SDOs' : 'DOs'})
             </span>
           </div>
           

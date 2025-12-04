@@ -179,6 +179,7 @@ export interface DOWorkbook {
   id?: string | number;
   year: number; // Year this workbook represents (e.g., 2025)
   name: string; // Workbook name like "DELIVERY ORDERS 2025"
+  type?: 'DO' | 'SDO'; // Type of workbook (for filtering when viewing all)
   sheetCount?: number; // Number of sheets (DOs) in this workbook
   sheets?: DeliveryOrder[]; // Each DO is a sheet in the workbook
   createdAt?: string;

@@ -157,6 +157,65 @@ export const doWorkbookAPI = {
   },
 };
 
+// SDO Workbook API (Excel-like workbook management for Special Delivery Orders)
+export const sdoWorkbookAPI = {
+  // Get all SDO workbooks (one per year)
+  getAll: async (): Promise<DOWorkbook[]> => {
+    const response = await apiClient.get('/delivery-orders/sdo/workbooks');
+    return response.data.data || [];
+  },
+
+  // Get SDO workbook by year with all its sheets
+  getByYear: async (year: number): Promise<DOWorkbook> => {
+    const response = await apiClient.get(`/delivery-orders/sdo/workbooks/${year}`);
+    return response.data.data;
+  },
+
+  // Get available years for SDO
+  getAvailableYears: async (): Promise<number[]> => {
+    const response = await apiClient.get('/delivery-orders/sdo/workbooks/years');
+    return response.data.data || [];
+  },
+
+  // Export SDO workbook as Excel file
+  exportWorkbook: async (year: number): Promise<void> => {
+    const response = await apiClient.get(`/delivery-orders/sdo/workbooks/${year}/export`, {
+      responseType: 'blob',
+    });
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `SDO_${year}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  // Export specific SDO month as Excel
+  exportMonth: async (year: number, month: number): Promise<void> => {
+    const response = await apiClient.get(`/delivery-orders/sdo/workbooks/${year}/month/${month}/export`, {
+      responseType: 'blob',
+    });
+    
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthName = monthNames[month - 1] || 'Unknown';
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `SDO_${monthName}_${year}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+};
+
 // Amended DOs API (for tracking and downloading amended delivery orders)
 export interface AmendedDOSummary {
   id: string;

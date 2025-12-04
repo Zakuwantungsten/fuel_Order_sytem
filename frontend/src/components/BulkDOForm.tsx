@@ -66,36 +66,86 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
 
   const handleDOTypeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newType = e.target.value as 'DO' | 'SDO';
-    setCommonData(prev => ({ ...prev, doType: newType }));
     
     // Fetch next number for the selected type
     const nextNumber = await deliveryOrdersAPI.getNextNumber(newType);
-    setCommonData(prev => ({ ...prev, startingNumber: nextNumber.toString() }));
+    
+    // Update both doType and startingNumber together
+    setCommonData(prev => ({ 
+      ...prev, 
+      doType: newType,
+      startingNumber: nextNumber.toString()
+    }));
   };
 
   const parseBulkData = () => {
-    const lines = bulkInput.trim().split('\n');
-    const rows: BulkDORow[] = [];
-
-    for (const line of lines) {
-      const parts = line.split('\t').map(p => p.trim());
-      if (parts.length >= 5) {
-        rows.push({
-          truckNo: parts[0],
-          trailerNo: parts[1],
-          driverName: parts[2],
-          tonnages: parseFloat(parts[3]) || 0,
-          ratePerTon: parseFloat(parts[4]) || 0,
-        });
+    try {
+      console.log('=== Parsing Bulk Data ===');
+      console.log('Input length:', bulkInput.length);
+      
+      if (!bulkInput.trim()) {
+        alert('Please enter truck data to parse');
+        return;
       }
-    }
+      
+      const lines = bulkInput.trim().split('\n');
+      console.log('Number of lines:', lines.length);
+      
+      const rows: BulkDORow[] = [];
 
-    setParsedRows(rows);
+      for (const line of lines) {
+        const parts = line.split('\t').map(p => p.trim());
+        console.log('Line parts:', parts.length, parts);
+        
+        if (parts.length >= 5) {
+          rows.push({
+            truckNo: parts[0],
+            trailerNo: parts[1],
+            driverName: parts[2],
+            tonnages: parseFloat(parts[3]) || 0,
+            ratePerTon: parseFloat(parts[4]) || 0,
+          });
+        }
+      }
+
+      console.log('Parsed rows:', rows.length, rows);
+      
+      if (rows.length === 0) {
+        alert('No valid data found. Please ensure data is tab-separated with at least 5 columns:\nTruck No | Trailer No | Driver Name | Tonnages | Rate Per Ton');
+        return;
+      }
+      
+      setParsedRows(rows);
+      alert(`✓ Successfully parsed ${rows.length} truck entries`);
+    } catch (error) {
+      console.error('Error parsing bulk data:', error);
+      alert('Error parsing data. Please check the format and try again.');
+    }
   };
 
   const generateDOs = async () => {
     try {
       console.log('=== Starting Bulk DO Generation ===');
+      console.log('Order Type:', commonData.doType);
+      console.log('Common Data:', commonData);
+      console.log('Parsed Rows:', parsedRows);
+      
+      if (parsedRows.length === 0) {
+        alert('Please parse the truck data first by clicking "Parse Data"');
+        return;
+      }
+      
+      // Validate required fields
+      if (!commonData.clientName || !commonData.loadingPoint || !commonData.destination) {
+        alert('Please fill in all required fields:\n- Client Name\n- Loading Point\n- Destination');
+        return;
+      }
+      
+      if (!commonData.startingNumber) {
+        alert('Please enter a starting number for the orders');
+        return;
+      }
+      
       const startNum = parseInt(commonData.startingNumber) || 0;
       
       const orders: Partial<DeliveryOrder>[] = parsedRows.map((row, index) => ({
@@ -117,6 +167,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
       }));
 
       console.log(`Generated ${orders.length} orders to save`);
+      console.log('Sample order:', orders[0]);
       
       // Pad DO numbers with leading zeros
       const paddedOrders = orders.map(order => ({
@@ -149,8 +200,13 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
         await downloadAllAsPDF(paddedOrders);
         console.log('✓ PDF downloaded successfully!');
         
-        // Show success message with download confirmation
-        alert(`✓ Success!\n\nCreated ${orders.length} delivery orders with fuel records and LPOs.\n\nPDF file has been downloaded to your Downloads folder.`);
+        // Show success message with download confirmation - dynamic based on order type
+        const orderTypeLabel = commonData.doType === 'SDO' ? 'special delivery orders (SDOs)' : 'delivery orders';
+        const additionalInfo = commonData.doType === 'SDO' 
+          ? '' 
+          : ' with fuel records and LPOs';
+        
+        alert(`✓ Success!\n\nCreated ${orders.length} ${orderTypeLabel}${additionalInfo}.\n\nPDF file has been downloaded to your Downloads folder.`);
       } catch (pdfError) {
         console.error('PDF generation error:', pdfError);
         alert(`Orders created successfully, but PDF download failed.\n\nYou can download the PDF again using the button below.`);
@@ -564,7 +620,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                   onClick={generateDOs}
                   className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 dark:bg-primary-500 hover:bg-primary-700 dark:hover:bg-primary-600"
                 >
-                  Create {parsedRows.length} DOs
+                  Create {parsedRows.length} {commonData.doType}s
                 </button>
               )}
             </div>

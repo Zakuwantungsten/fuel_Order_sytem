@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
-import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI } from '../services/api';
+import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
 import FuelConfigService from '../services/fuelConfigService';
 import DODetailModal from '../components/DODetailModal';
@@ -21,6 +21,7 @@ const DeliveryOrders = () => {
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('ALL');
+  const [filterDoType, setFilterDoType] = useState<'ALL' | 'DO' | 'SDO'>('DO'); // Filter by DO or SDO type
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'cancelled'>('all');
   const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,19 +48,21 @@ const DeliveryOrders = () => {
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedWorkbookId, setSelectedWorkbookId] = useState<string | number | null>(null);
+  const [previousFilterDoType, setPreviousFilterDoType] = useState<'ALL' | 'DO' | 'SDO'>('DO'); // Remember filter before opening workbook
   const [exportingYear, setExportingYear] = useState<number | null>(null);
 
   useEffect(() => {
     loadOrders();
     fetchWorkbooks();
     fetchAvailableYears();
-  }, [filterType]);
+  }, [filterType, filterDoType]);
 
   const loadOrders = async () => {
     setLoading(true);
     try {
       const data = await deliveryOrdersAPI.getAll({
         importOrExport: filterType,
+        doType: filterDoType === 'ALL' ? undefined : filterDoType,
       });
       // Ensure data is always an array and clean any corrupted data
       const rawOrders = Array.isArray(data) ? data : [];
@@ -83,24 +86,69 @@ const DeliveryOrders = () => {
 
   const fetchWorkbooks = async () => {
     try {
-      const data = await doWorkbookAPI.getAll();
-      setWorkbooks(Array.isArray(data) ? data : []);
+      // Fetch workbooks based on current filter
+      if (filterDoType === 'ALL') {
+        // Fetch both DO and SDO workbooks
+        const [doData, sdoData] = await Promise.all([
+          doWorkbookAPI.getAll().catch((err) => { console.error('DO workbook fetch error:', err); return []; }),
+          sdoWorkbookAPI.getAll().catch((err) => { console.error('SDO workbook fetch error:', err); return []; })
+        ]);
+        console.log('Raw DO data:', doData);
+        console.log('Raw SDO data:', sdoData);
+        const allWorkbooks = [
+          ...(Array.isArray(doData) ? doData.map(w => ({ ...w, type: 'DO' as const })) : []),
+          ...(Array.isArray(sdoData) ? sdoData.map(w => ({ ...w, type: 'SDO' as const })) : [])
+        ].sort((a, b) => (b.year || 0) - (a.year || 0)); // Sort by year descending
+        setWorkbooks(allWorkbooks);
+        console.log('Fetched ALL workbooks (DO + SDO):', allWorkbooks);
+        console.log('DO workbooks count:', allWorkbooks.filter(w => w.type === 'DO').length);
+        console.log('SDO workbooks count:', allWorkbooks.filter(w => w.type === 'SDO').length);
+      } else {
+        const data = filterDoType === 'SDO' 
+          ? await sdoWorkbookAPI.getAll()
+          : await doWorkbookAPI.getAll();
+        const typedData = Array.isArray(data) ? data.map(w => ({ ...w, type: filterDoType as 'DO' | 'SDO' })) : [];
+        setWorkbooks(typedData);
+        console.log(`Fetched ${filterDoType} workbooks:`, typedData);
+      }
     } catch (error) {
-      console.error('Error fetching DO workbooks:', error);
+      console.error('Error fetching workbooks:', error);
       setWorkbooks([]);
     }
   };
 
   const fetchAvailableYears = async () => {
     try {
-      const years = await doWorkbookAPI.getAvailableYears();
-      if (years.length > 0) {
-        setAvailableYears(years);
-        setSelectedYear(years[0]); // Most recent year
+      // Fetch years based on current filter
+      if (filterDoType === 'ALL') {
+        // Fetch years from both DO and SDO
+        const [doYears, sdoYears] = await Promise.all([
+          doWorkbookAPI.getAvailableYears().catch(() => []),
+          sdoWorkbookAPI.getAvailableYears().catch(() => [])
+        ]);
+        const allYears = [...new Set([...doYears, ...sdoYears])].sort((a, b) => b - a);
+        console.log('Available ALL years:', allYears);
+        if (allYears.length > 0) {
+          setAvailableYears(allYears);
+          setSelectedYear(allYears[0]);
+        } else {
+          const currentYear = new Date().getFullYear();
+          setAvailableYears([currentYear]);
+          setSelectedYear(currentYear);
+        }
       } else {
-        const currentYear = new Date().getFullYear();
-        setAvailableYears([currentYear]);
-        setSelectedYear(currentYear);
+        const years = filterDoType === 'SDO'
+          ? await sdoWorkbookAPI.getAvailableYears()
+          : await doWorkbookAPI.getAvailableYears();
+        console.log(`Available ${filterDoType} years:`, years);
+        if (years.length > 0) {
+          setAvailableYears(years);
+          setSelectedYear(years[0]); // Most recent year
+        } else {
+          const currentYear = new Date().getFullYear();
+          setAvailableYears([currentYear]);
+          setSelectedYear(currentYear);
+        }
       }
     } catch (error) {
       console.error('Error fetching available years:', error);
@@ -110,15 +158,24 @@ const DeliveryOrders = () => {
     }
   };
 
-  const handleExportWorkbook = async (year: number) => {
+  const handleExportWorkbook = async (year: number, workbookType?: string) => {
     try {
       setExportingYear(year);
-      await doWorkbookAPI.exportWorkbook(year);
-      alert(`✓ Workbook DELIVERY_ORDERS_${year}.xlsx downloaded successfully!`);
+      // Determine which API to use
+      const type = workbookType || filterDoType;
+      
+      if (type === 'SDO') {
+        await sdoWorkbookAPI.exportWorkbook(year);
+        alert(`✓ SDO Workbook SDO_${year}.xlsx downloaded successfully!`);
+      } else {
+        await doWorkbookAPI.exportWorkbook(year);
+        alert(`✓ Workbook DELIVERY_ORDERS_${year}.xlsx downloaded successfully!`);
+      }
     } catch (error: any) {
       console.error('Error exporting workbook:', error);
+      const type = workbookType || filterDoType;
       if (error.response?.status === 404) {
-        alert(`No delivery orders found for year ${year}`);
+        alert(`No ${type === 'SDO' ? 'SDO' : 'delivery'} orders found for year ${year}`);
       } else {
         alert('Failed to export workbook. Please try again.');
       }
@@ -127,13 +184,22 @@ const DeliveryOrders = () => {
     }
   };
 
-  const handleOpenWorkbook = (year: number) => {
+  const handleOpenWorkbook = (year: number, workbookType?: string) => {
     setSelectedYear(year);
     setSelectedWorkbookId(year);
+    // Remember current filter so we can restore it when closing
+    setPreviousFilterDoType(filterDoType);
+    // Store workbook type if provided for proper data fetching in DOWorkbook
+    // This ensures the DOWorkbook component uses the correct API
+    if (workbookType && (workbookType === 'DO' || workbookType === 'SDO')) {
+      setFilterDoType(workbookType);
+    }
   };
 
   const handleCloseWorkbook = () => {
     setSelectedWorkbookId(null);
+    // Restore previous filter type
+    setFilterDoType(previousFilterDoType);
     setActiveTab('list');
     fetchWorkbooks(); // Refresh workbooks list
   };
@@ -257,13 +323,18 @@ const DeliveryOrders = () => {
         // Create new DO
         savedOrder = await deliveryOrdersAPI.create(orderData);
         
-        // Handle fuel record creation/update based on import/export (only for new DOs)
-        if (savedOrder.importOrExport === 'IMPORT') {
-          // IMPORT = Going journey = Create new fuel record
-          await handleCreateFuelRecordForImport(savedOrder);
-        } else if (savedOrder.importOrExport === 'EXPORT') {
-          // EXPORT = Return journey = Update existing fuel record
-          await handleUpdateFuelRecordForExport(savedOrder);
+        // Handle fuel record creation/update ONLY for DO type (not SDO)
+        // SDO orders are standalone and don't interact with fuel records
+        if (savedOrder.doType === 'DO') {
+          if (savedOrder.importOrExport === 'IMPORT') {
+            // IMPORT = Going journey = Create new fuel record
+            await handleCreateFuelRecordForImport(savedOrder);
+          } else if (savedOrder.importOrExport === 'EXPORT') {
+            // EXPORT = Return journey = Update existing fuel record
+            await handleUpdateFuelRecordForExport(savedOrder);
+          }
+        } else {
+          console.log(`SDO ${savedOrder.doNumber} created - skipping fuel record operations`);
         }
       }
       
@@ -433,15 +504,19 @@ const DeliveryOrders = () => {
         console.log(`✓ DO ${savedOrder.doNumber} saved successfully with ID:`, savedOrder.id);
         createdOrders.push(savedOrder);
         
-        // Handle fuel record creation/update based on import/export
-        if (savedOrder.importOrExport === 'IMPORT') {
-          console.log(`→ Creating fuel record for IMPORT DO ${savedOrder.doNumber}`);
-          await handleCreateFuelRecordForImport(savedOrder);
-          console.log(`✓ Fuel record created for DO ${savedOrder.doNumber}`);
-        } else if (savedOrder.importOrExport === 'EXPORT') {
-          console.log(`→ Updating fuel record for EXPORT DO ${savedOrder.doNumber}`);
-          await handleUpdateFuelRecordForExport(savedOrder);
-          console.log(`✓ Fuel record updated for DO ${savedOrder.doNumber}`);
+        // Handle fuel record creation/update ONLY for DO type (not SDO)
+        if (savedOrder.doType === 'DO') {
+          if (savedOrder.importOrExport === 'IMPORT') {
+            console.log(`→ Creating fuel record for IMPORT DO ${savedOrder.doNumber}`);
+            await handleCreateFuelRecordForImport(savedOrder);
+            console.log(`✓ Fuel record created for DO ${savedOrder.doNumber}`);
+          } else if (savedOrder.importOrExport === 'EXPORT') {
+            console.log(`→ Updating fuel record for EXPORT DO ${savedOrder.doNumber}`);
+            await handleUpdateFuelRecordForExport(savedOrder);
+            console.log(`✓ Fuel record updated for DO ${savedOrder.doNumber}`);
+          }
+        } else {
+          console.log(`✓ SDO ${savedOrder.doNumber} created - skipping fuel record operations`);
         }
       }
       
@@ -548,7 +623,7 @@ const DeliveryOrders = () => {
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
           >
             <Plus className="w-4 h-4 mr-2" />
-            New DO
+            {filterDoType === 'SDO' ? 'New SDO' : 'New DO'}
           </button>
         </div>
       </div>
@@ -597,108 +672,268 @@ const DeliveryOrders = () => {
         selectedWorkbookId ? (
           <div className="h-[calc(100vh-200px)]">
             <DOWorkbook 
-              workbookId={selectedWorkbookId} 
+              workbookId={selectedWorkbookId}
+              workbookType={filterDoType === 'SDO' ? 'SDO' : 'DO'}
               onClose={handleCloseWorkbook}
             />
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-6 transition-colors">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">DO Workbooks by Year</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Each workbook contains individual sheets for each delivery order</p>
+            <div className="mb-6">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                  {filterDoType === 'SDO' ? 'SDO Workbooks by Year' : filterDoType === 'ALL' ? 'All Workbooks by Year' : 'DO Workbooks by Year'}
+                </h2>
+                {filterDoType === 'SDO' && (
+                  <span className="px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+                    Special Delivery Orders
+                  </span>
+                )}
+                {filterDoType === 'DO' && (
+                  <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                    Delivery Orders
+                  </span>
+                )}
+                {filterDoType === 'ALL' && (
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                      DO
+                    </span>
+                    <span className="text-gray-400">+</span>
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+                      SDO
+                    </span>
+                  </div>
+                )}
               </div>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {filterDoType === 'ALL'
+                  ? 'Viewing all delivery order and special delivery order workbooks'
+                  : filterDoType === 'SDO' 
+                    ? 'Each workbook contains individual sheets for each special delivery order' 
+                    : 'Each workbook contains individual sheets for each delivery order'}
+              </p>
             </div>
             
             {/* Year Selection for Export */}
-            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Export Workbook</h3>
-              <div className="flex items-center gap-4">
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                >
-                  {availableYears.map((year) => (
-                    <option key={year} value={year}>DELIVERY ORDERS {year}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => handleExportWorkbook(selectedYear)}
-                  disabled={exportingYear !== null}
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
-                >
-                  {exportingYear === selectedYear ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <FileDown className="w-4 h-4 mr-2" />
-                      Download Excel
-                    </>
-                  )}
-                </button>
+            {filterDoType !== 'ALL' && (
+              <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Export Workbook</h3>
+                <div className="flex items-center gap-4">
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  >
+                    {availableYears.map((year) => (
+                      <option key={year} value={year}>
+                        {filterDoType === 'SDO' ? `SDO ${year}` : `DELIVERY ORDERS ${year}`}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => handleExportWorkbook(selectedYear)}
+                    disabled={exportingYear !== null}
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                  >
+                    {exportingYear === selectedYear ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <FileDown className="w-4 h-4 mr-2" />
+                        Download Excel
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {workbooks.map((workbook) => (
-                <div
-                  key={workbook.id || workbook.year}
-                  className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition-shadow bg-white dark:bg-gray-800"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center">
-                        <FileSpreadsheet className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-2" />
-                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                          {workbook.name}
-                        </h3>
-                      </div>
-                      <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        <p>{workbook.sheetCount || 0} delivery orders</p>
-                        <p>Year: {workbook.year}</p>
-                      </div>
+            {/* Render workbooks grouped by type when ALL is selected */}
+            {filterDoType === 'ALL' ? (
+              <>
+                {/* DO Workbooks Section */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <h3 className="text-md font-semibold text-gray-900 dark:text-gray-100">Delivery Order Workbooks</h3>
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                      {workbooks.filter(w => w.type === 'DO').length}
+                    </span>
+                  </div>
+                  {workbooks.filter(w => w.type === 'DO').length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {workbooks.filter(w => w.type === 'DO').map((workbook) => (
+                        <div
+                          key={`${workbook.type || filterDoType}-${workbook.id || workbook.year}`}
+                          className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition-shadow bg-white dark:bg-gray-800"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <FileSpreadsheet className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-1" />
+                                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                  {workbook.name}
+                                </h3>
+                              </div>
+                              <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                <p>{workbook.sheetCount || 0} delivery orders</p>
+                                <p>Year: {workbook.year}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleOpenWorkbook(workbook.year, workbook.type)}
+                                className="px-3 py-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                              >
+                                Open
+                              </button>
+                              <button
+                                onClick={() => handleExportWorkbook(workbook.year, workbook.type)}
+                                disabled={exportingYear === workbook.year}
+                                className="px-3 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                              >
+                                {exportingYear === workbook.year ? '...' : 'Export'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleOpenWorkbook(workbook.year)}
-                        className="px-3 py-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
-                      >
-                        Open
-                      </button>
-                      <button
-                        onClick={() => handleExportWorkbook(workbook.year)}
-                        disabled={exportingYear === workbook.year}
-                        className="px-3 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
-                      >
-                        {exportingYear === workbook.year ? '...' : 'Export'}
-                      </button>
+                  ) : (
+                    <div className="text-center py-6 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">No DO workbooks yet</p>
+                    </div>
+                  )}
+                </div>
+                
+                {/* SDO Workbooks Section */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <h3 className="text-md font-semibold text-gray-900 dark:text-gray-100">Special Delivery Order Workbooks</h3>
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+                      {workbooks.filter(w => w.type === 'SDO').length}
+                    </span>
+                  </div>
+                  {workbooks.filter(w => w.type === 'SDO').length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {workbooks.filter(w => w.type === 'SDO').map((workbook) => (
+                        <div
+                          key={`${workbook.type || filterDoType}-${workbook.id || workbook.year}`}
+                          className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition-shadow bg-white dark:bg-gray-800"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <FileSpreadsheet className="w-5 h-5 text-purple-600 dark:text-purple-400 mr-1" />
+                                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                  {workbook.name}
+                                </h3>
+                              </div>
+                              <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                <p>{workbook.sheetCount || 0} SDO orders</p>
+                                <p>Year: {workbook.year}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleOpenWorkbook(workbook.year, workbook.type)}
+                                className="px-3 py-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                              >
+                                Open
+                              </button>
+                              <button
+                                onClick={() => handleExportWorkbook(workbook.year, workbook.type)}
+                                disabled={exportingYear === workbook.year}
+                                className="px-3 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                              >
+                                {exportingYear === workbook.year ? '...' : 'Export'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 bg-purple-50 dark:bg-purple-900/10 rounded-lg border-2 border-dashed border-purple-200 dark:border-purple-800">
+                      <FileSpreadsheet className="w-8 h-8 text-purple-300 dark:text-purple-600 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">No SDO workbooks yet</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500">Create SDO orders using the filter dropdown above</p>
+                    </div>
+                  )}
+                </div>
+                
+                {workbooks.length === 0 && (
+                  <div className="text-center py-8">
+                    <FileSpreadsheet className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-500 dark:text-gray-400 mb-2">No workbooks found</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {workbooks.map((workbook) => (
+                  <div
+                    key={`${workbook.type || filterDoType}-${workbook.id || workbook.year}`}
+                    className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition-shadow bg-white dark:bg-gray-800"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className={`w-5 h-5 ${workbook.type === 'SDO' ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'} mr-1`} />
+                          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {workbook.name}
+                          </h3>
+                        </div>
+                        <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                          <p>{workbook.sheetCount || 0} {workbook.type === 'SDO' ? 'SDO orders' : 'delivery orders'}</p>
+                          <p>Year: {workbook.year}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleOpenWorkbook(workbook.year, workbook.type)}
+                          className="px-3 py-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                        >
+                          Open
+                        </button>
+                        <button
+                          onClick={() => handleExportWorkbook(workbook.year, workbook.type)}
+                          disabled={exportingYear === workbook.year}
+                          className="px-3 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 rounded hover:bg-green-100 dark:hover:bg-green-900/50 disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                        >
+                          {exportingYear === workbook.year ? '...' : 'Export'}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-              
-              {workbooks.length === 0 && (
-                <div className="col-span-full text-center py-8">
-                  <FileSpreadsheet className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400 mb-2">No workbooks found</p>
-                  <p className="text-sm text-gray-400 dark:text-gray-500">Workbooks are generated automatically from your delivery orders</p>
-                </div>
-              )}
-            </div>
+                ))}
+                
+                {workbooks.length === 0 && (
+                  <div className="col-span-full text-center py-8">
+                    <FileSpreadsheet className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-500 dark:text-gray-400 mb-2">No workbooks found</p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                      {filterDoType === 'SDO' 
+                        ? 'Workbooks are generated automatically from your SDO orders' 
+                        : 'Workbooks are generated automatically from your delivery orders'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )
       ) : activeTab === 'list' ? (
         <>
           {/* Filters */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-4 mb-6 transition-colors">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
                 <input
@@ -709,6 +944,15 @@ const DeliveryOrders = () => {
                   className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
+              <select 
+                value={filterDoType}
+                onChange={(e) => { setFilterDoType(e.target.value as 'ALL' | 'DO' | 'SDO'); setCurrentPage(1); }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              >
+                <option value="DO">DO - Delivery Orders</option>
+                <option value="SDO">SDO - Special Delivery Orders</option>
+                <option value="ALL">All Order Types</option>
+              </select>
               <select 
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
@@ -731,10 +975,6 @@ const DeliveryOrders = () => {
                 type="date"
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
-              <button className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                <Filter className="w-4 h-4 mr-2" />
-                More Filters
-              </button>
             </div>
           </div>
 
@@ -935,6 +1175,7 @@ const DeliveryOrders = () => {
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
         onSave={handleSaveOrder}
+        defaultDoType={filterDoType === 'SDO' ? 'SDO' : 'DO'}
       />
 
       {/* Bulk DO Form */}
