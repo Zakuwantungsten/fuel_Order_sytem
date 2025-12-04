@@ -10,6 +10,7 @@ const CANCELLATION_POINTS: CancellationPoint[] = [
   'INFINITY_GOING',
   'TDM_GOING',
   'ZAMBIA_GOING',
+  'CONGO_GOING',
   'ZAMBIA_NDOLA',
   'ZAMBIA_KAPIRI',
   'TDM_RETURN',
@@ -17,6 +18,7 @@ const CANCELLATION_POINTS: CancellationPoint[] = [
   'MORO_RETURN',
   'DAR_RETURN',
   'TANGA_RETURN',
+  'CONGO_RETURNING',
   'CUSTOM_GOING',
   'CUSTOM_RETURN'
 ];
@@ -76,6 +78,15 @@ const lpoDetailSchema = new Schema<ILPODetail>(
       default: false,
     },
     cancellationPoint: {
+      type: String,
+      enum: CANCELLATION_POINTS,
+    },
+    // New: Support both directions for CASH payments (can have one or both)
+    goingCheckpoint: {
+      type: String,
+      enum: CANCELLATION_POINTS,
+    },
+    returningCheckpoint: {
       type: String,
       enum: CANCELLATION_POINTS,
     },

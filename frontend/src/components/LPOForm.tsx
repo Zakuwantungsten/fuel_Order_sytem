@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, MapPin, FileText } from 'lucide-react';
-import { LPOEntry, CancellationPoint, LPOSummary } from '../types';
+import { LPOEntry, CancellationPoint, LPOSummary, FuelStationConfig } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
-import { lpoDocumentsAPI } from '../services/api';
+import { lpoDocumentsAPI, configAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { 
   getAvailableCancellationPoints, 
@@ -69,6 +69,9 @@ const LPOForm: React.FC<LPOFormProps> = ({
   const [existingLPOsAtCheckpoint, setExistingLPOsAtCheckpoint] = useState<LPOSummary[]>([]);
   const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
 
+  // Configured stations from backend
+  const [configuredStations, setConfiguredStations] = useState<FuelStationConfig[]>([]);
+
   const [isAutoFetching, setIsAutoFetching] = useState(false);
   const [autoFillResult, setAutoFillResult] = useState<{
     doNumber: string;
@@ -86,7 +89,18 @@ const LPOForm: React.FC<LPOFormProps> = ({
       setFormData(initialData);
       setUseCustom(true); // Editing mode, allow custom
     }
+    // Fetch configured stations
+    loadConfiguredStations();
   }, [initialData]);
+
+  const loadConfiguredStations = async () => {
+    try {
+      const stations = await configAPI.getStations();
+      setConfiguredStations(stations.filter((s: FuelStationConfig) => s.isActive));
+    } catch (error) {
+      console.error('Failed to load configured stations:', error);
+    }
+  };
 
   // Auto-fetch when truck number and station are both filled
   useEffect(() => {
@@ -269,15 +283,10 @@ const LPOForm: React.FC<LPOFormProps> = ({
 
   if (!isOpen) return null;
 
+  // Build stations list: configured stations + CASH + CUSTOM
   const stations = [
-    'LAKE CHILABOMBWE',
-    'LAKE NDOLA',
-    'LAKE KAPIRI',
+    ...configuredStations.map(s => s.stationName),
     'CASH',
-    'TCC',
-    'ZHANFEI',
-    'KAMOA',
-    'COMIKA',
     'CUSTOM'  // Custom station option at the bottom - for unlisted stations
   ];
 

@@ -13,6 +13,7 @@ import systemAdminRoutes from './systemAdminRoutes';
 import trashRoutes from './trashRoutes';
 import backupRoutes from './backupRoutes';
 import analyticsRoutes from './analyticsRoutes';
+import configRoutes from './configRoutes';
 
 const router = Router();
 
@@ -31,5 +32,6 @@ router.use('/system-admin', systemAdminRoutes);
 router.use('/trash', trashRoutes);
 router.use('/system-admin', backupRoutes);
 router.use('/system-admin/analytics', analyticsRoutes);
+router.use('/system-admin/config', configRoutes);
 
 export default router;

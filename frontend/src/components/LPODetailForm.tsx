@@ -129,11 +129,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const [entryAutoFillData, setEntryAutoFillData] = useState<Record<number, EntryAutoFillData>>({});
   const [isLoadingLpoNumber, setIsLoadingLpoNumber] = useState(false);
 
-  // Cash cancellation state
-  const [cancellationDirection, setCancellationDirection] = useState<'going' | 'returning'>('going');
-  const [cancellationPoint, setCancellationPoint] = useState<CancellationPoint | ''>('');
-  const [existingLPOsForTrucks, setExistingLPOsForTrucks] = useState<Map<string, LPOSummary[]>>(new Map());
+  // Cash cancellation state - now supports both directions simultaneously
+  const [goingEnabled, setGoingEnabled] = useState(false);
+  const [returningEnabled, setReturningEnabled] = useState(false);
+  const [goingCheckpoint, setGoingCheckpoint] = useState<CancellationPoint | ''>('');
+  const [returningCheckpoint, setReturningCheckpoint] = useState<CancellationPoint | ''>('');
+  const [existingLPOsForTrucks, setExistingLPOsForTrucks] = useState<Map<string, { lpos: LPOSummary[], direction: string }[]>>(new Map());
+  const [trucksWithoutLPOs, setTrucksWithoutLPOs] = useState<Set<string>>(new Set());
   const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
+  
+  // Track which entries have been created (to prevent auto-update of their rates)
+  const [lockedEntryRates, setLockedEntryRates] = useState<Map<number, number>>(new Map());
 
   // Duplicate allocation warning state
   const [duplicateWarnings, setDuplicateWarnings] = useState<Map<string, {
@@ -177,10 +183,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       total: 0,
     });
     setEntryAutoFillData({});
-    setCancellationDirection('going');
-    setCancellationPoint('');
+    setGoingEnabled(false);
+    setReturningEnabled(false);
+    setGoingCheckpoint('');
+    setReturningCheckpoint('');
     setExistingLPOsForTrucks(new Map());
+    setTrucksWithoutLPOs(new Set());
     setDuplicateWarnings(new Map());
+    setLockedEntryRates(new Map());
     setCashConversion({
       localRate: 0,
       conversionRate: 1,
@@ -216,6 +226,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   };
 
   // Calculate TZS rate when cash conversion values change
+  // Only update entries that haven't been locked (new entries only)
   useEffect(() => {
     if (formData.station === 'CASH' && cashConversion.localRate > 0 && cashConversion.conversionRate > 0) {
       // If currency is ZMW, convert to TZS: localRate * conversionRate
@@ -223,47 +234,82 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const calculatedRate = cashConversion.localRate * cashConversion.conversionRate;
       setCashConversion(prev => ({ ...prev, calculatedRate }));
       
-      // Update all entries with the calculated rate
-      const updatedEntries = formData.entries?.map(entry => ({
-        ...entry,
-        rate: calculatedRate,
-        amount: entry.liters * calculatedRate
-      })) || [];
+      // Only update entries that are NOT locked (entries added after rate was set keep their original rate)
+      const updatedEntries = formData.entries?.map((entry, index) => {
+        const lockedRate = lockedEntryRates.get(index);
+        if (lockedRate !== undefined) {
+          // Entry is locked, keep its original rate
+          return entry;
+        }
+        // Entry is not locked, update with new calculated rate
+        return {
+          ...entry,
+          rate: calculatedRate,
+          amount: entry.liters * calculatedRate
+        };
+      }) || [];
       
       const total = updatedEntries.reduce((sum, entry) => sum + entry.amount, 0);
       setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
     }
-  }, [cashConversion.localRate, cashConversion.conversionRate, formData.station]);
+  }, [cashConversion.localRate, cashConversion.conversionRate, formData.station, lockedEntryRates]);
 
-  // Fetch existing LPOs for trucks when CASH is selected and cancellation point is chosen
+  // Fetch existing LPOs for trucks when CASH is selected and checkpoint(s) are chosen
   useEffect(() => {
     const fetchExistingLPOs = async () => {
-      if (formData.station === 'CASH' && cancellationPoint && formData.entries && formData.entries.length > 0) {
+      // Check if at least one direction is enabled with a checkpoint
+      const hasGoingCheckpoint = goingEnabled && goingCheckpoint;
+      const hasReturningCheckpoint = returningEnabled && returningCheckpoint;
+      
+      if (formData.station === 'CASH' && (hasGoingCheckpoint || hasReturningCheckpoint) && formData.entries && formData.entries.length > 0) {
         setIsFetchingLPOs(true);
-        const newMap = new Map<string, LPOSummary[]>();
+        const newMap = new Map<string, { lpos: LPOSummary[], direction: string }[]>();
+        const trucksWithoutLPOsSet = new Set<string>();
         
         try {
           for (const entry of formData.entries) {
             if (entry.truckNo && entry.truckNo.length >= 4) {
-              const lpos = await lpoDocumentsAPI.findAtCheckpoint(entry.truckNo);
-              if (lpos.length > 0) {
-                newMap.set(entry.truckNo, lpos);
+              const truckLPOs: { lpos: LPOSummary[], direction: string }[] = [];
+              
+              // Check going direction if enabled
+              if (hasGoingCheckpoint) {
+                const goingLpos = await lpoDocumentsAPI.findAtCheckpoint(entry.truckNo);
+                if (goingLpos.length > 0) {
+                  truckLPOs.push({ lpos: goingLpos, direction: 'Going' });
+                }
+              }
+              
+              // Check returning direction if enabled
+              if (hasReturningCheckpoint) {
+                const returningLpos = await lpoDocumentsAPI.findAtCheckpoint(entry.truckNo);
+                if (returningLpos.length > 0) {
+                  truckLPOs.push({ lpos: returningLpos, direction: 'Returning' });
+                }
+              }
+              
+              if (truckLPOs.length > 0) {
+                newMap.set(entry.truckNo, truckLPOs);
+              } else {
+                // Truck has no LPOs at selected checkpoints
+                trucksWithoutLPOsSet.add(entry.truckNo);
               }
             }
           }
-          setExistingLPOsForTrucks(newMap);
         } catch (error) {
           console.error('Error fetching existing LPOs:', error);
         } finally {
+          setExistingLPOsForTrucks(newMap);
+          setTrucksWithoutLPOs(trucksWithoutLPOsSet);
           setIsFetchingLPOs(false);
         }
       } else {
         setExistingLPOsForTrucks(new Map());
+        setTrucksWithoutLPOs(new Set());
       }
     };
 
     fetchExistingLPOs();
-  }, [formData.station, cancellationPoint, formData.entries?.map(e => e.truckNo).join(',')]);
+  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => e.truckNo).join(',')]);
 
   // Check for duplicate allocations when station or entries change (for non-CASH stations)
   useEffect(() => {
@@ -874,10 +920,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return;
     }
 
-    // CASH station requires cancellation point selection
-    if (formData.station === 'CASH' && !cancellationPoint) {
-      alert('For CASH payments, you must select a checkpoint (going/returning direction and specific checkpoint). This determines which fuel record column gets updated for the truck(s).');
-      return;
+    // CASH station requires at least one direction with checkpoint selection
+    if (formData.station === 'CASH') {
+      if (!goingEnabled && !returningEnabled) {
+        alert('For CASH payments, you must enable at least one direction (Going or Returning).');
+        return;
+      }
+      if (goingEnabled && !goingCheckpoint) {
+        alert('Going direction is enabled but no checkpoint is selected. Please select a checkpoint or disable Going direction.');
+        return;
+      }
+      if (returningEnabled && !returningCheckpoint) {
+        alert('Returning direction is enabled but no checkpoint is selected. Please select a checkpoint or disable Returning direction.');
+        return;
+      }
     }
 
     // CUSTOM station validation
@@ -926,7 +982,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
 
     // Ensure all entries have required fields with proper defaults
-    // For CASH mode, also include the cancellation point in each entry
+    // For CASH mode, include both direction checkpoints (can have one or both)
     // For CUSTOM mode, include the custom station checkpoint mappings
     const validEntries = formData.entries.map(entry => ({
       ...entry,
@@ -936,9 +992,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       liters: Number(entry.liters) || 0,
       rate: Number(entry.rate) || 0,
       amount: (Number(entry.liters) || 0) * (Number(entry.rate) || 0),
-      // Include cancellation point for CASH entries so backend knows which fuel field to update
-      // Only set if station is CASH and cancellation point is selected (not empty string)
-      cancellationPoint: formData.station === 'CASH' && cancellationPoint ? cancellationPoint : undefined,
+      // Include checkpoint(s) for CASH entries - can have going, returning, or both
+      goingCheckpoint: formData.station === 'CASH' && goingEnabled && goingCheckpoint ? goingCheckpoint : undefined,
+      returningCheckpoint: formData.station === 'CASH' && returningEnabled && returningCheckpoint ? returningCheckpoint : undefined,
       // Include custom station data for CUSTOM entries
       isCustomStation: formData.station === 'CUSTOM',
       customStationName: formData.station === 'CUSTOM' ? customStationName : undefined,
@@ -948,21 +1004,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
     const total = validEntries.reduce((sum, entry) => sum + entry.amount, 0);
 
-    // Perform auto-cancellation for CASH mode if cancellation point is selected
-    if (formData.station === 'CASH' && cancellationPoint && existingLPOsForTrucks.size > 0) {
+    // Perform auto-cancellation for CASH mode if checkpoint(s) are selected
+    if (formData.station === 'CASH' && existingLPOsForTrucks.size > 0) {
       try {
-        // Cancel trucks in existing LPOs
-        for (const [truckNo, lpos] of existingLPOsForTrucks) {
-          for (const lpo of lpos) {
-            await lpoDocumentsAPI.cancelTruck(
-              lpo.id as string,
-              truckNo,
-              cancellationPoint,
-              'Cash mode payment - station was out of fuel'
-            );
+        // Cancel trucks in existing LPOs for all directions
+        for (const [truckNo, directionLPOs] of existingLPOsForTrucks) {
+          for (const { lpos, direction } of directionLPOs) {
+            const checkpoint = direction === 'Going' ? goingCheckpoint : returningCheckpoint;
+            for (const lpo of lpos) {
+              await lpoDocumentsAPI.cancelTruck(
+                lpo.id as string,
+                truckNo,
+                checkpoint as CancellationPoint,
+                `Cash mode payment - station was out of fuel (${direction})`
+              );
+            }
           }
         }
-        console.log('Auto-cancellation completed');
+        console.log('Auto-cancellation completed for both directions');
       } catch (error) {
         console.error('Error during auto-cancellation:', error);
         // Continue with LPO creation even if cancellation fails
@@ -1271,76 +1330,103 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   <Ban className="w-5 h-5 text-orange-600" />
                   <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-200">Cash Purchase Checkpoint (Required)</h4>
                 </div>
-                <p className="text-xs text-orange-700 dark:text-orange-300 mb-3">
-                  <strong>Required:</strong> Select where the cash fuel was purchased. This determines which column in the fuel record gets updated for this truck.
-                  {cancellationPoint && ' Any existing LPOs at this checkpoint will be automatically cancelled.'}
+                <p className="text-xs text-orange-700 dark:text-orange-300 mb-4">
+                  <strong>Required:</strong> Select direction(s) and checkpoint(s) where cash fuel was purchased. You can select one or both directions. Any existing LPOs at selected checkpoints will be automatically cancelled.
                 </p>
                 
-                {/* Direction Toggle */}
-                <div className="flex space-x-4 mb-3">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="cancelDirection"
-                      value="going"
-                      checked={cancellationDirection === 'going'}
-                      onChange={() => {
-                        setCancellationDirection('going');
-                        setCancellationPoint('');
-                      }}
-                      className="w-4 h-4 text-orange-600"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Going</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="cancelDirection"
-                      value="returning"
-                      checked={cancellationDirection === 'returning'}
-                      onChange={() => {
-                        setCancellationDirection('returning');
-                        setCancellationPoint('');
-                      }}
-                      className="w-4 h-4 text-orange-600"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Returning</span>
-                  </label>
-                </div>
+                {/* Direction Checkboxes - Can select one or both */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {/* Going Direction */}
+                  <div className="border border-orange-200 dark:border-orange-700 rounded-lg p-3 bg-white dark:bg-gray-800">
+                    <label className="flex items-center space-x-2 cursor-pointer mb-3">
+                      <input
+                        type="checkbox"
+                        checked={goingEnabled}
+                        onChange={(e) => {
+                          setGoingEnabled(e.target.checked);
+                          if (!e.target.checked) setGoingCheckpoint('');
+                        }}
+                        className="w-4 h-4 text-orange-600"
+                      />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Going Direction</span>
+                    </label>
+                    
+                    {goingEnabled && (
+                      <div>
+                        <label className="block text-xs font-medium text-orange-800 dark:text-orange-300 mb-1">
+                          Going Checkpoint *
+                        </label>
+                        <select
+                          value={goingCheckpoint}
+                          onChange={(e) => setGoingCheckpoint(e.target.value as CancellationPoint)}
+                          className={`w-full px-2 py-1.5 text-sm border rounded-md focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                            !goingCheckpoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
+                          }`}
+                        >
+                          <option value="">Select checkpoint...</option>
+                          {getAvailableCancellationPoints('CASH').going.map((point) => (
+                            <option key={point} value={point}>
+                              {getCancellationPointDisplayName(point)}
+                            </option>
+                          ))}
+                        </select>
+                        {!goingCheckpoint && (
+                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                            ⚠ Select checkpoint
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                {/* Cancellation Point Dropdown - Required for Cash */}
-                <div>
-                  <label className="block text-sm font-medium text-orange-800 dark:text-orange-300 mb-1">
-                    Checkpoint (where fuel was purchased) *
-                  </label>
-                  <select
-                    required
-                    value={cancellationPoint}
-                    onChange={(e) => setCancellationPoint(e.target.value as CancellationPoint)}
-                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
-                      !cancellationPoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
-                    }`}
-                  >
-                    <option value="">Select checkpoint (required)...</option>
-                    {getAvailableCancellationPoints('CASH')[cancellationDirection].map((point) => (
-                      <option key={point} value={point}>
-                        {getCancellationPointDisplayName(point)}
-                      </option>
-                    ))}
-                  </select>
-                  {!cancellationPoint && (
-                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                      ⚠ Please select the checkpoint where cash was used. This determines which fuel record column gets updated.
-                    </p>
-                  )}
+                  {/* Returning Direction */}
+                  <div className="border border-orange-200 dark:border-orange-700 rounded-lg p-3 bg-white dark:bg-gray-800">
+                    <label className="flex items-center space-x-2 cursor-pointer mb-3">
+                      <input
+                        type="checkbox"
+                        checked={returningEnabled}
+                        onChange={(e) => {
+                          setReturningEnabled(e.target.checked);
+                          if (!e.target.checked) setReturningCheckpoint('');
+                        }}
+                        className="w-4 h-4 text-orange-600"
+                      />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Returning Direction</span>
+                    </label>
+                    
+                    {returningEnabled && (
+                      <div>
+                        <label className="block text-xs font-medium text-orange-800 dark:text-orange-300 mb-1">
+                          Returning Checkpoint *
+                        </label>
+                        <select
+                          value={returningCheckpoint}
+                          onChange={(e) => setReturningCheckpoint(e.target.value as CancellationPoint)}
+                          className={`w-full px-2 py-1.5 text-sm border rounded-md focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                            !returningCheckpoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
+                          }`}
+                        >
+                          <option value="">Select checkpoint...</option>
+                          {getAvailableCancellationPoints('CASH').returning.map((point) => (
+                            <option key={point} value={point}>
+                              {getCancellationPointDisplayName(point)}
+                            </option>
+                          ))}
+                        </select>
+                        {!returningCheckpoint && (
+                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                            ⚠ Select checkpoint
+                          </p>
+                        )}
+                        {returningCheckpoint && returningCheckpoint.includes('ZAMBIA') && (
+                          <p className="mt-1 text-xs text-orange-600 dark:text-orange-400">
+                            Note: Zambia returning has two parts - Ndola ({ZAMBIA_RETURNING_PARTS.ndola.liters}L) and Kapiri ({ZAMBIA_RETURNING_PARTS.kapiri.liters}L).
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-
-                {/* Zambia Returning Note */}
-                {cancellationDirection === 'returning' && (
-                  <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
-                    Note: Zambia returning has two parts - Ndola ({ZAMBIA_RETURNING_PARTS.ndola.liters}L) and Kapiri ({ZAMBIA_RETURNING_PARTS.kapiri.liters}L).
-                  </p>
-                )}
 
                 {/* Show existing LPOs that will be cancelled */}
                 {isFetchingLPOs && (
@@ -1362,9 +1448,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           The following will be automatically cancelled when you create this CASH LPO:
                         </p>
                         <ul className="mt-2 space-y-1">
-                          {Array.from(existingLPOsForTrucks.entries()).map(([truckNo, lpos]) => (
+                          {Array.from(existingLPOsForTrucks.entries()).map(([truckNo, directionLPOs]) => (
                             <li key={truckNo} className="text-xs text-red-700 dark:text-red-300">
-                              <span className="font-medium">{truckNo}</span>: {lpos.map(l => `LPO #${l.lpoNo}`).join(', ')}
+                              <span className="font-medium">{truckNo}</span>:
+                              {directionLPOs.map(({ lpos, direction }) => (
+                                <span key={direction} className="ml-1">
+                                  [{direction}] {lpos.map(l => `LPO #${l.lpoNo}`).join(', ')}
+                                </span>
+                              ))}
                             </li>
                           ))}
                         </ul>
@@ -1373,10 +1464,34 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </div>
                 )}
 
-                {!isFetchingLPOs && existingLPOsForTrucks.size === 0 && cancellationPoint && formData.entries && formData.entries.length > 0 && (
-                  <div className="mt-3 flex items-center space-x-2 text-sm text-green-600">
+                {/* Show trucks without existing LPOs (green message) */}
+                {!isFetchingLPOs && trucksWithoutLPOs.size > 0 && (
+                  <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                    <div className="flex items-start space-x-2">
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                          No Previous Orders: {trucksWithoutLPOs.size} truck(s)
+                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                          The following trucks had no previous fuel order/LPO at the selected checkpoint(s). Cash payment will be recorded:
+                        </p>
+                        <ul className="mt-2 space-y-1">
+                          {Array.from(trucksWithoutLPOs).map((truckNo) => (
+                            <li key={truckNo} className="text-xs text-green-700 dark:text-green-300">
+                              ✓ <span className="font-medium">{truckNo}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isFetchingLPOs && existingLPOsForTrucks.size === 0 && trucksWithoutLPOs.size === 0 && (goingEnabled || returningEnabled) && formData.entries && formData.entries.length > 0 && (
+                  <div className="mt-3 flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                     <CheckCircle className="w-4 h-4" />
-                    <span>No existing LPOs found for these trucks to cancel</span>
+                    <span>Add truck entries to check for existing LPOs</span>
                   </div>
                 )}
               </div>

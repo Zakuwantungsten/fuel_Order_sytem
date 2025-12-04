@@ -238,6 +238,9 @@ export interface ILPODetail {
   isCancelled?: boolean;
   isDriverAccount?: boolean;
   cancellationPoint?: CancellationPoint;
+  // New: Support both directions for CASH payments (can have one or both)
+  goingCheckpoint?: CancellationPoint;
+  returningCheckpoint?: CancellationPoint;
   originalDoNo?: string;
   cancellationReason?: string;
   cancelledAt?: Date;
@@ -258,6 +261,7 @@ export type CancellationPoint =
   | 'INFINITY_GOING'
   | 'TDM_GOING'
   | 'ZAMBIA_GOING'
+  | 'CONGO_GOING'
   | 'ZAMBIA_NDOLA'
   | 'ZAMBIA_KAPIRI'
   | 'TDM_RETURN'
@@ -265,6 +269,7 @@ export type CancellationPoint =
   | 'MORO_RETURN'
   | 'DAR_RETURN'
   | 'TANGA_RETURN'
+  | 'CONGO_RETURNING'
   // Custom station checkpoints (for unlisted stations)
   | 'CUSTOM_GOING'
   | 'CUSTOM_RETURN';

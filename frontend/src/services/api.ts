@@ -1193,6 +1193,70 @@ export const analyticsAPI = {
   },
 };
 
+// Configuration API
+export const configAPI = {
+  // Fuel Stations
+  getStations: async () => {
+    const response = await apiClient.get('/system-admin/config/stations');
+    return response.data.data;
+  },
+  
+  createStation: async (data: {
+    stationName: string;
+    defaultRate: number;
+    defaultLitersGoing: number;
+    defaultLitersReturning: number;
+    formulaGoing?: string;
+    formulaReturning?: string;
+  }) => {
+    const response = await apiClient.post('/system-admin/config/stations', data);
+    return response.data;
+  },
+  
+  updateStation: async (id: string, data: any) => {
+    const response = await apiClient.put(`/system-admin/config/stations/${id}`, data);
+    return response.data;
+  },
+  
+  deleteStation: async (id: string) => {
+    const response = await apiClient.delete(`/system-admin/config/stations/${id}`);
+    return response.data;
+  },
+  
+  // Routes
+  getRoutes: async () => {
+    const response = await apiClient.get('/system-admin/config/routes');
+    return response.data.data;
+  },
+  
+  createRoute: async (data: {
+    routeName: string;
+    destination: string;
+    defaultTotalLiters: number;
+    formula?: string;
+    description?: string;
+  }) => {
+    const response = await apiClient.post('/system-admin/config/routes', data);
+    return response.data;
+  },
+  
+  updateRoute: async (id: string, data: any) => {
+    const response = await apiClient.put(`/system-admin/config/routes/${id}`, data);
+    return response.data;
+  },
+  
+  deleteRoute: async (id: string) => {
+    const response = await apiClient.delete(`/system-admin/config/routes/${id}`);
+    return response.data;
+  },
+  
+  // Formula helpers
+  getFormulaVariables: async () => {
+    const response = await apiClient.get('/system-admin/config/formula-variables');
+    return response.data;
+  },
+};
+
 // Trash Management API
 export const trashAPI = {
   // Get trash statistics

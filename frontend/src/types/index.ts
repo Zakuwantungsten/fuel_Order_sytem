@@ -531,6 +531,7 @@ export type CancellationPoint =
   | 'INFINITY_GOING'  // Mbeya area (going)
   | 'TDM_GOING'       // TDM/Tunduma (going)
   | 'ZAMBIA_GOING'    // Lake Chilabombwe
+  | 'CONGO_GOING'     // Congo (going direction)
   // Returning direction checkpoints
   | 'ZAMBIA_NDOLA'    // Returning - first part (50 liters)
   | 'ZAMBIA_KAPIRI'   // Returning - second part (350 liters)
@@ -539,6 +540,7 @@ export type CancellationPoint =
   | 'MORO_RETURN'
   | 'DAR_RETURN'
   | 'TANGA_RETURN'
+  | 'CONGO_RETURNING' // Congo (returning direction)
   // Custom station checkpoints (for unlisted stations)
   | 'CUSTOM_GOING'    // Custom station for going direction
   | 'CUSTOM_RETURN';  // Custom station for return direction
@@ -842,4 +844,55 @@ export interface SystemPerformance {
     last24h: number;
     last7d: number;
   };
+}
+
+// Configuration Types
+export type FuelRecordField = 
+  | 'darGoing' | 'moroGoing' | 'mbeyaGoing' | 'tdmGoing' | 'zambiaGoing' | 'congoFuel'
+  | 'zambiaReturn' | 'tundumaReturn' | 'mbeyaReturn' | 'moroReturn' | 'darReturn' | 'tangaReturn';
+
+export interface FuelStationConfig {
+  _id: string;
+  stationName: string;
+  defaultRate: number;
+  defaultLitersGoing: number;
+  defaultLitersReturning: number;
+  fuelRecordFieldGoing?: FuelRecordField;  // e.g., 'zambiaGoing', 'mbeyaGoing'
+  fuelRecordFieldReturning?: FuelRecordField;  // e.g., 'zambiaReturn', 'mbeyaReturn'
+  formulaGoing?: string;
+  formulaReturning?: string;
+  isActive: boolean;
+  createdBy: string;
+  updatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RouteConfig {
+  _id: string;
+  routeName: string;
+  destination: string;
+  defaultTotalLiters: number;
+  description?: string;
+  isActive: boolean;
+  createdBy: string;
+  updatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FormulaVariable {
+  name: string;
+  description: string;
+  type: string;
+}
+
+export interface FormulaExample {
+  formula: string;
+  description: string;
+}
+
+export interface FuelRecordFieldOption {
+  value: FuelRecordField;
+  label: string;
 }

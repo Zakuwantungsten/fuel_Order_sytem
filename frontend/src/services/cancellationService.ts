@@ -45,6 +45,7 @@ export const GOING_CHECKPOINTS: CancellationPoint[] = [
   'INFINITY_GOING', // Infinity/Mbeya area (Going)
   'TDM_GOING',      // TDM/Tunduma checkpoint (Going)
   'ZAMBIA_GOING',   // Zambia entry (Going) - Lake Chilabombwe
+  'CONGO_GOING',    // Congo (Going)
 ];
 
 // Returning direction checkpoints
@@ -56,6 +57,7 @@ export const RETURNING_CHECKPOINTS: CancellationPoint[] = [
   'MORO_RETURN',    // Morogoro (Returning)
   'DAR_RETURN',     // Dar es Salaam (Returning)
   'TANGA_RETURN',   // Tanga (Returning - alternative route)
+  'CONGO_RETURNING', // Congo (Returning)
 ];
 
 // Zambia returning has two parts
@@ -99,6 +101,7 @@ export const CANCELLATION_POINT_TO_FUEL_FIELD: Record<CancellationPoint, string>
   'INFINITY_GOING': 'mbeyaGoing',    // Infinity is in Mbeya area
   'TDM_GOING': 'tdmGoing',
   'ZAMBIA_GOING': 'zambiaGoing',
+  'CONGO_GOING': 'congoFuel',        // Congo (Going) maps to congoFuel column
   // Returning direction checkpoints
   'ZAMBIA_NDOLA': 'zambiaReturn',    // Part of Zambia Return (50L)
   'ZAMBIA_KAPIRI': 'zambiaReturn',   // Part of Zambia Return (350L)
@@ -107,6 +110,7 @@ export const CANCELLATION_POINT_TO_FUEL_FIELD: Record<CancellationPoint, string>
   'MORO_RETURN': 'moroReturn',
   'DAR_RETURN': 'darReturn',
   'TANGA_RETURN': 'tangaReturn',
+  'CONGO_RETURNING': 'congoFuel',    // Congo (Returning) also maps to congoFuel column
   // Custom station checkpoints (dynamically mapped to selected fuel record field)
   'CUSTOM_GOING': 'darGoing',     // Default, but actual field is determined by customGoingCheckpoint
   'CUSTOM_RETURN': 'darReturn',   // Default, but actual field is determined by customReturnCheckpoint
@@ -123,6 +127,7 @@ export const FUEL_RECORD_COLUMNS = {
     { field: 'mbeyaGoing', label: 'Mbeya Going' },
     { field: 'tdmGoing', label: 'TDM/Tunduma Going' },
     { field: 'zambiaGoing', label: 'Zambia Going' },
+    { field: 'congoFuel', label: 'Congo' },
   ],
   return: [
     { field: 'zambiaReturn', label: 'Zambia Return' },
@@ -131,6 +136,7 @@ export const FUEL_RECORD_COLUMNS = {
     { field: 'moroReturn', label: 'Moro Return' },
     { field: 'darReturn', label: 'Dar Return' },
     { field: 'tangaReturn', label: 'Tanga Return' },
+    { field: 'congoFuel', label: 'Congo' },
   ],
 };
 
@@ -151,7 +157,8 @@ export const getCancellationPointDisplayName = (point: CancellationPoint): strin
     'MBEYA_GOING': 'Mbeya Going',
     'INFINITY_GOING': 'Infinity (Mbeya)',
     'TDM_GOING': 'TDM/Tunduma Going',
-    'ZAMBIA_GOING': 'Zambia Going (Lake Chilabombwe)',
+    'ZAMBIA_GOING': 'Zambia Going',
+    'CONGO_GOING': 'Congo',
     'ZAMBIA_NDOLA': 'Zambia Returning (Ndola - 50L)',
     'ZAMBIA_KAPIRI': 'Zambia Returning (Kapiri - 350L)',
     'TDM_RETURN': 'TDM/Tunduma Return',
@@ -159,6 +166,7 @@ export const getCancellationPointDisplayName = (point: CancellationPoint): strin
     'MORO_RETURN': 'Moro Return',
     'DAR_RETURN': 'Dar Return',
     'TANGA_RETURN': 'Tanga Return',
+    'CONGO_RETURNING': 'Congo',
     'CUSTOM_GOING': 'Custom Station (Going)',
     'CUSTOM_RETURN': 'Custom Station (Return)'
   };

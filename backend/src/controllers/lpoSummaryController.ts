@@ -1,16 +1,54 @@
 import { Response } from 'express';
 import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry, LPOEntry } from '../models';
+import { FuelStationConfig } from '../models/FuelStationConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
 import ExcelJS from 'exceljs';
 
+// Dynamic station to fuel field mapping cache
+let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
+let CACHE_LAST_UPDATED = 0;
+const CACHE_TTL = 60000; // 1 minute
+
+/**
+ * Load station mappings from database and cache them
+ */
+async function loadStationMappings() {
+  const now = Date.now();
+  if (now - CACHE_LAST_UPDATED < CACHE_TTL && Object.keys(STATION_TO_FUEL_FIELD_CACHE).length > 0) {
+    return STATION_TO_FUEL_FIELD_CACHE;
+  }
+
+  const stations = await FuelStationConfig.find({ isActive: true });
+  const mapping: Record<string, { going?: string; returning?: string }> = {};
+
+  for (const station of stations) {
+    mapping[station.stationName] = {
+      going: station.fuelRecordFieldGoing,
+      returning: station.fuelRecordFieldReturning,
+    };
+  }
+
+  // Add CASH as a fallback (context determines the field)
+  mapping['CASH'] = { going: 'darGoing', returning: 'darReturn' };
+
+  STATION_TO_FUEL_FIELD_CACHE = mapping;
+  CACHE_LAST_UPDATED = now;
+  
+  return mapping;
+}
+
+/**
+ * Get station to fuel field mapping (with caching)
+ */
+async function getStationToFuelFieldMapping() {
+  return await loadStationMappings();
+}
+
 // Mapping from station to fuel record field for updating
-// Updated: Removed invalid station names (MBEYA GOING, TUNDUMA RETURN, etc.)
-// INFINITY = Mbeya station (both directions)
-// LAKE TUNDUMA = Tunduma station (return)
-// GBP KANGE = Tanga Return (for Mombasa/MSA destinations)
-const STATION_TO_FUEL_FIELD: Record<string, { going?: string; returning?: string }> = {
+// Kept as fallback for backward compatibility
+const STATION_TO_FUEL_FIELD_FALLBACK: Record<string, { going?: string; returning?: string }> = {
   // Zambia stations - going direction uses zambiaGoing, return uses zambiaReturn
   'LAKE CHILABOMBWE': { going: 'zambiaGoing', returning: 'zambiaReturn' },
   'LAKE NDOLA': { going: 'zambiaGoing', returning: 'zambiaReturn' },  // Return: 50L split
@@ -40,6 +78,7 @@ const CANCELLATION_POINT_TO_FUEL_FIELD: Record<string, string> = {
   'INFINITY_GOING': 'mbeyaGoing',    // Infinity is in Mbeya area
   'TDM_GOING': 'tdmGoing',
   'ZAMBIA_GOING': 'zambiaGoing',
+  'CONGO_GOING': 'congoFuel',        // Congo (Going) maps to congoFuel column
   // Returning direction checkpoints
   'ZAMBIA_NDOLA': 'zambiaReturn',    // Part of Zambia Return (50L)
   'ZAMBIA_KAPIRI': 'zambiaReturn',   // Part of Zambia Return (350L)
@@ -48,6 +87,7 @@ const CANCELLATION_POINT_TO_FUEL_FIELD: Record<string, string> = {
   'MORO_RETURN': 'moroReturn',
   'DAR_RETURN': 'darReturn',
   'TANGA_RETURN': 'tangaReturn',
+  'CONGO_RETURNING': 'congoFuel',    // Congo (Returning) also maps to congoFuel column
 };
 
 // Station rates reference (for documentation/validation)
@@ -228,12 +268,13 @@ async function updateFuelRecordForLPOEntry(
 
     // Fallback to station-based mapping if no cancellation point or no mapping found
     if (!fieldToUpdate) {
-      const fieldMapping = STATION_TO_FUEL_FIELD[stationUpper];
+      const stationMappings = await getStationToFuelFieldMapping();
+      const fieldMapping = stationMappings[stationUpper] || STATION_TO_FUEL_FIELD_FALLBACK[stationUpper];
       
       logger.info(`Found fuel record ${fuelRecord._id} for truck ${truckNo}, direction=${direction}, station=${stationUpper}`);
 
       if (!fieldMapping) {
-        logger.warn(`No field mapping for station "${stationUpper}" - available: ${Object.keys(STATION_TO_FUEL_FIELD).join(', ')}`);
+        logger.warn(`No field mapping for station "${stationUpper}" - available: ${Object.keys(stationMappings).join(', ')}`);
         return;
       }
 
@@ -723,20 +764,73 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
         }
 
         // Regular entry - update fuel record
-        // For CASH station entries, pass the cancellation point to determine the correct fuel field
+        // For CASH station entries, pass both checkpoints to update correct fuel fields
+        // Can have going, returning, or both checkpoints for CASH payments
         // For CUSTOM station entries, pass the custom checkpoint info
-        await updateFuelRecordForLPOEntry(
-          entry.doNo,
-          entry.liters,
-          lpoSummary.station,
-          entry.truckNo,
-          entry.cancellationPoint, // Pass cancellation point for CASH entries
-          entry.isCustomStation ? {
-            isCustomStation: entry.isCustomStation,
-            customGoingCheckpoint: entry.customGoingCheckpoint,
-            customReturnCheckpoint: entry.customReturnCheckpoint,
-          } : undefined
-        );
+        
+        // Handle going checkpoint if present
+        if (entry.goingCheckpoint) {
+          await updateFuelRecordForLPOEntry(
+            entry.doNo,
+            entry.liters,
+            lpoSummary.station,
+            entry.truckNo,
+            entry.goingCheckpoint, // Going checkpoint
+            entry.isCustomStation ? {
+              isCustomStation: entry.isCustomStation,
+              customGoingCheckpoint: entry.customGoingCheckpoint,
+              customReturnCheckpoint: entry.customReturnCheckpoint,
+            } : undefined
+          );
+        }
+        
+        // Handle returning checkpoint if present
+        if (entry.returningCheckpoint) {
+          await updateFuelRecordForLPOEntry(
+            entry.doNo,
+            entry.liters,
+            lpoSummary.station,
+            entry.truckNo,
+            entry.returningCheckpoint, // Returning checkpoint
+            entry.isCustomStation ? {
+              isCustomStation: entry.isCustomStation,
+              customGoingCheckpoint: entry.customGoingCheckpoint,
+              customReturnCheckpoint: entry.customReturnCheckpoint,
+            } : undefined
+          );
+        }
+        
+        // Fallback to old cancellationPoint field for backward compatibility
+        if (!entry.goingCheckpoint && !entry.returningCheckpoint && entry.cancellationPoint) {
+          await updateFuelRecordForLPOEntry(
+            entry.doNo,
+            entry.liters,
+            lpoSummary.station,
+            entry.truckNo,
+            entry.cancellationPoint,
+            entry.isCustomStation ? {
+              isCustomStation: entry.isCustomStation,
+              customGoingCheckpoint: entry.customGoingCheckpoint,
+              customReturnCheckpoint: entry.customReturnCheckpoint,
+            } : undefined
+          );
+        }
+        
+        // If no checkpoints specified, use regular station-based mapping
+        if (!entry.goingCheckpoint && !entry.returningCheckpoint && !entry.cancellationPoint) {
+          await updateFuelRecordForLPOEntry(
+            entry.doNo,
+            entry.liters,
+            lpoSummary.station,
+            entry.truckNo,
+            undefined,
+            entry.isCustomStation ? {
+              isCustomStation: entry.isCustomStation,
+              customGoingCheckpoint: entry.customGoingCheckpoint,
+              customReturnCheckpoint: entry.customReturnCheckpoint,
+            } : undefined
+          );
+        }
       }
     }
 

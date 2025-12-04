@@ -185,6 +185,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         theme: state.theme, // Include theme preference
       }));
 
+      // Clear active tab on login to force role default tab
+      localStorage.removeItem('fuel_order_active_tab');
+
       dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Login failed';
@@ -197,6 +200,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = () => {
     localStorage.removeItem('fuel_order_auth');
     localStorage.removeItem('fuel_order_token');
+    localStorage.removeItem('fuel_order_active_tab'); // Clear active tab on logout
     // Reset state but preserve theme preference
     const currentTheme = state.theme;
     dispatch({ type: 'AUTH_LOGOUT' });
