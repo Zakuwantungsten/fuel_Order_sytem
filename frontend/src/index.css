@@ -89,6 +89,30 @@ textarea {
   color-scheme: light;
 }
 
+/* Mobile-specific select fixes */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: none;
+  max-width: 100%;
+  touch-action: manipulation;
+}
+
+/* Ensure select options are visible on mobile */
+select option {
+  background-color: white;
+  color: black;
+  padding: 8px;
+  font-size: 16px; /* Prevents zoom on iOS */
+}
+
+/* Dark mode select options */
+html.dark select option {
+  background-color: #1f2937;
+  color: #f9fafb;
+}
+
 /* Light mode checkboxes and radios */
 input[type="checkbox"],
 input[type="radio"] {
@@ -766,5 +790,27 @@ html.dark .bg-info {
   
   .page-break-avoid {
     page-break-inside: avoid;
+  }
+}
+
+/* Mobile-specific fixes for select dropdowns */
+@media (max-width: 640px) {
+  /* Ensure selects are properly sized on mobile */
+  select {
+    font-size: 16px !important; /* Prevents iOS zoom */
+    min-height: 44px; /* iOS recommended touch target */
+    width: 100%;
+  }
+  
+  /* Ensure containers don't clip dropdowns */
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+  
+  /* Ensure select options are readable */
+  select option {
+    font-size: 16px;
+    min-height: 44px;
+    padding: 12px 8px;
   }
 }

@@ -16,11 +16,13 @@ import {
   AlertCircle,
   X,
   ChevronRight,
+  ChevronDown,
   Sun,
   Moon,
   LogOut,
   Wifi,
-  WifiOff
+  WifiOff,
+  Check
 } from 'lucide-react';
 import { lposAPI } from '../services/api';
 import { LPOEntry } from '../types';
@@ -99,6 +101,10 @@ export function ManagerView({ user }: ManagerViewProps) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Custom dropdown states
+  const [showStationDropdown, setShowStationDropdown] = useState(false);
+  const stationDropdownRef = useRef<HTMLDivElement>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -239,6 +245,18 @@ export function ManagerView({ user }: ManagerViewProps) {
       }
     };
   }, [fetchLPOEntries, isOnline]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
+        setShowStationDropdown(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter and sort entries
   const filteredEntries = useMemo(() => {
@@ -530,16 +548,16 @@ export function ManagerView({ user }: ManagerViewProps) {
 
         {/* Search and Filter */}
         <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-2 sm:p-3 transition-colors">
-            <div className="flex items-center space-x-2">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 sm:w-5 sm:h-5" />
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-2 sm:p-3 transition-colors relative">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 sm:w-5 sm:h-5 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search truck, LPO, DO..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors text-sm"
+                  className="w-full pl-9 sm:pl-10 pr-9 py-2 sm:py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors text-sm"
                 />
                 {searchTerm && (
                   <button
@@ -553,13 +571,13 @@ export function ManagerView({ user }: ManagerViewProps) {
               {isSuperManager && (
                 <button
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`p-2 sm:p-2.5 rounded-lg border transition-colors ${
+                  className={`flex-shrink-0 p-2 sm:p-2.5 rounded-lg border transition-colors ${
                     showFilters || selectedStation !== 'all'
                       ? 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400'
                       : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400'
                   }`}
                 >
-                  <Filter className="w-5 h-5" />
+                  <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               )}
             </div>
@@ -567,17 +585,52 @@ export function ManagerView({ user }: ManagerViewProps) {
             {/* Station Filter Dropdown */}
             {isSuperManager && showFilters && (
               <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-100 dark:border-gray-700">
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1 sm:mb-2">Filter by Station</label>
-                <select
-                  value={selectedStation}
-                  onChange={(e) => setSelectedStation(e.target.value)}
-                  className="w-full px-3 py-2 sm:py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors text-sm"
-                >
-                  <option value="all">All Stations</option>
-                  {availableStations.map(station => (
-                    <option key={station} value={station}>{station}</option>
-                  ))}
-                </select>
+                <label htmlFor="station-filter" className="block text-xs text-gray-500 dark:text-gray-400 mb-1 sm:mb-2">Filter by Station</label>
+                <div className="relative" ref={stationDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowStationDropdown(!showStationDropdown)}
+                    className="w-full px-3 py-2 sm:py-2.5 pr-10 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors text-left flex items-center justify-between"
+                  >
+                    <span className="truncate">{selectedStation === 'all' ? 'All Stations' : selectedStation}</span>
+                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {/* Custom Dropdown Menu */}
+                  {showStationDropdown && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStation('all');
+                          setShowStationDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          selectedStation === 'all' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>All Stations</span>
+                        {selectedStation === 'all' && <Check className="w-4 h-4" />}
+                      </button>
+                      {availableStations.map(station => (
+                        <button
+                          key={station}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStation(station);
+                            setShowStationDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                            selectedStation === station ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          }`}
+                        >
+                          <span>{station}</span>
+                          {selectedStation === station && <Check className="w-4 h-4" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

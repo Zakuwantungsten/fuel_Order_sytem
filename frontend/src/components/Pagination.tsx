@@ -1,5 +1,5 @@
-import React from 'react';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check } from 'lucide-react';
 
 interface PaginationProps {
   currentPage: number;
@@ -22,8 +22,23 @@ const Pagination: React.FC<PaginationProps> = ({
   showItemsPerPage = true,
   itemsPerPageOptions = [10, 25, 50, 100],
 }) => {
+  const [showPerPageDropdown, setShowPerPageDropdown] = useState(false);
+  const perPageDropdownRef = useRef<HTMLDivElement>(null);
+  
   const startItem = (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (perPageDropdownRef.current && !perPageDropdownRef.current.contains(event.target as Node)) {
+        setShowPerPageDropdown(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Generate page numbers to display
   const getPageNumbers = (): (number | string)[] => {
@@ -69,8 +84,8 @@ const Pagination: React.FC<PaginationProps> = ({
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 gap-4">
       {/* Left side - Items info and per page selector */}
-      <div className="flex items-center gap-4">
-        <span className="text-sm text-gray-700 dark:text-gray-300">
+      <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
+        <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 text-center sm:text-left">
           Showing <span className="font-medium">{startItem}</span> to{' '}
           <span className="font-medium">{endItem}</span> of{' '}
           <span className="font-medium">{totalItems}</span> results
@@ -78,21 +93,41 @@ const Pagination: React.FC<PaginationProps> = ({
         
         {showItemsPerPage && onItemsPerPageChange && (
           <div className="flex items-center gap-2">
-            <label htmlFor="itemsPerPage" className="text-sm text-gray-600 dark:text-gray-400">
+            <label className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
               Per page:
             </label>
-            <select
-              id="itemsPerPage"
-              value={itemsPerPage}
-              onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              {itemsPerPageOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            <div className="relative" ref={perPageDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowPerPageDropdown(!showPerPageDropdown)}
+                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md pl-3 pr-8 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 cursor-pointer min-w-[70px] flex items-center justify-between"
+              >
+                <span className="text-sm">{itemsPerPage}</span>
+                <ChevronDown className={`w-3 h-3 absolute right-2 transition-transform ${showPerPageDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {/* Custom Dropdown Menu */}
+              {showPerPageDropdown && (
+                <div className="absolute z-50 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg min-w-[70px]">
+                  {itemsPerPageOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => {
+                        onItemsPerPageChange(option);
+                        setShowPerPageDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                        itemsPerPage === option ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>{option}</span>
+                      {itemsPerPage === option && <Check className="w-3 h-3" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
