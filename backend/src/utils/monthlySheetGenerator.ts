@@ -30,7 +30,7 @@ export const addMonthlySummarySheets = (
   monthNames.reverse().forEach((monthName) => {
     if (ordersByMonth[monthName] && ordersByMonth[monthName].length > 0) {
       const monthOrders = ordersByMonth[monthName];
-      const monthSheet = workbook.addWorksheet(`${monthName} Summary`);
+      const monthSheet = workbook.addWorksheet(monthName);
 
       // Helper to format dates
       const formatDate = (dateString: string) => {
