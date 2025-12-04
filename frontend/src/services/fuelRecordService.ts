@@ -331,10 +331,22 @@ export function determineLPOsToGenerate(
 export function createFuelRecordFromDO(
   deliveryOrder: DeliveryOrder,
   _loadingPoint: 'DAR_YARD' | 'KISARAWE' | 'DAR_STATION' = 'DAR_YARD',
-  totalLiters: number = 2200
-): { fuelRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[] } {
+  totalLiters: number | null = null, // Allow null for unlisted routes
+  extraFuel: number | null = null // Allow null for unlisted trucks
+): { fuelRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[]; isLocked: boolean; missingFields: string[] } {
   const isImport = deliveryOrder.importOrExport === 'IMPORT';
-  const extra = calculateExtraFuel(deliveryOrder.truckNo);
+  
+  // Determine if configuration is missing
+  const missingTotalLiters = totalLiters === null;
+  const missingExtraFuel = extraFuel === null;
+  const isLocked = missingTotalLiters || missingExtraFuel;
+  const missingFields: string[] = [];
+  
+  if (missingTotalLiters) missingFields.push('totalLiters');
+  if (missingExtraFuel) missingFields.push('extraFuel');
+  
+  // Calculate extra fuel if provided, otherwise null
+  const extra = extraFuel !== null ? extraFuel : null;
   const start = determineJourneyStart(deliveryOrder);
   
   // Note: _loadingPoint parameter preserved for future yard fuel tracking implementation
@@ -352,8 +364,12 @@ export function createFuelRecordFromDO(
       start: start,
       from: start,
       to: deliveryOrder.destination,
-      totalLts: totalLiters,
-      extra: extra || 0,
+      totalLts: totalLiters, // Can be null if route not configured
+      extra: extra, // Can be null if truck not configured
+      isLocked: isLocked,
+      pendingConfigReason: isLocked 
+        ? (missingFields.length === 2 ? 'both' : missingFields[0] === 'totalLiters' ? 'missing_total_liters' : 'missing_extra_fuel')
+        : null,
       // ALL checkpoint fields start at 0 - they get filled when fuel orders are made
       tangaYard: 0,
       darYard: 0,
@@ -369,17 +385,17 @@ export function createFuelRecordFromDO(
       moroReturn: 0,
       darReturn: 0,
       tangaReturn: 0,
-      balance: totalLiters + extra, // Initial balance is totalLts + extra
+      balance: totalLiters !== null && extra !== null ? totalLiters + extra : 0, // Balance is 0 if missing config
     };
     
     // Don't generate any LPOs automatically - they will be created manually as needed
     const lposToGenerate: LPOToGenerate[] = [];
     
-    return { fuelRecord, lposToGenerate };
+    return { fuelRecord, lposToGenerate, isLocked, missingFields };
   } else {
     // Return journey - will update existing record
     // This is handled separately in updateFuelRecordWithReturnDO
-    return { fuelRecord: {}, lposToGenerate: [] };
+    return { fuelRecord: {}, lposToGenerate: [], isLocked: false, missingFields: [] };
   }
 }
 

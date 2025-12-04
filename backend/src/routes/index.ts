@@ -14,6 +14,7 @@ import trashRoutes from './trashRoutes';
 import backupRoutes from './backupRoutes';
 import analyticsRoutes from './analyticsRoutes';
 import configRoutes from './configRoutes';
+import notificationRoutes from './notificationRoutes';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/users', userRoutes);
 router.use('/admin', adminRoutes);
 router.use('/driver-accounts', driverAccountRoutes);
+router.use('/notifications', notificationRoutes);
 router.use('/system-admin', systemAdminRoutes);
 router.use('/trash', trashRoutes);
 router.use('/system-admin', backupRoutes);

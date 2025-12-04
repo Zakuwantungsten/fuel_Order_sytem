@@ -241,3 +241,10 @@ and also handling when the system doesn't know the total liters for a truck on t
 ask lance about data archiving to improve performance
 
 Google app password - wszw ewxu bkfx gazt
+
+
+
+changes in total liters for trucks when an export do is created -
+extra liters hakuna
+new routes yenye hakuna 
+

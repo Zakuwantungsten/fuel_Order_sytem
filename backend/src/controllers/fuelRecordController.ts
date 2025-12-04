@@ -3,6 +3,7 @@ import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
+import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
 
 /**
  * Get all fuel records with pagination and filters
@@ -198,9 +199,41 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`Fuel record created for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
 
+    // Check if configuration is missing and create notification
+    if (fuelRecord.isLocked && fuelRecord.pendingConfigReason) {
+      const missingFields: ('totalLiters' | 'extraFuel')[] = [];
+      
+      if (fuelRecord.pendingConfigReason === 'both') {
+        missingFields.push('totalLiters', 'extraFuel');
+      } else if (fuelRecord.pendingConfigReason === 'missing_total_liters') {
+        missingFields.push('totalLiters');
+      } else if (fuelRecord.pendingConfigReason === 'missing_extra_fuel') {
+        missingFields.push('extraFuel');
+      }
+
+      // Extract truck suffix for notification
+      const truckSuffix = fuelRecord.truckNo.split(' ').pop() || '';
+
+      await createMissingConfigNotification(
+        fuelRecord._id.toString(),
+        missingFields,
+        {
+          doNumber: fuelRecord.goingDo,
+          truckNo: fuelRecord.truckNo,
+          destination: fuelRecord.to,
+          truckSuffix,
+        },
+        req.user?.username || 'system'
+      );
+
+      logger.info(`Created notification for locked fuel record ${fuelRecord._id} - missing: ${missingFields.join(', ')}`);
+    }
+
     res.status(201).json({
       success: true,
-      message: 'Fuel record created successfully',
+      message: fuelRecord.isLocked 
+        ? 'Fuel record created but locked - admin notification sent for missing configuration'
+        : 'Fuel record created successfully',
       data: fuelRecord,
     });
   } catch (error: any) {
@@ -223,6 +256,30 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       req.body.month = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
     }
 
+    // Check if we're filling in missing configuration
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) {
+      throw new ApiError(404, 'Fuel record not found');
+    }
+
+    const wasLocked = existingRecord.isLocked;
+    const fillingTotalLiters = existingRecord.totalLts === null && req.body.totalLts !== null && req.body.totalLts !== undefined;
+    const fillingExtraFuel = existingRecord.extra === null && req.body.extra !== null && req.body.extra !== undefined;
+
+    // Auto-unlock if all required fields are now provided
+    if (wasLocked && (fillingTotalLiters || fillingExtraFuel)) {
+      const willHaveTotalLts = fillingTotalLiters ? req.body.totalLts : existingRecord.totalLts;
+      const willHaveExtra = fillingExtraFuel ? req.body.extra : existingRecord.extra;
+
+      if (willHaveTotalLts !== null && willHaveExtra !== null) {
+        req.body.isLocked = false;
+        req.body.pendingConfigReason = null;
+        
+        // Recalculate balance if both values are now set
+        req.body.balance = willHaveTotalLts + willHaveExtra;
+      }
+    }
+
     const fuelRecord = await FuelRecord.findOneAndUpdate(
       { _id: id, isDeleted: false },
       req.body,
@@ -235,9 +292,17 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`Fuel record updated for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
 
+    // Auto-resolve notifications if record was unlocked
+    if (wasLocked && !fuelRecord.isLocked) {
+      await autoResolveNotifications(id, req.user?.username || 'admin');
+      logger.info(`Fuel record ${id} unlocked and notifications resolved`);
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Fuel record updated successfully',
+      message: wasLocked && !fuelRecord.isLocked 
+        ? 'Fuel record updated and unlocked successfully'
+        : 'Fuel record updated successfully',
       data: fuelRecord,
     });
   } catch (error: any) {
@@ -291,7 +356,7 @@ export const getMonthlyFuelSummary = async (req: AuthRequest, res: Response): Pr
     // Calculate summary
     const summary = {
       totalRecords: fuelRecords.length,
-      totalFuel: fuelRecords.reduce((sum, record) => sum + record.totalLts, 0),
+      totalFuel: fuelRecords.reduce((sum, record) => sum + (record.totalLts || 0), 0),
       totalBalance: fuelRecords.reduce((sum, record) => sum + record.balance, 0),
       yardTotals: {
         mmsa: fuelRecords.reduce((sum, record) => sum + (record.mmsaYard || 0), 0),

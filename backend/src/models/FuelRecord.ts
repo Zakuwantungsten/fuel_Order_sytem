@@ -44,12 +44,24 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
     },
     totalLts: {
       type: Number,
-      required: [true, 'Total liters is required'],
+      required: false, // Changed to allow null for pending admin configuration
       min: [0, 'Total liters cannot be negative'],
+      default: null,
     },
     extra: {
       type: Number,
-      default: 0,
+      required: false, // Changed to allow null for pending admin configuration
+      default: null,
+    },
+    // Lock status for pending configurations
+    isLocked: {
+      type: Boolean,
+      default: false,
+    },
+    pendingConfigReason: {
+      type: String,
+      enum: ['missing_total_liters', 'missing_extra_fuel', 'both', null],
+      default: null,
     },
     // Yard allocations
     mmsaYard: {

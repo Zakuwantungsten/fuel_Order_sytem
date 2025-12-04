@@ -23,7 +23,10 @@ export function TruckBatchManagement({ onClose }: TruckBatchManagementProps) {
     loadBatches();
   }, []);
 
-  const loadBatches = () => {
+  const loadBatches = async () => {
+    // Sync from backend first
+    await FuelConfigService.syncTruckBatchesFromBackend();
+    // Then load from localStorage
     const allBatches = FuelConfigService.getAllTruckBatches();
     setBatches(allBatches);
   };
@@ -48,16 +51,16 @@ export function TruckBatchManagement({ onClose }: TruckBatchManagementProps) {
     loadBatches();
   };
 
-  const handleMoveTruck = (suffix: string, newBatch: 100 | 80 | 60) => {
+  const handleMoveTruck = async (suffix: string, newBatch: 100 | 80 | 60) => {
     if (confirm(`Move "${suffix.toUpperCase()}" to ${newBatch}L batch?`)) {
-      FuelConfigService.updateTruckBatch(suffix, newBatch);
+      await FuelConfigService.updateTruckBatch(suffix, newBatch);
       loadBatches();
     }
   };
 
-  const handleDeleteTruck = (suffix: string) => {
+  const handleDeleteTruck = async (suffix: string) => {
     if (confirm(`Remove "${suffix.toUpperCase()}" from batch configuration?\nIt will revert to default 60L extra fuel.`)) {
-      FuelConfigService.removeTruckFromBatches(suffix);
+      await FuelConfigService.removeTruckFromBatches(suffix);
       loadBatches();
     }
   };

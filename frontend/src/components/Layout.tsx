@@ -18,6 +18,7 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo, RESOURCES, ACTIONS } from '../utils/permissions';
+import NotificationBell from './NotificationBell';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -224,6 +225,14 @@ const Layout = ({ children }: LayoutProps) => {
             </h2>
           </div>
           <div className="flex items-center space-x-4">
+            {/* Notification Bell */}
+            <NotificationBell onNotificationClick={(notification) => {
+              // Navigate to fuel record or relevant page
+              if (notification.metadata?.fuelRecordId) {
+                window.location.href = `/fuel-records?id=${notification.metadata.fuelRecordId}`;
+              }
+            }} />
+            
             {/* User Menu */}
             <div className="relative" ref={userMenuRef}>
               <button

@@ -9,3 +9,4 @@ export { YardFuelDispense, IYardFuelDispenseDocument } from './YardFuelDispense'
 export { SystemConfig, ISystemConfigDocument } from './SystemConfig';
 export { DriverAccountEntry, IDriverAccountEntryDocument } from './DriverAccountEntry';
 export { AuditLog, IAuditLogDocument } from './AuditLog';
+export { Notification, INotification } from './Notification';

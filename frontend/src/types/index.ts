@@ -229,8 +229,11 @@ export interface FuelRecord {
   start: string;
   from: string;
   to: string;
-  totalLts: number;
-  extra?: number;
+  totalLts: number | null;
+  extra?: number | null;
+  // Lock status for pending configurations
+  isLocked?: boolean;
+  pendingConfigReason?: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | null;
   mmsaYard?: number;
   tangaYard?: number;
   darYard?: number;
@@ -896,4 +899,31 @@ export interface FormulaExample {
 export interface FuelRecordFieldOption {
   value: FuelRecordField;
   label: string;
+}
+
+// Notification Types
+export interface Notification {
+  id?: string;
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'info' | 'warning' | 'error';
+  title: string;
+  message: string;
+  relatedModel: 'FuelRecord' | 'DeliveryOrder' | 'LPO' | 'User';
+  relatedId: string;
+  metadata?: {
+    fuelRecordId?: string;
+    doNumber?: string;
+    truckNo?: string;
+    destination?: string;
+    truckSuffix?: string;
+    missingFields?: string[];
+  };
+  recipients: string[];
+  isRead: boolean;
+  readBy: string[];
+  status: 'pending' | 'resolved' | 'dismissed';
+  resolvedAt?: string;
+  resolvedBy?: string;
+  createdBy: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

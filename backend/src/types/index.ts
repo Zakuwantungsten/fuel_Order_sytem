@@ -365,8 +365,11 @@ export interface IFuelRecord {
   start: string;
   from: string;
   to: string;
-  totalLts: number;
-  extra?: number;
+  totalLts: number | null;
+  extra?: number | null;
+  // Lock status for pending configurations
+  isLocked?: boolean;
+  pendingConfigReason?: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | null;
   mmsaYard?: number;
   tangaYard?: number;
   darYard?: number;

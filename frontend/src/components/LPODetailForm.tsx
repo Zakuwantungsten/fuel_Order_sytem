@@ -418,6 +418,28 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         };
       }
 
+      // Check if any active fuel record is locked (pending admin configuration)
+      const lockedRecord = activeFuelRecords.find((r: any) => r.isLocked);
+      if (lockedRecord) {
+        const reasonText = lockedRecord.pendingConfigReason === 'both' 
+          ? 'route total liters and truck batch assignment'
+          : lockedRecord.pendingConfigReason === 'missing_total_liters'
+          ? 'route total liters configuration'
+          : 'truck batch assignment';
+        
+        return {
+          fuelRecord: lockedRecord,
+          goingDo: lockedRecord.goingDo || 'NIL',
+          returnDo: lockedRecord.returnDo || 'NIL',
+          destination: lockedRecord.to || 'NIL',
+          goingDestination: lockedRecord.originalGoingTo || lockedRecord.to || 'NIL',
+          balance: 0,
+          message: `🔒 LOCKED: This fuel record is waiting for admin to configure ${reasonText}.\n\nDO: ${lockedRecord.goingDo}\nTruck: ${lockedRecord.truckNo}\nDestination: ${lockedRecord.to}\n\nPlease contact admin to unlock this record before creating LPOs.`,
+          success: false,
+          warningType: 'not_found' as const
+        };
+      }
+
       // Get current date and calculate month boundaries
       const now = new Date();
       const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);

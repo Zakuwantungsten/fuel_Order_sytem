@@ -162,8 +162,13 @@ export const fuelRecordValidation = {
     body('from').trim().notEmpty().withMessage('From location is required'),
     body('to').trim().notEmpty().withMessage('To location is required'),
     body('totalLts')
+      .optional({ nullable: true })
       .isFloat({ min: 0 })
       .withMessage('Total liters must be a non-negative number'),
+    body('extra')
+      .optional({ nullable: true })
+      .isFloat({ min: 0 })
+      .withMessage('Extra fuel must be a non-negative number'),
     body('balance').isNumeric().withMessage('Balance must be a number'),
   ],
 };

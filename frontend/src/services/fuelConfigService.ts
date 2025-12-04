@@ -3,6 +3,8 @@
  * Manage all configurable settings for fuel record calculations
  */
 
+import { adminAPI } from './api';
+
 export interface FuelConfig {
   // Truck batch configurations
   truckBatches: {
@@ -274,6 +276,28 @@ export class FuelConfigService {
       console.error('Failed to load fuel config:', error);
     }
     return DEFAULT_FUEL_CONFIG;
+  }
+  
+  /**
+   * Sync truck batches from backend and update localStorage
+   */
+  static async syncTruckBatchesFromBackend(): Promise<void> {
+    try {
+      const backendBatches = await adminAPI.getTruckBatches();
+      
+      // Transform backend format (objects) to frontend format (strings)
+      const config = this.loadConfig();
+      config.truckBatches = {
+        batch_100: backendBatches.batch_100.map(t => t.truckSuffix),
+        batch_80: backendBatches.batch_80.map(t => t.truckSuffix),
+        batch_60: backendBatches.batch_60.map(t => t.truckSuffix),
+      };
+      
+      this.saveConfig(config);
+      console.log('✓ Truck batches synced from backend');
+    } catch (error) {
+      console.warn('Failed to sync truck batches from backend:', error);
+    }
   }
   
   /**
@@ -586,13 +610,13 @@ export class FuelConfigService {
   }
   
   /**
-   * Add or update truck in a batch
+   * Add or update truck in a batch (localStorage + backend sync)
    */
-  static updateTruckBatch(
+  static async updateTruckBatch(
     truckSuffix: string, 
     batch: 100 | 80 | 60,
     config?: FuelConfig
-  ): FuelConfig {
+  ): Promise<FuelConfig> {
     const cfg = config || this.loadConfig();
     const suffix = truckSuffix.toLowerCase();
     
@@ -613,13 +637,25 @@ export class FuelConfigService {
     // Save to localStorage
     this.saveConfig(cfg);
     
+    // Sync to backend
+    try {
+      await adminAPI.addTruckToBatch({ 
+        truckSuffix: suffix, 
+        extraLiters: batch 
+      });
+      console.log(`✓ Truck batch synced to backend: ${suffix} → ${batch}L`);
+    } catch (error) {
+      console.warn('Failed to sync truck batch to backend:', error);
+      // Continue even if backend sync fails (localStorage is updated)
+    }
+    
     return cfg;
   }
   
   /**
-   * Remove truck from all batches
+   * Remove truck from all batches (localStorage + backend sync)
    */
-  static removeTruckFromBatches(truckSuffix: string, config?: FuelConfig): FuelConfig {
+  static async removeTruckFromBatches(truckSuffix: string, config?: FuelConfig): Promise<FuelConfig> {
     const cfg = config || this.loadConfig();
     const suffix = truckSuffix.toLowerCase();
     
@@ -629,6 +665,15 @@ export class FuelConfigService {
     
     // Save to localStorage
     this.saveConfig(cfg);
+    
+    // Sync to backend
+    try {
+      await adminAPI.removeTruckFromBatch(suffix);
+      console.log(`✓ Truck removal synced to backend: ${suffix}`);
+    } catch (error) {
+      console.warn('Failed to sync truck removal to backend:', error);
+      // Continue even if backend sync fails (localStorage is updated)
+    }
     
     return cfg;
   }

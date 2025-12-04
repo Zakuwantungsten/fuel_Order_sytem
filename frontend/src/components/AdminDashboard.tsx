@@ -18,6 +18,7 @@ import {
   TrendingUp,
   BarChart3,
   UserPlus,
+  Lock,
 } from 'lucide-react';
 import {
   adminAPI,
@@ -32,12 +33,13 @@ import { User } from '../types';
 import CreateUserModal, { BatchTruckCreation } from './CreateUserModal';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import Pagination from './Pagination';
+import PendingConfigurations from '../pages/PendingConfigurations';
 
 interface AdminDashboardProps {
   user: any;
 }
 
-type TabType = 'overview' | 'stations' | 'routes' | 'trucks' | 'allocations' | 'users';
+type TabType = 'overview' | 'stations' | 'routes' | 'trucks' | 'allocations' | 'users' | 'pending';
 
 export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -253,6 +255,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'pending', label: 'Pending Config', icon: Lock },
     { id: 'stations', label: 'Fuel Stations', icon: Fuel },
     { id: 'routes', label: 'Routes', icon: MapPin },
     { id: 'trucks', label: 'Truck Batches', icon: Truck },
@@ -389,6 +392,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
                     onUpdate={handleUpdateAllocations}
                   />
                 )}
+                {activeTab === 'pending' && <PendingConfigurations />}
                 {activeTab === 'users' && (
                   <>
                     <UsersTab
