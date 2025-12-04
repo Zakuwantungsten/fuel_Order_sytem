@@ -759,8 +759,11 @@ export const getAllTrucks = async (req: AuthRequest, res: Response): Promise<voi
  */
 export const getAllWorkbooks = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // Get distinct years from delivery orders
-    const years = await DeliveryOrder.distinct('date', { isDeleted: false });
+    // Get distinct years from delivery orders (DO type only)
+    const years = await DeliveryOrder.distinct('date', { 
+      isDeleted: false,
+      doType: 'DO'
+    });
     
     // Extract unique years from dates (format: YYYY-MM-DD)
     const uniqueYears = [...new Set(
@@ -780,6 +783,7 @@ export const getAllWorkbooks = async (req: AuthRequest, res: Response): Promise<
         
         const count = await DeliveryOrder.countDocuments({
           isDeleted: false,
+          doType: 'DO',
           date: { $gte: yearStart, $lte: yearEnd }
         });
 
@@ -788,6 +792,7 @@ export const getAllWorkbooks = async (req: AuthRequest, res: Response): Promise<
           {
             $match: {
               isDeleted: false,
+              doType: 'DO',
               date: { $gte: yearStart, $lte: yearEnd }
             }
           },
@@ -835,6 +840,7 @@ export const getWorkbookByYear = async (req: AuthRequest, res: Response): Promis
     // Get all DOs for the year - each DO is its own sheet
     const deliveryOrders = await DeliveryOrder.find({
       isDeleted: false,
+      doType: 'DO',
       date: { $gte: yearStart, $lte: yearEnd }
     }).sort({ date: 1, doNumber: 1 }).lean();
 
@@ -866,7 +872,10 @@ export const getWorkbookByYear = async (req: AuthRequest, res: Response): Promis
  */
 export const getAvailableYears = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const years = await DeliveryOrder.distinct('date', { isDeleted: false });
+    const years = await DeliveryOrder.distinct('date', { 
+      isDeleted: false,
+      doType: 'DO'
+    });
     
     const uniqueYears = [...new Set(
       years
@@ -904,6 +913,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     // Get all DOs for the year
     const deliveryOrders = await DeliveryOrder.find({
       isDeleted: false,
+      doType: 'DO',
       date: { $gte: yearStart, $lte: yearEnd }
     }).sort({ date: 1, doNumber: 1 }).lean();
 

@@ -140,35 +140,6 @@ export const addMonthlySummarySheets = (
 
         rowNum++;
       });
-
-      // Add totals row
-      const totalsRow = monthSheet.getRow(rowNum + 1);
-      const totalTonnage = monthOrders.reduce((sum, o) => sum + o.tonnages, 0);
-      const totalRevenue = monthOrders.reduce((sum, o) => sum + (o.tonnages * o.ratePerTon), 0);
-      
-      totalsRow.values = [
-        '', '', '', '', '', '', '', '', '', '', '', '', 'TOTAL:',
-        totalTonnage,
-        '',
-        totalRevenue,
-      ];
-      totalsRow.font = { bold: true };
-      totalsRow.alignment = { horizontal: 'center', vertical: 'middle' };
-      totalsRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE8F4F8' },
-      };
-
-      // Add borders to totals row
-      for (let col = 1; col <= 16; col++) {
-        totalsRow.getCell(col).border = {
-          top: { style: 'double' },
-          left: { style: 'thin' },
-          bottom: { style: 'double' },
-          right: { style: 'thin' },
-        };
-      }
     }
   });
 };
