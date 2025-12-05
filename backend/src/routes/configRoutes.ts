@@ -15,6 +15,7 @@ router.delete('/stations/:id', configController.deleteFuelStation);
 
 // Route configuration routes
 router.get('/routes', configController.getRoutes);
+router.get('/routes/find/:destination', configController.findRouteByDestination);
 router.post('/routes', configController.createRoute);
 router.put('/routes/:id', configController.updateRoute);
 router.delete('/routes/:id', configController.deleteRoute);

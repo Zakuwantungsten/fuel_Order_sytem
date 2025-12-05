@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, LogIn, User, Lock, AlertCircle, Sun, Moon } from 'lucide-react';
+import { Eye, EyeOff, LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo } from '../utils/permissions';
 import tahmeedLogo from '../assets/logo.png';
@@ -13,7 +13,7 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const { login, isLoading, error, clearError, toggleTheme, isDark } = useAuth();
+  const { login, isLoading, error, clearError } = useAuth();
 
   // Clear error when component unmounts or credentials change
   useEffect(() => {
@@ -81,15 +81,6 @@ const Login: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-6 transition-all duration-500">
-      {/* Theme Toggle Button */}
-      <button
-        onClick={toggleTheme}
-        className="fixed top-6 right-6 p-4 btn btn-primary rounded-2xl shadow-2xl hover:shadow-3xl transition-all duration-300 z-50 transform hover:scale-105"
-        title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      >
-        {isDark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
-      </button>
-
       <div className="w-full max-w-6xl flex bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20 dark:border-gray-700/50">
         {/* Left side - Login Form */}
         <div className="w-full lg:w-1/2 p-8 lg:p-12">

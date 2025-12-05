@@ -1299,6 +1299,8 @@ export const configAPI = {
     defaultRate: number;
     defaultLitersGoing: number;
     defaultLitersReturning: number;
+    fuelRecordFieldGoing?: string;
+    fuelRecordFieldReturning?: string;
     formulaGoing?: string;
     formulaReturning?: string;
   }) => {
@@ -1324,7 +1326,9 @@ export const configAPI = {
   
   createRoute: async (data: {
     routeName: string;
+    origin?: string;
     destination: string;
+    destinationAliases?: string[];
     defaultTotalLiters: number;
     formula?: string;
     description?: string;

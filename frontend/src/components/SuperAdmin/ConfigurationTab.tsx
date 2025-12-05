@@ -34,7 +34,9 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
 
   const [routeForm, setRouteForm] = useState({
     routeName: '',
+    origin: '',
     destination: '',
+    destinationAliases: '',
     defaultTotalLiters: '',
     description: '',
   });
@@ -120,7 +122,11 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
     try {
       await configAPI.createRoute({
         routeName: routeForm.routeName,
+        origin: routeForm.origin || undefined,
         destination: routeForm.destination,
+        destinationAliases: routeForm.destinationAliases
+          ? routeForm.destinationAliases.split(',').map(a => a.trim()).filter(Boolean)
+          : undefined,
         defaultTotalLiters: parseFloat(routeForm.defaultTotalLiters),
         description: routeForm.description || undefined,
       });
@@ -138,7 +144,11 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
     try {
       await configAPI.updateRoute(editingRoute._id, {
         routeName: routeForm.routeName,
+        origin: routeForm.origin || undefined,
         destination: routeForm.destination,
+        destinationAliases: routeForm.destinationAliases
+          ? routeForm.destinationAliases.split(',').map(a => a.trim()).filter(Boolean)
+          : undefined,
         defaultTotalLiters: parseFloat(routeForm.defaultTotalLiters),
         description: routeForm.description || undefined,
       });
@@ -185,7 +195,9 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
       setEditingRoute(route);
       setRouteForm({
         routeName: route.routeName,
+        origin: route.origin || '',
         destination: route.destination,
+        destinationAliases: route.destinationAliases?.join(', ') || '',
         defaultTotalLiters: route.defaultTotalLiters.toString(),
         description: route.description || '',
       });
@@ -209,7 +221,9 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
   const resetRouteForm = () => {
     setRouteForm({
       routeName: '',
+      origin: '',
       destination: '',
+      destinationAliases: '',
       defaultTotalLiters: '',
       description: '',
     });
@@ -362,8 +376,9 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Route</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Destination</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">From → To</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Default Liters</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Aliases</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Description</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-gray-600 dark:text-gray-400">Actions</th>
                 </tr>
@@ -372,8 +387,31 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
                 {routes.map((route) => (
                   <tr key={route._id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{route.routeName}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{route.destination}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      {route.origin ? (
+                        <span className="flex items-center gap-1">
+                          <span className="font-medium text-green-600 dark:text-green-400">{route.origin}</span>
+                          <span className="text-gray-400">→</span>
+                          <span className="font-medium text-blue-600 dark:text-blue-400">{route.destination}</span>
+                        </span>
+                      ) : (
+                        <span className="font-medium text-blue-600 dark:text-blue-400">{route.destination}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{route.defaultTotalLiters} L</td>
+                    <td className="px-4 py-3 text-xs">
+                      {route.destinationAliases && route.destinationAliases.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {route.destinationAliases.map((alias, idx) => (
+                            <span key={idx} className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded">
+                              {alias}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{route.description || '—'}</td>
                     <td className="px-4 py-3 text-sm text-right">
                       <button onClick={() => openRouteModal(route)} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 mr-3">
@@ -386,7 +424,7 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
                   </tr>
                 ))}
                 {routes.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No routes configured.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No routes configured.</td></tr>
                 )}
               </tbody>
             </table>
@@ -493,18 +531,31 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Route Name *</label>
                     <input type="text" value={routeForm.routeName} onChange={(e) => setRouteForm({ ...routeForm, routeName: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Lusaka Express" />
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Dar to Kolwezi Route" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination *</label>
-                    <input type="text" value={routeForm.destination} onChange={(e) => setRouteForm({ ...routeForm, destination: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Lusaka, Zambia" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Origin (From)</label>
+                    <input type="text" value={routeForm.origin} onChange={(e) => setRouteForm({ ...routeForm, origin: e.target.value })}
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Dar, DSM, Tanga" />
+                    <p className="mt-1 text-xs text-gray-500">Starting point (optional)</p>
                   </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination *</label>
+                  <input type="text" value={routeForm.destination} onChange={(e) => setRouteForm({ ...routeForm, destination: e.target.value })}
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Kolwezi, Lusaka" />
+                  <p className="mt-1 text-xs text-gray-500">Main destination (will be auto-uppercased)</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination Aliases</label>
+                  <input type="text" value={routeForm.destinationAliases} onChange={(e) => setRouteForm({ ...routeForm, destinationAliases: e.target.value })}
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., DSM, DAR (comma-separated)" />
+                  <p className="mt-1 text-xs text-gray-500">Alternative names for destination (e.g., "DSM, DAR" for Dar es Salaam)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Total Liters *</label>
                   <input type="number" value={routeForm.defaultTotalLiters} onChange={(e) => setRouteForm({ ...routeForm, defaultTotalLiters: e.target.value })}
-                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="1500" />
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="2400" />
                   <p className="mt-1 text-xs text-gray-500">Default liters assigned when creating new fuel records for this route</p>
                 </div>
                 <div>

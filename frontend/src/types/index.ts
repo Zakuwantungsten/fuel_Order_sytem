@@ -877,7 +877,9 @@ export interface FuelStationConfig {
 export interface RouteConfig {
   _id: string;
   routeName: string;
+  origin?: string;
   destination: string;
+  destinationAliases?: string[];
   defaultTotalLiters: number;
   description?: string;
   isActive: boolean;

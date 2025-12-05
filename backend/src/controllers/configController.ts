@@ -260,6 +260,43 @@ export const getRoutes = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * Find route by destination or alias
+ * GET /api/system-admin/config/routes/find/:destination
+ */
+export const findRouteByDestination = async (req: AuthRequest, res: Response) => {
+  try {
+    const { destination } = req.params;
+    const normalizedDest = destination.trim().toUpperCase();
+    
+    // Try to find by destination or alias
+    const route = await RouteConfig.findOne({
+      $or: [
+        { destination: normalizedDest },
+        { destinationAliases: normalizedDest }
+      ],
+      isActive: true
+    });
+    
+    if (!route) {
+      return res.status(404).json({
+        success: false,
+        message: 'Route not found',
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: route,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to find route',
+    });
+  }
+};
+
+/**
  * Create route configuration
  * POST /api/system-admin/config/routes
  */
@@ -267,7 +304,9 @@ export const createRoute = async (req: AuthRequest, res: Response) => {
   try {
     const {
       routeName,
+      origin,
       destination,
+      destinationAliases,
       defaultTotalLiters,
       description,
     } = req.body;
@@ -291,7 +330,9 @@ export const createRoute = async (req: AuthRequest, res: Response) => {
 
     const route = await RouteConfig.create({
       routeName,
-      destination,
+      origin: origin?.trim().toUpperCase() || undefined,
+      destination: destination.trim().toUpperCase(),
+      destinationAliases: destinationAliases?.map((alias: string) => alias.trim().toUpperCase()) || [],
       defaultTotalLiters,
       description,
       createdBy: req.user?.username || 'system',
