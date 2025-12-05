@@ -528,11 +528,47 @@ export function getGoingOrigin(fuelRecord: FuelRecord): string {
 }
 
 /**
+ * Check if a journey is complete based on return checkpoints
+ * - For non-MSA destinations: mbeyaReturn must be filled (not 0)
+ * - For MSA destinations: tangaReturn must be filled (not 0)
+ * - balance === 0 is also required
+ * - Negative balance is acceptable (not journey complete)
+ */
+export function isJourneyComplete(fuelRecord: FuelRecord): boolean {
+  // Balance must be exactly 0 for journey to be complete
+  // Negative balance is acceptable and means journey is still active
+  if (fuelRecord.balance !== 0) {
+    return false;
+  }
+  
+  const destination = (fuelRecord.originalGoingTo || fuelRecord.to || '').toUpperCase();
+  const isMSADestination = destination.includes('MSA') || destination.includes('MOMBASA');
+  
+  if (isMSADestination) {
+    // For MSA destinations, check if tangaReturn is filled
+    return (fuelRecord as any).tangaReturn !== 0 && (fuelRecord as any).tangaReturn !== undefined;
+  } else {
+    // For non-MSA destinations, check if mbeyaReturn is filled
+    return (fuelRecord as any).mbeyaReturn !== 0 && (fuelRecord as any).mbeyaReturn !== undefined;
+  }
+}
+
+/**
  * Determine if a truck is currently on its going journey or returning
- * A truck is "going" if it doesn't have a returnDo yet
+ * Uses mbeyaReturn/tangaReturn checkpoints to determine if truck has returned
+ * Note: returnDo is NOT used as trucks can return without a return order
  */
 export function isTruckGoingJourney(fuelRecord: FuelRecord): boolean {
-  return !fuelRecord.returnDo;
+  const destination = (fuelRecord.originalGoingTo || fuelRecord.to || '').toUpperCase();
+  const isMSADestination = destination.includes('MSA') || destination.includes('MOMBASA');
+  
+  if (isMSADestination) {
+    // For MSA destinations, check tangaReturn - if filled, truck is returning or returned
+    return !(fuelRecord as any).tangaReturn || (fuelRecord as any).tangaReturn === 0;
+  } else {
+    // For non-MSA destinations, check mbeyaReturn - if filled, truck is returning or returned
+    return !(fuelRecord as any).mbeyaReturn || (fuelRecord as any).mbeyaReturn === 0;
+  }
 }
 
 /**
@@ -564,4 +600,5 @@ export default {
   getGoingDestination,
   getGoingOrigin,
   isTruckGoingJourney,
+  isJourneyComplete,
 };

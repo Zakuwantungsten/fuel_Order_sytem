@@ -225,4 +225,18 @@ ask lance about data archiving to improve performance
 
 Google app password - wszw ewxu bkfx gazt
 
+CSE/002/24 -com00224@uoeld.ac.ke
+ABE/049/24 - abe04924@uoeld.ac.ke
 
+Read AdminDashboard.tsx, lines 1 to 80
+
+Read SuperAdminDashboard.tsx, lines 1 to 80
+
+Read SystemAdminDashboard.tsx, lines 1 to 80
+
+Read StandardAdminDashboard.tsx, lines 1 to 80 
+seed these users 
+
+default liters for returning mbeya and also add an inspect to see the record in the fuel record and the be able to come back to the making of lpo and retaining what was written 
+
+okay - small text for small screens and also full text for conditional rendering 

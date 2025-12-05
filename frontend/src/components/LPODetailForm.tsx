@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, ExternalLink, Fuel } from 'lucide-react';
 import { LPOSummary, LPODetail, FuelRecord, CancellationPoint } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
@@ -9,6 +9,7 @@ import {
   ZAMBIA_RETURNING_PARTS,
   FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
+import FuelRecordInspectModal, { calculateMbeyaReturnBalance } from './FuelRecordInspectModal';
 
 // Station defaults mapping based on direction
 // Correct rates: USD stations = 1.2, TZS stations have specific rates
@@ -88,11 +89,29 @@ interface EntryAutoFillData {
   loading: boolean;
   fetched: boolean;
   fuelRecord: FuelRecord | null;
+  fuelRecordId?: string | number;  // Store fuel record ID for inspect modal
   goingDestination?: string;  // Store original going destination for proper fuel allocation
   returnDoMissing?: boolean;  // Track if return DO is not yet inputted
   // Warning states for trucks without valid fuel records
   warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | null;
   warningMessage?: string;
+  // Balance info for Mbeya returning and other checkpoints
+  balanceInfo?: {
+    availableBalance: number;
+    standardAllocation: number;
+    suggestedLiters: number;
+    reason: string;
+  };
+}
+
+// Inspect modal state
+interface InspectModalState {
+  isOpen: boolean;
+  truckNo: string;
+  fuelRecord: FuelRecord | null;
+  fuelRecordId?: string | number;
+  direction: 'going' | 'returning';
+  entryIndex: number;
 }
 
 // Cash currency conversion state
@@ -110,30 +129,133 @@ interface LPODetailFormProps {
   initialData?: LPOSummary;
 }
 
+// Local storage key for persisting form draft
+const LPO_FORM_STORAGE_KEY = 'lpo_form_draft';
+
+// Interface for stored form data
+interface StoredFormData {
+  formData: Partial<LPOSummary>;
+  entryAutoFillData: Record<number, EntryAutoFillData>;
+  goingEnabled: boolean;
+  returningEnabled: boolean;
+  goingCheckpoint: CancellationPoint | '';
+  returningCheckpoint: CancellationPoint | '';
+  cashConversion: CashConversion;
+  customStationName: string;
+  customGoingEnabled: boolean;
+  customReturnEnabled: boolean;
+  customGoingCheckpoint: string;
+  customReturnCheckpoint: string;
+  savedAt: string;
+}
+
+// Save form data to local storage
+const saveFormToStorage = (data: StoredFormData) => {
+  try {
+    localStorage.setItem(LPO_FORM_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Error saving form to local storage:', error);
+  }
+};
+
+// Load form data from local storage
+const loadFormFromStorage = (): StoredFormData | null => {
+  try {
+    const stored = localStorage.getItem(LPO_FORM_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as StoredFormData;
+      // Check if data is less than 24 hours old
+      const savedAt = new Date(parsed.savedAt);
+      const now = new Date();
+      const hoursDiff = (now.getTime() - savedAt.getTime()) / (1000 * 60 * 60);
+      if (hoursDiff < 24) {
+        return parsed;
+      } else {
+        // Data is too old, clear it
+        localStorage.removeItem(LPO_FORM_STORAGE_KEY);
+      }
+    }
+  } catch (error) {
+    console.error('Error loading form from local storage:', error);
+  }
+  return null;
+};
+
+// Clear form data from local storage
+const clearFormStorage = () => {
+  try {
+    localStorage.removeItem(LPO_FORM_STORAGE_KEY);
+  } catch (error) {
+    console.error('Error clearing form from local storage:', error);
+  }
+};
+
 const LPODetailForm: React.FC<LPODetailFormProps> = ({
   isOpen,
   onClose,
   onSubmit,
   initialData,
 }) => {
-  const [formData, setFormData] = useState<Partial<LPOSummary>>({
-    lpoNo: '',
-    date: new Date().toISOString().split('T')[0],
-    station: '',
-    orderOf: 'TAHMEED',
-    entries: [],
-    total: 0,
+  const [formData, setFormData] = useState<Partial<LPOSummary>>(() => {
+    // Try to load from local storage on initial mount (only if not editing)
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      if (stored) {
+        return stored.formData;
+      }
+    }
+    return {
+      lpoNo: '',
+      date: new Date().toISOString().split('T')[0],
+      station: '',
+      orderOf: 'TAHMEED',
+      entries: [],
+      total: 0,
+    };
   });
 
   // Track auto-fill data for each entry
-  const [entryAutoFillData, setEntryAutoFillData] = useState<Record<number, EntryAutoFillData>>({});
+  const [entryAutoFillData, setEntryAutoFillData] = useState<Record<number, EntryAutoFillData>>(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      if (stored) {
+        return stored.entryAutoFillData;
+      }
+    }
+    return {};
+  });
   const [isLoadingLpoNumber, setIsLoadingLpoNumber] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
 
   // Cash cancellation state - now supports both directions simultaneously
-  const [goingEnabled, setGoingEnabled] = useState(false);
-  const [returningEnabled, setReturningEnabled] = useState(false);
-  const [goingCheckpoint, setGoingCheckpoint] = useState<CancellationPoint | ''>('');
-  const [returningCheckpoint, setReturningCheckpoint] = useState<CancellationPoint | ''>('');
+  const [goingEnabled, setGoingEnabled] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.goingEnabled ?? false;
+    }
+    return false;
+  });
+  const [returningEnabled, setReturningEnabled] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.returningEnabled ?? false;
+    }
+    return false;
+  });
+  const [goingCheckpoint, setGoingCheckpoint] = useState<CancellationPoint | ''>(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.goingCheckpoint ?? '';
+    }
+    return '';
+  });
+  const [returningCheckpoint, setReturningCheckpoint] = useState<CancellationPoint | ''>(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.returningCheckpoint ?? '';
+    }
+    return '';
+  });
   const [existingLPOsForTrucks, setExistingLPOsForTrucks] = useState<Map<string, { lpos: LPOSummary[], direction: string }[]>>(new Map());
   const [trucksWithoutLPOs, setTrucksWithoutLPOs] = useState<Set<string>>(new Set());
   const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
@@ -151,12 +273,33 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   }>>(new Map());
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
 
+  // Inspect modal state - for viewing fuel record details without leaving the form
+  const [inspectModal, setInspectModal] = useState<InspectModalState>({
+    isOpen: false,
+    truckNo: '',
+    fuelRecord: null,
+    fuelRecordId: undefined,
+    direction: 'going',
+    entryIndex: -1,
+  });
+
   // Cash currency conversion state
-  const [cashConversion, setCashConversion] = useState<CashConversion>({
-    localRate: 0,
-    conversionRate: 1,
-    currency: 'ZMW',
-    calculatedRate: 0,
+  const [cashConversion, setCashConversion] = useState<CashConversion>(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.cashConversion ?? {
+        localRate: 0,
+        conversionRate: 1,
+        currency: 'ZMW',
+        calculatedRate: 0,
+      };
+    }
+    return {
+      localRate: 0,
+      conversionRate: 1,
+      currency: 'ZMW',
+      calculatedRate: 0,
+    };
   });
 
   // Forwarding state - tracks when trucks are auto-loaded from previous station
@@ -166,14 +309,88 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const [forwardRate, setForwardRate] = useState<number>(0);
 
   // Custom station state - for unlisted stations
-  const [customStationName, setCustomStationName] = useState('');
-  const [customGoingEnabled, setCustomGoingEnabled] = useState(false);
-  const [customReturnEnabled, setCustomReturnEnabled] = useState(false);
-  const [customGoingCheckpoint, setCustomGoingCheckpoint] = useState('');
-  const [customReturnCheckpoint, setCustomReturnCheckpoint] = useState('');
+  const [customStationName, setCustomStationName] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customStationName ?? '';
+    }
+    return '';
+  });
+  const [customGoingEnabled, setCustomGoingEnabled] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customGoingEnabled ?? false;
+    }
+    return false;
+  });
+  const [customReturnEnabled, setCustomReturnEnabled] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customReturnEnabled ?? false;
+    }
+    return false;
+  });
+  const [customGoingCheckpoint, setCustomGoingCheckpoint] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customGoingCheckpoint ?? '';
+    }
+    return '';
+  });
+  const [customReturnCheckpoint, setCustomReturnCheckpoint] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customReturnCheckpoint ?? '';
+    }
+    return '';
+  });
+
+  // Handle inspect modal open - view fuel record details
+  const handleInspectRecord = (index: number) => {
+    const autoFill = entryAutoFillData[index];
+    const entry = formData.entries?.[index];
+    
+    if (!entry) return;
+    
+    setInspectModal({
+      isOpen: true,
+      truckNo: entry.truckNo,
+      fuelRecord: autoFill?.fuelRecord || null,
+      fuelRecordId: autoFill?.fuelRecordId,
+      direction: autoFill?.direction || 'going',
+      entryIndex: index,
+    });
+  };
+
+  // Handle navigate to full fuel record - saves form first, then navigates in same tab
+  const handleNavigateToFullRecord = (recordId: string | number) => {
+    // Save current form state before navigating
+    saveFormToStorage({
+      formData,
+      entryAutoFillData,
+      goingEnabled,
+      returningEnabled,
+      goingCheckpoint,
+      returningCheckpoint,
+      cashConversion,
+      customStationName,
+      customGoingEnabled,
+      customReturnEnabled,
+      customGoingCheckpoint,
+      customReturnCheckpoint,
+      savedAt: new Date().toISOString(),
+    });
+    // Navigate in same tab - form data is saved
+    window.location.href = `/fuel-records?viewRecord=${recordId}`;
+  };
+
+  // Close inspect modal
+  const handleCloseInspectModal = () => {
+    setInspectModal(prev => ({ ...prev, isOpen: false }));
+  };
 
   // Reset all form state to initial values
-  const resetForm = () => {
+  const resetForm = (clearStorage = true) => {
     setFormData({
       lpoNo: '',
       date: new Date().toISOString().split('T')[0],
@@ -205,24 +422,81 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setCustomReturnEnabled(false);
     setCustomGoingCheckpoint('');
     setCustomReturnCheckpoint('');
+    setHasDraft(false);
+    // Clear local storage if requested
+    if (clearStorage) {
+      clearFormStorage();
+    }
   };
 
-  // Reset form when modal opens (if not editing) or closes
+  // Check for existing draft on mount and when modal opens
   useEffect(() => {
-    if (isOpen) {
-      if (!initialData) {
-        // Reset form when opening a new LPO modal
-        resetForm();
-        // Fetch new LPO number after reset
+    if (isOpen && !initialData) {
+      const stored = loadFormFromStorage();
+      if (stored && stored.formData.entries && stored.formData.entries.length > 0) {
+        // Found a draft with entries - keep the loaded data and show indicator
+        setHasDraft(true);
+        // Entries are already loaded from useState initializers
+      } else {
+        // No draft or empty draft - reset and fetch new LPO number
+        resetForm(false); // Don't clear storage since there's nothing there
         fetchNextLpoNumber();
       }
     }
-  }, [isOpen]);
+  }, [isOpen, initialData]);
+
+  // Auto-save form data to local storage on changes (debounced)
+  useEffect(() => {
+    // Don't save if editing existing LPO or if form is empty
+    if (initialData) return;
+    if (!formData.entries || formData.entries.length === 0) return;
+    
+    const timeoutId = setTimeout(() => {
+      saveFormToStorage({
+        formData,
+        entryAutoFillData,
+        goingEnabled,
+        returningEnabled,
+        goingCheckpoint,
+        returningCheckpoint,
+        cashConversion,
+        customStationName,
+        customGoingEnabled,
+        customReturnEnabled,
+        customGoingCheckpoint,
+        customReturnCheckpoint,
+        savedAt: new Date().toISOString(),
+      });
+      setHasDraft(true);
+    }, 1000); // Save after 1 second of no changes
+    
+    return () => clearTimeout(timeoutId);
+  }, [
+    formData, 
+    entryAutoFillData, 
+    goingEnabled, 
+    returningEnabled, 
+    goingCheckpoint, 
+    returningCheckpoint,
+    cashConversion,
+    customStationName,
+    customGoingEnabled,
+    customReturnEnabled,
+    customGoingCheckpoint,
+    customReturnCheckpoint,
+    initialData
+  ]);
 
   // Handle cancel button click - reset and close
   const handleCancel = () => {
     resetForm();
     onClose();
+  };
+
+  // Handle discard draft
+  const handleDiscardDraft = () => {
+    resetForm();
+    fetchNextLpoNumber();
   };
 
   // Calculate TZS rate when cash conversion values change
@@ -440,11 +714,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         };
       }
 
-      // Get current date and calculate month boundaries
+      // Get current date and calculate month boundaries (4 months for better searching)
       const now = new Date();
       const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
 
       // Helper to check if a date is within a specific month
       const isInMonth = (dateStr: string, monthStart: Date): boolean => {
@@ -453,25 +728,62 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         return date >= monthStart && date <= monthEnd;
       };
 
+      /**
+       * Check if a journey is complete based on return checkpoints
+       * - For non-MSA destinations: mbeyaReturn must be filled (not 0)
+       * - For MSA destinations: tangaReturn must be filled (not 0)
+       * - balance === 0 is also required
+       * - Negative balance is acceptable (not journey complete)
+       */
+      const isJourneyComplete = (record: FuelRecord): boolean => {
+        // Balance must be exactly 0 for journey to be complete
+        // Negative balance is acceptable and means journey is still active
+        if (record.balance !== 0) {
+          return false;
+        }
+        
+        const destination = (record.originalGoingTo || record.to || '').toUpperCase();
+        const isMSADestination = destination.includes('MSA') || destination.includes('MOMBASA');
+        
+        if (isMSADestination) {
+          // For MSA destinations, check if tangaReturn is filled
+          return (record as any).tangaReturn !== 0 && (record as any).tangaReturn !== undefined;
+        } else {
+          // For non-MSA destinations, check if mbeyaReturn is filled
+          return (record as any).mbeyaReturn !== 0 && (record as any).mbeyaReturn !== undefined;
+        }
+      };
+
       // Sort records by date descending (most recent first)
       const sortedRecords = [...activeFuelRecords].sort((a: FuelRecord, b: FuelRecord) => 
         new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 
-      // Search for active fuel record: current month → previous month → two months ago
+      // Search for active fuel record: current month → previous month → two months ago → three months ago
+      // Active record = balance !== 0 (negative is acceptable) AND journey not complete
       let activeRecord: FuelRecord | null = null;
       let searchMonth = 'current';
 
-      // First, try to find a record with balance > 0 in current month
+      // Helper to check if a record is active (balance != 0 OR journey not complete based on return checkpoints)
+      const isActiveRecord = (r: FuelRecord): boolean => {
+        // If balance is not 0 (including negative), it's active
+        if (r.balance !== 0) {
+          return true;
+        }
+        // If balance is 0, check if journey is truly complete based on return checkpoints
+        return !isJourneyComplete(r);
+      };
+
+      // First, try to find a record in current month that is active
       activeRecord = sortedRecords.find((r: FuelRecord) => 
-        isInMonth(r.date, currentMonth) && r.balance > 0
+        isInMonth(r.date, currentMonth) && isActiveRecord(r)
       ) || null;
 
       if (!activeRecord) {
         // Try previous month
         searchMonth = 'previous';
         activeRecord = sortedRecords.find((r: FuelRecord) => 
-          isInMonth(r.date, previousMonth) && r.balance > 0
+          isInMonth(r.date, previousMonth) && isActiveRecord(r)
         ) || null;
       }
 
@@ -479,18 +791,29 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         // Try two months ago
         searchMonth = 'two months ago';
         activeRecord = sortedRecords.find((r: FuelRecord) => 
-          isInMonth(r.date, twoMonthsAgo) && r.balance > 0
+          isInMonth(r.date, twoMonthsAgo) && isActiveRecord(r)
         ) || null;
       }
 
-      // If still no active record with balance > 0, check if we have any record at all
+      if (!activeRecord) {
+        // Try three months ago (4 months total search window)
+        searchMonth = 'three months ago';
+        activeRecord = sortedRecords.find((r: FuelRecord) => 
+          isInMonth(r.date, threeMonthsAgo) && isActiveRecord(r)
+        ) || null;
+      }
+
+      // If still no active record, check if we have any record at all
       if (!activeRecord) {
         // Get the most recent record regardless of month
         const mostRecent = sortedRecords[0];
         
-        if (mostRecent && mostRecent.balance === 0) {
-          // Journey completed - truck has returned and used all fuel
+        if (mostRecent && isJourneyComplete(mostRecent)) {
+          // Journey truly completed - return checkpoint is filled
           const goingDest = mostRecent.originalGoingTo || mostRecent.to || 'NIL';
+          const destination = (mostRecent.originalGoingTo || mostRecent.to || '').toUpperCase();
+          const isMSA = destination.includes('MSA') || destination.includes('MOMBASA');
+          const returnCheckpoint = isMSA ? 'Tanga Return' : 'Mbeya Return';
           return {
             fuelRecord: mostRecent,
             goingDo: mostRecent.goingDo || 'NIL',
@@ -498,13 +821,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             destination: mostRecent.to || 'NIL',
             goingDestination: goingDest,
             balance: 0,
-            message: `⚠️ Journey completed (Balance: 0L). Last trip: ${mostRecent.goingDo}. You can still add fuel manually if needed.`,
+            message: `⚠️ Journey completed (${returnCheckpoint} filled). Last trip: ${mostRecent.goingDo}. You can still add fuel manually if needed.`,
             success: false,  // Mark as not successful since no fuel allocation is needed
             warningType: 'journey_completed' as const
           };
         }
 
-        // No active record found
+        // No active record found in last 4 months
         return {
           fuelRecord: null,
           goingDo: 'NIL',
@@ -512,7 +835,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           destination: 'NIL',
           goingDestination: 'NIL',  // Added: original going destination
           balance: 0,
-          message: '⚠️ No active journey found in last 3 months. You can still add fuel manually.',
+          message: '⚠️ No active journey found in last 4 months. You can still add fuel manually.',
           success: false,
           warningType: 'no_active_record' as const
         };
@@ -810,6 +1133,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
       const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
       
+      // Calculate balance info for Mbeya returning (INFINITY station)
+      let balanceInfo = undefined;
+      if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
+        balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
+        // If suggested liters differs from standard, update the entry
+        if (balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
+          newEntries[index].liters = balanceInfo.suggestedLiters;
+          newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
+        }
+      }
+      
       setFormData(prev => ({ ...prev, entries: newEntries, total }));
       setEntryAutoFillData(prev => ({
         ...prev,
@@ -818,10 +1152,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           loading: false, 
           fetched: result.success, 
           fuelRecord: result.fuelRecord,
+          fuelRecordId: result.fuelRecord?.id,  // Store fuel record ID for inspect modal
           goingDestination: result.goingDestination,  // Store for later use when toggling direction
           returnDoMissing,  // Track if return DO is missing
           warningType: result.warningType || null,
-          warningMessage: result.message
+          warningMessage: result.message,
+          balanceInfo,  // Store balance info for display
         }
       }));
     }
@@ -833,11 +1169,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const newDirection = currentDirection === 'going' ? 'returning' : 'going';
     const fuelRecord = entryAutoFillData[index]?.fuelRecord;
     const storedGoingDestination = entryAutoFillData[index]?.goingDestination;
-
-    setEntryAutoFillData(prev => ({
-      ...prev,
-      [index]: { ...prev[index], direction: newDirection }
-    }));
 
     // Update the DO number and liters based on new direction
     if (fuelRecord) {
@@ -854,17 +1185,45 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         ? getStationDefaults(formData.station, newDirection, destinationForAllocation) 
         : { liters: 350, rate: 1.2 };
 
+      let litersToSet = defaults.liters;
+      
+      // Calculate balance info for Mbeya returning (INFINITY station)
+      let balanceInfo = undefined;
+      if (formData.station?.toUpperCase() === 'INFINITY' && newDirection === 'returning') {
+        balanceInfo = calculateMbeyaReturnBalance(fuelRecord);
+        // If suggested liters differs from standard, use it
+        if (balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
+          litersToSet = balanceInfo.suggestedLiters;
+        }
+      }
+
       const newEntries = [...(formData.entries || [])];
       newEntries[index] = {
         ...newEntries[index],
         doNo: doNumber,
         dest: destinationForAllocation,  // Update destination based on direction
-        liters: defaults.liters,
-        amount: defaults.liters * defaults.rate
+        liters: litersToSet,
+        amount: litersToSet * defaults.rate
       };
 
       const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
       setFormData(prev => ({ ...prev, entries: newEntries, total }));
+      
+      // Update autofill data with new direction and balance info
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { 
+          ...prev[index], 
+          direction: newDirection,
+          balanceInfo: newDirection === 'returning' ? balanceInfo : undefined
+        }
+      }));
+    } else {
+      // Just update direction if no fuel record
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { ...prev[index], direction: newDirection }
+      }));
     }
   };
 
@@ -1071,6 +1430,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     };
 
     onSubmit(submitData);
+    
+    // Clear the draft from local storage after successful submit
+    clearFormStorage();
+    setHasDraft(false);
   };
 
   if (!isOpen) return null;
@@ -1079,15 +1442,35 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={handleCancel}>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto transition-colors" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            {initialData ? 'Edit LPO Document' : 'New LPO Document'}
-          </h2>
-          <button
-            onClick={handleCancel}
-            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              {initialData ? 'Edit LPO Document' : 'New LPO Document'}
+            </h2>
+            {/* Draft indicator */}
+            {hasDraft && !initialData && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                Draft saved
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Discard draft button */}
+            {hasDraft && !initialData && (
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 px-3 py-1 rounded border border-red-300 dark:border-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                Discard Draft
+              </button>
+            )}
+            <button
+              onClick={handleCancel}
+              className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
@@ -1870,13 +2253,53 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             />
                           </td>
                           <td className="px-3 py-3">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveEntry(index)}
-                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center space-x-1">
+                              {/* Inspect button - Quick view fuel record */}
+                              {autoFill.fuelRecord && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleInspectRecord(index)}
+                                  className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                                  title="Inspect fuel record (view consumption & balance)"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                              )}
+                              {/* Navigate to full record button */}
+                              {autoFill.fuelRecordId && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleNavigateToFullRecord(autoFill.fuelRecordId!)}
+                                  className="p-1.5 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded"
+                                  title="View full fuel record (opens in new tab)"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </button>
+                              )}
+                              {/* Delete entry button */}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveEntry(index)}
+                                className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                                title="Remove entry"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            {/* Show balance info hint for Mbeya Return */}
+                            {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && (
+                              <div className={`mt-1 text-xs ${
+                                autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : 'text-green-600 dark:text-green-400'
+                              }`} title={autoFill.balanceInfo.reason}>
+                                <Fuel className="w-3 h-3 inline mr-1" />
+                                {autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation
+                                  ? `${autoFill.balanceInfo.suggestedLiters}L (reduced)`
+                                  : `${autoFill.balanceInfo.suggestedLiters}L`
+                                }
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1927,6 +2350,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Fuel Record Inspect Modal */}
+      <FuelRecordInspectModal
+        isOpen={inspectModal.isOpen}
+        onClose={handleCloseInspectModal}
+        truckNumber={inspectModal.truckNo}
+        fuelRecordId={inspectModal.fuelRecordId || ''}
+        onNavigateToRecord={handleNavigateToFullRecord}
+      />
     </div>
   );
 };
