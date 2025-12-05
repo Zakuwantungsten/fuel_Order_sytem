@@ -603,7 +603,7 @@ const DeliveryOrders = () => {
           console.error('Failed to create notification for unlinked DO:', notifyError);
         }
         
-        alert(`⚠️ Warning: No fuel record found for truck ${deliveryOrder.truckNo}.\n\nReturn DO-${deliveryOrder.doNumber} has been saved, but could not be linked to a fuel record.\n\nAdmin has been notified. Please check the truck number - if incorrect, edit the DO and it will attempt to re-link automatically.`);
+        alert(`⚠️ Warning: No fuel record found for truck ${deliveryOrder.truckNo}.\n\nReturn DO-${deliveryOrder.doNumber} has been saved, but could not be linked to a fuel record.\n\nA notification has been created. Please check the truck number - if incorrect, edit the DO and it will attempt to re-link automatically.`);
         return;
       }
       

@@ -225,23 +225,25 @@ const Layout = ({ children }: LayoutProps) => {
               {navigation.find(item => isActive(item.href))?.name || 'Dashboard'}
             </h2>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 relative z-[60]">
             {/* Notification Bell */}
-            <NotificationBell 
-              onNotificationClick={(notification) => {
-                // Navigate to fuel record or relevant page
-                if (notification.metadata?.fuelRecordId) {
-                  navigate(`/fuel-records?id=${notification.metadata.fuelRecordId}`);
-                }
-              }}
-              onEditDO={(doId) => {
-                // Navigate to delivery orders page with the DO ID to edit
-                navigate(`/delivery-orders?edit=${doId}`);
-              }}
-            />
+            <div className="relative z-[60]">
+              <NotificationBell 
+                onNotificationClick={(notification) => {
+                  // Navigate to fuel record or relevant page
+                  if (notification.metadata?.fuelRecordId) {
+                    navigate(`/fuel-records?id=${notification.metadata.fuelRecordId}`);
+                  }
+                }}
+                onEditDO={(doId) => {
+                  // Navigate to delivery orders page with the DO ID to edit
+                  navigate(`/delivery-orders?edit=${doId}`);
+                }}
+              />
+            </div>
             
             {/* User Menu */}
-            <div className="relative z-20" ref={userMenuRef}>
+            <div className="relative z-[60]" ref={userMenuRef}>
               <button
                 type="button"
                 onClick={(e) => {
@@ -274,10 +276,10 @@ const Layout = ({ children }: LayoutProps) => {
                 <>
                   {/* Backdrop to catch outside clicks */}
                   <div
-                    className="fixed inset-0 z-[70]"
+                    className="fixed inset-0 z-[100]"
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[80]">
+                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
                   <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">

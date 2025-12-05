@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck } from 'lucide-react';
 
 interface Notification {
-  id: string;
+  id?: string;
+  _id?: string;
   type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
@@ -29,6 +30,11 @@ interface NotificationBellProps {
   onEditDO?: (doId: string) => void; // Callback to navigate to edit a DO
   onRelinkDO?: (doId: string) => Promise<boolean>; // Callback to attempt re-linking a DO
 }
+
+// Helper to get notification ID (handles both id and _id from MongoDB)
+const getNotificationId = (notification: Notification): string => {
+  return notification.id || notification._id || '';
+};
 
 export default function NotificationBell({ onNotificationClick, onEditDO, onRelinkDO }: NotificationBellProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -101,7 +107,8 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     const doId = notification.metadata?.deliveryOrderId || notification.relatedId;
     if (!doId) return;
 
-    setRelinkingId(notification.id);
+    const notifId = getNotificationId(notification);
+    setRelinkingId(notifId);
     try {
       if (onRelinkDO) {
         const success = await onRelinkDO(doId);
@@ -147,7 +154,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
   };
 
   const handleNotificationClick = (notification: Notification) => {
-    markAsRead(notification.id);
+    markAsRead(getNotificationId(notification));
     if (onNotificationClick) {
       onNotificationClick(notification);
     }
@@ -178,12 +185,17 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
   };
 
   return (
-    <div className="relative z-10">
+    <div className="relative">
       {/* Bell Icon Button */}
       <button
-        onClick={() => setShowDropdown(!showDropdown)}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowDropdown(!showDropdown);
+        }}
         className="relative p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors cursor-pointer"
         title="Notifications"
+        type="button"
       >
         <Bell className="w-6 h-6" />
         {unreadCount > 0 && (
@@ -197,10 +209,10 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       {showDropdown && (
         <>
           <div
-            className="fixed inset-0 z-[55] pointer-events-auto"
+            className="fixed inset-0 z-[100] pointer-events-auto"
             onClick={() => setShowDropdown(false)}
           />
-          <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 z-[60] max-h-[600px] overflow-hidden flex flex-col pointer-events-auto">
+          <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 z-[110] max-h-[600px] overflow-hidden flex flex-col pointer-events-auto">
             {/* Header */}
             <div className="px-4 py-3 border-b dark:border-gray-700 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -227,9 +239,11 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                   <p className="text-sm mt-1">All caught up!</p>
                 </div>
               ) : (
-                notifications.map((notification) => (
+                notifications.map((notification) => {
+                  const notifId = getNotificationId(notification);
+                  return (
                   <div
-                    key={notification.id}
+                    key={notifId}
                     className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
                       !notification.isRead ? 'bg-blue-50 dark:bg-blue-900/10' : ''
                     } ${notification.type !== 'unlinked_export_do' ? 'cursor-pointer' : ''}`}
@@ -270,12 +284,12 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                             <div className="flex items-center gap-2 mt-3">
                               <button
                                 onClick={(e) => handleRelinkDO(e, notification)}
-                                disabled={relinkingId === notification.id}
+                                disabled={relinkingId === notifId}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 rounded transition-colors"
                                 title="Try to link this DO to a fuel record"
                               >
                                 <Link2 className="w-3.5 h-3.5" />
-                                {relinkingId === notification.id ? 'Linking...' : 'Try Re-link'}
+                                {relinkingId === notifId ? 'Linking...' : 'Try Re-link'}
                               </button>
                               {onEditDO && (
                                 <button
@@ -299,7 +313,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            dismissNotification(notification.id);
+                            dismissNotification(notifId);
                           }}
                           className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0"
                           title="Dismiss"
@@ -309,7 +323,8 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                       </div>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
 
