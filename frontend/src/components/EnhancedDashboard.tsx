@@ -116,12 +116,26 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [activeTab, setActiveTab] = useState(() => getInitialTab(user.role));
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [editDoId, setEditDoId] = useState<string | null>(null);
   const { logout, toggleTheme, isDark } = useAuth();
 
   // Persist active tab to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('fuel_order_active_tab', activeTab);
   }, [activeTab]);
+
+  // Handle edit DO ID by updating URL search params
+  useEffect(() => {
+    if (editDoId && activeTab === 'do') {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('edit', editDoId);
+      window.history.replaceState({}, '', currentUrl.toString());
+      // Dispatch a custom event to notify child components
+      window.dispatchEvent(new CustomEvent('urlchange'));
+      // Clear the editDoId after setting
+      setEditDoId(null);
+    }
+  }, [editDoId, activeTab]);
 
   const getMenuItems = () => {
     // Drivers only see their portal, no overview
@@ -448,7 +462,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   }
                 }}
                 onEditDO={(doId) => {
+                  // Switch to DO tab first
                   setActiveTab('do');
+                  // Then set the edit DO ID which will trigger the URL update
+                  setEditDoId(doId);
                 }}
               />
               

@@ -57,6 +57,36 @@ const DeliveryOrders = () => {
     loadOrders();
     fetchWorkbooks();
     fetchAvailableYears();
+    
+    // Listen for URL changes from EnhancedDashboard
+    const handleUrlChange = () => {
+      // Force re-read of search params
+      const url = new URL(window.location.href);
+      const editId = url.searchParams.get('edit');
+      if (editId) {
+        // Manually trigger the edit flow
+        deliveryOrdersAPI.getById(editId).then(order => {
+          if (order) {
+            console.log('Fetched DO for edit from URL change event:', order.doNumber);
+            setEditingOrder(order);
+            setIsFormOpen(true);
+            // Clear the query param
+            url.searchParams.delete('edit');
+            window.history.replaceState({}, '', url.toString());
+          }
+        }).catch(err => {
+          console.error('Failed to fetch DO for edit:', err);
+        });
+      }
+    };
+    
+    window.addEventListener('urlchange', handleUrlChange);
+    window.addEventListener('popstate', handleUrlChange);
+    
+    return () => {
+      window.removeEventListener('urlchange', handleUrlChange);
+      window.removeEventListener('popstate', handleUrlChange);
+    };
   }, [filterType, filterDoType]);
 
   // Handle edit query parameter (e.g., from notification click)
