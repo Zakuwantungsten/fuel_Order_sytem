@@ -5,7 +5,6 @@ import {
   AlertTriangle, 
   CheckCircle, 
   RefreshCw,
-  TrendingUp,
   HardDrive,
   Zap
 } from 'lucide-react';

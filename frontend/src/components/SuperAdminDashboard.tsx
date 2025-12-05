@@ -209,7 +209,7 @@ function OverviewTab({
   dbHealth, 
   trashStats,
   recentActivity,
-  onRefresh 
+  onRefresh: _onRefresh 
 }: { 
   stats: any; 
   dbHealth: any; 
@@ -217,6 +217,8 @@ function OverviewTab({
   recentActivity: any[];
   onRefresh: () => void;
 }) {
+  // Using underscore prefix to suppress unused variable warning
+  void _onRefresh;
   if (!stats || !dbHealth) {
     return (
       <div className="flex items-center justify-center h-64">

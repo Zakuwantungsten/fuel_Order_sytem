@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Activity, TrendingUp, Users, Database } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
 
 interface SystemHealthTabProps {

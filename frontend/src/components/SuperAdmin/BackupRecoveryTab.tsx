@@ -13,7 +13,9 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
   const [stats, setStats] = useState<BackupStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [_showScheduleModal, setShowScheduleModal] = useState(false);
+  // Using underscore prefix to suppress unused variable warning
+  void _showScheduleModal;
 
   useEffect(() => {
     loadData();

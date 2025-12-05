@@ -372,19 +372,14 @@ export class FuelConfigService {
       };
     }
     
-    // No match found - find similar truck suffixes and return default
-    const allSuffixes = [
-      ...cfg.truckBatches.batch_100,
-      ...cfg.truckBatches.batch_80,
-      ...cfg.truckBatches.batch_60
-    ];
-    const suggestions = this.findSimilarStrings(truckSuffix, allSuffixes, 0.5).slice(0, 3);
+    // No match found - return default with empty suggestions
+    // (findSimilarStrings feature not implemented)
     
     return { 
       extraFuel: 60, 
       matched: false, 
       truckSuffix,
-      suggestions: suggestions.length > 0 ? suggestions : undefined
+      suggestions: undefined
     };
   }
   

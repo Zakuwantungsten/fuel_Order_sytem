@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileSearch, Download, Filter, Search, Calendar } from 'lucide-react';
+import { FileSearch, Download } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
 
 interface AuditLogsTabProps {

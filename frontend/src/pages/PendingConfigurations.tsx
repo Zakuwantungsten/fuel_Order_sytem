@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lock, Unlock, Save, X, AlertCircle, CheckCircle, Truck, MapPin } from 'lucide-react';
 import { fuelRecordsAPI } from '../services/api';
 
-interface FuelRecord {
+interface LocalFuelRecord {
   id: string;
   date: string;
   truckNo: string;
@@ -16,7 +16,7 @@ interface FuelRecord {
 }
 
 export default function PendingConfigurations() {
-  const [lockedRecords, setLockedRecords] = useState<FuelRecord[]>([]);
+  const [lockedRecords, setLockedRecords] = useState<LocalFuelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ totalLts?: number; extra?: number }>({});
@@ -31,8 +31,10 @@ export default function PendingConfigurations() {
     try {
       setLoading(true);
       const response = await fuelRecordsAPI.getAll();
-      const locked = response.data.filter((record: FuelRecord) => record.isLocked);
-      setLockedRecords(locked);
+      // Response is the array directly, not response.data
+      const records = Array.isArray(response) ? response : [];
+      const locked = records.filter((record: any) => record.isLocked);
+      setLockedRecords(locked as LocalFuelRecord[]);
     } catch (error: any) {
       console.error('Failed to load locked records:', error);
       showMessage('error', 'Failed to load pending configurations');
@@ -46,7 +48,7 @@ export default function PendingConfigurations() {
     setTimeout(() => setMessage(null), 5000);
   };
 
-  const startEditing = (record: FuelRecord) => {
+  const startEditing = (record: LocalFuelRecord) => {
     setEditingId(record.id);
     setEditValues({
       totalLts: record.totalLts ?? undefined,

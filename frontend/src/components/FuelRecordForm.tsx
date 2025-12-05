@@ -341,7 +341,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
                 <input
                   type="number"
                   name="totalLts"
-                  value={formData.totalLts}
+                  value={formData.totalLts ?? ''}
                   onChange={handleChange}
                   required
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"

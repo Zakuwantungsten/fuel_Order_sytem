@@ -235,7 +235,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+      <div className="flex items-center justify-center min-h-screen px-2 md:px-4 pt-2 md:pt-4 pb-10 md:pb-20 text-center sm:block sm:p-0">
         {/* Background overlay */}
         <div
           className="fixed inset-0 transition-opacity bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-80"
@@ -243,20 +243,20 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
         />
 
         {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle w-full max-w-[98%] md:max-w-4xl mx-auto">
           {/* Header */}
-          <div className="bg-primary-600 dark:bg-primary-700 px-6 py-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">
+          <div className="bg-primary-600 dark:bg-primary-700 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between">
+            <h3 className="text-base md:text-lg font-semibold text-white">
               {order ? `Edit ${order.doType || 'DO'}-${order.doNumber}` : 'New Delivery Order'}
             </h3>
-            <button onClick={handleClose} className="p-2 text-white hover:bg-primary-700 dark:hover:bg-primary-600 rounded">
-              <X className="w-5 h-5" />
+            <button onClick={handleClose} className="p-1 md:p-2 text-white hover:bg-primary-700 dark:hover:bg-primary-600 rounded">
+              <X className="w-4 h-4 md:w-5 md:h-5" />
             </button>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 px-6 py-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 px-3 md:px-6 py-4 md:py-6 max-h-[80vh] overflow-y-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
               {/* Basic Information */}
               <div className="md:col-span-2">
                 <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 uppercase">

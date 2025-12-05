@@ -439,37 +439,37 @@ const FuelRecords = () => {
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg overflow-hidden transition-colors">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs divide-y divide-gray-200 dark:divide-gray-700">
+        <div className="w-full">
+          <table className="w-full text-xs divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
-                <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-100 uppercase w-8">SN</th>
-                <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-100 uppercase w-16">Date</th>
-                <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-100 uppercase w-20">Truck</th>
-                <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-100 uppercase w-14">Go DO</th>
-                <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-100 uppercase w-14">Ret DO</th>
-                <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-100 uppercase w-12">Start</th>
-                <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-100 uppercase w-16">From</th>
-                <th className="px-2 py-2 text-left font-medium text-gray-500 dark:text-gray-100 uppercase w-16">To</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-12">Total</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Ext</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">MMSA</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Tng Y</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Dar Y</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Dar G</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Mor G</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Mby G</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Tdm G</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Zam G</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Congo</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Zam R</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Tdm R</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Mby R</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Mor R</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Dar R</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-10">Tng R</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-12">Bal</th>
-                <th className="px-2 py-2 text-center font-medium text-gray-500 dark:text-gray-100 uppercase w-14">Act</th>
+                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">SN</th>
+                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Date</th>
+                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Truck</th>
+                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Go</th>
+                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Ret</th>
+                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">St</th>
+                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Fr</th>
+                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">To</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Tot</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Ex</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MMS</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TnY</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrY</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrG</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MoG</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MbG</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TdG</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">ZmG</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Cng</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">ZmR</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TdR</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MbR</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MoR</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrR</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TnR</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Bal</th>
+                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Act</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -549,7 +549,7 @@ const FuelRecords = () => {
                       <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
                         {record.to}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.totalLts.toLocaleString()}</td>
+                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{(record.totalLts || 0).toLocaleString()}</td>
                       <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.extra || '-'}</td>
                       <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.mmsaYard || '-'}</td>
                       {renderFuelCell('tangaYard', record.tangaYard)}

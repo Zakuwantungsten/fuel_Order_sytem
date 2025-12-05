@@ -1,9 +1,5 @@
 import { useState, useEffect } from 'react';
 import {
-  BarChart3,
-  FileText,
-  Users,
-  TrendingUp,
   Activity,
   RefreshCw,
   X,

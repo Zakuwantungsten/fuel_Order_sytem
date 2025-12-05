@@ -13,9 +13,22 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Mobile viewport scaling - allows pinch zoom */
+@media (max-width: 768px) {
+  html {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 10px;
+  }
+}
+
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 280px;
   min-height: 100vh;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
@@ -793,24 +806,328 @@ html.dark .bg-info {
   }
 }
 
+/* ============================================
+   MOBILE RESPONSIVE STYLES
+   Make pages look exactly like desktop on mobile
+   ============================================ */
+
 /* Mobile-specific fixes for select dropdowns */
 @media (max-width: 640px) {
   /* Ensure selects are properly sized on mobile */
   select {
-    font-size: 16px !important; /* Prevents iOS zoom */
-    min-height: 44px; /* iOS recommended touch target */
+    font-size: 14px !important;
+    min-height: 36px;
     width: 100%;
-  }
-  
-  /* Ensure containers don't clip dropdowns */
-  .overflow-hidden {
-    overflow: visible !important;
   }
   
   /* Ensure select options are readable */
   select option {
-    font-size: 16px;
-    min-height: 44px;
-    padding: 12px 8px;
+    font-size: 14px;
+    min-height: 36px;
+    padding: 8px 6px;
+  }
+}
+
+/* Mobile table styles - full table view without horizontal scroll */
+@media (max-width: 768px) {
+  /* Scale down tables to fit mobile screens */
+  table {
+    font-size: 10px !important;
+    width: 100% !important;
+  }
+  
+  table th,
+  table td {
+    padding: 4px 2px !important;
+    font-size: 9px !important;
+    white-space: normal !important;
+    word-break: break-word;
+    max-width: none !important;
+  }
+  
+  /* Reduce header text size */
+  table th {
+    font-size: 8px !important;
+    letter-spacing: 0 !important;
+  }
+  
+  /* Truncate long text in cells */
+  table td {
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* Make action buttons smaller */
+  table td button,
+  table td a {
+    padding: 2px !important;
+  }
+  
+  table td button svg,
+  table td a svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+  
+  /* Checkbox sizing */
+  table input[type="checkbox"] {
+    width: 12px !important;
+    height: 12px !important;
+  }
+  
+  /* Badge/pill sizing */
+  table .rounded-full,
+  table span[class*="bg-"] {
+    font-size: 7px !important;
+    padding: 1px 4px !important;
+  }
+  
+  /* Remove overflow-x-auto to prevent horizontal scroll */
+  .overflow-x-auto {
+    overflow-x: visible !important;
+  }
+}
+
+/* Even smaller screens (phones) */
+@media (max-width: 480px) {
+  table {
+    font-size: 8px !important;
+  }
+  
+  table th,
+  table td {
+    padding: 3px 1px !important;
+    font-size: 7px !important;
+  }
+  
+  table th {
+    font-size: 6px !important;
+  }
+  
+  table td {
+    max-width: 45px;
+  }
+  
+  table td button svg,
+  table td a svg {
+    width: 10px !important;
+    height: 10px !important;
+  }
+  
+  table input[type="checkbox"] {
+    width: 10px !important;
+    height: 10px !important;
+  }
+  
+  table .rounded-full,
+  table span[class*="bg-"] {
+    font-size: 6px !important;
+    padding: 1px 2px !important;
+  }
+}
+
+/* Mobile header and filter sections */
+@media (max-width: 768px) {
+  /* Stack header elements vertically */
+  .flex.items-center.justify-between {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 12px;
+  }
+  
+  /* Make filter grids single column on mobile */
+  .grid.grid-cols-1.md\\:grid-cols-2,
+  .grid.grid-cols-1.md\\:grid-cols-3,
+  .grid.grid-cols-1.md\\:grid-cols-4,
+  .grid.grid-cols-1.md\\:grid-cols-5 {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Stack buttons horizontally with wrap */
+  .flex.space-x-2,
+  .flex.space-x-3,
+  .flex.space-x-4,
+  .flex.gap-2,
+  .flex.gap-3,
+  .flex.gap-4 {
+    flex-wrap: wrap;
+  }
+  
+  /* Smaller buttons on mobile */
+  button {
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+  }
+  
+  button svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  
+  /* Reduce padding on cards and containers */
+  .p-4, .p-6 {
+    padding: 8px !important;
+  }
+  
+  .px-4, .px-6 {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+  
+  .py-4, .py-6 {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+  
+  /* Reduce margins */
+  .mb-4, .mb-6, .mb-8 {
+    margin-bottom: 8px !important;
+  }
+  
+  .mt-4, .mt-6 {
+    margin-top: 8px !important;
+  }
+  
+  /* Smaller text */
+  .text-2xl {
+    font-size: 18px !important;
+  }
+  
+  .text-xl {
+    font-size: 16px !important;
+  }
+  
+  .text-lg {
+    font-size: 14px !important;
+  }
+  
+  .text-base {
+    font-size: 12px !important;
+  }
+  
+  .text-sm {
+    font-size: 11px !important;
+  }
+  
+  .text-xs {
+    font-size: 10px !important;
+  }
+  
+  /* Input fields */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="email"],
+  input[type="password"],
+  select,
+  textarea {
+    font-size: 14px !important;
+    padding: 6px 8px !important;
+    min-height: 36px;
+  }
+  
+  /* Tabs navigation */
+  nav.-mb-px {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  
+  nav.-mb-px button {
+    font-size: 11px !important;
+    padding: 8px 6px !important;
+  }
+  
+  nav.-mb-px button svg {
+    width: 12px !important;
+    height: 12px !important;
+    margin-right: 2px !important;
+  }
+}
+
+/* Modal responsiveness */
+@media (max-width: 768px) {
+  /* Full-width modals on mobile */
+  .sm\\:max-w-lg,
+  .sm\\:max-w-xl,
+  .sm\\:max-w-2xl,
+  .sm\\:max-w-3xl,
+  .sm\\:max-w-4xl {
+    max-width: 100% !important;
+    margin: 8px !important;
+    width: calc(100% - 16px) !important;
+  }
+  
+  /* Modal content adjustments */
+  .modal-content,
+  .inline-block.align-bottom {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  /* Form grids in modals */
+  .grid.grid-cols-1.md\\:grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Dashboard stats cards */
+@media (max-width: 768px) {
+  .grid.grid-cols-1.sm\\:grid-cols-2.lg\\:grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  
+  /* Stats card content */
+  .text-3xl {
+    font-size: 20px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid.grid-cols-1.sm\\:grid-cols-2.lg\\:grid-cols-4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Pagination mobile styling */
+@media (max-width: 768px) {
+  .pagination,
+  [class*="Pagination"] {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
+  
+  .pagination button,
+  [class*="Pagination"] button {
+    min-width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+    padding: 4px !important;
+  }
+}
+
+/* Sidebar adjustments for mobile */
+@media (max-width: 1024px) {
+  /* Ensure main content uses full width when sidebar hidden */
+  .lg\\:pl-64,
+  .lg\\:pl-16 {
+    padding-left: 0 !important;
+  }
+}
+
+/* Workbook cards grid */
+@media (max-width: 768px) {
+  .grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Summary stats row */
+@media (max-width: 768px) {
+  .grid.grid-cols-1.md\\:grid-cols-3 {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
   }
 }

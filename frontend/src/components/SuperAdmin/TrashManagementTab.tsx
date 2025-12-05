@@ -6,8 +6,7 @@ import {
   Trash,
   AlertTriangle,
   Calendar,
-  Filter,
-  Search
+  Filter
 } from 'lucide-react';
 import { trashAPI } from '../../services/api';
 

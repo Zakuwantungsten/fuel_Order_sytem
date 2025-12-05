@@ -70,7 +70,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
     const monthFuelRecords = fuelRecords.filter(r => r.date.includes(selectedMonth));
     const monthLpoEntries = lpoEntries.filter(l => l.date.includes(selectedMonth));
     
-    const totalFuelConsumed = monthFuelRecords.reduce((sum, r) => sum + r.totalLts + (r.extra || 0), 0);
+    const totalFuelConsumed = monthFuelRecords.reduce((sum, r) => sum + (r.totalLts || 0) + (r.extra || 0), 0);
     const totalFuelCost = monthLpoEntries.reduce((sum, l) => sum + (l.ltrs * l.pricePerLtr), 0);
     const avgFuelPerOrder = monthOrders.length > 0 ? totalFuelConsumed / monthOrders.length : 0;
     

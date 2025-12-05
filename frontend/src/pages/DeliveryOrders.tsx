@@ -1100,8 +1100,8 @@ const DeliveryOrders = () => {
 
           {/* Table */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg overflow-hidden transition-colors">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <div className="w-full">
+              <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     <th className="px-6 py-3 text-left">
@@ -1112,15 +1112,15 @@ const DeliveryOrders = () => {
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
                       />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Destination</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tonnage</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Actions</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO#</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Status</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Dest.</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tons</th>
+                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Act</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1144,93 +1144,95 @@ const DeliveryOrders = () => {
                           order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
                         }`}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={order.id ? selectedOrders.includes(order.id) : false}
                             onChange={() => order.id && handleSelectOrder(order.id)}
-                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
+                            className="h-3 w-3 md:h-4 md:w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
                             disabled={order.isCancelled}
                           />
                         </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm font-medium truncate max-w-[60px] md:max-w-none ${
                           order.isCancelled 
                             ? 'text-gray-400 dark:text-gray-500 line-through' 
                             : 'text-gray-900 dark:text-gray-100'
                         }`}>
                           {order.doType}-{order.doNumber}
                         </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm truncate max-w-[50px] md:max-w-none ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.date}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap">
+                          <span className={`px-1 md:px-2 py-0.5 md:py-1 inline-flex text-[10px] md:text-xs leading-5 font-semibold rounded-full ${
                             order.isCancelled
                               ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                               : order.importOrExport === 'IMPORT' 
                                 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' 
                                 : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                           }`}>
-                            {order.importOrExport}
+                            {order.importOrExport === 'IMPORT' ? 'IMP' : 'EXP'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap">
                           {order.isCancelled ? (
-                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-                              <Ban className="w-3 h-3 mr-1" />
-                              Cancelled
+                            <span className="px-1 md:px-2 py-0.5 md:py-1 inline-flex text-[10px] md:text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+                              <Ban className="w-2 h-2 md:w-3 md:h-3 mr-0.5 md:mr-1" />
+                              <span className="hidden md:inline">Cancelled</span>
+                              <span className="md:hidden">X</span>
                             </span>
                           ) : (
-                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">
-                              Active
+                            <span className="px-1 md:px-2 py-0.5 md:py-1 inline-flex text-[10px] md:text-xs leading-5 font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">
+                              <span className="hidden md:inline">Active</span>
+                              <span className="md:hidden">✓</span>
                             </span>
                           )}
                         </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm truncate max-w-[50px] md:max-w-none ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.clientName}
                         </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm truncate max-w-[50px] md:max-w-none ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.truckNo}
                         </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm truncate max-w-[50px] md:max-w-none ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.destination}
                         </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
-                          {order.tonnages} tons
+                          {order.tonnages}<span className="hidden md:inline"> tons</span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-sm font-medium">
                           <button 
                             onClick={() => handleViewOrder(order)}
-                            className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300 mr-3"
+                            className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300 mr-1 md:mr-3"
                             title="View Details"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-3 h-3 md:w-4 md:h-4" />
                           </button>
                           {!order.isCancelled && (
                             <>
                               <button 
                                 onClick={() => handleEditOrder(order)}
-                                className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-3" 
+                                className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-1 md:mr-3" 
                                 title="Edit"
                               >
-                                <Edit className="w-4 h-4" />
+                                <Edit className="w-3 h-3 md:w-4 md:h-4" />
                               </button>
                               <button 
                                 onClick={() => handleOpenCancelModal(order)}
                                 className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300" 
                                 title="Cancel DO"
                               >
-                                <Ban className="w-4 h-4" />
+                                <Ban className="w-3 h-3 md:w-4 md:h-4" />
                               </button>
                             </>
                           )}

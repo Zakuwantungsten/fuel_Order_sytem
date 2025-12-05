@@ -987,43 +987,43 @@ const LPOs = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg transition-colors" style={{ overflow: 'visible' }}>
-        <div className="overflow-x-auto" style={{ overflow: 'auto' }}>
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg transition-colors">
+        <div className="w-full">
+          <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  S/No
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  S/N
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                   Date
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  LPO No.
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  LPO#
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Station
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  Stn
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  DO/SDO
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  DO
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Truck No.
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  Truck
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Liters
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  Ltrs
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Price/Ltr
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  $/L
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Dest.
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  Dest
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Amount
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  Amt
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Actions
+                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                  Act
                 </th>
               </tr>
             </thead>
@@ -1049,73 +1049,73 @@ const LPOs = () => {
                     className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
                     onClick={() => handleRowClick(lpo)}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.sn}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[40px] md:max-w-none">
                       {lpo.date}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 dark:text-blue-400 underline">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm font-medium text-blue-600 dark:text-blue-400 underline truncate max-w-[50px] md:max-w-none">
                       {lpo.lpoNo}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[40px] md:max-w-none">
                       {lpo.dieselAt}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[40px] md:max-w-none">
                       {lpo.doSdo}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[50px] md:max-w-none">
                       {lpo.truckNo}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.ltrs.toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.pricePerLtr.toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[40px] md:max-w-none">
                       {lpo.destinations}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex space-x-2 relative">
+                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex space-x-1 md:space-x-2 relative">
                         {/* Copy/Download Dropdown */}
                         <div className="relative">
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleDropdown(rowKey, e); }}
-                            className="flex items-center px-2 py-1 text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                            className="flex items-center px-1 md:px-2 py-0.5 md:py-1 text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
                             title="Copy/Download LPO"
                           >
-                            <Copy className="w-4 h-4 mr-1" />
-                            <ChevronDown className="w-3 h-3" />
+                            <Copy className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" />
+                            <ChevronDown className="w-2 h-2 md:w-3 md:h-3" />
                           </button>
                           
                           {openDropdowns[rowKey] && (
                             <div 
-                              className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
+                              className="fixed w-48 md:w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
                               style={{
                                 top: `${dropdownPosition.top}px`,
                                 left: `${dropdownPosition.left}px`
                               }}
                             >
                               <div className="py-1">
-                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                <div className="px-2 md:px-3 py-1 md:py-2 text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                   Copy Options
                                 </div>
                                 <button
                                   onClick={() => handleCopyImageToClipboard(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                  className="flex items-center w-full px-3 md:px-4 py-1.5 md:py-2 text-left text-xs md:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                                 >
-                                  <Image className="w-4 h-4 mr-2" />
+                                  <Image className="w-3 h-3 md:w-4 md:h-4 mr-1.5 md:mr-2" />
                                   Copy as Image
                                 </button>
                                 <button
                                   onClick={() => handleCopyWhatsAppText(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                  className="flex items-center w-full px-3 md:px-4 py-1.5 md:py-2 text-left text-xs md:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                                 >
-                                  <MessageSquare className="w-4 h-4 mr-2" />
+                                  <MessageSquare className="w-3 h-3 md:w-4 md:h-4 mr-1.5 md:mr-2" />
                                   Copy for WhatsApp
                                 </button>
                                 <button

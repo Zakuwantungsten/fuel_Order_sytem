@@ -36,7 +36,7 @@ const FuelAnalytics = ({ fuelRecords, lpoEntries }: FuelAnalyticsProps) => {
       
       routeMap.set(route, {
         trips: existing.trips + 1,
-        totalFuel: existing.totalFuel + record.totalLts + (record.extra || 0),
+        totalFuel: existing.totalFuel + (record.totalLts || 0) + (record.extra || 0),
         cost: existing.cost + 0, // Will be calculated from LPOs
       });
     });
@@ -61,7 +61,7 @@ const FuelAnalytics = ({ fuelRecords, lpoEntries }: FuelAnalyticsProps) => {
       
       truckMap.set(record.truckNo, {
         trips: existing.trips + 1,
-        totalFuel: existing.totalFuel + record.totalLts + (record.extra || 0),
+        totalFuel: existing.totalFuel + (record.totalLts || 0) + (record.extra || 0),
       });
     });
 
@@ -120,7 +120,7 @@ const FuelAnalytics = ({ fuelRecords, lpoEntries }: FuelAnalyticsProps) => {
   // Overall stats
   const overallStats = useMemo(() => {
     const totalTrips = fuelRecords.length;
-    const totalFuelConsumed = fuelRecords.reduce((sum, r) => sum + r.totalLts + (r.extra || 0), 0);
+    const totalFuelConsumed = fuelRecords.reduce((sum, r) => sum + (r.totalLts || 0) + (r.extra || 0), 0);
     const totalBalance = fuelRecords.reduce((sum, r) => sum + r.balance, 0);
     const avgFuelPerTrip = totalFuelConsumed / totalTrips || 0;
 

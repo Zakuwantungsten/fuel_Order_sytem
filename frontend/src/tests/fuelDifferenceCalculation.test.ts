@@ -103,6 +103,7 @@ const scenario1Record: FuelRecord = {
 
 const scenario1DO: DeliveryOrder = {
   id: 1,
+  sn: 1,
   doNumber: '6868',
   date: '2025-12-04',
   truckNo: 'T664 ECQ',
@@ -115,7 +116,8 @@ const scenario1DO: DeliveryOrder = {
   ratePerTon: 1000,
   driverName: 'John Doe',
   doType: 'DO',
-  invoiceNos: [],
+  haulier: 'Test Haulier',
+  invoiceNos: '',
 };
 
 console.log('\nScenario 1: 2300L going, return from KAMOA to DAR');
