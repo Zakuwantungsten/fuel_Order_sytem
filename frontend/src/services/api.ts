@@ -96,6 +96,33 @@ export const deliveryOrdersAPI = {
     });
     return response.data.data?.nextSN || 1;
   },
+
+  // Re-link an EXPORT DO to a fuel record after truck number correction
+  relinkToFuelRecord: async (id: string | number): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      deliveryOrder: DeliveryOrder;
+      fuelRecord: FuelRecord | null;
+      wasAlreadyLinked?: boolean;
+      previousGoingJourney?: { from: string; to: string };
+      suggestion?: string;
+    };
+  }> => {
+    const response = await apiClient.post(`/delivery-orders/${id}/relink-to-fuel-record`);
+    return response.data;
+  },
+
+  // Create notification for unlinked EXPORT DO
+  notifyUnlinkedExport: async (data: {
+    deliveryOrderId: string;
+    doNumber: string;
+    truckNo: string;
+    destination?: string;
+    loadingPoint?: string;
+  }): Promise<void> => {
+    await apiClient.post('/delivery-orders/notify-unlinked-export', data);
+  },
 };
 
 // DO Workbook API (Excel-like workbook management - one workbook per year with monthly sheets)

@@ -223,6 +223,84 @@ export const createMissingConfigNotification = async (
 };
 
 /**
+ * Create notification for unlinked EXPORT DO (no matching fuel record found)
+ */
+export const createUnlinkedExportDONotification = async (
+  deliveryOrderId: string,
+  metadata: {
+    doNumber: string;
+    truckNo: string;
+    destination?: string;
+    loadingPoint?: string;
+  },
+  createdBy: string
+): Promise<void> => {
+  try {
+    const title = `Unlinked Return DO: ${metadata.doNumber}`;
+    const message = `Return DO for truck ${metadata.truckNo} has no matching fuel record. The truck number may be incorrect or the going journey was not recorded.`;
+
+    await Notification.create({
+      type: 'unlinked_export_do',
+      title,
+      message,
+      relatedModel: 'DeliveryOrder',
+      relatedId: deliveryOrderId,
+      metadata: {
+        doNumber: metadata.doNumber,
+        truckNo: metadata.truckNo,
+        destination: metadata.destination,
+        loadingPoint: metadata.loadingPoint,
+        importOrExport: 'EXPORT',
+        deliveryOrderId,
+      },
+      recipients: ['fuel_order_maker'], // Only fuel order maker should see this to follow up and re-link
+      createdBy,
+    });
+
+    logger.info(`Created notification for unlinked EXPORT DO ${metadata.doNumber} (truck: ${metadata.truckNo})`);
+  } catch (error) {
+    logger.error('Failed to create unlinked EXPORT DO notification:', error);
+    // Don't throw - notification failure shouldn't break DO creation
+  }
+};
+
+/**
+ * Auto-resolve unlinked DO notifications when DO is linked to a fuel record
+ */
+export const resolveUnlinkedDONotification = async (
+  deliveryOrderId: string,
+  resolvedBy: string
+): Promise<number> => {
+  try {
+    const result = await Notification.updateMany(
+      {
+        relatedModel: 'DeliveryOrder',
+        relatedId: deliveryOrderId,
+        type: 'unlinked_export_do',
+        status: 'pending',
+      },
+      {
+        $set: {
+          status: 'resolved',
+          resolvedAt: new Date(),
+          resolvedBy,
+          isRead: true,
+        },
+      }
+    );
+
+    if (result.modifiedCount > 0) {
+      logger.info(`Resolved ${result.modifiedCount} unlinked DO notification(s) for DO ${deliveryOrderId}`);
+    }
+    
+    return result.modifiedCount;
+  } catch (error) {
+    logger.error('Failed to resolve unlinked DO notification:', error);
+    return 0;
+  }
+};
+
+/**
  * Auto-resolve notifications when fuel record is updated
  */
 export const autoResolveNotifications = async (fuelRecordId: string, resolvedBy: string): Promise<void> => {
@@ -273,5 +351,7 @@ export default {
   dismissNotification,
   resolveNotification,
   createMissingConfigNotification,
+  createUnlinkedExportDONotification,
+  resolveUnlinkedDONotification,
   autoResolveNotifications,
 };

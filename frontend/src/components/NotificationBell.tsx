@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck } from 'lucide-react';
 
 interface Notification {
   id: string;
-  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'info' | 'warning' | 'error';
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
   relatedModel: string;
@@ -15,6 +15,9 @@ interface Notification {
     destination?: string;
     truckSuffix?: string;
     missingFields?: string[];
+    loadingPoint?: string;
+    importOrExport?: string;
+    deliveryOrderId?: string;
   };
   status: 'pending' | 'resolved' | 'dismissed';
   createdAt: string;
@@ -23,13 +26,16 @@ interface Notification {
 
 interface NotificationBellProps {
   onNotificationClick?: (notification: Notification) => void;
+  onEditDO?: (doId: string) => void; // Callback to navigate to edit a DO
+  onRelinkDO?: (doId: string) => Promise<boolean>; // Callback to attempt re-linking a DO
 }
 
-export default function NotificationBell({ onNotificationClick }: NotificationBellProps) {
+export default function NotificationBell({ onNotificationClick, onEditDO, onRelinkDO }: NotificationBellProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [relinkingId, setRelinkingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadNotifications();
@@ -41,9 +47,10 @@ export default function NotificationBell({ onNotificationClick }: NotificationBe
   const loadNotifications = async () => {
     try {
       setLoading(true);
+      const token = localStorage.getItem('fuel_order_token') || localStorage.getItem('token');
       const response = await fetch('/api/notifications?status=pending', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
       
@@ -61,10 +68,11 @@ export default function NotificationBell({ onNotificationClick }: NotificationBe
 
   const markAsRead = async (id: string) => {
     try {
+      const token = localStorage.getItem('fuel_order_token') || localStorage.getItem('token');
       await fetch(`/api/notifications/${id}/read`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
       loadNotifications();
@@ -75,15 +83,66 @@ export default function NotificationBell({ onNotificationClick }: NotificationBe
 
   const dismissNotification = async (id: string) => {
     try {
+      const token = localStorage.getItem('fuel_order_token') || localStorage.getItem('token');
       await fetch(`/api/notifications/${id}/dismiss`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
       loadNotifications();
     } catch (error) {
       console.error('Failed to dismiss notification:', error);
+    }
+  };
+
+  const handleRelinkDO = async (e: React.MouseEvent, notification: Notification) => {
+    e.stopPropagation();
+    const doId = notification.metadata?.deliveryOrderId || notification.relatedId;
+    if (!doId) return;
+
+    setRelinkingId(notification.id);
+    try {
+      if (onRelinkDO) {
+        const success = await onRelinkDO(doId);
+        if (success) {
+          loadNotifications(); // Refresh to remove resolved notification
+        }
+      } else {
+        // Default behavior: call API directly
+        const token = localStorage.getItem('fuel_order_token') || localStorage.getItem('token');
+        const response = await fetch(`/api/delivery-orders/${doId}/relink-to-fuel-record`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        const result = await response.json();
+        if (result.success && result.data?.fuelRecord) {
+          alert(`✓ Successfully linked DO-${notification.metadata?.doNumber} to fuel record!`);
+          loadNotifications();
+        } else {
+          alert(`Could not link: ${result.message}\n\nPlease edit the DO to correct the truck number.`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to re-link DO:', error);
+      alert('Failed to re-link. Please try again.');
+    } finally {
+      setRelinkingId(null);
+    }
+  };
+
+  const handleEditDO = (e: React.MouseEvent, notification: Notification) => {
+    e.stopPropagation();
+    const doId = notification.metadata?.deliveryOrderId || notification.relatedId;
+    if (!doId) return;
+    
+    if (onEditDO) {
+      onEditDO(doId);
+      setShowDropdown(false);
     }
   };
 
@@ -104,9 +163,18 @@ export default function NotificationBell({ onNotificationClick }: NotificationBe
       case 'missing_extra_fuel':
       case 'warning':
         return 'text-yellow-500';
+      case 'unlinked_export_do':
+        return 'text-orange-500';
       default:
         return 'text-blue-500';
     }
+  };
+
+  const getNotificationIcon = (type: string) => {
+    if (type === 'unlinked_export_do') {
+      return <Truck className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
+    }
+    return <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
   };
 
   return (
@@ -162,14 +230,14 @@ export default function NotificationBell({ onNotificationClick }: NotificationBe
                 notifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${
+                    className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
                       !notification.isRead ? 'bg-blue-50 dark:bg-blue-900/10' : ''
-                    }`}
-                    onClick={() => handleNotificationClick(notification)}
+                    } ${notification.type !== 'unlinked_export_do' ? 'cursor-pointer' : ''}`}
+                    onClick={() => notification.type !== 'unlinked_export_do' && handleNotificationClick(notification)}
                   >
                     <div className="p-4">
                       <div className="flex items-start gap-3">
-                        <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(notification.type)}`} />
+                        {getNotificationIcon(notification.type)}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                             {notification.title}
@@ -188,11 +256,40 @@ export default function NotificationBell({ onNotificationClick }: NotificationBe
                               {notification.metadata.destination && (
                                 <div>Destination: {notification.metadata.destination}</div>
                               )}
+                              {notification.metadata.loadingPoint && (
+                                <div>Loading Point: {notification.metadata.loadingPoint}</div>
+                              )}
                               {notification.metadata.truckSuffix && (
                                 <div>Suffix: {notification.metadata.truckSuffix}</div>
                               )}
                             </div>
                           )}
+                          
+                          {/* Action buttons for unlinked EXPORT DO */}
+                          {notification.type === 'unlinked_export_do' && (
+                            <div className="flex items-center gap-2 mt-3">
+                              <button
+                                onClick={(e) => handleRelinkDO(e, notification)}
+                                disabled={relinkingId === notification.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 rounded transition-colors"
+                                title="Try to link this DO to a fuel record"
+                              >
+                                <Link2 className="w-3.5 h-3.5" />
+                                {relinkingId === notification.id ? 'Linking...' : 'Try Re-link'}
+                              </button>
+                              {onEditDO && (
+                                <button
+                                  onClick={(e) => handleEditDO(e, notification)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                                  title="Edit this DO to correct the truck number"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                  Edit DO
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          
                           <div className="flex items-center gap-2 mt-2">
                             <span className="text-xs text-gray-400 dark:text-gray-500">
                               {new Date(notification.createdAt).toLocaleString()}

@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface INotification extends Document {
-  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'info' | 'warning' | 'error';
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
   relatedModel: 'FuelRecord' | 'DeliveryOrder' | 'LPO' | 'User';
@@ -13,6 +13,9 @@ export interface INotification extends Document {
     destination?: string;
     truckSuffix?: string;
     missingFields?: string[];
+    loadingPoint?: string; // For EXPORT DO - where truck loads cargo
+    importOrExport?: string;
+    deliveryOrderId?: string; // ID of the unlinked DO
   };
   recipients: string[]; // Array of user IDs or roles (e.g., ['admin', 'super_admin'])
   isRead: boolean;
@@ -29,7 +32,7 @@ const notificationSchema = new Schema<INotification>(
   {
     type: {
       type: String,
-      enum: ['missing_total_liters', 'missing_extra_fuel', 'both', 'info', 'warning', 'error'],
+      enum: ['missing_total_liters', 'missing_extra_fuel', 'both', 'unlinked_export_do', 'info', 'warning', 'error'],
       required: true,
     },
     title: {

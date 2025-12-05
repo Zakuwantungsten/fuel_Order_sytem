@@ -227,12 +227,18 @@ const Layout = ({ children }: LayoutProps) => {
           </div>
           <div className="flex items-center space-x-4">
             {/* Notification Bell */}
-            <NotificationBell onNotificationClick={(notification) => {
-              // Navigate to fuel record or relevant page
-              if (notification.metadata?.fuelRecordId) {
-                window.location.href = `/fuel-records?id=${notification.metadata.fuelRecordId}`;
-              }
-            }} />
+            <NotificationBell 
+              onNotificationClick={(notification) => {
+                // Navigate to fuel record or relevant page
+                if (notification.metadata?.fuelRecordId) {
+                  navigate(`/fuel-records?id=${notification.metadata.fuelRecordId}`);
+                }
+              }}
+              onEditDO={(doId) => {
+                // Navigate to delivery orders page with the DO ID to edit
+                navigate(`/delivery-orders?edit=${doId}`);
+              }}
+            />
             
             {/* User Menu */}
             <div className="relative z-20" ref={userMenuRef}>

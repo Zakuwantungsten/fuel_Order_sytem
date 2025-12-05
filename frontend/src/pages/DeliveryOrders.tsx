@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
 import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
@@ -17,6 +18,7 @@ import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup
 import Pagination from '../components/Pagination';
 
 const DeliveryOrders = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,39 @@ const DeliveryOrders = () => {
     fetchWorkbooks();
     fetchAvailableYears();
   }, [filterType, filterDoType]);
+
+  // Handle edit query parameter (e.g., from notification click)
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId && orders.length > 0) {
+      // Find the order to edit
+      const orderToEdit = orders.find(o => 
+        (o.id && String(o.id) === editId) || 
+        ((o as any)._id && String((o as any)._id) === editId)
+      );
+      
+      if (orderToEdit) {
+        console.log('Opening DO for edit from URL param:', orderToEdit.doNumber);
+        setEditingOrder(orderToEdit);
+        setIsFormOpen(true);
+        // Clear the query param to prevent re-opening on refresh
+        setSearchParams({});
+      } else {
+        // Order not found in current filter, try to fetch it directly
+        deliveryOrdersAPI.getById(editId).then(order => {
+          if (order) {
+            console.log('Fetched DO for edit:', order.doNumber);
+            setEditingOrder(order);
+            setIsFormOpen(true);
+            setSearchParams({});
+          }
+        }).catch(err => {
+          console.error('Failed to fetch DO for edit:', err);
+          setSearchParams({});
+        });
+      }
+    }
+  }, [searchParams, orders]);
 
   const loadOrders = async () => {
     setLoading(true);
@@ -345,6 +380,28 @@ const DeliveryOrders = () => {
             console.log(`${result.cascadeResults.lpoEntriesUpdated} LPO entries updated`);
           }
         }
+
+        // Check if this is an EXPORT DO with truck number changed - try to re-link to fuel record
+        if (savedOrder.doType === 'DO' && 
+            savedOrder.importOrExport === 'EXPORT' && 
+            fieldsChanged.includes('truckNo')) {
+          console.log('Truck number changed for EXPORT DO, attempting to re-link to fuel record...');
+          try {
+            const relinkResult = await deliveryOrdersAPI.relinkToFuelRecord(orderId);
+            if (relinkResult.success && relinkResult.data.fuelRecord) {
+              if (relinkResult.data.wasAlreadyLinked) {
+                console.log('DO was already linked to fuel record');
+              } else {
+                alert(`✓ Successfully linked DO-${savedOrder.doNumber} to fuel record for truck ${savedOrder.truckNo}.\n\nNotification resolved.`);
+              }
+            } else {
+              console.log('Re-link result:', relinkResult.message);
+              // Still unlinked - notification remains
+            }
+          } catch (relinkError) {
+            console.error('Failed to re-link EXPORT DO to fuel record:', relinkError);
+          }
+        }
       } else {
         // Create new DO
         savedOrder = await deliveryOrdersAPI.create(orderData);
@@ -528,7 +585,25 @@ const DeliveryOrders = () => {
       
       if (!matchingRecord) {
         console.warn('No matching going record found for truck:', deliveryOrder.truckNo);
-        alert(`Warning: No fuel record found for truck ${deliveryOrder.truckNo}. Return DO saved, but fuel record not updated.`);
+        
+        // Create notification for admin about unlinked EXPORT DO
+        try {
+          const doId = deliveryOrder.id || (deliveryOrder as any)._id;
+          if (doId) {
+            await deliveryOrdersAPI.notifyUnlinkedExport({
+              deliveryOrderId: String(doId),
+              doNumber: deliveryOrder.doNumber,
+              truckNo: deliveryOrder.truckNo,
+              destination: deliveryOrder.destination,
+              loadingPoint: deliveryOrder.loadingPoint,
+            });
+            console.log('✓ Notification created for unlinked EXPORT DO');
+          }
+        } catch (notifyError) {
+          console.error('Failed to create notification for unlinked DO:', notifyError);
+        }
+        
+        alert(`⚠️ Warning: No fuel record found for truck ${deliveryOrder.truckNo}.\n\nReturn DO-${deliveryOrder.doNumber} has been saved, but could not be linked to a fuel record.\n\nAdmin has been notified. Please check the truck number - if incorrect, edit the DO and it will attempt to re-link automatically.`);
         return;
       }
       

@@ -2399,3 +2399,146 @@ export const exportSDOYearlyMonthlySummaries = async (req: AuthRequest, res: Res
     }
   }
 };
+
+/**
+ * Re-link an EXPORT DO to a fuel record after truck number correction
+ * This is called after editing a DO's truck number to find and link it to the correct fuel record
+ */
+export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username || 'system';
+
+    // Get the delivery order
+    const deliveryOrder = await DeliveryOrder.findOne({ _id: id, isDeleted: false });
+
+    if (!deliveryOrder) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+
+    // Only EXPORT DOs can be re-linked
+    if (deliveryOrder.importOrExport !== 'EXPORT') {
+      throw new ApiError(400, 'Only EXPORT (return) DOs can be re-linked to fuel records');
+    }
+
+    // Skip SDOs - they don't interact with fuel records
+    if (deliveryOrder.doType === 'SDO') {
+      throw new ApiError(400, 'SDO orders do not have fuel records');
+    }
+
+    // Check if already linked to a fuel record
+    const existingLink = await FuelRecord.findOne({
+      returnDo: deliveryOrder.doNumber,
+      isDeleted: false,
+    });
+
+    if (existingLink) {
+      res.status(200).json({
+        success: true,
+        message: 'DO is already linked to a fuel record',
+        data: {
+          deliveryOrder,
+          fuelRecord: existingLink,
+          wasAlreadyLinked: true,
+        },
+      });
+      return;
+    }
+
+    // Find matching fuel record for this truck (one without a return DO yet)
+    const matchingFuelRecord = await FuelRecord.findOne({
+      truckNo: deliveryOrder.truckNo,
+      returnDo: { $in: [null, '', undefined] },
+      isDeleted: false,
+    }).sort({ date: -1 }); // Most recent first
+
+    if (!matchingFuelRecord) {
+      res.status(200).json({
+        success: false,
+        message: `No matching fuel record found for truck ${deliveryOrder.truckNo}. The truck may not have a going journey recorded yet.`,
+        data: {
+          deliveryOrder,
+          fuelRecord: null,
+          suggestion: 'Check that the truck number is correct and that an IMPORT DO exists for this truck.',
+        },
+      });
+      return;
+    }
+
+    // Link the DO to the fuel record
+    // Store original going journey locations before changing
+    const originalGoingFrom = matchingFuelRecord.originalGoingFrom || matchingFuelRecord.from;
+    const originalGoingTo = matchingFuelRecord.originalGoingTo || matchingFuelRecord.to;
+
+    // Update the fuel record with return DO info
+    const updateData: any = {
+      returnDo: deliveryOrder.doNumber,
+      originalGoingFrom: originalGoingFrom,
+      originalGoingTo: originalGoingTo,
+      // Update from/to for return journey
+      from: deliveryOrder.destination, // Return journey: load from EXPORT destination
+      to: matchingFuelRecord.start || 'DAR', // Back to start location
+    };
+
+    await FuelRecord.findByIdAndUpdate(matchingFuelRecord._id, updateData);
+
+    // Resolve any pending unlinked DO notifications
+    const { resolveUnlinkedDONotification } = await import('./notificationController');
+    await resolveUnlinkedDONotification(id, username);
+
+    logger.info(`Re-linked EXPORT DO ${deliveryOrder.doNumber} to fuel record ${matchingFuelRecord._id} by ${username}`);
+
+    // Fetch the updated fuel record
+    const updatedFuelRecord = await FuelRecord.findById(matchingFuelRecord._id);
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully linked DO-${deliveryOrder.doNumber} to fuel record for truck ${deliveryOrder.truckNo}`,
+      data: {
+        deliveryOrder,
+        fuelRecord: updatedFuelRecord,
+        wasAlreadyLinked: false,
+        previousGoingJourney: {
+          from: originalGoingFrom,
+          to: originalGoingTo,
+        },
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Create notification for unlinked EXPORT DO
+ * Called from frontend when no fuel record match is found during DO creation
+ */
+export const createUnlinkedExportNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { deliveryOrderId, doNumber, truckNo, destination, loadingPoint } = req.body;
+    const username = req.user?.username || 'system';
+
+    if (!deliveryOrderId || !doNumber || !truckNo) {
+      throw new ApiError(400, 'Missing required fields: deliveryOrderId, doNumber, truckNo');
+    }
+
+    const { createUnlinkedExportDONotification } = await import('./notificationController');
+    await createUnlinkedExportDONotification(
+      deliveryOrderId,
+      {
+        doNumber,
+        truckNo,
+        destination,
+        loadingPoint,
+      },
+      username
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Notification created for unlinked EXPORT DO',
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};

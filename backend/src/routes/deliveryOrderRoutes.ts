@@ -71,6 +71,22 @@ router.put(
   asyncHandler(deliveryOrderController.cancelDeliveryOrder)
 );
 
+// Re-link EXPORT DO to fuel record (after truck number correction)
+router.post(
+  '/:id/relink-to-fuel-record',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker'),
+  validate,
+  asyncHandler(deliveryOrderController.relinkExportDOToFuelRecord)
+);
+
+// Create notification for unlinked EXPORT DO
+router.post(
+  '/notify-unlinked-export',
+  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker'),
+  asyncHandler(deliveryOrderController.createUnlinkedExportNotification)
+);
+
 // Delete route (requires appropriate role)
 router.delete(
   '/:id',
