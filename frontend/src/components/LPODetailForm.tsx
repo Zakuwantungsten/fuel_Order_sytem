@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, ExternalLink, Fuel } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel } from 'lucide-react';
 import { LPOSummary, LPODetail, FuelRecord, CancellationPoint } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
@@ -366,28 +366,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       direction: autoFill?.direction || 'going',
       entryIndex: index,
     });
-  };
-
-  // Handle navigate to full fuel record - saves form first, then navigates in same tab
-  const handleNavigateToFullRecord = (recordId: string | number) => {
-    // Save current form state before navigating
-    saveFormToStorage({
-      formData,
-      entryAutoFillData,
-      goingEnabled,
-      returningEnabled,
-      goingCheckpoint,
-      returningCheckpoint,
-      cashConversion,
-      customStationName,
-      customGoingEnabled,
-      customReturnEnabled,
-      customGoingCheckpoint,
-      customReturnCheckpoint,
-      savedAt: new Date().toISOString(),
-    });
-    // Navigate in same tab - form data is saved
-    window.location.href = `/fuel-records?viewRecord=${recordId}`;
   };
 
   // Close inspect modal
@@ -2283,17 +2261,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                   <Eye className="w-4 h-4" />
                                 </button>
                               )}
-                              {/* Navigate to full record button */}
-                              {autoFill.fuelRecordId && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleNavigateToFullRecord(autoFill.fuelRecordId!)}
-                                  className="p-1.5 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded"
-                                  title="View full fuel record (opens in new tab)"
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                </button>
-                              )}
                               {/* Delete entry button */}
                               <button
                                 type="button"
@@ -2507,7 +2474,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         onClose={handleCloseInspectModal}
         truckNumber={inspectModal.truckNo}
         fuelRecordId={inspectModal.fuelRecordId || ''}
-        onNavigateToRecord={handleNavigateToFullRecord}
       />
     </div>
   );
