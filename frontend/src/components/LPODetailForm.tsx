@@ -302,11 +302,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     };
   });
 
-  // Forwarding state - tracks when trucks are auto-loaded from previous station
-  const [selectedSourceLpo, setSelectedSourceLpo] = useState<LPOSummary | null>(null);
-  const [isLoadingForward, setIsLoadingForward] = useState(false);
-  const [forwardDefaultLiters, setForwardDefaultLiters] = useState<number>(0);
-  const [forwardRate, setForwardRate] = useState<number>(0);
+  // Forwarding modal state - opens after creating LPO at a forwardable station
+  const [showForwardingModal, setShowForwardingModal] = useState(false);
+  const [forwardingData, setForwardingData] = useState<{
+    entries: LPODetail[];
+    targetStation: string;
+    targetLiters: number;
+    targetRate: number;
+    sourceStation: string;
+    sourceLpoNo: string;
+    orderOf: string;
+  } | null>(null);
 
   // Custom station state - for unlisted stations
   const [customStationName, setCustomStationName] = useState(() => {
@@ -414,9 +420,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       currency: 'ZMW',
       calculatedRate: 0,
     });
-    setSelectedSourceLpo(null);
-    setForwardDefaultLiters(0);
-    setForwardRate(0);
+    setShowForwardingModal(false);
+    setForwardingData(null);
     setCustomStationName('');
     setCustomGoingEnabled(false);
     setCustomReturnEnabled(false);
@@ -914,18 +919,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   // Zambia Return Split: Same trucks get fuel at TWO stations in sequence
   // Lake Ndola (50L) → Lake Kapiri (350L) = 400L total for Zambia Return
-  // When creating LPO at LAKE KAPIRI, auto-fetch trucks from the last LAKE NDOLA LPO
-  const FORWARD_STATION_MAP: Record<string, { 
-    sourceStation: string; 
-    defaultLiters: number; 
-    rate: number;
+  // Source stations that can forward trucks to the next station
+  const FORWARDABLE_STATIONS: Record<string, { 
+    targetStation: string; 
+    targetLiters: number; 
+    targetRate: number;
     description: string;
   }> = {
-    'LAKE KAPIRI': { 
-      sourceStation: 'LAKE NDOLA', 
-      defaultLiters: 350, 
-      rate: 1.2,
-      description: 'Zambia Return: Ndola (50L) + Kapiri (350L) = 400L total'
+    'LAKE NDOLA': { 
+      targetStation: 'LAKE KAPIRI', 
+      targetLiters: 350, 
+      targetRate: 1.2,
+      description: 'Forward to Kapiri (350L) - Total Zambia Return: 400L'
+    },
+    'LAKE TUNDUMA': { 
+      targetStation: 'INFINITY', 
+      targetLiters: 400, 
+      targetRate: 2757,
+      description: 'Forward to Infinity/Mbeya (400L)'
     },
   };
 
@@ -934,95 +945,37 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // RETURNING: Zambia Return (400 = Ndola 50 + Kapiri 350), Tunduma Return (100), 
   //            Mbeya Return (400), Moro Return (100), Tanga Return (70), Dar Return (variable)
 
-  // Fetch the last LPO from a source station to forward trucks
-  const fetchLastLPOFromStation = async (sourceStation: string): Promise<LPOSummary | null> => {
-    try {
-      // Get LPOs filtered by station, sorted by date/lpoNo descending
-      const lpos = await lpoDocumentsAPI.getAll({ 
-        station: sourceStation, 
-        limit: 10,
-        sortBy: 'lpoNo',
-        sortOrder: 'desc'
-      });
-      
-      // Find the most recent LPO with active entries
-      const validLpo = lpos.find((lpo: LPOSummary) => {
-        const hasActiveEntries = lpo.entries.some(e => !e.isCancelled);
-        return hasActiveEntries;
-      });
-      
-      return validLpo || null;
-    } catch (error) {
-      console.error('Error fetching last LPO from station:', error);
-      return null;
-    }
-  };
+  // Check if current station is a forwardable station (can forward trucks to next station)
+  const isForwardableStation = useCallback((): boolean => {
+    const station = formData.station?.toUpperCase();
+    return station ? !!FORWARDABLE_STATIONS[station] : false;
+  }, [formData.station]);
 
-  // Auto-forward trucks when selecting a target station (LAKE KAPIRI or INFINITY)
-  const autoForwardFromPreviousStation = async (targetStation: string) => {
-    const forwardConfig = FORWARD_STATION_MAP[targetStation.toUpperCase()];
-    if (!forwardConfig) return;
+  // Get forwarding config for current station
+  const getForwardingConfig = useCallback(() => {
+    const station = formData.station?.toUpperCase();
+    return station ? FORWARDABLE_STATIONS[station] : null;
+  }, [formData.station]);
 
-    setIsLoadingForward(true);
-    try {
-      const sourceLpo = await fetchLastLPOFromStation(forwardConfig.sourceStation);
-      
-      if (sourceLpo) {
-        const activeEntries = sourceLpo.entries.filter(e => !e.isCancelled);
-        
-        // Create forwarded entries with correct liters and rate
-        const forwardedEntries: LPODetail[] = activeEntries.map(entry => ({
-          doNo: entry.doNo,
-          truckNo: entry.truckNo,
-          liters: forwardConfig.defaultLiters,
-          rate: forwardConfig.rate,
-          amount: forwardConfig.defaultLiters * forwardConfig.rate,
-          dest: entry.dest,
-          isCancelled: false,
-          isDriverAccount: false,
-        }));
-
-        const total = forwardedEntries.reduce((sum, e) => sum + e.amount, 0);
-
-        setFormData(prev => ({
-          ...prev,
-          station: targetStation,
-          orderOf: sourceLpo.orderOf || prev.orderOf,
-          entries: forwardedEntries,
-          total,
-        }));
-
-        setSelectedSourceLpo(sourceLpo);
-        setForwardDefaultLiters(forwardConfig.defaultLiters);
-        setForwardRate(forwardConfig.rate);
-
-        // Set all entries as returning direction
-        const autoFillData: Record<number, EntryAutoFillData> = {};
-        forwardedEntries.forEach((_, idx) => {
-          autoFillData[idx] = { direction: 'returning', loading: false, fetched: true, fuelRecord: null };
-        });
-        setEntryAutoFillData(autoFillData);
-      }
-    } catch (error) {
-      console.error('Error auto-forwarding:', error);
-    } finally {
-      setIsLoadingForward(false);
-    }
-  };
-
-  // Reset forwarding state
-  const resetForwarding = () => {
-    setSelectedSourceLpo(null);
-    setForwardDefaultLiters(0);
-    setForwardRate(0);
-    setEntryAutoFillData({});
-    setFormData(prev => ({
-      ...prev,
-      station: '',
-      entries: [],
-      total: 0,
+  // Prepare forwarded entries for the modal
+  const prepareForwardedEntries = useCallback((): LPODetail[] => {
+    const config = getForwardingConfig();
+    if (!config || !formData.entries) return [];
+    
+    // Only include active (non-cancelled) entries
+    const activeEntries = formData.entries.filter(e => !e.isCancelled);
+    
+    return activeEntries.map(entry => ({
+      doNo: entry.doNo,
+      truckNo: entry.truckNo,
+      liters: config.targetLiters,
+      rate: config.targetRate,
+      amount: config.targetLiters * config.targetRate,
+      dest: entry.dest,
+      isCancelled: false,
+      isDriverAccount: false,
     }));
-  };
+  }, [formData.entries, getForwardingConfig]);
 
   const handleHeaderChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -1031,33 +984,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       [name]: value,
     }));
 
-    // If station changes to a forwarding target (LAKE KAPIRI or INFINITY), auto-fetch trucks
+    // When station changes, update rates for existing entries (no auto-forwarding)
     if (name === 'station' && value) {
-      const stationUpper = value.toUpperCase();
+      // Regular station change - update rates for existing entries
+      const updatedEntries = formData.entries?.map((entry, idx) => {
+        const direction = entryAutoFillData[idx]?.direction || 'going';
+        const defaults = getStationDefaults(value, direction, entry.dest);
+        return {
+          ...entry,
+          rate: defaults.rate,
+          liters: entry.liters || defaults.liters,
+          amount: (entry.liters || defaults.liters) * defaults.rate
+        };
+      }) || [];
       
-      // Check if this is a forwarding target station
-      if (FORWARD_STATION_MAP[stationUpper]) {
-        // Auto-forward from the source station
-        await autoForwardFromPreviousStation(value);
-      } else {
-        // Regular station change - update rates for existing entries
-        const updatedEntries = formData.entries?.map((entry, idx) => {
-          const direction = entryAutoFillData[idx]?.direction || 'going';
-          const defaults = getStationDefaults(value, direction, entry.dest);
-          return {
-            ...entry,
-            rate: defaults.rate,
-            liters: entry.liters || defaults.liters,
-            amount: (entry.liters || defaults.liters) * defaults.rate
-          };
-        }) || [];
-        
-        const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
-        setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
-        
-        // Clear any previous forwarding state
-        setSelectedSourceLpo(null);
-      }
+      const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+      setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
     }
   };
 
@@ -1436,6 +1378,108 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setHasDraft(false);
   };
 
+  // Handle "Forward Trucks" button click - creates LPO and opens forwarding modal
+  const handleForwardAndSubmit = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    // Same validation as handleSubmit
+    if (!formData.entries || formData.entries.length === 0) {
+      alert('Please add at least one entry');
+      return;
+    }
+    if (!formData.lpoNo || !formData.lpoNo.trim()) {
+      alert('LPO number is required');
+      return;
+    }
+    if (!formData.date) {
+      alert('Date is required');
+      return;
+    }
+    if (!formData.station || !formData.station.trim()) {
+      alert('Station is required');
+      return;
+    }
+    if (!formData.orderOf || !formData.orderOf.trim()) {
+      alert('Order of is required');
+      return;
+    }
+    
+    // Validate each entry has truck number
+    const invalidEntries = formData.entries.filter(
+      (entry) => !entry.truckNo || !entry.truckNo.trim()
+    );
+    if (invalidEntries.length > 0) {
+      alert('All entries must have a truck number');
+      return;
+    }
+
+    // Check if this is a forwardable station
+    const forwardConfig = getForwardingConfig();
+    if (!forwardConfig) {
+      alert('This station does not support forwarding');
+      return;
+    }
+
+    // Prepare forwarded entries before submitting
+    const forwardedEntries = prepareForwardedEntries();
+    if (forwardedEntries.length === 0) {
+      alert('No active entries to forward');
+      return;
+    }
+
+    // Prepare the submit data (same as handleSubmit)
+    const validEntries = formData.entries.map(entry => ({
+      ...entry,
+      doNo: (entry.doNo && entry.doNo.trim()) || 'NIL',
+      truckNo: entry.truckNo.trim(),
+      dest: (entry.dest && entry.dest.trim()) || 'NIL',
+      liters: Number(entry.liters) || 0,
+      rate: Number(entry.rate) || 0,
+      amount: (Number(entry.liters) || 0) * (Number(entry.rate) || 0),
+    }));
+    const total = validEntries.reduce((sum, entry) => sum + entry.amount, 0);
+
+    const submitData = {
+      ...formData,
+      entries: validEntries,
+      total,
+    };
+
+    // Store forwarding data for the modal that will open after LPO creation
+    setForwardingData({
+      entries: forwardedEntries,
+      targetStation: forwardConfig.targetStation,
+      targetLiters: forwardConfig.targetLiters,
+      targetRate: forwardConfig.targetRate,
+      sourceStation: formData.station || '',
+      sourceLpoNo: formData.lpoNo || '',
+      orderOf: formData.orderOf || 'TAHMEED',
+    });
+
+    // Submit the current LPO
+    onSubmit(submitData);
+    
+    // Clear the draft from local storage
+    clearFormStorage();
+    setHasDraft(false);
+
+    // Show the forwarding modal (the parent component handles success toast)
+    setShowForwardingModal(true);
+  };
+
+  // Handle forwarding modal submission - create the forwarded LPO
+  const handleForwardingModalSubmit = async (forwardedData: Partial<LPOSummary>) => {
+    onSubmit(forwardedData);
+    setShowForwardingModal(false);
+    setForwardingData(null);
+  };
+
+  // Close the forwarding modal without creating forwarded LPO
+  const handleForwardingModalClose = () => {
+    setShowForwardingModal(false);
+    setForwardingData(null);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -1537,46 +1581,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             );
           })()}
 
-          {/* Auto-Forward Notice - Shows when trucks are loaded from previous station (Zambia Return) */}
-          {!initialData && selectedSourceLpo && (
-            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-                  <div>
-                    <h3 className="font-medium text-green-800 dark:text-green-200">
-                      Trucks Forwarded from LPO #{selectedSourceLpo.lpoNo} ({selectedSourceLpo.station})
-                    </h3>
-                    <p className="text-sm text-green-600 dark:text-green-300">
-                      {formData.entries?.length} trucks loaded @ {forwardDefaultLiters}L each @ {forwardRate}/L
-                    </p>
-                    <p className="text-xs text-green-500 dark:text-green-400 mt-1">
-                      Zambia Return: Same trucks from Ndola (50L) now at Kapiri (350L) = 400L total
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={resetForwarding}
-                  className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Loading indicator when fetching trucks */}
-          {!initialData && isLoadingForward && (
+          {/* Forwardable Station Notice - Shows when creating LPO at a station that can forward trucks */}
+          {!initialData && isForwardableStation() && formData.entries && formData.entries.length > 0 && (
             <div className="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-700">
-              <div className="flex items-center space-x-3">
-                <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+              <div className="flex items-start space-x-3">
+                <ArrowRight className="w-6 h-6 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <h3 className="font-medium text-indigo-800 dark:text-indigo-200">
-                    Loading trucks from previous station...
+                    Forward Available: {formData.station} → {getForwardingConfig()?.targetStation}
                   </h3>
-                  <p className="text-sm text-indigo-600 dark:text-indigo-300">
-                    Fetching active entries to forward
+                  <p className="text-sm text-indigo-600 dark:text-indigo-300 mt-1">
+                    After creating this LPO, you can forward these trucks to {getForwardingConfig()?.targetStation} ({getForwardingConfig()?.targetLiters}L @ {getForwardingConfig()?.targetRate}/L).
+                  </p>
+                  <p className="text-xs text-indigo-500 dark:text-indigo-400 mt-1">
+                    Use the <strong>"Forward Trucks"</strong> button below to create both LPOs in sequence.
                   </p>
                 </div>
               </div>
@@ -2340,6 +2358,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             >
               Cancel
             </button>
+            
+            {/* Forward Trucks Button - Only show for forwardable stations (LAKE NDOLA, LAKE TUNDUMA) */}
+            {!initialData && isForwardableStation() && formData.entries && formData.entries.length > 0 && (
+              <button
+                type="button"
+                onClick={handleForwardAndSubmit}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 flex items-center gap-2"
+                title={getForwardingConfig()?.description}
+              >
+                <ArrowRight className="w-4 h-4" />
+                Forward Trucks to {getForwardingConfig()?.targetStation}
+              </button>
+            )}
+            
             <button
               type="submit"
               disabled={!formData.entries || formData.entries.length === 0}
@@ -2350,6 +2382,124 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Forwarding Modal - Opens after creating LPO at a forwardable station */}
+      {showForwardingModal && forwardingData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                    Forward Trucks to {forwardingData.targetStation}
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    LPO #{forwardingData.sourceLpoNo} created at {forwardingData.sourceStation}. Now create the forwarded LPO.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleForwardingModalClose}
+                className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Info banner */}
+              <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+                <div className="flex items-start space-x-3">
+                  <ArrowRight className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-green-800 dark:text-green-200">
+                      {forwardingData.entries.length} trucks ready to forward
+                    </h3>
+                    <p className="text-sm text-green-600 dark:text-green-300 mt-1">
+                      From {forwardingData.sourceStation} → {forwardingData.targetStation}
+                    </p>
+                    <p className="text-sm text-green-600 dark:text-green-300">
+                      {forwardingData.targetLiters}L per truck @ {forwardingData.targetRate}/L
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Forwarded entries table */}
+              <div className="overflow-x-auto border dark:border-gray-700 rounded-lg mb-6">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">DO</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Truck</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Liters</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Rate</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Dest</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {forwardingData.entries.map((entry, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{entry.doNo}</td>
+                        <td className="px-4 py-3 text-sm font-mono text-gray-900 dark:text-gray-100">{entry.truckNo}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{entry.liters}L</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{entry.rate}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{entry.amount.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{entry.dest}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <td colSpan={4} className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 text-right">
+                        TOTAL:
+                      </td>
+                      <td colSpan={2} className="px-4 py-3 text-sm font-bold text-primary-700 dark:text-primary-400">
+                        {forwardingData.entries.reduce((sum, e) => sum + e.amount, 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end space-x-3 pt-4 border-t dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={handleForwardingModalClose}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+                >
+                  Skip (Don't Forward)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const total = forwardingData.entries.reduce((sum, e) => sum + e.amount, 0);
+                    handleForwardingModalSubmit({
+                      date: new Date().toISOString().split('T')[0],
+                      station: forwardingData.targetStation,
+                      orderOf: forwardingData.orderOf,
+                      entries: forwardingData.entries,
+                      total,
+                      forwardedFrom: {
+                        lpoId: '',
+                        lpoNo: forwardingData.sourceLpoNo,
+                        station: forwardingData.sourceStation,
+                      },
+                    });
+                  }}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Create Forwarded LPO at {forwardingData.targetStation}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fuel Record Inspect Modal */}
       <FuelRecordInspectModal

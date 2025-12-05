@@ -39,16 +39,24 @@ export function calculateMbeyaReturnBalance(fuelRecord: FuelRecord): {
   tundumaFuel: number;
   availableBalance: number;
   hasReceivedTundumaFuel: boolean;
+  suggestedLiters: number;
+  reason: string;
 } {
   const standardAllocation = 400;
   const tundumaFuel = fuelRecord.tundumaReturn || 0;
   const availableBalance = Math.max(0, standardAllocation - tundumaFuel);
+  const suggestedLiters = availableBalance;
+  const reason = tundumaFuel > 0 
+    ? `Standard ${standardAllocation}L - ${tundumaFuel}L (Tunduma) = ${availableBalance}L available`
+    : `Standard allocation: ${standardAllocation}L`;
   
   return {
     standardAllocation,
     tundumaFuel,
     availableBalance,
-    hasReceivedTundumaFuel: tundumaFuel > 0
+    hasReceivedTundumaFuel: tundumaFuel > 0,
+    suggestedLiters,
+    reason,
   };
 }
 
@@ -97,7 +105,9 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
     setError(null);
     try {
       const response = await api.get(`/fuel-records/${fuelRecordId}`);
-      setFuelRecord(response.data);
+      // API returns { success, message, data: fuelRecord }
+      const fuelRecordData = response.data?.data || response.data;
+      setFuelRecord(fuelRecordData);
     } catch (err: any) {
       console.error('Error fetching fuel record:', err);
       setError(err.response?.data?.message || 'Failed to fetch fuel record');
@@ -183,13 +193,13 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Truck</p>
                     <p className="font-semibold text-gray-900 dark:text-white">
-                      {fuelRecord.truck?.plateNumber || truckNumber || 'N/A'}
+                      {fuelRecord.truckNo || truckNumber || 'N/A'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Driver</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Month</p>
                     <p className="font-semibold text-gray-900 dark:text-white">
-                      {fuelRecord.driver?.name || 'N/A'}
+                      {fuelRecord.month || 'N/A'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -204,13 +214,13 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                      fuelRecord.status === 'COMPLETED' 
+                      fuelRecord.balance === 0 
                         ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                        : fuelRecord.status === 'ACTIVE' 
+                        : fuelRecord.balance > 0 
                           ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-                          : 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
                     }`}>
-                      {fuelRecord.status || 'N/A'}
+                      {fuelRecord.balance === 0 ? 'Completed' : fuelRecord.balance > 0 ? 'Active' : 'Overspent'}
                     </span>
                   </div>
                 </div>
