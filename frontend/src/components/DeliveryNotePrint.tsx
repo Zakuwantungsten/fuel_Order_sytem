@@ -204,8 +204,14 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
                 <td className="border border-black p-2" style={{ backgroundColor: 'white' }}></td>
                 <td className="border border-black p-2" style={{ backgroundColor: 'white' }}></td>
                 <td className="border border-black p-2 text-center" style={{ backgroundColor: 'white' }}>
-                  <span className="font-bold" style={{ color: 'black' }}>{order.tonnages}</span>
-                  <div className="font-bold mt-1" style={{ color: 'black' }}>TONS</div>
+                  {order.rateType === 'per_ton' ? (
+                    <>
+                      <span className="font-bold" style={{ color: 'black' }}>{order.tonnages}</span>
+                      <div className="font-bold mt-1" style={{ color: 'black' }}>TONS</div>
+                    </>
+                  ) : (
+                    <span className="font-bold text-sm" style={{ color: 'black' }}>-</span>
+                  )}
                 </td>
                 <td className="border border-black p-2" style={{ backgroundColor: 'white' }}></td>
               </tr>
@@ -253,7 +259,11 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
               </div>
             </div>
             <div className="text-center font-bold text-lg p-3" style={{ color: 'black' }}>
-              ${order.ratePerTon} PER TON
+              {order.rateType === 'per_ton' ? (
+                `$${order.ratePerTon} PER TON`
+              ) : (
+                `TOTAL: $${order.ratePerTon?.toLocaleString() || 0}`
+              )}
             </div>
           </div>
 

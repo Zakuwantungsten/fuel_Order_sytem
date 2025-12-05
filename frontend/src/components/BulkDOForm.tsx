@@ -18,6 +18,7 @@ interface BulkDORow {
   driverName: string;
   tonnages: number;
   ratePerTon: number;
+  totalAmount?: number;
 }
 
 const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
@@ -36,6 +37,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
     destination: '',
     haulier: '',
     containerNo: 'LOOSE CARGO',
+    cargoType: 'loosecargo' as 'loosecargo' | 'container',
+    rateType: 'per_ton' as 'per_ton' | 'fixed_total',
     startingNumber: '',
   });
 
@@ -82,6 +85,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
     try {
       console.log('=== Parsing Bulk Data ===');
       console.log('Input length:', bulkInput.length);
+      console.log('Rate Type:', commonData.rateType);
       
       if (!bulkInput.trim()) {
         alert('Please enter truck data to parse');
@@ -97,21 +101,43 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
         const parts = line.split('\t').map(p => p.trim());
         console.log('Line parts:', parts.length, parts);
         
-        if (parts.length >= 5) {
-          rows.push({
-            truckNo: parts[0],
-            trailerNo: parts[1],
-            driverName: parts[2],
-            tonnages: parseFloat(parts[3]) || 0,
-            ratePerTon: parseFloat(parts[4]) || 0,
-          });
+        if (commonData.rateType === 'per_ton') {
+          // Format: Truck | Trailer | Driver | Tonnage | Rate Per Ton
+          if (parts.length >= 5) {
+            const tonnage = parseFloat(parts[3]) || 0;
+            const rate = parseFloat(parts[4]) || 0;
+            rows.push({
+              truckNo: parts[0],
+              trailerNo: parts[1],
+              driverName: parts[2],
+              tonnages: tonnage,
+              ratePerTon: rate,
+              totalAmount: tonnage * rate,
+            });
+          }
+        } else {
+          // fixed_total: Format: Truck | Trailer | Driver | Total Amount
+          if (parts.length >= 4) {
+            const totalAmount = parseFloat(parts[3]) || 0;
+            rows.push({
+              truckNo: parts[0],
+              trailerNo: parts[1],
+              driverName: parts[2],
+              tonnages: 0,
+              ratePerTon: totalAmount,
+              totalAmount: totalAmount,
+            });
+          }
         }
       }
 
       console.log('Parsed rows:', rows.length, rows);
       
       if (rows.length === 0) {
-        alert('No valid data found. Please ensure data is tab-separated with at least 5 columns:\nTruck No | Trailer No | Driver Name | Tonnages | Rate Per Ton');
+        const expectedFormat = commonData.rateType === 'per_ton'
+          ? 'Truck No | Trailer No | Driver Name | Tonnage | Rate Per Ton'
+          : 'Truck No | Trailer No | Driver Name | Total Amount';
+        alert(`No valid data found. Please ensure data is tab-separated:\n${expectedFormat}`);
         return;
       }
       
@@ -158,12 +184,15 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
         truckNo: row.truckNo,
         trailerNo: row.trailerNo,
         driverName: row.driverName,
-        containerNo: commonData.containerNo,
+        containerNo: commonData.containerNo || undefined,
+        cargoType: commonData.cargoType,
+        rateType: commonData.rateType,
         loadingPoint: commonData.loadingPoint,
         destination: commonData.destination,
         haulier: commonData.haulier || '',
         tonnages: row.tonnages,
         ratePerTon: row.ratePerTon,
+        totalAmount: row.totalAmount,
       }));
 
       console.log(`Generated ${orders.length} orders to save`);
@@ -394,6 +423,59 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                 </div>
               </div>
               
+              {/* Cargo Type and Rate Type Selectors */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    Cargo Type *
+                  </label>
+                  <select
+                    name="cargoType"
+                    value={commonData.cargoType}
+                    onChange={(e) => {
+                      const cargoType = e.target.value as 'loosecargo' | 'container';
+                      setCommonData(prev => ({ 
+                        ...prev, 
+                        cargoType,
+                        containerNo: cargoType === 'container' ? 'CONTAINER' : 'LOOSE CARGO'
+                      }));
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="loosecargo">Loose Cargo</option>
+                    <option value="container">Container</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    Rate Structure *
+                  </label>
+                  <select
+                    name="rateType"
+                    value={commonData.rateType}
+                    onChange={(e) => {
+                      setCommonData(prev => ({ 
+                        ...prev, 
+                        rateType: e.target.value as 'per_ton' | 'fixed_total'
+                      }));
+                      // Clear parsed rows when changing rate type
+                      setParsedRows([]);
+                      setBulkInput('');
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="per_ton">Per Ton Rate (Tonnage × Rate)</option>
+                    <option value="fixed_total">Fixed Total Amount</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {commonData.rateType === 'per_ton' 
+                      ? 'Calculate: Tonnage × Rate Per Ton'
+                      : 'Single fixed amount per DO'}
+                  </p>
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
@@ -503,14 +585,26 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
                 Truck Details (Paste from Excel/Spreadsheet)
               </h4>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                Paste data with columns: <span className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">Truck No &nbsp;&nbsp; Trailer No &nbsp;&nbsp; Driver Name &nbsp;&nbsp; Tonnage &nbsp;&nbsp; Rate Per Ton</span>
+                <strong>Format:</strong> Paste tab-separated data from Excel/Spreadsheet
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                {commonData.rateType === 'per_ton' 
+                  ? 'Required columns: Truck No | Trailer No | Driver Name | Tonnage | Rate Per Ton'
+                  : 'Required columns: Truck No | Trailer No | Driver Name | Total Amount'}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                <strong>Example:</strong> {commonData.rateType === 'per_ton' 
+                  ? 'T538 EKT [TAB] T637 ELE [TAB] John Doe [TAB] 32 [TAB] 185'
+                  : 'T538 EKT [TAB] T637 ELE [TAB] John Doe [TAB] 5920'}
               </p>
               <textarea
                 value={bulkInput}
                 onChange={(e) => setBulkInput(e.target.value)}
                 rows={8}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
-                placeholder="T844 EKS&#9;T629 ELE&#9;John Doe&#9;30&#9;1850&#10;T845 ABC&#9;T630 DEF&#9;Jane Smith&#9;28&#9;1850"
+                placeholder={commonData.rateType === 'per_ton'
+                  ? "T844 EKS\tT629 ELE\tJohn Doe\t30\t1850\nT845 ABC\tT630 DEF\tJane Smith\t28\t1850"
+                  : "T844 EKS\tT629 ELE\tJohn Doe\t55500\nT845 ABC\tT630 DEF\tJane Smith\t51800"}
               />
               <button
                 type="button"

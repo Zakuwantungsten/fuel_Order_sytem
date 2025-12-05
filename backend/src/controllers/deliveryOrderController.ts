@@ -352,6 +352,27 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       req.body.sn = parseInt(req.body.doNumber.replace(/^0+/, '')) || 1;
     }
     
+    // Set defaults for new fields if not provided
+    if (!req.body.rateType) {
+      req.body.rateType = 'per_ton';
+    }
+    if (!req.body.cargoType && req.body.containerNo) {
+      req.body.cargoType = req.body.containerNo?.toLowerCase().includes('container') 
+        ? 'container' 
+        : 'loosecargo';
+    } else if (!req.body.cargoType) {
+      req.body.cargoType = 'loosecargo';
+    }
+    
+    // Calculate totalAmount if not provided
+    if (!req.body.totalAmount) {
+      if (req.body.rateType === 'per_ton') {
+        req.body.totalAmount = (req.body.tonnages || 0) * (req.body.ratePerTon || 0);
+      } else if (req.body.rateType === 'fixed_total') {
+        req.body.totalAmount = req.body.ratePerTon || 0;
+      }
+    }
+    
     const deliveryOrder = await DeliveryOrder.create(req.body);
 
     logger.info(`Delivery order created: ${deliveryOrder.doNumber} by ${req.user?.username}`);

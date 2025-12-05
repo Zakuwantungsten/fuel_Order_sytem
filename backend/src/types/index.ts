@@ -159,7 +159,7 @@ export interface IDeliveryOrder {
   clientName: string;
   truckNo: string;
   trailerNo: string;
-  containerNo: string;
+  containerNo?: string;
   borderEntryDRC?: string;
   loadingPoint: string;
   destination: string;
@@ -168,7 +168,9 @@ export interface IDeliveryOrder {
   tonnages: number;
   ratePerTon: number;
   rate?: string;
-  cargoType?: string;
+  cargoType?: 'loosecargo' | 'container';
+  rateType?: 'per_ton' | 'fixed_total';
+  totalAmount?: number;
   // Status fields
   status: DOStatus;
   isCancelled: boolean;

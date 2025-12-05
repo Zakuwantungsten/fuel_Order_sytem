@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, Download } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
@@ -11,20 +11,20 @@ interface DOFormProps {
   order?: DeliveryOrder;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (order: Partial<DeliveryOrder>) => void;
+  onSave: (order: Partial<DeliveryOrder>) => Promise<DeliveryOrder | void>;
   defaultDoType?: 'DO' | 'SDO'; // Default DO type when creating new order
 }
 
 const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOFormProps) => {
-  const getCurrentDate = () => {
+  const getCurrentDate = useCallback(() => {
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();
     return `${year}-${month}-${day}`;
-  };
+  }, []);
 
-  const getDefaultFormData = (): Partial<DeliveryOrder> => ({
+  const getDefaultFormData = useCallback((): Partial<DeliveryOrder> => ({
     // Explicitly no id for new orders
     date: getCurrentDate(),
     importOrExport: 'IMPORT',
@@ -33,13 +33,15 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
     truckNo: '',
     trailerNo: '',
     containerNo: 'LOOSE CARGO',
+    cargoType: 'loosecargo',
+    rateType: 'per_ton',
     loadingPoint: '',
     destination: '',
     haulier: '',
     driverName: '',
     tonnages: 0,
     ratePerTon: 0,
-  });
+  }), [defaultDoType, getCurrentDate]);
 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
   const [createdOrder, setCreatedOrder] = useState<DeliveryOrder | null>(null);
@@ -66,7 +68,8 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
     }
   }, [isOpen, order, defaultDoType]);
 
-  // Fetch next DO/SDO number when component opens or doType changes
+  // Fetch next DO/SDO number when component opens
+  // Note: When doType changes via handleDOTypeChange, it fetches directly, so we don't need doType in dependencies
   useEffect(() => {
     if (isOpen && !order) {
       const fetchNextNumber = async () => {
@@ -80,7 +83,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
       };
       fetchNextNumber();
     }
-  }, [isOpen, formData.doType, order]);
+  }, [isOpen, order]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -435,16 +438,37 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Container Number *
+                  Cargo Type *
+                </label>
+                <select
+                  name="cargoType"
+                  value={formData.cargoType || 'loosecargo'}
+                  onChange={(e) => {
+                    const cargoType = e.target.value as 'loosecargo' | 'container';
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      cargoType,
+                      containerNo: cargoType === 'container' ? 'CONTAINER' : 'LOOSE CARGO'
+                    }));
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="loosecargo">Loose Cargo</option>
+                  <option value="container">Container</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                  Container Number
                 </label>
                 <input
                   type="text"
                   name="containerNo"
                   value={formData.containerNo || ''}
                   onChange={handleChange}
-                  required
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="e.g., LOOSE CARGO"
+                  placeholder="e.g., LOOSE CARGO or CONTAINER"
                 />
               </div>
 
@@ -522,48 +546,92 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Tonnage *
+                  Rate Structure *
                 </label>
-                <input
-                  type="number"
-                  name="tonnages"
-                  value={formData.tonnages || ''}
-                  onChange={handleChange}
-                  required
-                  min="0"
-                  step="0.1"
+                <select
+                  name="rateType"
+                  value={formData.rateType || 'per_ton'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, rateType: e.target.value as 'per_ton' | 'fixed_total' }))}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter tonnage"
-                />
+                >
+                  <option value="per_ton">Per Ton Rate (Tonnage × Rate)</option>
+                  <option value="fixed_total">Fixed Total Amount</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {formData.rateType === 'per_ton' 
+                    ? 'Calculate: Tonnage × Rate Per Ton'
+                    : 'Single fixed amount for this DO'}
+                </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Rate Per Ton ($) *
-                </label>
-                <input
-                  type="number"
-                  name="ratePerTon"
-                  value={formData.ratePerTon || ''}
-                  onChange={handleChange}
-                  required
-                  min="0"
-                  step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter rate per ton"
-                />
-              </div>
+              <div></div>
 
-              <div className="md:col-span-2">
-                <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg">
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
-                    <span className="font-semibold">Total Amount:</span>{' '}
-                    <span className="text-lg font-bold text-primary-600 dark:text-primary-400">
-                      ${((formData.tonnages || 0) * (formData.ratePerTon || 0)).toFixed(2)}
-                    </span>
-                  </p>
-                </div>
-              </div>
+              {formData.rateType === 'per_ton' ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Tonnage *
+                    </label>
+                    <input
+                      type="number"
+                      name="tonnages"
+                      value={formData.tonnages || ''}
+                      onChange={handleChange}
+                      required
+                      min="0"
+                      step="0.1"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder="Enter tonnage"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Rate Per Ton ($) *
+                    </label>
+                    <input
+                      type="number"
+                      name="ratePerTon"
+                      value={formData.ratePerTon || ''}
+                      onChange={handleChange}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder="Enter rate per ton"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 rounded-md">
+                      <div className="text-sm text-gray-700 dark:text-gray-300">
+                        <strong>Total Amount:</strong> ${((formData.tonnages || 0) * (formData.ratePerTon || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Total Amount ($) *
+                    </label>
+                    <input
+                      type="number"
+                      name="ratePerTon"
+                      value={formData.ratePerTon || ''}
+                      onChange={handleChange}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder="Enter fixed total amount"
+                    />
+                  </div>
+                  <div></div>
+                </>
+              )}
+
             </div>
 
             {/* Footer */}

@@ -73,7 +73,6 @@ const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
     },
     containerNo: {
       type: String,
-      required: [true, 'Container number is required'],
       trim: true,
     },
     borderEntryDRC: {
@@ -114,7 +113,18 @@ const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
     },
     cargoType: {
       type: String,
+      enum: ['loosecargo', 'container'],
+      default: 'loosecargo',
       trim: true,
+    },
+    rateType: {
+      type: String,
+      enum: ['per_ton', 'fixed_total'],
+      default: 'per_ton',
+    },
+    totalAmount: {
+      type: Number,
+      min: [0, 'Total amount cannot be negative'],
     },
     // Status fields
     status: {
@@ -163,11 +173,38 @@ const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
         ret.id = ret._id;
         delete ret._id;
         delete ret.__v;
+        
+        // Compute totalAmount on the fly if not stored
+        if (!ret.totalAmount) {
+          if (ret.rateType === 'fixed_total') {
+            ret.totalAmount = ret.ratePerTon || 0;
+          } else {
+            ret.totalAmount = (ret.tonnages || 0) * (ret.ratePerTon || 0);
+          }
+        }
+        
         return ret;
       },
     },
   }
 );
+
+// Pre-save middleware to compute/validate totalAmount
+deliveryOrderSchema.pre('save', function(next) {
+  if (this.rateType === 'per_ton') {
+    this.totalAmount = (this.tonnages || 0) * (this.ratePerTon || 0);
+  } else if (this.rateType === 'fixed_total') {
+    this.totalAmount = this.ratePerTon || 0;
+    // For fixed total, set tonnages to 0 if not provided
+    if (!this.tonnages) {
+      this.tonnages = 0;
+    }
+  } else {
+    // Default to per_ton calculation
+    this.totalAmount = (this.tonnages || 0) * (this.ratePerTon || 0);
+  }
+  next();
+});
 
 // Indexes
 // Note: doNumber already has a unique index from schema definition
