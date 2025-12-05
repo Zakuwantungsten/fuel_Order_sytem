@@ -122,7 +122,7 @@ export interface LPOSummary {
   updatedAt?: string;
   // Forwarding tracking (if this LPO was forwarded from another)
   forwardedFrom?: {
-    lpoId: string | number;
+    lpoId?: string | number; // Optional - may not have ObjectId when forwarding from frontend
     lpoNo: string;
     station: string;
   };
