@@ -147,15 +147,17 @@ const LPOSummary = ({
       setAvailableYears(Array.from(years).sort());
       setAvailableStations(Array.from(stations).sort());
       
-      // Set default to current month if available, otherwise first month
-      const currentMonth = getCurrentMonth();
-      if (monthsArray.includes(currentMonth) && !selectedMonth) {
-        setSelectedMonth(currentMonth);
-      } else if (monthsArray.length > 0 && !selectedMonth) {
-        setSelectedMonth(monthsArray[monthsArray.length - 1]); // Latest month
+      // Only set default month if it hasn't been set yet and we have months available
+      if (!selectedMonth && monthsArray.length > 0) {
+        const currentMonth = getCurrentMonth();
+        if (monthsArray.includes(currentMonth)) {
+          setSelectedMonth(currentMonth);
+        } else {
+          setSelectedMonth(monthsArray[monthsArray.length - 1]); // Latest month
+        }
       }
     }
-  }, [combinedEntries, selectedYear]);
+  }, [combinedEntries.length, selectedYear]);
 
   // Notify parent of filter changes
   useEffect(() => {
@@ -168,96 +170,91 @@ const LPOSummary = ({
     }
   }, [localSelectedStations, localDateFrom, localDateTo, onFiltersChange]);
 
+  // Calculate summary when relevant data changes
   useEffect(() => {
     if (selectedMonth && combinedEntries.length > 0) {
-      calculateMonthlySummary();
-    }
-  }, [selectedMonth, selectedYear, combinedEntries, localSelectedStations, localDateFrom, localDateTo]);
+      let filteredEntries = combinedEntries as ExtendedLPOEntry[];
 
-  const calculateMonthlySummary = () => {
-    let filteredEntries = combinedEntries as ExtendedLPOEntry[];
+      // Apply month filter
+      if (selectedMonth) {
+        filteredEntries = filteredEntries.filter(entry => entry.date.includes(selectedMonth));
+      }
 
-    // Apply month filter
-    if (selectedMonth) {
-      filteredEntries = filteredEntries.filter(entry => entry.date.includes(selectedMonth));
-    }
+      // Apply station filter
+      if (localSelectedStations.length > 0) {
+        filteredEntries = filteredEntries.filter(entry => 
+          localSelectedStations.includes(entry.dieselAt)
+        );
+      }
 
-    // Apply station filter
-    if (localSelectedStations.length > 0) {
-      filteredEntries = filteredEntries.filter(entry => 
-        localSelectedStations.includes(entry.dieselAt)
-      );
-    }
-
-    // Apply date range filter (convert date format for comparison)
-    if (localDateFrom || localDateTo) {
-      filteredEntries = filteredEntries.filter(entry => {
-        // Convert "3-Oct" format to a comparable date
-        const parts = entry.date.split('-');
-        if (parts.length === 2) {
-          const day = parseInt(parts[0]);
-          const monthName = parts[1];
-          const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          const monthIndex = monthOrder.indexOf(monthName);
-          
-          if (monthIndex !== -1) {
-            // Construct date string for comparison (assuming current year)
-            const entryDate = new Date(parseInt(selectedYear), monthIndex, day);
-            const fromDate = localDateFrom ? new Date(localDateFrom) : null;
-            const toDate = localDateTo ? new Date(localDateTo) : null;
+      // Apply date range filter (convert date format for comparison)
+      if (localDateFrom || localDateTo) {
+        filteredEntries = filteredEntries.filter(entry => {
+          // Convert "3-Oct" format to a comparable date
+          const parts = entry.date.split('-');
+          if (parts.length === 2) {
+            const day = parseInt(parts[0]);
+            const monthName = parts[1];
+            const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const monthIndex = monthOrder.indexOf(monthName);
             
-            if (fromDate && entryDate < fromDate) return false;
-            if (toDate && entryDate > toDate) return false;
+            if (monthIndex !== -1) {
+              // Construct date string for comparison (assuming current year)
+              const entryDate = new Date(parseInt(selectedYear), monthIndex, day);
+              const fromDate = localDateFrom ? new Date(localDateFrom) : null;
+              const toDate = localDateTo ? new Date(localDateTo) : null;
+              
+              if (fromDate && entryDate < fromDate) return false;
+              if (toDate && entryDate > toDate) return false;
+            }
           }
+          return true;
+        });
+      }
+      
+      const totalLiters = filteredEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
+      const totalAmount = filteredEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
+      const avgPricePerLiter = totalLiters > 0 ? totalAmount / totalLiters : 0;
+
+      // Count driver account vs regular LPOs
+      const driverAccountCount = filteredEntries.filter(e => e.isDriverAccount).length;
+      const regularLPOCount = filteredEntries.length - driverAccountCount;
+
+      // Group by station
+      const byStation: Record<string, { lpos: number; liters: number; amount: number; }> = {};
+      filteredEntries.forEach(entry => {
+        if (!byStation[entry.dieselAt]) {
+          byStation[entry.dieselAt] = { lpos: 0, liters: 0, amount: 0 };
         }
-        return true;
+        byStation[entry.dieselAt].lpos += 1;
+        byStation[entry.dieselAt].liters += entry.ltrs;
+        byStation[entry.dieselAt].amount += (entry.ltrs * entry.pricePerLtr);
+      });
+
+      // Group by destination
+      const byDestination: Record<string, number> = {};
+      filteredEntries.forEach(entry => {
+        if (!byDestination[entry.destinations]) {
+          byDestination[entry.destinations] = 0;
+        }
+        byDestination[entry.destinations] += 1;
+      });
+
+      setSummary({
+        month: selectedMonth,
+        totalLPOs: filteredEntries.length,
+        totalLiters,
+        totalAmount,
+        avgPricePerLiter,
+        byStation,
+        byDestination,
+        entries: filteredEntries,
+        driverAccountCount,
+        regularLPOCount
       });
     }
-    
-    const totalLiters = filteredEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
-    const totalAmount = filteredEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
-    const avgPricePerLiter = totalLiters > 0 ? totalAmount / totalLiters : 0;
-    
-    // Count driver account vs regular LPOs
-    const driverAccountCount = filteredEntries.filter(e => e.isDriverAccount).length;
-    const regularLPOCount = filteredEntries.length - driverAccountCount;
-
-    // Group by station
-    const byStation: Record<string, { lpos: number; liters: number; amount: number; }> = {};
-    filteredEntries.forEach(entry => {
-      if (!byStation[entry.dieselAt]) {
-        byStation[entry.dieselAt] = { lpos: 0, liters: 0, amount: 0 };
-      }
-      byStation[entry.dieselAt].lpos += 1;
-      byStation[entry.dieselAt].liters += entry.ltrs;
-      byStation[entry.dieselAt].amount += (entry.ltrs * entry.pricePerLtr);
-    });
-
-    // Group by destination
-    const byDestination: Record<string, number> = {};
-    filteredEntries.forEach(entry => {
-      if (!byDestination[entry.destinations]) {
-        byDestination[entry.destinations] = 0;
-      }
-      byDestination[entry.destinations] += 1;
-    });
-
-    setSummary({
-      month: selectedMonth,
-      totalLPOs: filteredEntries.length,
-      totalLiters,
-      totalAmount,
-      avgPricePerLiter,
-      byStation,
-      byDestination,
-      entries: filteredEntries,
-      driverAccountCount,
-      regularLPOCount
-    });
-  };
-
-  // Helper function to apply borders and center alignment to worksheet
+  }, [selectedMonth, selectedYear, combinedEntries.length, localSelectedStations, localDateFrom, localDateTo]);  // Helper function to apply borders and center alignment to worksheet
   const applyExcelStyles = (ws: XLSX.WorkSheet) => {
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
     

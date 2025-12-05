@@ -123,8 +123,8 @@ const Dashboard = () => {
           </h3>
           <div className="space-y-3">
             {stats.recentActivities?.deliveryOrders && stats.recentActivities.deliveryOrders.length > 0 ? (
-              stats.recentActivities.deliveryOrders.slice(0, 5).map((DO) => (
-                <div key={DO.id || DO.doNumber} className="flex items-center justify-between py-2 border-b dark:border-gray-700">
+              stats.recentActivities.deliveryOrders.slice(0, 5).map((DO, index) => (
+                <div key={`${DO.id || DO.doNumber}-${index}`} className="flex items-center justify-between py-2 border-b dark:border-gray-700">
                   <div>
                     <p className="font-medium text-gray-900 dark:text-gray-100">{DO.doNumber}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{DO.haulier} - {DO.truckNo}</p>
@@ -144,8 +144,8 @@ const Dashboard = () => {
           </h3>
           <div className="space-y-3">
             {stats.recentActivities?.lpoEntries && stats.recentActivities.lpoEntries.length > 0 ? (
-              stats.recentActivities.lpoEntries.slice(0, 5).map((lpo) => (
-                <div key={lpo.id || lpo.lpoNo} className="flex items-center justify-between py-2 border-b dark:border-gray-700">
+              stats.recentActivities.lpoEntries.slice(0, 5).map((lpo, index) => (
+                <div key={`${lpo.id || lpo.lpoNo}-${index}`} className="flex items-center justify-between py-2 border-b dark:border-gray-700">
                   <div>
                     <p className="font-medium text-gray-900 dark:text-gray-100">{lpo.lpoNo}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{lpo.dieselAt}</p>

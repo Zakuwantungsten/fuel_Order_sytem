@@ -110,11 +110,11 @@ export default function NotificationBell({ onNotificationClick }: NotificationBe
   };
 
   return (
-    <div className="relative">
+    <div className="relative z-10">
       {/* Bell Icon Button */}
       <button
         onClick={() => setShowDropdown(!showDropdown)}
-        className="relative p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+        className="relative p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors cursor-pointer"
         title="Notifications"
       >
         <Bell className="w-6 h-6" />
@@ -129,10 +129,10 @@ export default function NotificationBell({ onNotificationClick }: NotificationBe
       {showDropdown && (
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-[55] pointer-events-auto"
             onClick={() => setShowDropdown(false)}
           />
-          <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 z-50 max-h-[600px] overflow-hidden flex flex-col">
+          <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 z-[60] max-h-[600px] overflow-hidden flex flex-col pointer-events-auto">
             {/* Header */}
             <div className="px-4 py-3 border-b dark:border-gray-700 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">

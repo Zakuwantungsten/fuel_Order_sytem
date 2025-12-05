@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -26,6 +26,7 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
@@ -208,7 +209,7 @@ const Layout = ({ children }: LayoutProps) => {
       {/* Main content */}
       <div className={`transition-all duration-300 ease-in-out ${shouldShowText ? 'lg:pl-64' : 'lg:pl-16'}`}>
         {/* Top bar */}
-        <div className="sticky top-0 z-10 flex items-center h-16 bg-white dark:bg-gray-800 shadow-sm px-4 lg:px-8 border-b dark:border-gray-700 transition-colors">
+        <div className="sticky top-0 z-50 flex items-center h-16 bg-white dark:bg-gray-800 shadow-sm px-4 lg:px-8 border-b dark:border-gray-700 transition-colors">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden mr-4 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors group"
@@ -234,32 +235,43 @@ const Layout = ({ children }: LayoutProps) => {
             }} />
             
             {/* User Menu */}
-            <div className="relative" ref={userMenuRef}>
+            <div className="relative z-20" ref={userMenuRef}>
               <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Profile clicked, current state:', showUserMenu);
+                  setShowUserMenu(!showUserMenu);
+                }}
+                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                aria-label="User menu"
               >
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-medium">
-                      {user?.firstName?.[0]}{user?.lastName?.[0]}
-                    </span>
+                <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center pointer-events-none">
+                  <span className="text-white text-sm font-medium">
+                    {user?.firstName?.[0]}{user?.lastName?.[0]}
+                  </span>
+                </div>
+                <div className="hidden sm:block text-left pointer-events-none">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {user?.firstName} {user?.lastName}
                   </div>
-                  <div className="hidden sm:block text-left">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {user?.firstName} {user?.lastName}
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {getRoleInfo(user?.role || 'viewer').name}
-                    </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {getRoleInfo(user?.role || 'viewer').name}
                   </div>
                 </div>
-                <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <ChevronDown className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform pointer-events-none ${showUserMenu ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Dropdown Menu */}
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+                <>
+                  {/* Backdrop to catch outside clicks */}
+                  <div
+                    className="fixed inset-0 z-[70]"
+                    onClick={() => setShowUserMenu(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[80]">
                   <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
@@ -285,22 +297,26 @@ const Layout = ({ children }: LayoutProps) => {
                   
                   <div className="py-2">
                     <button
+                      type="button"
                       onClick={() => {
                         setShowUserMenu(false);
                         // Add profile logic here
                       }}
-                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                      style={{ cursor: 'pointer' }}
                     >
                       <User className="w-4 h-4 mr-3" />
                       Profile Settings
                     </button>
                     
                     <button
+                      type="button"
                       onClick={() => {
                         setShowUserMenu(false);
                         toggleTheme();
                       }}
-                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                      style={{ cursor: 'pointer' }}
                       title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                     >
                       {isDark ? <Sun className="w-4 h-4 mr-3" /> : <Moon className="w-4 h-4 mr-3" />}
@@ -308,17 +324,24 @@ const Layout = ({ children }: LayoutProps) => {
                     </button>
                     
                     <button
-                      onClick={() => {
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Logout clicked');
                         setShowUserMenu(false);
                         logout();
+                        navigate('/login');
                       }}
-                      className="w-full flex items-center px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="w-full flex items-center px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
+                      style={{ cursor: 'pointer' }}
                     >
                       <LogOut className="w-4 h-4 mr-3" />
                       Sign Out
                     </button>
                   </div>
                 </div>
+                </>
               )}
             </div>
           </div>
