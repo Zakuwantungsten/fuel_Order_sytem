@@ -421,11 +421,16 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       }
     }
 
-    // Prepare the update data with edit history
-    const updateData = {
-      ...req.body,
-      lastEditedAt: new Date(),
-      lastEditedBy: username,
+    // Prepare the update data - exclude fields that shouldn't be directly set
+    const { editHistory, editReason, _id, __v, createdAt, ...fieldsToUpdate } = req.body;
+    
+    // Build the update object
+    const updateData: any = {
+      $set: {
+        ...fieldsToUpdate,
+        lastEditedAt: new Date(),
+        lastEditedBy: username,
+      },
     };
 
     // Add to edit history if there are changes
@@ -435,11 +440,9 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           editedAt: new Date(),
           editedBy: username,
           changes,
-          reason: req.body.editReason || undefined,
+          reason: editReason || undefined,
         },
       };
-      // Remove editReason from the main update
-      delete updateData.editReason;
     }
 
     // Update the delivery order
