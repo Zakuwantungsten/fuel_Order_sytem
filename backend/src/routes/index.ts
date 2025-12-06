@@ -14,12 +14,14 @@ import trashRoutes from './trashRoutes';
 import backupRoutes from './backupRoutes';
 import analyticsRoutes from './analyticsRoutes';
 import configRoutes from './configRoutes';
+import publicConfigRoutes from './publicConfigRoutes';
 import notificationRoutes from './notificationRoutes';
 
 const router = Router();
 
 // Mount routes
 router.use('/auth', authRoutes);
+router.use('/config', publicConfigRoutes); // Public read-only config for all authenticated users
 router.use('/delivery-orders', deliveryOrderRoutes);
 router.use('/lpo-entries', lpoEntryRoutes);
 router.use('/lpo-documents', lpoSummaryRoutes);

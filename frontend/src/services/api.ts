@@ -1315,9 +1315,9 @@ export const analyticsAPI = {
 
 // Configuration API
 export const configAPI = {
-  // Fuel Stations
+  // Fuel Stations (public read-only endpoint for all authenticated users)
   getStations: async () => {
-    const response = await apiClient.get('/system-admin/config/stations');
+    const response = await apiClient.get('/config/stations');
     return response.data.data;
   },
   
@@ -1345,9 +1345,9 @@ export const configAPI = {
     return response.data;
   },
   
-  // Routes
+  // Routes (public read-only endpoint for all authenticated users)
   getRoutes: async () => {
-    const response = await apiClient.get('/system-admin/config/routes');
+    const response = await apiClient.get('/config/routes');
     return response.data.data;
   },
   
@@ -1374,9 +1374,9 @@ export const configAPI = {
     return response.data;
   },
   
-  // Formula helpers
+  // Formula helpers (public read-only endpoint)
   getFormulaVariables: async () => {
-    const response = await apiClient.get('/system-admin/config/formula-variables');
+    const response = await apiClient.get('/config/formula-variables');
     return response.data;
   },
 };

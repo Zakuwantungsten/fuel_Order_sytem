@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel } from 'lucide-react';
-import { LPOSummary, LPODetail, FuelRecord, CancellationPoint } from '../types';
+import { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import { configService } from '../services/configService';
 import { 
   getAvailableCancellationPoints, 
   getCancellationPointDisplayName,
@@ -51,26 +52,8 @@ export const calculateZambiaGoing = (totalLts: number, extra: number, destinatio
   return Math.max(0, (totalLts + extra) - 900);
 };
 
-// Available stations - Valid station names only (no going/return suffixes)
-const STATIONS = [
-  // Zambia stations (USD rate: 1.2)
-  'LAKE CHILABOMBWE',
-  'LAKE NDOLA',
-  'LAKE KAPIRI',
-  'LAKE KITWE',
-  'LAKE KABANGWA',
-  'LAKE CHINGOLA',
-  // Tanzania stations (TZS rates)
-  'LAKE TUNDUMA',   // Rate: 2875 TZS - for Tunduma checkpoint
-  'INFINITY',       // Rate: 2757 TZS - for Mbeya checkpoint (both directions)
-  'GBP MOROGORO',   // Rate: 2710 TZS - for Morogoro checkpoint
-  'GBP KANGE',      // Rate: 2730 TZS - for Morogoro area
-  'GPB KANGE',      // Rate: 2730 TZS - typo version for compatibility
-  // Cash payment (variable rate)
-  'CASH',
-  // Custom station (for unlisted stations)
-  'CUSTOM',
-];
+// STATIONS array removed - now using dynamic stations from database
+// CASH and CUSTOM are always available in the dropdown
 
 interface TruckFetchResult {
   fuelRecord: FuelRecord | null;
@@ -213,6 +196,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       total: 0,
     };
   });
+
+  // Dynamic stations from database
+  const [availableStations, setAvailableStations] = useState<FuelStationConfig[]>([]);
+  const [loadingStations, setLoadingStations] = useState(true);
 
   // Track auto-fill data for each entry
   const [entryAutoFillData, setEntryAutoFillData] = useState<Record<number, EntryAutoFillData>>(() => {
@@ -406,6 +393,23 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       clearFormStorage();
     }
   };
+
+  // Load stations from database
+  useEffect(() => {
+    const loadStations = async () => {
+      try {
+        setLoadingStations(true);
+        const stations = await configService.getActiveStations();
+        setAvailableStations(stations);
+      } catch (error) {
+        console.error('Failed to load stations:', error);
+        // Don't set fallback here, just leave empty - CASH and CUSTOM will always be available
+      } finally {
+        setLoadingStations(false);
+      }
+    };
+    loadStations();
+  }, []);
 
   // Check for existing draft on mount and when modal opens
   useEffect(() => {
@@ -861,6 +865,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     destination?: string
   ): { liters: number; rate: number } => {
     const stationUpper = station.toUpperCase();
+    
+    // First try to get from dynamic stations
+    const dynamicStation = availableStations.find(s => s.stationName.toUpperCase() === stationUpper);
+    if (dynamicStation) {
+      const liters = direction === 'going' ? dynamicStation.defaultLitersGoing : dynamicStation.defaultLitersReturning;
+      return { liters, rate: dynamicStation.defaultRate };
+    }
+    
+    // Fall back to hardcoded STATION_DEFAULTS for backward compatibility and CASH/CUSTOM stations
     const defaults = STATION_DEFAULTS[stationUpper];
     const dest = destination?.toLowerCase() || '';
     
@@ -1711,20 +1724,27 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   onChange={handleHeaderChange}
                   required
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  disabled={loadingStations}
                 >
-                  <option value="">Select Station</option>
-                  {STATIONS.map(station => (
-                    <option key={station} value={station}>{station}</option>
+                  <option value="">{loadingStations ? 'Loading stations...' : 'Select Station'}</option>
+                  {availableStations.map(station => (
+                    <option key={station._id} value={station.stationName}>{station.stationName}</option>
                   ))}
+                  <option value="CASH">CASH</option>
+                  <option value="CUSTOM">CUSTOM</option>
                 </select>
-                {formData.station && STATION_DEFAULTS[formData.station.toUpperCase()] && (
-                  <p className="text-xs text-green-600 mt-1">
-                    Default: Going {STATION_DEFAULTS[formData.station.toUpperCase()]?.going || 0}L, 
-                    Returning {STATION_DEFAULTS[formData.station.toUpperCase()]?.returning || 0}L @ 
-                    {STATION_DEFAULTS[formData.station.toUpperCase()]?.rate}/L
-                    ({STATION_DEFAULTS[formData.station.toUpperCase()]?.currency})
-                  </p>
-                )}
+                {formData.station && (() => {
+                  const station = availableStations.find(s => s.stationName === formData.station);
+                  if (station) {
+                    const currency = station.defaultRate < 10 ? 'USD' : 'TZS';
+                    return (
+                      <p className="text-xs text-green-600 mt-1">
+                        Default: Going {station.defaultLitersGoing}L, Returning {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <div>

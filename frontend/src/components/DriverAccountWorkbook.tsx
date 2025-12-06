@@ -4,9 +4,10 @@ import {
   Copy, User, AlertTriangle, FileDown, Search,
   Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download
 } from 'lucide-react';
-import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary } from '../types';
+import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary, FuelStationConfig } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
+import { configService } from '../services/configService';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import XLSX from 'xlsx-js-style';
 
@@ -802,6 +803,26 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingLPO, setIsFetchingLPO] = useState(false);
   const [isFetchingDO, setIsFetchingDO] = useState<number | null>(null);
+  
+  // Dynamic stations
+  const [availableStations, setAvailableStations] = useState<FuelStationConfig[]>([]);
+  const [loadingStations, setLoadingStations] = useState(true);
+
+  // Load stations from database
+  useEffect(() => {
+    const loadStations = async () => {
+      try {
+        setLoadingStations(true);
+        const stations = await configService.getActiveStations();
+        setAvailableStations(stations);
+      } catch (error) {
+        console.error('Failed to load stations:', error);
+      } finally {
+        setLoadingStations(false);
+      }
+    };
+    loadStations();
+  }, []);
 
   // Fetch next LPO number on mount
   useEffect(() => {
@@ -936,22 +957,10 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
     }
   };
 
+  // Build stations list: dynamic stations from database + CASH
   const stations = [
-    // Zambia stations (USD rate: 1.2)
-    'LAKE CHILABOMBWE',
-    'LAKE NDOLA',
-    'LAKE KAPIRI',
-    'LAKE KITWE',
-    'LAKE KABANGWA',
-    'LAKE CHINGOLA',
-    // Tanzania stations (TZS rates)
-    'LAKE TUNDUMA',
-    'INFINITY',
-    'GBP MOROGORO',
-    'GBP KANGE',
-    'GPB KANGE',
-    // Cash payment
-    'CASH',
+    ...availableStations.map(s => s.stationName),
+    'CASH',  // Always include CASH option
   ];
 
   const paymentModes: { value: PaymentMode; label: string }[] = [
@@ -1026,9 +1035,10 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
                 value={formData.station}
                 onChange={(e) => setFormData(prev => ({ ...prev, station: e.target.value }))}
                 required
+                disabled={loadingStations}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
-                <option value="">Select Station</option>
+                <option value="">{loadingStations ? 'Loading stations...' : 'Select Station'}</option>
                 {stations.map(s => (
                   <option key={s} value={s}>{s}</option>
                 ))}
