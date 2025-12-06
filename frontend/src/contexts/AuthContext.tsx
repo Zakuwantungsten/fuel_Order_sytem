@@ -201,6 +201,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     localStorage.removeItem('fuel_order_auth');
     localStorage.removeItem('fuel_order_token');
     localStorage.removeItem('fuel_order_active_tab'); // Clear active tab on logout
+    localStorage.removeItem('fuel_order_active_role'); // Clear active role on logout
     // Reset state but preserve theme preference
     const currentTheme = state.theme;
     dispatch({ type: 'AUTH_LOGOUT' });

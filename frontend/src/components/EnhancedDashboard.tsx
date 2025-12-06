@@ -53,8 +53,9 @@ const getInitialTab = (userRole: string): string => {
   const isDriver = userRole === 'driver';
   const isManager = userRole === 'manager' || userRole === 'super_manager' || userRole === 'station_manager';
   
-  // Get stored tab from localStorage
+  // Get stored tab and role from localStorage
   const storedTab = localStorage.getItem('fuel_order_active_tab');
+  const storedRole = localStorage.getItem('fuel_order_active_role');
   
   // Define valid tabs for each role type
   const getValidTabs = () => {
@@ -93,8 +94,8 @@ const getInitialTab = (userRole: string): string => {
   
   const validTabs = getValidTabs();
   
-  // If stored tab is valid for this role, use it
-  if (storedTab && validTabs.includes(storedTab)) {
+  // Only use stored tab if it's for the SAME role and is valid
+  if (storedTab && storedRole === userRole && validTabs.includes(storedTab)) {
     return storedTab;
   }
   
@@ -103,6 +104,7 @@ const getInitialTab = (userRole: string): string => {
   if (isDriver) return 'driver_portal';
   if (isManager) return 'manager_view';
   if (userRole === 'system_admin') return 'sys_database';
+  if (userRole === 'super_admin') return 'sa_overview'; // Super admin should start at their overview, not generic overview
   return 'overview';
 };
 
@@ -122,7 +124,14 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   // Persist active tab to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('fuel_order_active_tab', activeTab);
-  }, [activeTab]);
+    localStorage.setItem('fuel_order_active_role', user.role);
+  }, [activeTab, user.role]);
+
+  // Reset to default tab when user role changes (e.g., after login/logout)
+  useEffect(() => {
+    const defaultTab = getInitialTab(user.role);
+    setActiveTab(defaultTab);
+  }, [user.role]);
 
   // Handle edit DO ID by updating URL search params
   useEffect(() => {

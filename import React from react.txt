@@ -240,3 +240,8 @@ seed these users
 default liters for returning mbeya and also add an inspect to see the record in the fuel record and the be able to come back to the making of lpo and retaining what was written 
 
 okay - small text for small screens and also full text for conditional rendering 
+
+LPO 2461 is fully cancelled - all 1 entries have been reverted.
+
+
+summary isn't updated 
