@@ -65,15 +65,24 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
 
   const handleCreateStation = async () => {
     try {
+      const going = parseFloat(stationForm.defaultLitersGoing) || 0;
+      const returning = parseFloat(stationForm.defaultLitersReturning) || 0;
+      
+      // Validate at least one direction has liters > 0
+      if (going === 0 && returning === 0) {
+        onMessage('error', 'At least one of Going or Returning liters must be greater than 0');
+        return;
+      }
+
       await configAPI.createStation({
         stationName: stationForm.stationName,
         defaultRate: parseFloat(stationForm.defaultRate),
-        defaultLitersGoing: parseFloat(stationForm.defaultLitersGoing),
-        defaultLitersReturning: parseFloat(stationForm.defaultLitersReturning),
+        defaultLitersGoing: going,
+        defaultLitersReturning: returning,
         fuelRecordFieldGoing: stationForm.fuelRecordFieldGoing || undefined,
         fuelRecordFieldReturning: stationForm.fuelRecordFieldReturning || undefined,
-        formulaGoing: stationForm.formulaGoing || undefined,
-        formulaReturning: stationForm.formulaReturning || undefined,
+        formulaGoing: stationForm.formulaGoing?.trim() || undefined,
+        formulaReturning: stationForm.formulaReturning?.trim() || undefined,
       });
       onMessage('success', 'Fuel station created successfully');
       setShowStationModal(false);
@@ -87,15 +96,24 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
   const handleUpdateStation = async () => {
     if (!editingStation) return;
     try {
+      const going = parseFloat(stationForm.defaultLitersGoing) || 0;
+      const returning = parseFloat(stationForm.defaultLitersReturning) || 0;
+      
+      // Validate at least one direction has liters > 0
+      if (going === 0 && returning === 0) {
+        onMessage('error', 'At least one of Going or Returning liters must be greater than 0');
+        return;
+      }
+
       await configAPI.updateStation(editingStation._id, {
         stationName: stationForm.stationName,
         defaultRate: parseFloat(stationForm.defaultRate),
-        defaultLitersGoing: parseFloat(stationForm.defaultLitersGoing),
-        defaultLitersReturning: parseFloat(stationForm.defaultLitersReturning),
+        defaultLitersGoing: going,
+        defaultLitersReturning: returning,
         fuelRecordFieldGoing: stationForm.fuelRecordFieldGoing || undefined,
         fuelRecordFieldReturning: stationForm.fuelRecordFieldReturning || undefined,
-        formulaGoing: stationForm.formulaGoing || undefined,
-        formulaReturning: stationForm.formulaReturning || undefined,
+        formulaGoing: stationForm.formulaGoing?.trim() || undefined,
+        formulaReturning: stationForm.formulaReturning?.trim() || undefined,
       });
       onMessage('success', 'Fuel station updated successfully');
       setShowStationModal(false);
@@ -120,9 +138,15 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
 
   const handleCreateRoute = async () => {
     try {
+      // Validate required fields
+      if (!routeForm.routeName || !routeForm.origin || !routeForm.destination || !routeForm.defaultTotalLiters) {
+        onMessage('error', 'Please fill in all required fields (Route Name, Starting Point, Destination, and Default Liters)');
+        return;
+      }
+
       await configAPI.createRoute({
         routeName: routeForm.routeName,
-        origin: routeForm.origin || undefined,
+        origin: routeForm.origin,
         destination: routeForm.destination,
         destinationAliases: routeForm.destinationAliases
           ? routeForm.destinationAliases.split(',').map(a => a.trim()).filter(Boolean)
@@ -142,9 +166,15 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
   const handleUpdateRoute = async () => {
     if (!editingRoute) return;
     try {
+      // Validate required fields
+      if (!routeForm.routeName || !routeForm.origin || !routeForm.destination || !routeForm.defaultTotalLiters) {
+        onMessage('error', 'Please fill in all required fields (Route Name, Starting Point, Destination, and Default Liters)');
+        return;
+      }
+
       await configAPI.updateRoute(editingRoute._id, {
         routeName: routeForm.routeName,
-        origin: routeForm.origin || undefined,
+        origin: routeForm.origin,
         destination: routeForm.destination,
         destinationAliases: routeForm.destinationAliases
           ? routeForm.destinationAliases.split(',').map(a => a.trim()).filter(Boolean)
@@ -456,15 +486,22 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
                       className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="1.2 or 2500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Going (L) *</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Going (L)</label>
                     <input type="number" value={stationForm.defaultLitersGoing} onChange={(e) => setStationForm({ ...stationForm, defaultLitersGoing: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="1000" />
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="0 or 450" />
+                    <p className="mt-1 text-xs text-gray-500">0 if not used</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Returning (L) *</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Returning (L)</label>
                     <input type="number" value={stationForm.defaultLitersReturning} onChange={(e) => setStationForm({ ...stationForm, defaultLitersReturning: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="800" />
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="0 or 400" />
+                    <p className="mt-1 text-xs text-gray-500">0 if not used</p>
                   </div>
+                </div>
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                  <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                    ⚠️ At least one of Going or Returning must be greater than 0
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -527,24 +564,25 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
                 </button>
               </div>
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Route Name *</label>
+                  <input type="text" value={routeForm.routeName} onChange={(e) => setRouteForm({ ...routeForm, routeName: e.target.value })}
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Dar to Kolwezi Route" />
+                  <p className="mt-1 text-xs text-gray-500">Descriptive name for this route</p>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Route Name *</label>
-                    <input type="text" value={routeForm.routeName} onChange={(e) => setRouteForm({ ...routeForm, routeName: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Dar to Kolwezi Route" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Starting Point (Origin) *</label>
+                    <input type="text" value={routeForm.origin} onChange={(e) => setRouteForm({ ...routeForm, origin: e.target.value })}
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., DAR, TANGA, DSM" required />
+                    <p className="mt-1 text-xs text-gray-500">Where the journey starts (determines fuel allocation)</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Origin (From)</label>
-                    <input type="text" value={routeForm.origin} onChange={(e) => setRouteForm({ ...routeForm, origin: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Dar, DSM, Tanga" />
-                    <p className="mt-1 text-xs text-gray-500">Starting point (optional)</p>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination *</label>
+                    <input type="text" value={routeForm.destination} onChange={(e) => setRouteForm({ ...routeForm, destination: e.target.value })}
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., KOLWEZI, LUSAKA" />
+                    <p className="mt-1 text-xs text-gray-500">Final destination (will be auto-uppercased)</p>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination *</label>
-                  <input type="text" value={routeForm.destination} onChange={(e) => setRouteForm({ ...routeForm, destination: e.target.value })}
-                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Kolwezi, Lusaka" />
-                  <p className="mt-1 text-xs text-gray-500">Main destination (will be auto-uppercased)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination Aliases</label>

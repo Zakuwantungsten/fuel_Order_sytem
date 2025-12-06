@@ -3,8 +3,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IFuelStationConfig extends Document {
   stationName: string;
   defaultRate: number;
-  defaultLitersGoing: number;
-  defaultLitersReturning: number;
+  defaultLitersGoing: number;  // Defaults to 0 if not provided
+  defaultLitersReturning: number;  // Defaults to 0 if not provided
   fuelRecordFieldGoing?: string;  // e.g., 'zambiaGoing', 'mbeyaGoing'
   fuelRecordFieldReturning?: string;  // e.g., 'zambiaReturn', 'mbeyaReturn'
   formulaGoing?: string; // e.g., "totalLiters + extraLiters - 900"
@@ -31,12 +31,14 @@ const FuelStationConfigSchema = new Schema<IFuelStationConfig>(
     },
     defaultLitersGoing: {
       type: Number,
-      required: true,
+      required: false,
+      default: 0,
       min: 0,
     },
     defaultLitersReturning: {
       type: Number,
-      required: true,
+      required: false,
+      default: 0,
       min: 0,
     },
     fuelRecordFieldGoing: {

@@ -63,15 +63,24 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
     } = req.body;
 
     // Validate required fields
-    if (!stationName || defaultRate == null || defaultLitersGoing == null || defaultLitersReturning == null) {
+    if (!stationName || defaultRate == null) {
       return res.status(400).json({
         success: false,
-        message: 'Station name, rate, and default liters are required',
+        message: 'Station name and rate are required',
+      });
+    }
+
+    // At least one default liter value should be provided
+    if ((defaultLitersGoing == null || defaultLitersGoing === 0) && 
+        (defaultLitersReturning == null || defaultLitersReturning === 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one of defaultLitersGoing or defaultLitersReturning must be greater than 0',
       });
     }
 
     // Validate formulas if provided
-    if (formulaGoing) {
+    if (formulaGoing && formulaGoing.trim() !== '') {
       const validation = validateFormula(formulaGoing);
       if (!validation.valid) {
         return res.status(400).json({
@@ -81,7 +90,7 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    if (formulaReturning) {
+    if (formulaReturning && formulaReturning.trim() !== '') {
       const validation = validateFormula(formulaReturning);
       if (!validation.valid) {
         return res.status(400).json({
@@ -103,22 +112,23 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
     const station = await FuelStationConfig.create({
       stationName,
       defaultRate,
-      defaultLitersGoing,
-      defaultLitersReturning,
-      fuelRecordFieldGoing,
-      fuelRecordFieldReturning,
-      formulaGoing,
-      formulaReturning,
+      defaultLitersGoing: defaultLitersGoing != null ? defaultLitersGoing : 0,
+      defaultLitersReturning: defaultLitersReturning != null ? defaultLitersReturning : 0,
+      fuelRecordFieldGoing: fuelRecordFieldGoing && fuelRecordFieldGoing.trim() !== '' ? fuelRecordFieldGoing : undefined,
+      fuelRecordFieldReturning: fuelRecordFieldReturning && fuelRecordFieldReturning.trim() !== '' ? fuelRecordFieldReturning : undefined,
+      formulaGoing: formulaGoing && formulaGoing.trim() !== '' ? formulaGoing : undefined,
+      formulaReturning: formulaReturning && formulaReturning.trim() !== '' ? formulaReturning : undefined,
       createdBy: req.user?.username || 'system',
     });
 
     // Audit log
     await AuditLog.create({
-      user: req.user?.username || 'system',
-      action: 'station_created',
-      resource: 'fuel_station_config',
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'fuel_station_config',
       resourceId: station._id.toString(),
-      details: { stationName },
+      details: JSON.stringify({ stationName }),
+      severity: 'low',
     });
 
     res.status(201).json({
@@ -142,9 +152,28 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+    const unsetFields: any = {};
 
-    // Validate formulas if provided
-    if (updates.formulaGoing) {
+    // Separate fields to unset (empty strings or undefined for optional fields)
+    if (updates.fuelRecordFieldGoing === '' || updates.fuelRecordFieldGoing === undefined) {
+      unsetFields.fuelRecordFieldGoing = '';
+      delete updates.fuelRecordFieldGoing;
+    }
+    if (updates.fuelRecordFieldReturning === '' || updates.fuelRecordFieldReturning === undefined) {
+      unsetFields.fuelRecordFieldReturning = '';
+      delete updates.fuelRecordFieldReturning;
+    }
+    if (updates.formulaGoing === '' || updates.formulaGoing === undefined) {
+      unsetFields.formulaGoing = '';
+      delete updates.formulaGoing;
+    }
+    if (updates.formulaReturning === '' || updates.formulaReturning === undefined) {
+      unsetFields.formulaReturning = '';
+      delete updates.formulaReturning;
+    }
+
+    // Validate formulas if provided and not empty
+    if (updates.formulaGoing && typeof updates.formulaGoing === 'string' && updates.formulaGoing.trim()) {
       const validation = validateFormula(updates.formulaGoing);
       if (!validation.valid) {
         return res.status(400).json({
@@ -154,7 +183,7 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    if (updates.formulaReturning) {
+    if (updates.formulaReturning && typeof updates.formulaReturning === 'string' && updates.formulaReturning.trim()) {
       const validation = validateFormula(updates.formulaReturning);
       if (!validation.valid) {
         return res.status(400).json({
@@ -164,11 +193,32 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Validate required fields
+    if (updates.stationName !== undefined && !updates.stationName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Station name is required',
+      });
+    }
+
+    if (updates.defaultRate !== undefined && (isNaN(updates.defaultRate) || updates.defaultRate < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid default rate is required',
+      });
+    }
+
     updates.updatedBy = req.user?.username || 'system';
+
+    // Build update operation
+    const updateOperation: any = { $set: updates };
+    if (Object.keys(unsetFields).length > 0) {
+      updateOperation.$unset = unsetFields;
+    }
 
     const station = await FuelStationConfig.findByIdAndUpdate(
       id,
-      updates,
+      updateOperation,
       { new: true, runValidators: true }
     );
 
@@ -181,11 +231,12 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
 
     // Audit log
     await AuditLog.create({
-      user: req.user?.username || 'system',
-      action: 'station_updated',
-      resource: 'fuel_station_config',
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'fuel_station_config',
       resourceId: id,
-      details: updates,
+      details: JSON.stringify({ ...updates, unsetFields: Object.keys(unsetFields) }),
+      severity: 'low',
     });
 
     res.json({
@@ -194,9 +245,11 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
       message: 'Fuel station updated successfully',
     });
   } catch (error: any) {
+    console.error('Error updating fuel station:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update fuel station',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 };
@@ -220,11 +273,12 @@ export const deleteFuelStation = async (req: AuthRequest, res: Response) => {
 
     // Audit log
     await AuditLog.create({
-      user: req.user?.username || 'system',
-      action: 'station_deleted',
-      resource: 'fuel_station_config',
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'fuel_station_config',
       resourceId: id,
-      details: { stationName: station.stationName },
+      details: JSON.stringify({ stationName: station.stationName }),
+      severity: 'medium',
     });
 
     res.json({
@@ -340,11 +394,12 @@ export const createRoute = async (req: AuthRequest, res: Response) => {
 
     // Audit log
     await AuditLog.create({
-      user: req.user?.username || 'system',
-      action: 'route_created',
-      resource: 'route_config',
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'route_config',
       resourceId: route._id.toString(),
-      details: { routeName, destination },
+      details: JSON.stringify({ routeName, destination }),
+      severity: 'low',
     });
 
     res.status(201).json({
@@ -386,11 +441,12 @@ export const updateRoute = async (req: AuthRequest, res: Response) => {
 
     // Audit log
     await AuditLog.create({
-      user: req.user?.username || 'system',
-      action: 'route_updated',
-      resource: 'route_config',
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'route_config',
       resourceId: id,
-      details: updates,
+      details: JSON.stringify(updates),
+      severity: 'low',
     });
 
     res.json({
@@ -425,11 +481,12 @@ export const deleteRoute = async (req: AuthRequest, res: Response) => {
 
     // Audit log
     await AuditLog.create({
-      user: req.user?.username || 'system',
-      action: 'route_deleted',
-      resource: 'route_config',
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'route_config',
       resourceId: id,
-      details: { routeName: route.routeName },
+      details: JSON.stringify({ routeName: route.routeName }),
+      severity: 'medium',
     });
 
     res.json({

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Plus, 
   X, 
@@ -8,11 +8,13 @@ import {
   Lock,
   User as UserIcon,
   Briefcase,
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react';
 import { usersAPI } from '../services/api';
-import { UserRole } from '../types';
+import { UserRole, FuelStationConfig } from '../types';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import { configService } from '../services/configService';
 
 interface CreateUserModalProps {
   isOpen: boolean;
@@ -23,7 +25,9 @@ interface CreateUserModalProps {
 
 export default function CreateUserModal({ isOpen, onClose, onUserCreated, restrictedRoles = [] }: CreateUserModalProps) {
   const [loading, setLoading] = useState(false);
+  const [loadingStations, setLoadingStations] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fuelStations, setFuelStations] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -36,19 +40,37 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated, restri
     truckNo: '',
   });
 
-  // Fuel stations for manager role assignment
-  const FUEL_STATIONS = [
-    'INFINITY',
-    'LAKE CHILABOMBWE',
-    'LAKE NDOLA',
-    'LAKE KAPIRI',
-    'LAKE KITWE',
-    'LAKE KABANGWA',
-    'LAKE CHINGOLA',
-    'LAKE TUNDUMA',
-    'GBP MOROGORO',
-    'GBP KANGE',
-  ];
+  // Load fuel stations dynamically from database
+  useEffect(() => {
+    const loadStations = async () => {
+      try {
+        setLoadingStations(true);
+        const stationNames = await configService.getStationNames();
+        setFuelStations(stationNames);
+      } catch (error) {
+        console.error('Failed to load fuel stations:', error);
+        // Fallback to hardcoded list if API fails
+        setFuelStations([
+          'INFINITY',
+          'LAKE CHILABOMBWE',
+          'LAKE NDOLA',
+          'LAKE KAPIRI',
+          'LAKE KITWE',
+          'LAKE KABANGWA',
+          'LAKE CHINGOLA',
+          'LAKE TUNDUMA',
+          'GBP MOROGORO',
+          'GBP KANGE',
+        ]);
+      } finally {
+        setLoadingStations(false);
+      }
+    };
+    
+    if (isOpen) {
+      loadStations();
+    }
+  }, [isOpen]);
 
   const roles = [
     { value: 'super_admin' as UserRole, label: 'Super Admin', description: 'Full system access with all privileges' },
@@ -270,9 +292,10 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated, restri
                 onChange={e => setFormData({ ...formData, station: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                 required
+                disabled={loadingStations}
               >
-                <option value="">Select a station...</option>
-                {FUEL_STATIONS.map(station => (
+                <option value="">{loadingStations ? 'Loading stations...' : 'Select a station...'}</option>
+                {fuelStations.map(station => (
                   <option key={station} value={station}>
                     {station}
                   </option>

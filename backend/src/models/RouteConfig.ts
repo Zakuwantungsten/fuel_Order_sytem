@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IRouteConfig extends Document {
   routeName: string;
-  origin?: string; // Starting point (e.g., "Dar", "Tanga")
+  origin: string; // Starting point (e.g., "Dar", "Tanga") - REQUIRED as it determines fuel allocation
   destination: string;
   destinationAliases?: string[]; // Alternative names (e.g., ["DSM", "DAR"] for Dar es Salaam)
   defaultTotalLiters: number;
@@ -24,6 +24,7 @@ const RouteConfigSchema = new Schema<IRouteConfig>(
     },
     origin: {
       type: String,
+      required: true,
       trim: true,
       uppercase: true,
     },
