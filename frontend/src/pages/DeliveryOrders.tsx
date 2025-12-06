@@ -522,12 +522,15 @@ const DeliveryOrders = () => {
         throw new Error(message);
       }
       
-      // Get total liters based on destination with match information
-      const destinationMatch = FuelConfigService.getTotalLitersByDestination(deliveryOrder.destination);
+      // Get total liters based on origin (POL) + destination with match information from database
+      const destinationMatch = await FuelConfigService.getTotalLitersByRoute(
+        deliveryOrder.loadingPoint || '',
+        deliveryOrder.destination
+      );
       let totalLiters: number | null = destinationMatch.matched ? destinationMatch.liters : null;
       let missingTotalLiters = !destinationMatch.matched;
       
-      console.log(`  → Destination: ${deliveryOrder.destination}`);
+      console.log(`  → POL: ${deliveryOrder.loadingPoint || 'N/A'}, Destination: ${deliveryOrder.destination}`);
       console.log(`  → Match Type: ${destinationMatch.matchType}`);
       
       if (missingTotalLiters) {
@@ -639,7 +642,7 @@ const DeliveryOrders = () => {
       
       // Use the service function to properly update returnDo, from, and to fields
       // This now includes fuel difference calculation logic
-      const { updatedRecord, additionalFuelInfo } = fuelRecordService.updateFuelRecordWithReturnDO(
+      const { updatedRecord, additionalFuelInfo } = await fuelRecordService.updateFuelRecordWithReturnDO(
         matchingRecord,
         deliveryOrder
       );

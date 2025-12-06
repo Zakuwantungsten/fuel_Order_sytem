@@ -245,5 +245,5 @@ LPO 2461 is fully cancelled - all 1 entries have been reverted.
 
 
 summary isn't updated 
-
-remove all hardcorded stations and thier default liters - transfer them to the routes configuration 
+OKAY FIX THE FILTERS FOR ALL ROUTES IN THE FUEL RECORDS
+notification when yard pending linking 

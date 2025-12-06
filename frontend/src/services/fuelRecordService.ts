@@ -412,10 +412,10 @@ export function createFuelRecordFromDO(
  * - Adds extra fuel based on special loading points (Kamoa +40L, NMI +20L, Kalongwe +60L)
  * - Adds extra fuel if final destination is Moshi/Msa (+170L)
  */
-export function updateFuelRecordWithReturnDO(
+export async function updateFuelRecordWithReturnDO(
   existingRecord: FuelRecord,
   returnDeliveryOrder: DeliveryOrder
-): { updatedRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[]; additionalFuelInfo?: any } {
+): Promise<{ updatedRecord: Partial<FuelRecord>; lposToGenerate: LPOToGenerate[]; additionalFuelInfo?: any }> {
   // IMPORTANT: Store the original going journey from/to BEFORE we change them
   // This is critical for LPO creation when the truck is still going
   // The originalGoingFrom and originalGoingTo preserve the original going journey details
@@ -431,8 +431,8 @@ export function updateFuelRecordWithReturnDO(
   const finalDestination = existingRecord.start || 'DAR';
   
   // Calculate required total liters for return journey with match information
-  // Based on the loading point (from) to the final destination
-  const destinationMatch = FuelConfigService.getTotalLitersByDestination(returnLoadingPoint);
+  // Based on the loading point (from) to the final destination using database routes
+  const destinationMatch = await FuelConfigService.getTotalLitersByRoute(returnLoadingPoint, finalDestination);
   const requiredTotalLiters = destinationMatch.liters;
   
   // Log if destination was not found or fuzzy matched
