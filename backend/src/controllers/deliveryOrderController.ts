@@ -3,6 +3,7 @@ import { DeliveryOrder, FuelRecord, LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { AuditService } from '../utils/auditService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import ExcelJS from 'exceljs';
 import path from 'path';
@@ -377,6 +378,16 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     logger.info(`Delivery order created: ${deliveryOrder.doNumber} by ${req.user?.username}`);
 
+    // Log audit trail
+    await AuditService.logCreate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'DeliveryOrder',
+      deliveryOrder._id.toString(),
+      { doNumber: deliveryOrder.doNumber, truckNo: deliveryOrder.truckNo, destination: deliveryOrder.destination },
+      req.ip
+    );
+
     res.status(201).json({
       success: true,
       message: 'Delivery order created successfully',
@@ -480,6 +491,19 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     }
 
     logger.info(`Delivery order updated: ${deliveryOrder.doNumber} by ${username}. Changes: ${JSON.stringify(changes)}`);
+
+    // Log audit trail
+    if (changes.length > 0) {
+      await AuditService.logUpdate(
+        req.user?.userId || 'system',
+        username,
+        'DeliveryOrder',
+        deliveryOrder._id.toString(),
+        { doNumber: originalDO.doNumber, changes: changes.map(c => c.field) },
+        { doNumber: deliveryOrder.doNumber, changes },
+        req.ip
+      );
+    }
 
     res.status(200).json({
       success: true,
@@ -600,6 +624,16 @@ export const deleteDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     }
 
     logger.info(`Delivery order deleted: ${deliveryOrder.doNumber} by ${req.user?.username}`);
+
+    // Log audit trail
+    await AuditService.logDelete(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'DeliveryOrder',
+      deliveryOrder._id.toString(),
+      { doNumber: deliveryOrder.doNumber, truckNo: deliveryOrder.truckNo },
+      req.ip
+    );
 
     res.status(200).json({
       success: true,

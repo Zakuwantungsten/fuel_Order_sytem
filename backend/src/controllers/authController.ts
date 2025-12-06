@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { User } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger } from '../utils';
+import { AuditService } from '../utils/auditService';
 import { AuthRequest } from '../middleware/auth';
 import { LoginRequest, RegisterRequest, AuthResponse, JWTPayload } from '../types';
 
@@ -122,6 +123,15 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
         logger.info(`Driver logged in: ${username}`);
 
+        // Log driver login
+        await AuditService.logLogin(
+          driverUser.username,
+          true,
+          req.ip,
+          req.get('user-agent'),
+          driverUser._id
+        );
+
         const response: AuthResponse = {
           user: driverUser as any,
           accessToken,
@@ -159,6 +169,13 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
+      // Log failed login attempt
+      await AuditService.logLogin(
+        username,
+        false,
+        req.ip,
+        req.get('user-agent')
+      );
       throw new ApiError(401, 'Invalid username or password');
     }
 
@@ -177,6 +194,15 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     await user.save();
 
     logger.info(`User logged in: ${username}`);
+
+    // Log successful login
+    await AuditService.logLogin(
+      user.username,
+      true,
+      req.ip,
+      req.get('user-agent'),
+      user._id.toString()
+    );
 
     const response: AuthResponse = {
       user: user.toJSON(),
@@ -254,6 +280,13 @@ export const logout = async (req: AuthRequest, res: Response): Promise<void> => 
     await User.findByIdAndUpdate(req.user.userId, { refreshToken: null });
 
     logger.info(`User logged out: ${req.user.username}`);
+
+    // Log logout
+    await AuditService.logLogout(
+      req.user.userId,
+      req.user.username,
+      req.ip
+    );
 
     res.status(200).json({
       success: true,

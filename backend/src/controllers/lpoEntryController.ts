@@ -3,6 +3,7 @@ import { LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { AuditService } from '../utils/auditService';
 
 /**
  * Get all LPO entries with pagination and filters
@@ -90,6 +91,16 @@ export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<v
 
     logger.info(`LPO entry created: ${lpoEntry.lpoNo} by ${req.user?.username}`);
 
+    // Log audit trail
+    await AuditService.logCreate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'LPOEntry',
+      lpoEntry._id.toString(),
+      { lpoNo: lpoEntry.lpoNo, truckNo: lpoEntry.truckNo, station: lpoEntry.dieselAt },
+      req.ip
+    );
+
     res.status(201).json({
       success: true,
       message: 'LPO entry created successfully',
@@ -119,6 +130,17 @@ export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<v
 
     logger.info(`LPO entry updated: ${lpoEntry.lpoNo} by ${req.user?.username}`);
 
+    // Log audit trail
+    await AuditService.logUpdate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'LPOEntry',
+      lpoEntry._id.toString(),
+      {},
+      { lpoNo: lpoEntry.lpoNo, truckNo: lpoEntry.truckNo },
+      req.ip
+    );
+
     res.status(200).json({
       success: true,
       message: 'LPO entry updated successfully',
@@ -147,6 +169,16 @@ export const deleteLPOEntry = async (req: AuthRequest, res: Response): Promise<v
     }
 
     logger.info(`LPO entry deleted: ${lpoEntry.lpoNo} by ${req.user?.username}`);
+
+    // Log audit trail
+    await AuditService.logDelete(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'LPOEntry',
+      lpoEntry._id.toString(),
+      { lpoNo: lpoEntry.lpoNo, truckNo: lpoEntry.truckNo },
+      req.ip
+    );
 
     res.status(200).json({
       success: true,

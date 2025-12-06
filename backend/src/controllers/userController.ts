@@ -3,6 +3,7 @@ import { User } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
+import { AuditService } from '../utils/auditService';
 import crypto from 'crypto';
 
 /**
@@ -126,6 +127,16 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
 
     logger.info(`New user created: ${username} by ${req.user?.username}`);
 
+    // Log audit trail
+    await AuditService.logCreate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'User',
+      user._id.toString(),
+      { username, role, department },
+      req.ip
+    );
+
     res.status(201).json({
       success: true,
       message: 'User created successfully',
@@ -156,6 +167,17 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     logger.info(`User updated: ${user.username} by ${req.user?.username}`);
+
+    // Log audit trail
+    await AuditService.logUpdate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'User',
+      user._id.toString(),
+      {},
+      { username: user.username, role: user.role },
+      req.ip
+    );
 
     res.status(200).json({
       success: true,
@@ -191,6 +213,16 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 
     logger.info(`User deleted: ${user.username} by ${req.user?.username}`);
 
+    // Log audit trail
+    await AuditService.logDelete(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'User',
+      user._id.toString(),
+      { username: user.username, role: user.role },
+      req.ip
+    );
+
     res.status(200).json({
       success: true,
       message: 'User deleted successfully',
@@ -222,6 +254,18 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
     await user.save();
 
     logger.info(`Password reset for user: ${user.username} by ${req.user?.username}`);
+
+    // Log audit trail
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'PASSWORD_RESET',
+      resourceType: 'User',
+      resourceId: user._id.toString(),
+      details: `Password reset for user: ${user.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
 
     res.status(200).json({
       success: true,

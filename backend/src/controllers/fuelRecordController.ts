@@ -3,6 +3,7 @@ import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
+import { AuditService } from '../utils/auditService';
 import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
 
 /**
@@ -199,6 +200,16 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`Fuel record created for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
 
+    // Log audit trail
+    await AuditService.logCreate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'FuelRecord',
+      fuelRecord._id.toString(),
+      { truckNo: fuelRecord.truckNo, goingDo: fuelRecord.goingDo, from: fuelRecord.from, to: fuelRecord.to },
+      req.ip
+    );
+
     // Check if configuration is missing and create notification
     if (fuelRecord.isLocked && fuelRecord.pendingConfigReason) {
       const missingFields: ('totalLiters' | 'extraFuel')[] = [];
@@ -292,6 +303,17 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`Fuel record updated for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
 
+    // Log audit trail
+    await AuditService.logUpdate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'FuelRecord',
+      fuelRecord._id.toString(),
+      { truckNo: existingRecord.truckNo, goingDo: existingRecord.goingDo },
+      { truckNo: fuelRecord.truckNo, goingDo: fuelRecord.goingDo, isLocked: fuelRecord.isLocked },
+      req.ip
+    );
+
     // Auto-resolve notifications if record was unlocked
     if (wasLocked && !fuelRecord.isLocked) {
       await autoResolveNotifications(id, req.user?.username || 'admin');
@@ -328,6 +350,16 @@ export const deleteFuelRecord = async (req: AuthRequest, res: Response): Promise
     }
 
     logger.info(`Fuel record deleted for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
+
+    // Log audit trail
+    await AuditService.logDelete(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'FuelRecord',
+      fuelRecord._id.toString(),
+      { truckNo: fuelRecord.truckNo, goingDo: fuelRecord.goingDo },
+      req.ip
+    );
 
     res.status(200).json({
       success: true,
