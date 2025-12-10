@@ -15,6 +15,9 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [recentEntries, setRecentEntries] = useState<any[]>([]);
+  const [rejectionHistory, setRejectionHistory] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'entries' | 'rejections'>('entries');
+  const [showResolved, setShowResolved] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -88,14 +91,32 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
     }
   }, []);
 
+  const fetchRejectionHistory = useCallback(async () => {
+    try {
+      // Get yard from user role
+      const yardMap: Record<string, string> = {
+        dar_yard: 'DAR YARD',
+        tanga_yard: 'TANGA YARD',
+        mmsa_yard: 'MMSA YARD',
+      };
+      const yard = yardMap[user.role];
+      const history = await yardFuelService.getRejectionHistory(yard, showResolved);
+      setRejectionHistory(history);
+    } catch (error: any) {
+      console.error('Failed to fetch rejection history:', error);
+    }
+  }, [user.role, showResolved]);
+
   // Initial fetch and real-time updates
   useEffect(() => {
     fetchRecentEntries();
+    fetchRejectionHistory();
     
     // Set up real-time polling
     updateIntervalRef.current = setInterval(() => {
       if (isOnline) {
         fetchRecentEntries(true);
+        fetchRejectionHistory();
       }
     }, REALTIME_UPDATE_INTERVAL);
     
@@ -374,13 +395,38 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
           </div>
         </div>
 
-        {/* Recent Entries */}
+        {/* Tabs & Content */}
         <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-3 sm:p-4 border border-gray-100 dark:border-gray-700 transition-colors">
-            <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-gray-800 dark:text-gray-100 flex items-center">
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-gray-400" />
-              Recent Entries
-            </h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 dark:border-gray-600">
+              <button
+                onClick={() => setActiveTab('entries')}
+                className={`flex-1 px-4 py-3 text-sm sm:text-base font-medium transition-colors ${
+                  activeTab === 'entries'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                <Clock className="w-4 h-4 inline mr-2" />
+                Recent Entries
+              </button>
+              <button
+                onClick={() => setActiveTab('rejections')}
+                className={`flex-1 px-4 py-3 text-sm sm:text-base font-medium transition-colors ${
+                  activeTab === 'rejections'
+                    ? 'text-red-600 dark:text-red-400 border-b-2 border-red-600 dark:border-red-400'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                ⚠️ Rejections {rejectionHistory.length > 0 && `(${rejectionHistory.length})`}
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="p-3 sm:p-4">
+              {activeTab === 'entries' && (
+                <div>
             
             {loading ? (
               <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
@@ -428,6 +474,117 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                 ))}
               </div>
             )}
+          </div>
+              )}
+
+              {activeTab === 'rejections' && (
+                <div>
+                  {/* Toggle for showing resolved */}
+                  <div className="mb-4 flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Show resolved rejections
+                    </span>
+                    <button
+                      onClick={() => setShowResolved(!showResolved)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        showResolved ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          showResolved ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {rejectionHistory.length === 0 ? (
+                    <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
+                      <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-green-300 dark:text-green-600 mb-2" />
+                      <p className="text-sm sm:text-base font-medium">
+                        {showResolved ? 'No Resolved Rejections' : 'No Pending Rejections'}
+                      </p>
+                      <p className="text-xs sm:text-sm mt-1">
+                        {showResolved ? 'You have fixed all rejected entries' : 'All your entries have been accepted'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {rejectionHistory.map((entry, index) => (
+                        <div
+                          key={entry._id || index}
+                          className={`border-2 rounded-xl p-3 sm:p-4 ${
+                            entry.rejectionResolved
+                              ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+                              : 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100">
+                                  {entry.truckNo}
+                                </p>
+                                {entry.rejectionResolved ? (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 font-medium flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" /> RESOLVED
+                                  </span>
+                                ) : (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 font-medium">
+                                    REJECTED
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                {new Date(entry.rejectedAt).toLocaleDateString()} at {new Date(entry.rejectedAt).toLocaleTimeString()}
+                              </p>
+                            </div>
+                            <div className="text-right ml-3">
+                              <p className="text-lg font-bold text-red-600 dark:text-red-400">{entry.liters}L</p>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-3 p-2 sm:p-3 bg-white dark:bg-gray-800 rounded-lg">
+                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                              Rejection Reason:
+                            </p>
+                            <p className="text-sm text-gray-900 dark:text-gray-100">
+                              {entry.rejectionReason}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                              Rejected by: {entry.rejectedBy}
+                            </p>
+                          </div>
+
+                          {entry.rejectionResolved ? (
+                            <div className="mt-3 pt-3 border-t border-green-200 dark:border-green-800">
+                              <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1">
+                                ✅ Issue Resolved
+                              </p>
+                              <p className="text-xs text-gray-700 dark:text-gray-300">
+                                This entry was successfully corrected and linked.
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Resolved on: {new Date(entry.rejectionResolvedAt).toLocaleDateString()} by {entry.rejectionResolvedBy}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
+                              <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">
+                                ⚠️ Action Required:
+                              </p>
+                              <p className="text-xs text-gray-700 dark:text-gray-300">
+                                Please re-enter this fuel dispense with the correct truck number and details.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </main>

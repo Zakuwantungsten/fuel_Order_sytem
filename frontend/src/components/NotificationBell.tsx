@@ -4,7 +4,7 @@ import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck } from 'lucide-
 interface Notification {
   id?: string;
   _id?: string;
-  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'info' | 'warning' | 'error';
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
   relatedModel: string;
@@ -19,6 +19,12 @@ interface Notification {
     loadingPoint?: string;
     importOrExport?: string;
     deliveryOrderId?: string;
+    yardFuelDispenseId?: string;
+    yard?: string;
+    liters?: number;
+    enteredBy?: string;
+    rejectionReason?: string;
+    rejectedBy?: string;
   };
   status: 'pending' | 'resolved' | 'dismissed';
   createdAt: string;
@@ -29,6 +35,8 @@ interface NotificationBellProps {
   onNotificationClick?: (notification: Notification) => void;
   onEditDO?: (doId: string) => void; // Callback to navigate to edit a DO
   onRelinkDO?: (doId: string) => Promise<boolean>; // Callback to attempt re-linking a DO
+  onViewPendingYardFuel?: () => void; // Callback to open pending yard fuel modal
+  onViewAllNotifications?: () => void; // Callback to open all notifications page
 }
 
 // Helper to get notification ID (handles both id and _id from MongoDB)
@@ -36,12 +44,13 @@ const getNotificationId = (notification: Notification): string => {
   return notification.id || notification._id || '';
 };
 
-export default function NotificationBell({ onNotificationClick, onEditDO, onRelinkDO }: NotificationBellProps) {
+export default function NotificationBell({ onNotificationClick, onEditDO, onRelinkDO, onViewPendingYardFuel, onViewAllNotifications }: NotificationBellProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
   const [relinkingId, setRelinkingId] = useState<string | null>(null);
+  const [pendingYardFuelCount, setPendingYardFuelCount] = useState(0);
 
   useEffect(() => {
     loadNotifications();
@@ -64,6 +73,12 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
         const data = await response.json();
         setNotifications(data.data || []);
         setUnreadCount(data.unreadCount || 0);
+        
+        // Count pending yard fuel notifications
+        const pendingCount = (data.data || []).filter(
+          (n: Notification) => n.type === 'truck_pending_linking'
+        ).length;
+        setPendingYardFuelCount(pendingCount);
       }
     } catch (error) {
       console.error('Failed to load notifications:', error);
@@ -155,6 +170,14 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
 
   const handleNotificationClick = (notification: Notification) => {
     markAsRead(getNotificationId(notification));
+    
+    // If it's a yard fuel notification, open the pending yard fuel modal
+    if ((notification.type === 'yard_fuel_recorded' || notification.type === 'truck_pending_linking') && onViewPendingYardFuel) {
+      setShowDropdown(false);
+      onViewPendingYardFuel();
+      return;
+    }
+    
     if (onNotificationClick) {
       onNotificationClick(notification);
     }
@@ -165,21 +188,28 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     switch (type) {
       case 'both':
       case 'error':
+      case 'truck_entry_rejected':
         return 'text-red-500';
       case 'missing_total_liters':
       case 'missing_extra_fuel':
       case 'warning':
+      case 'truck_pending_linking':
         return 'text-yellow-500';
       case 'unlinked_export_do':
         return 'text-orange-500';
+      case 'yard_fuel_recorded':
+        return 'text-green-500';
       default:
         return 'text-blue-500';
     }
   };
 
   const getNotificationIcon = (type: string) => {
-    if (type === 'unlinked_export_do') {
+    if (type === 'unlinked_export_do' || type === 'truck_pending_linking') {
       return <Truck className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
+    }
+    if (type === 'yard_fuel_recorded') {
+      return <CheckCircle2 className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
     }
     return <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
   };
@@ -225,6 +255,26 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Pending Yard Fuel Button */}
+            {pendingYardFuelCount > 0 && onViewPendingYardFuel && (
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-b dark:border-gray-700">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDropdown(false);
+                    onViewPendingYardFuel();
+                  }}
+                  className="w-full px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Truck className="w-4 h-4" />
+                  View {pendingYardFuelCount} Pending Yard Fuel {pendingYardFuelCount === 1 ? 'Entry' : 'Entries'}
+                </button>
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2 text-center">
+                  Trucks awaiting DO linkage - Review and reject incorrect entries
+                </p>
+              </div>
+            )}
 
             {/* Notifications List */}
             <div className="overflow-y-auto flex-1">
@@ -334,7 +384,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                 <button
                   onClick={() => {
                     setShowDropdown(false);
-                    // Navigate to full notifications page if you have one
+                    onViewAllNotifications?.();
                   }}
                   className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
                 >

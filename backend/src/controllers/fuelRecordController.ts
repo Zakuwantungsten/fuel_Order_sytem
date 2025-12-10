@@ -240,6 +240,34 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
       logger.info(`Created notification for locked fuel record ${fuelRecord._id} - missing: ${missingFields.join(', ')}`);
     }
 
+    // Auto-link any pending yard fuel entries for this truck
+    try {
+      const axios = require('axios');
+      const response = await axios.post(
+        'http://localhost:5000/api/yard-fuel/link-pending',
+        {
+          fuelRecordId: fuelRecord._id.toString(),
+          truckNo: fuelRecord.truckNo,
+          doNumber: fuelRecord.goingDo,
+          date: fuelRecord.date,
+        },
+        {
+          headers: {
+            Authorization: req.headers.authorization,
+          },
+        }
+      );
+
+      if (response.data.data.linkedCount > 0) {
+        logger.info(
+          `Auto-linked ${response.data.data.linkedCount} pending yard fuel entry(ies) for truck ${fuelRecord.truckNo}`
+        );
+      }
+    } catch (linkError: any) {
+      // Don't fail the fuel record creation if linking fails
+      logger.warn(`Failed to auto-link pending yard fuel for ${fuelRecord.truckNo}:`, linkError.message);
+    }
+
     res.status(201).json({
       success: true,
       message: fuelRecord.isLocked 

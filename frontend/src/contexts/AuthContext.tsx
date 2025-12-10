@@ -12,12 +12,18 @@ type AuthAction =
   | { type: 'AUTH_CLEAR_ERROR' }
   | { type: 'SET_THEME'; payload: 'light' | 'dark' };
 
+// Helper function to get user-specific theme key
+const getUserThemeKey = (userId?: string | number): string => {
+  return userId ? `fuel_order_theme_user_${userId}` : 'fuel_order_theme_default';
+};
+
 // Initial state
-const getInitialTheme = (): 'light' | 'dark' => {
+const getInitialTheme = (userId?: string | number): 'light' | 'dark' => {
   if (typeof window === 'undefined') return 'light';
   
   try {
-    const stored = localStorage.getItem('fuel_order_theme');
+    const themeKey = getUserThemeKey(userId);
+    const stored = localStorage.getItem(themeKey);
     if (stored === 'dark' || stored === 'light') return stored;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   } catch {
@@ -103,7 +109,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Apply initial theme immediately on mount (before React hydration)
   useEffect(() => {
-    const storedTheme = localStorage.getItem('fuel_order_theme');
+    const userId = state.user?.id;
+    const themeKey = getUserThemeKey(userId);
+    const storedTheme = localStorage.getItem(themeKey);
     if (storedTheme === 'dark' || storedTheme === 'light') {
       // Apply theme to DOM immediately
       if (storedTheme === 'dark') {
@@ -116,7 +124,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         dispatch({ type: 'SET_THEME', payload: storedTheme });
       }
     }
-  }, []);
+  }, [state.user?.id]);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -126,11 +134,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (stored) {
           const authData = JSON.parse(stored);
           const permissions = getRolePermissions(authData.role);
+          
+          // Load user-specific theme preference
+          const userId = authData.id;
+          const userTheme = getInitialTheme(userId);
+          
           const authUser: AuthUser = {
             ...authData,
             permissions,
           };
           dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
+          
+          // Apply user-specific theme
+          dispatch({ type: 'SET_THEME', payload: userTheme });
         }
       } catch (error) {
         console.error('Error checking existing session:', error);
@@ -266,13 +282,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         root.classList.add('dark');
       }
       
-      // Persist theme preference
-      localStorage.setItem('fuel_order_theme', state.theme);
+      // Persist theme preference with user-specific key
+      const userId = state.user?.id;
+      const themeKey = getUserThemeKey(userId);
+      localStorage.setItem(themeKey, state.theme);
       
     } catch (error) {
       console.error('Error applying theme:', error);
     }
-  }, [state.theme]);
+  }, [state.theme, state.user?.id]);
 
   const contextValue: AuthContextType = {
     ...state,

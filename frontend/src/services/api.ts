@@ -790,6 +790,33 @@ export const yardFuelAPI = {
     });
     return response.data.data?.data || response.data.data || [];
   },
+
+  reject: async (id: string | number, rejectionReason: string): Promise<any> => {
+    const response = await apiClient.post(`/yard-fuel/${id}/reject`, { rejectionReason });
+    return response.data;
+  },
+
+  getRejectionHistory: async (yard?: string, dateFrom?: string, dateTo?: string, showResolved?: boolean): Promise<YardFuelDispense[]> => {
+    const response = await apiClient.get('/yard-fuel/history/rejections', {
+      params: { yard, dateFrom, dateTo, showResolved },
+    });
+    return response.data.data || [];
+  },
+
+  getPending: async (): Promise<YardFuelDispense[]> => {
+    const response = await apiClient.get('/yard-fuel/pending');
+    return response.data.data || [];
+  },
+
+  linkPending: async (fuelRecordId: string, truckNo: string, doNumber: string, date: string): Promise<any> => {
+    const response = await apiClient.post('/yard-fuel/link-pending', {
+      fuelRecordId,
+      truckNo,
+      doNumber,
+      date,
+    });
+    return response.data;
+  },
 };
 
 // Admin Configuration API

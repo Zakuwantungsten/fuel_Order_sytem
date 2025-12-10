@@ -244,16 +244,14 @@ okay - small text for small screens and also full text for conditional rendering
 LPO 2461 is fully cancelled - all 1 entries have been reverted.
 
 
-summary isn't updated 
-OKAY FIX THE FILTERS FOR ALL ROUTES IN THE FUEL RECORDS
-notification when yard pending linking - logic 
+
+
 kwa overviw page to fetch the percent increase data dyanimcally instead of placeholder values
 cookies not functioning - fuel order maker not remembering dark mode 
 all those interfaces for mobile arenow zoomout way to far - they are kinda okay - but try to do mobile responsiveness to seee which is cooler - to show a table rather than a card - nice idea hamdu
 go through all things one by one - its like they have changed  and there might unlooked or overlooked erros 
 
 implement data archinving and search limit
-implement correct truck entry and option for linking since and implement notification on this to the fuel order maker 
 revelacnt errors when toggling return and going in the lpo making
 in the mobile screen mode for the lpo the drop down appears outside the screen - fix this - fix all drop downs appearing outside screens and table like for do management to shows instead of cards
 making the text responsive or rather not to overlap or show dots 

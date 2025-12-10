@@ -33,6 +33,8 @@ import SuperAdminDashboard from './SuperAdminDashboard';
 import StandardAdminDashboard from './StandardAdminDashboard';
 import ManagerView from './ManagerView';
 import OfficerPortal from './OfficerPortal';
+import PendingYardFuel from './PendingYardFuel';
+import NotificationsPage from './NotificationsPage';
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
 import { useNavigate } from 'react-router-dom';
@@ -120,6 +122,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [activeTab, setActiveTab] = useState(() => getInitialTab(user.role));
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showPendingYardFuel, setShowPendingYardFuel] = useState(false);
+  const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [editDoId, setEditDoId] = useState<string | null>(null);
   const { logout, toggleTheme, isDark } = useAuth();
 
@@ -483,6 +487,12 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   // Then set the edit DO ID which will trigger the URL update
                   setEditDoId(doId);
                 }}
+                onViewPendingYardFuel={() => {
+                  setShowPendingYardFuel(true);
+                }}
+                onViewAllNotifications={() => {
+                  setShowNotificationsPage(true);
+                }}
               />
               
               {/* Profile Menu */}
@@ -525,6 +535,16 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           {renderActiveComponent()}
         </main>
       </div>
+
+      {/* Pending Yard Fuel Modal */}
+      {showPendingYardFuel && (
+        <PendingYardFuel onClose={() => setShowPendingYardFuel(false)} />
+      )}
+
+      {/* All Notifications Page Modal */}
+      {showNotificationsPage && (
+        <NotificationsPage onClose={() => setShowNotificationsPage(false)} />
+      )}
     </div>
   );
 }

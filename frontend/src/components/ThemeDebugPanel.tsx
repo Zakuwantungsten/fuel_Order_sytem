@@ -3,15 +3,20 @@ import { Sun, Moon, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const ThemeDebugPanel: React.FC = () => {
-  const { theme, toggleTheme, setTheme, isDark } = useAuth();
+  const { theme, toggleTheme, setTheme, isDark, user } = useAuth();
   const [debugInfo, setDebugInfo] = useState<any>({});
 
   const updateDebugInfo = () => {
+    const userId = user?.id;
+    const themeKey = userId ? `fuel_order_theme_user_${userId}` : 'fuel_order_theme_default';
+    
     const info = {
       currentTheme: theme,
       isDark: isDark,
       htmlClasses: document.documentElement.className || 'none',
-      localStorage: localStorage.getItem('fuel_order_theme'),
+      localStorage: localStorage.getItem(themeKey),
+      themeKey: themeKey,
+      userId: userId || 'Not logged in',
       bodyBackground: getComputedStyle(document.body).backgroundColor,
       bodyColor: getComputedStyle(document.body).color,
       hasDarkClass: document.documentElement.classList.contains('dark'),
@@ -26,6 +31,10 @@ export const ThemeDebugPanel: React.FC = () => {
   }, [theme, isDark]);
 
   const clearCache = () => {
+    const userId = user?.id;
+    const themeKey = userId ? `fuel_order_theme_user_${userId}` : 'fuel_order_theme_default';
+    localStorage.removeItem(themeKey);
+    // Also remove old global key if it exists
     localStorage.removeItem('fuel_order_theme');
     document.documentElement.classList.remove('dark');
     window.location.reload();
@@ -103,8 +112,14 @@ export const ThemeDebugPanel: React.FC = () => {
             <span className="text-gray-600 dark:text-gray-400">isDark:</span>
             <span className="font-mono text-gray-900 dark:text-gray-100">{String(debugInfo.isDark)}</span>
             
+            <span className="text-gray-600 dark:text-gray-400">User ID:</span>
+            <span className="font-mono text-gray-900 dark:text-gray-100 break-all">{debugInfo.userId}</span>
+            
             <span className="text-gray-600 dark:text-gray-400">HTML class:</span>
             <span className="font-mono text-gray-900 dark:text-gray-100 break-all">{debugInfo.htmlClasses}</span>
+            
+            <span className="text-gray-600 dark:text-gray-400">Theme Key:</span>
+            <span className="font-mono text-gray-900 dark:text-gray-100 text-xs break-all">{debugInfo.themeKey}</span>
             
             <span className="text-gray-600 dark:text-gray-400">localStorage:</span>
             <span className="font-mono text-gray-900 dark:text-gray-100">{debugInfo.localStorage || 'null'}</span>

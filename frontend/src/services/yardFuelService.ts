@@ -223,6 +223,32 @@ export const yardFuelService = {
       pendingEntries: dispenses.filter(d => d.status === 'pending').length,
     };
   },
+
+  /**
+   * Reject a yard fuel entry (fuel order maker action)
+   */
+  rejectYardFuelEntry: async (id: string | number, rejectionReason: string): Promise<any> => {
+    try {
+      const response = await yardFuelAPI.reject(id, rejectionReason);
+      return response;
+    } catch (error) {
+      console.error('Error rejecting yard fuel entry:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get rejection history for a yard
+   */
+  getRejectionHistory: async (yard?: string, showResolved: boolean = false, dateFrom?: string, dateTo?: string): Promise<YardFuelDispense[]> => {
+    try {
+      const response = await yardFuelAPI.getRejectionHistory(yard, dateFrom, dateTo, showResolved);
+      return response;
+    } catch (error) {
+      console.error('Error getting rejection history:', error);
+      return [];
+    }
+  },
 };
 
 export default yardFuelService;

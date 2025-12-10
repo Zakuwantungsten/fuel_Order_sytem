@@ -417,8 +417,20 @@ export interface IYardFuelDispense {
   linkedDONumber?: string;
   autoLinked?: boolean;
   status: 'pending' | 'linked' | 'manual';
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: Date;
+  rejectionResolved?: boolean;
+  rejectionResolvedAt?: Date;
+  rejectionResolvedBy?: string;
   isDeleted: boolean;
   deletedAt?: Date;
+  history?: Array<{
+    action: 'created' | 'updated' | 'rejected' | 're-entered' | 'linked';
+    performedBy: string;
+    timestamp: Date;
+    details?: any;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }

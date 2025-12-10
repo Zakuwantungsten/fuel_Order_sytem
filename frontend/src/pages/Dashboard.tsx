@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown } from 'lucide-react';
 import { dashboardAPI } from '../services/api';
 import { DashboardStats } from '../types';
 
@@ -48,27 +47,19 @@ const Dashboard = () => {
   const statsCards = [
     { 
       name: 'Total Delivery Orders', 
-      value: stats.totalDOs.toString(), 
-      change: '+12%', 
-      changeType: 'increase' 
+      value: stats.totalDOs.toString()
     },
     { 
       name: 'Active LPOs', 
-      value: stats.totalLPOs.toString(), 
-      change: '+8%', 
-      changeType: 'increase' 
+      value: stats.totalLPOs.toString()
     },
     { 
       name: 'Fuel Records', 
-      value: stats.totalFuelRecords.toString(), 
-      change: '+5%', 
-      changeType: 'increase' 
+      value: stats.totalFuelRecords.toString()
     },
     { 
       name: 'Total Tonnage', 
-      value: stats.totalTonnage.toLocaleString(), 
-      change: '+15%', 
-      changeType: 'increase' 
+      value: stats.totalTonnage.toLocaleString()
     },
   ];
 
@@ -97,17 +88,6 @@ const Dashboard = () => {
                   <p className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-100">
                     {stat.value}
                   </p>
-                </div>
-                <div className={`
-                  flex items-center text-sm font-semibold
-                  ${stat.changeType === 'increase' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}
-                `}>
-                  {stat.changeType === 'increase' ? (
-                    <TrendingUp className="w-4 h-4 mr-1" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 mr-1" />
-                  )}
-                  {stat.change}
                 </div>
               </div>
             </div>

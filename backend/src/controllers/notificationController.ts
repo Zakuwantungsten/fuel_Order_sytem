@@ -344,6 +344,215 @@ export const autoResolveNotifications = async (fuelRecordId: string, resolvedBy:
   }
 };
 
+/**
+ * Create notification when yard man records fuel (both linked and pending)
+ */
+export const createYardFuelRecordedNotification = async (
+  yardFuelDispenseId: string,
+  metadata: {
+    truckNo: string;
+    liters: number;
+    yard: string;
+    enteredBy: string;
+    doNumber?: string;
+    status: 'linked' | 'pending';
+  },
+  createdBy: string
+): Promise<void> => {
+  try {
+    const title = metadata.status === 'linked' 
+      ? `Yard Fuel Recorded: ${metadata.truckNo}`
+      : `Yard Fuel Pending: ${metadata.truckNo}`;
+    
+    const message = metadata.status === 'linked'
+      ? `${metadata.enteredBy} recorded ${metadata.liters}L for truck ${metadata.truckNo} at ${metadata.yard}. Linked to DO ${metadata.doNumber}.`
+      : `${metadata.enteredBy} recorded ${metadata.liters}L for truck ${metadata.truckNo} at ${metadata.yard}. No active DO found - entry is pending linking.`;
+
+    await Notification.create({
+      type: 'yard_fuel_recorded',
+      title,
+      message,
+      relatedModel: 'YardFuelDispense',
+      relatedId: yardFuelDispenseId,
+      metadata: {
+        yardFuelDispenseId,
+        truckNo: metadata.truckNo,
+        liters: metadata.liters,
+        yard: metadata.yard,
+        enteredBy: metadata.enteredBy,
+        doNumber: metadata.doNumber,
+      },
+      recipients: ['fuel_order_maker'],
+      createdBy,
+    });
+
+    logger.info(`Created yard fuel recorded notification for truck ${metadata.truckNo} (${metadata.status})`);
+  } catch (error) {
+    logger.error('Failed to create yard fuel recorded notification:', error);
+  }
+};
+
+/**
+ * Create notification when truck is pending linking (no DO found)
+ */
+export const createTruckPendingLinkingNotification = async (
+  yardFuelDispenseId: string,
+  metadata: {
+    truckNo: string;
+    liters: number;
+    yard: string;
+    enteredBy: string;
+  },
+  createdBy: string
+): Promise<void> => {
+  try {
+    const title = `Truck Pending Linking: ${metadata.truckNo}`;
+    const message = `Truck ${metadata.truckNo} has ${metadata.liters}L recorded at ${metadata.yard} by ${metadata.enteredBy}, but no active DO was found. Please create the necessary DO and fuel record to link this entry.`;
+
+    await Notification.create({
+      type: 'truck_pending_linking',
+      title,
+      message,
+      relatedModel: 'YardFuelDispense',
+      relatedId: yardFuelDispenseId,
+      metadata: {
+        yardFuelDispenseId,
+        truckNo: metadata.truckNo,
+        liters: metadata.liters,
+        yard: metadata.yard,
+        enteredBy: metadata.enteredBy,
+      },
+      recipients: ['fuel_order_maker'],
+      createdBy,
+    });
+
+    logger.info(`Created truck pending linking notification for truck ${metadata.truckNo}`);
+  } catch (error) {
+    logger.error('Failed to create truck pending linking notification:', error);
+  }
+};
+
+/**
+ * Create notification when fuel order maker rejects a truck entry
+ */
+export const createTruckEntryRejectedNotification = async (
+  yardFuelDispenseId: string,
+  metadata: {
+    truckNo: string;
+    liters: number;
+    yard: string;
+    enteredBy: string;
+    rejectionReason: string;
+    rejectedBy: string;
+  },
+  createdBy: string
+): Promise<void> => {
+  try {
+    const title = `Truck Entry Rejected: ${metadata.truckNo}`;
+    const message = `Your fuel entry for truck ${metadata.truckNo} (${metadata.liters}L at ${metadata.yard}) has been rejected by ${metadata.rejectedBy}. Reason: ${metadata.rejectionReason}. Please re-enter with the correct information.`;
+
+    await Notification.create({
+      type: 'truck_entry_rejected',
+      title,
+      message,
+      relatedModel: 'YardFuelDispense',
+      relatedId: yardFuelDispenseId,
+      metadata: {
+        yardFuelDispenseId,
+        truckNo: metadata.truckNo,
+        liters: metadata.liters,
+        yard: metadata.yard,
+        enteredBy: metadata.enteredBy,
+        rejectionReason: metadata.rejectionReason,
+        rejectedBy: metadata.rejectedBy,
+      },
+      recipients: [metadata.yard.toLowerCase().replace(' ', '_')], // Send to specific yard role
+      createdBy,
+    });
+
+    logger.info(`Created truck entry rejected notification for truck ${metadata.truckNo} to ${metadata.yard}`);
+  } catch (error) {
+    logger.error('Failed to create truck entry rejected notification:', error);
+  }
+};
+
+/**
+ * Create notification when pending yard fuel entry gets successfully linked
+ */
+export const createYardFuelLinkedNotification = async (
+  yardFuelDispenseId: string,
+  metadata: {
+    truckNo: string;
+    liters: number;
+    yard: string;
+    enteredBy: string;
+    doNumber: string;
+  },
+  createdBy: string
+): Promise<void> => {
+  try {
+    const title = `Truck Successfully Linked: ${metadata.truckNo}`;
+    const message = `Good news! Your pending fuel entry for truck ${metadata.truckNo} (${metadata.liters}L at ${metadata.yard}) has been successfully linked to DO ${metadata.doNumber}.`;
+
+    await Notification.create({
+      type: 'yard_fuel_recorded',
+      title,
+      message,
+      relatedModel: 'YardFuelDispense',
+      relatedId: yardFuelDispenseId,
+      metadata: {
+        yardFuelDispenseId,
+        truckNo: metadata.truckNo,
+        liters: metadata.liters,
+        yard: metadata.yard,
+        enteredBy: metadata.enteredBy,
+        doNumber: metadata.doNumber,
+      },
+      recipients: [metadata.yard.toLowerCase().replace(' ', '_')], // Send to specific yard role
+      createdBy,
+    });
+
+    logger.info(`Created yard fuel linked notification for truck ${metadata.truckNo}`);
+  } catch (error) {
+    logger.error('Failed to create yard fuel linked notification:', error);
+  }
+};
+
+/**
+ * Resolve pending yard fuel notifications when entry gets linked
+ */
+export const resolvePendingYardFuelNotifications = async (
+  yardFuelDispenseId: string,
+  resolvedBy: string
+): Promise<number> => {
+  try {
+    const result = await Notification.updateMany(
+      {
+        relatedModel: 'YardFuelDispense',
+        relatedId: yardFuelDispenseId,
+        status: 'pending',
+      },
+      {
+        $set: {
+          status: 'resolved',
+          resolvedAt: new Date(),
+          resolvedBy,
+          isRead: true,
+        },
+      }
+    );
+
+    if (result.modifiedCount > 0) {
+      logger.info(`Resolved ${result.modifiedCount} pending yard fuel notification(s) for ${yardFuelDispenseId}`);
+    }
+    
+    return result.modifiedCount;
+  } catch (error) {
+    logger.error('Failed to resolve pending yard fuel notifications:', error);
+    return 0;
+  }
+};
+
 export default {
   getNotifications,
   getNotificationCount,
@@ -354,4 +563,9 @@ export default {
   createUnlinkedExportDONotification,
   resolveUnlinkedDONotification,
   autoResolveNotifications,
+  createYardFuelRecordedNotification,
+  createTruckPendingLinkingNotification,
+  createTruckEntryRejectedNotification,
+  createYardFuelLinkedNotification,
+  resolvePendingYardFuelNotifications,
 };

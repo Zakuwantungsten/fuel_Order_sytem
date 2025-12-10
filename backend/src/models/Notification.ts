@@ -1,10 +1,10 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface INotification extends Document {
-  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'info' | 'warning' | 'error';
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
-  relatedModel: 'FuelRecord' | 'DeliveryOrder' | 'LPO' | 'User';
+  relatedModel: 'FuelRecord' | 'DeliveryOrder' | 'LPO' | 'User' | 'YardFuelDispense';
   relatedId: string;
   metadata?: {
     fuelRecordId?: string;
@@ -16,6 +16,12 @@ export interface INotification extends Document {
     loadingPoint?: string; // For EXPORT DO - where truck loads cargo
     importOrExport?: string;
     deliveryOrderId?: string; // ID of the unlinked DO
+    yardFuelDispenseId?: string; // ID of yard fuel dispense
+    yard?: string; // Which yard
+    liters?: number; // Amount of fuel
+    enteredBy?: string; // Yard man who entered
+    rejectionReason?: string; // Reason for rejection
+    rejectedBy?: string; // Fuel order maker who rejected
   };
   recipients: string[]; // Array of user IDs or roles (e.g., ['admin', 'super_admin'])
   isRead: boolean;
@@ -32,7 +38,7 @@ const notificationSchema = new Schema<INotification>(
   {
     type: {
       type: String,
-      enum: ['missing_total_liters', 'missing_extra_fuel', 'both', 'unlinked_export_do', 'info', 'warning', 'error'],
+      enum: ['missing_total_liters', 'missing_extra_fuel', 'both', 'unlinked_export_do', 'yard_fuel_recorded', 'truck_pending_linking', 'truck_entry_rejected', 'info', 'warning', 'error'],
       required: true,
     },
     title: {
@@ -47,7 +53,7 @@ const notificationSchema = new Schema<INotification>(
     },
     relatedModel: {
       type: String,
-      enum: ['FuelRecord', 'DeliveryOrder', 'LPO', 'User'],
+      enum: ['FuelRecord', 'DeliveryOrder', 'LPO', 'User', 'YardFuelDispense'],
       required: true,
     },
     relatedId: {

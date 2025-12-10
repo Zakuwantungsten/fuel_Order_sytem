@@ -526,6 +526,19 @@ export interface YardFuelDispense {
   linkedDONumber?: string;
   autoLinked?: boolean;
   status?: 'pending' | 'linked' | 'manual'; // pending = waiting for DO, linked = auto-matched, manual = manually entered
+  // Rejection fields
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  // History tracking
+  history?: Array<{
+    action: 'created' | 'updated' | 'rejected' | 're-entered' | 'linked';
+    performedBy: string;
+    timestamp: string;
+    details?: any;
+  }>;
 }
 
 // Cash Mode Cancellation Types - Checkpoints along the route
@@ -909,10 +922,10 @@ export interface FuelRecordFieldOption {
 // Notification Types
 export interface Notification {
   id?: string;
-  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'info' | 'warning' | 'error';
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
-  relatedModel: 'FuelRecord' | 'DeliveryOrder' | 'LPO' | 'User';
+  relatedModel: 'FuelRecord' | 'DeliveryOrder' | 'LPO' | 'User' | 'YardFuelDispense';
   relatedId: string;
   metadata?: {
     fuelRecordId?: string;
@@ -921,6 +934,12 @@ export interface Notification {
     destination?: string;
     truckSuffix?: string;
     missingFields?: string[];
+    yardFuelDispenseId?: string;
+    yard?: string;
+    liters?: number;
+    enteredBy?: string;
+    rejectionReason?: string;
+    rejectedBy?: string;
   };
   recipients: string[];
   isRead: boolean;

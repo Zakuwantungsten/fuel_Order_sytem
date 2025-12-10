@@ -55,6 +55,28 @@ const yardFuelDispenseSchema = new Schema<IYardFuelDispenseDocument>(
       enum: ['pending', 'linked', 'manual'],
       default: 'pending',
     },
+    rejectionReason: {
+      type: String,
+      trim: true,
+    },
+    rejectedBy: {
+      type: String,
+      trim: true,
+    },
+    rejectedAt: {
+      type: Date,
+    },
+    rejectionResolved: {
+      type: Boolean,
+      default: false,
+    },
+    rejectionResolvedAt: {
+      type: Date,
+    },
+    rejectionResolvedBy: {
+      type: String,
+      trim: true,
+    },
     isDeleted: {
       type: Boolean,
       default: false,
@@ -62,6 +84,24 @@ const yardFuelDispenseSchema = new Schema<IYardFuelDispenseDocument>(
     deletedAt: {
       type: Date,
     },
+    history: [{
+      action: {
+        type: String,
+        enum: ['created', 'updated', 'rejected', 're-entered', 'linked'],
+        required: true,
+      },
+      performedBy: {
+        type: String,
+        required: true,
+      },
+      timestamp: {
+        type: Date,
+        default: Date.now,
+      },
+      details: {
+        type: Schema.Types.Mixed,
+      },
+    }],
   },
   {
     timestamps: true,

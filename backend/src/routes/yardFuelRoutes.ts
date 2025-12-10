@@ -44,4 +44,27 @@ router.delete(
   asyncHandler(yardFuelController.deleteYardFuelDispense)
 );
 
+// Reject route (fuel order maker can reject pending entries)
+router.post(
+  '/:id/reject',
+  commonValidation.mongoId,
+  authorize('fuel_order_maker', 'super_admin', 'admin', 'manager'),
+  validate,
+  asyncHandler(yardFuelController.rejectYardFuelDispense)
+);
+
+// Get rejection history (yard personnel can view their rejections)
+router.get(
+  '/history/rejections',
+  authorize('yard_personnel', 'dar_yard', 'tanga_yard', 'mmsa_yard', 'super_admin', 'admin', 'manager'),
+  asyncHandler(yardFuelController.getYardRejectionHistory)
+);
+
+// Link pending yard fuel to newly created fuel record
+router.post(
+  '/link-pending',
+  authorize('fuel_order_maker', 'super_admin', 'admin', 'manager'),
+  asyncHandler(yardFuelController.linkPendingYardFuelToFuelRecord)
+);
+
 export default router;
