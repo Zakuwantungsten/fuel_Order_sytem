@@ -208,6 +208,7 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
           enteredBy: yardFuelDispense.enteredBy,
           doNumber: linkedInfo?.doNumber,
           status: linkedInfo?.linked ? 'linked' : 'pending',
+          notes: yardFuelDispense.notes,
         },
         req.user?.username || 'system'
       );
@@ -221,6 +222,7 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
             liters: yardFuelDispense.liters,
             yard: yardFuelDispense.yard,
             enteredBy: yardFuelDispense.enteredBy,
+            notes: yardFuelDispense.notes,
           },
           req.user?.username || 'system'
         );

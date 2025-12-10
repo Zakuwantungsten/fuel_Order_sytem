@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theme Storage Inspector - Fuel Order System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .key-value {
+            display: flex;
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .key {
+            font-weight: 600;
+            color: #667eea;
+            min-width: 250px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        .value {
+            color: #333;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            flex: 1;
+        }
+        
+        .value.null {
+            color: #999;
+            font-style: italic;
+        }
+        
+        .value.dark {
+            color: #2d3748;
+            font-weight: 600;
+        }
+        
+        .value.light {
+            color: #f7fafc;
+            background: #2d3748;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #e53e3e;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(245, 101, 101, 0.4);
+        }
+        
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-weight: 600;
+        }
+        
+        .status.success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 2px solid #48bb78;
+        }
+        
+        .status.warning {
+            background: #feebc8;
+            color: #7c2d12;
+            border: 2px solid #ed8936;
+        }
+        
+        .status.error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 2px solid #f56565;
+        }
+        
+        .empty {
+            color: #999;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .badge.old {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .badge.new {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        pre {
+            background: #2d3748;
+            color: #68d391;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Theme Storage Inspector</h1>
+        <p class="subtitle">Fuel Order System - User-Specific Theme Debugging Tool</p>
+        
+        <div class="section">
+            <h2>📦 Current Theme Keys in localStorage</h2>
+            <div id="themeKeys"></div>
+            <div class="buttons">
+                <button class="btn-primary" onclick="refreshData()">🔄 Refresh</button>
+                <button class="btn-danger" onclick="clearOldKey()">🗑️ Remove Old Global Key</button>
+                <button class="btn-danger" onclick="clearAllThemes()">⚠️ Clear All Theme Keys</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>👤 Current User Info</h2>
+            <div id="userInfo"></div>
+        </div>
+        
+        <div class="section">
+            <h2>✅ System Status</h2>
+            <div id="systemStatus"></div>
+        </div>
+        
+        <div class="section">
+            <h2>🛠️ Quick Actions</h2>
+            <div class="buttons">
+                <button class="btn-success" onclick="simulateUserTheme(1, 'dark')">Set User 1 → Dark</button>
+                <button class="btn-success" onclick="simulateUserTheme(1, 'light')">Set User 1 → Light</button>
+                <button class="btn-success" onclick="simulateUserTheme(2, 'dark')">Set User 2 → Dark</button>
+                <button class="btn-success" onclick="simulateUserTheme(2, 'light')">Set User 2 → Light</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📝 Testing Instructions</h2>
+            <pre>
+// 1. Clear old theme key (run once)
+localStorage.removeItem('fuel_order_theme');
+
+// 2. Login as User A and set dark mode
+// Expected: localStorage.setItem('fuel_order_theme_user_A', 'dark')
+
+// 3. Logout, then login as User B and set light mode  
+// Expected: localStorage.setItem('fuel_order_theme_user_B', 'light')
+
+// 4. Logout, login as User A again
+// Expected: Theme should be 'dark' (from step 2)
+
+// 5. Check this inspector to verify keys exist
+            </pre>
+        </div>
+    </div>
+    
+    <script>
+        function getAllThemeKeys() {
+            return Object.keys(localStorage).filter(key => key.includes('theme'));
+        }
+        
+        function displayThemeKeys() {
+            const keys = getAllThemeKeys();
+            const container = document.getElementById('themeKeys');
+            
+            if (keys.length === 0) {
+                container.innerHTML = '<div class="empty">No theme keys found in localStorage</div>';
+                return;
+            }
+            
+            let html = '';
+            keys.forEach(key => {
+                const value = localStorage.getItem(key);
+                const isOld = key === 'fuel_order_theme';
+                const badge = isOld 
+                    ? '<span class="badge old">OLD - Should Remove</span>' 
+                    : '<span class="badge new">NEW - User Specific</span>';
+                
+                const valueClass = value === 'dark' ? 'dark' : value === 'light' ? 'light' : 'null';
+                
+                html += `
+                    <div class="key-value">
+                        <div class="key">${key}${badge}</div>
+                        <div class="value ${valueClass}">${value || 'null'}</div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        function displayUserInfo() {
+            const container = document.getElementById('userInfo');
+            
+            try {
+                const authData = localStorage.getItem('fuel_order_auth');
+                if (!authData) {
+                    container.innerHTML = '<div class="empty">No user logged in</div>';
+                    return;
+                }
+                
+                const user = JSON.parse(authData);
+                const userId = user.id;
+                const expectedKey = `fuel_order_theme_user_${userId}`;
+                const userTheme = localStorage.getItem(expectedKey);
+                
+                container.innerHTML = `
+                    <div class="key-value">
+                        <div class="key">User ID</div>
+                        <div class="value">${userId}</div>
+                    </div>
+                    <div class="key-value">
+                        <div class="key">Username</div>
+                        <div class="value">${user.username}</div>
+                    </div>
+                    <div class="key-value">
+                        <div class="key">Role</div>
+                        <div class="value">${user.role}</div>
+                    </div>
+                    <div class="key-value">
+                        <div class="key">Expected Theme Key</div>
+                        <div class="value">${expectedKey}</div>
+                    </div>
+                    <div class="key-value">
+                        <div class="key">Current Theme</div>
+                        <div class="value ${userTheme}">${userTheme || 'Not set (will use default)'}</div>
+                    </div>
+                `;
+            } catch (e) {
+                container.innerHTML = '<div class="empty">Error reading user data</div>';
+            }
+        }
+        
+        function displaySystemStatus() {
+            const container = document.getElementById('systemStatus');
+            const keys = getAllThemeKeys();
+            const hasOldKey = keys.includes('fuel_order_theme');
+            const userKeys = keys.filter(k => k.startsWith('fuel_order_theme_user_'));
+            
+            let status = '';
+            let statusClass = 'success';
+            
+            if (hasOldKey) {
+                status += '<div class="status error">❌ Old global key detected! Remove it for proper per-user themes.</div>';
+            } else {
+                status += '<div class="status success">✅ No old global key found</div>';
+            }
+            
+            if (userKeys.length > 0) {
+                status += `<div class="status success">✅ Found ${userKeys.length} user-specific theme(s)</div>`;
+            } else {
+                status += '<div class="status warning">⚠️ No user-specific themes found yet</div>';
+            }
+            
+            container.innerHTML = status;
+        }
+        
+        function clearOldKey() {
+            const oldKey = 'fuel_order_theme';
+            if (localStorage.getItem(oldKey)) {
+                localStorage.removeItem(oldKey);
+                alert('✅ Old global theme key removed!');
+                refreshData();
+            } else {
+                alert('ℹ️ Old key not found (already clean)');
+            }
+        }
+        
+        function clearAllThemes() {
+            if (!confirm('⚠️ This will remove ALL theme preferences. Continue?')) return;
+            
+            const keys = getAllThemeKeys();
+            keys.forEach(key => localStorage.removeItem(key));
+            alert(`✅ Removed ${keys.length} theme key(s)`);
+            refreshData();
+        }
+        
+        function simulateUserTheme(userId, theme) {
+            const key = `fuel_order_theme_user_${userId}`;
+            localStorage.setItem(key, theme);
+            alert(`✅ Set ${key} = ${theme}`);
+            refreshData();
+        }
+        
+        function refreshData() {
+            displayThemeKeys();
+            displayUserInfo();
+            displaySystemStatus();
+        }
+        
+        // Initial load
+        refreshData();
+        
+        // Auto-refresh every 2 seconds
+        setInterval(refreshData, 2000);
+    </script>
+</body>
+</html>

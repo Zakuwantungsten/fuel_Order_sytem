@@ -356,6 +356,7 @@ export const createYardFuelRecordedNotification = async (
     enteredBy: string;
     doNumber?: string;
     status: 'linked' | 'pending';
+    notes?: string;
   },
   createdBy: string
 ): Promise<void> => {
@@ -364,9 +365,14 @@ export const createYardFuelRecordedNotification = async (
       ? `Yard Fuel Recorded: ${metadata.truckNo}`
       : `Yard Fuel Pending: ${metadata.truckNo}`;
     
-    const message = metadata.status === 'linked'
+    let message = metadata.status === 'linked'
       ? `${metadata.enteredBy} recorded ${metadata.liters}L for truck ${metadata.truckNo} at ${metadata.yard}. Linked to DO ${metadata.doNumber}.`
       : `${metadata.enteredBy} recorded ${metadata.liters}L for truck ${metadata.truckNo} at ${metadata.yard}. No active DO found - entry is pending linking.`;
+    
+    // Add notes to message if provided
+    if (metadata.notes && metadata.notes.trim()) {
+      message += ` Note: ${metadata.notes}`;
+    }
 
     await Notification.create({
       type: 'yard_fuel_recorded',
@@ -381,6 +387,7 @@ export const createYardFuelRecordedNotification = async (
         yard: metadata.yard,
         enteredBy: metadata.enteredBy,
         doNumber: metadata.doNumber,
+        notes: metadata.notes,
       },
       recipients: ['fuel_order_maker'],
       createdBy,
@@ -402,12 +409,18 @@ export const createTruckPendingLinkingNotification = async (
     liters: number;
     yard: string;
     enteredBy: string;
+    notes?: string;
   },
   createdBy: string
 ): Promise<void> => {
   try {
     const title = `Truck Pending Linking: ${metadata.truckNo}`;
-    const message = `Truck ${metadata.truckNo} has ${metadata.liters}L recorded at ${metadata.yard} by ${metadata.enteredBy}, but no active DO was found. Please create the necessary DO and fuel record to link this entry.`;
+    let message = `Truck ${metadata.truckNo} has ${metadata.liters}L recorded at ${metadata.yard} by ${metadata.enteredBy}, but no active DO was found. Please create the necessary DO and fuel record to link this entry.`;
+    
+    // Add notes to message if provided
+    if (metadata.notes && metadata.notes.trim()) {
+      message += ` Note: ${metadata.notes}`;
+    }
 
     await Notification.create({
       type: 'truck_pending_linking',
@@ -421,6 +434,7 @@ export const createTruckPendingLinkingNotification = async (
         liters: metadata.liters,
         yard: metadata.yard,
         enteredBy: metadata.enteredBy,
+        notes: metadata.notes,
       },
       recipients: ['fuel_order_maker'],
       createdBy,

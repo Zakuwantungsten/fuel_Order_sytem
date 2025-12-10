@@ -67,7 +67,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
     case 'AUTH_LOGOUT':
       return {
         ...initialState,
-        theme: state.theme, // Preserve current theme on logout
+        // Theme will be set separately after logout
       };
     case 'AUTH_CLEAR_ERROR':
       return {
@@ -172,13 +172,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Get role permissions
       const permissions = getRolePermissions(user.role);
 
+      // Load THIS user's theme preference (not the previous user's)
+      const userTheme = getInitialTheme(user.id);
+
       // Create authenticated user object
       const authUser: AuthUser = {
         ...user,
         token: accessToken,
         permissions,
         lastLogin: new Date().toISOString(),
-        theme: state.theme, // Include current theme
+        theme: userTheme, // Include THIS user's theme
       };
 
       // Store user data in localStorage
@@ -198,13 +201,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
         lastLogin: authUser.lastLogin,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
-        theme: state.theme, // Include theme preference
+        theme: userTheme, // Include THIS user's theme preference
       }));
 
       // Clear active tab on login to force role default tab
       localStorage.removeItem('fuel_order_active_tab');
 
       dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
+      
+      // Apply the user's theme immediately after login
+      dispatch({ type: 'SET_THEME', payload: userTheme });
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Login failed';
       dispatch({ type: 'AUTH_ERROR', payload: errorMessage });
@@ -218,10 +224,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     localStorage.removeItem('fuel_order_token');
     localStorage.removeItem('fuel_order_active_tab'); // Clear active tab on logout
     localStorage.removeItem('fuel_order_active_role'); // Clear active role on logout
-    // Reset state but preserve theme preference
-    const currentTheme = state.theme;
+    
+    // Reset to default theme for logged-out state
+    const defaultTheme = getInitialTheme(); // No userId = uses default
     dispatch({ type: 'AUTH_LOGOUT' });
-    dispatch({ type: 'SET_THEME', payload: currentTheme });
+    dispatch({ type: 'SET_THEME', payload: defaultTheme });
   };
 
   // Clear error function
