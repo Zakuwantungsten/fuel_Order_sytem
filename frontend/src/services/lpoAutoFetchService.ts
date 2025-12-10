@@ -148,15 +148,20 @@ export async function findCorrectDOForTruck(
   station: string
 ): Promise<DOSelectionResult | null> {
   try {
-    // Fetch all DOs for this truck
-    const allDOs = await deliveryOrdersAPI.getAll({ truckNo });
+    // Calculate date limit: 4 months ago (120 days) for DO and fuel record searches
+    const fourMonthsAgo = new Date();
+    fourMonthsAgo.setDate(fourMonthsAgo.getDate() - 120);
+    const dateLimit = fourMonthsAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    // Fetch DOs for this truck from last 4 months only
+    const allDOs = await deliveryOrdersAPI.getAll({ truckNo, dateFrom: dateLimit });
     
     if (!allDOs || allDOs.length === 0) {
       return null;
     }
     
-    // Get fuel records for this truck
-    const fuelRecords = await fuelRecordsAPI.getAll({ truckNo });
+    // Get fuel records for this truck from last 4 months only
+    const fuelRecords = await fuelRecordsAPI.getAll({ truckNo, dateFrom: dateLimit });
     
     // Filter out cancelled DOs - only work with active DOs
     const activeDOs = allDOs.filter((do_: DeliveryOrder) => !do_.isCancelled);
@@ -395,9 +400,15 @@ export async function deductFuelFromRecord(
   liters: number
 ): Promise<FuelRecord | null> {
   try {
-    // Find the fuel record for this DO
+    // Calculate date limit: 4 months ago (120 days)
+    const fourMonthsAgo = new Date();
+    fourMonthsAgo.setDate(fourMonthsAgo.getDate() - 120);
+    const dateLimit = fourMonthsAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    // Find the fuel record for this DO from last 4 months only
     const fuelRecords = await fuelRecordsAPI.getAll({ 
-      truckNo: lpoEntry.truckNo 
+      truckNo: lpoEntry.truckNo,
+      dateFrom: dateLimit
     });
     
     // Filter out cancelled fuel records - only work with active records

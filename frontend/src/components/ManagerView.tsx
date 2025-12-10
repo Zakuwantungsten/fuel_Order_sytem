@@ -712,9 +712,9 @@ export function ManagerView({ user }: ManagerViewProps) {
           </select>
         </div>
 
-        {/* Card View - Now shown on all screen sizes for consistency */}
-        <div className="px-3 sm:px-4 space-y-2 sm:space-y-3">
-          {filteredEntries.length === 0 ? (
+        {/* Empty State */}
+        {filteredEntries.length === 0 && (
+          <div className="px-3 sm:px-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 sm:p-8 text-center transition-colors">
               <FileText className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-gray-300 dark:text-gray-600 mb-2 sm:mb-3" />
               <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400">No LPO entries found</p>
@@ -727,7 +727,13 @@ export function ManagerView({ user }: ManagerViewProps) {
                 </button>
               )}
             </div>
-          ) : (
+          </div>
+        )}
+
+        {/* Card View - Mobile/Tablet (below lg) */}
+        {filteredEntries.length > 0 && (
+          <div className="lg:hidden px-3 sm:px-4 space-y-2 sm:space-y-3">
+            {
             paginatedEntries.map((entry, index) => (
               <button
                 key={entry.id || `${entry.lpoNo}-${index}`}
@@ -764,13 +770,115 @@ export function ManagerView({ user }: ManagerViewProps) {
                   </div>
                 </div>
               </button>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
+
+        {/* Table View - Desktop/Laptop (lg and up) */}
+        {filteredEntries.length > 0 && (
+          <div className="hidden lg:block px-3 sm:px-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        LPO No.
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Truck No.
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Station
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Liters
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Price/L
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Total Amount
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {paginatedEntries.map((entry, index) => (
+                      <tr key={entry.id || `${entry.lpoNo}-${index}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
+                            {entry.lpoNo}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-sm text-gray-900 dark:text-gray-100">
+                            {entry.date}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Truck className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {entry.truckNo}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <MapPin className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-900 dark:text-gray-100">
+                              {entry.dieselAt}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right">
+                          <div className="flex items-center justify-end">
+                            <Fuel className="w-4 h-4 mr-1 text-green-500 dark:text-green-400" />
+                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                              {entry.ltrs}L
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right">
+                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                            {entry.pricePerLtr}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right">
+                          <div className="flex items-center justify-end">
+                            <DollarSign className="w-4 h-4 mr-1 text-gray-400" />
+                            <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                              {entry.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          <button
+                            onClick={() => setSelectedEntry(entry)}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5 mr-1" />
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Pagination */}
         {filteredEntries.length > 0 && (
-          <div className="px-3 sm:px-4 pb-24">
+          <div className="px-3 sm:px-4 pb-24 lg:pb-28">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm">
               <Pagination
                 currentPage={currentPage}

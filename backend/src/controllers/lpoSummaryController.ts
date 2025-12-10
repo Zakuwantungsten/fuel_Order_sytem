@@ -1709,13 +1709,20 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
     // Normalize truck number for case-insensitive matching
     const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
     
+    // Calculate date limit: 40 days ago (1 month + 10 days)
+    const dateLimitForLPO = new Date();
+    dateLimitForLPO.setDate(dateLimitForLPO.getDate() - 40);
+    const dateLimitString = dateLimitForLPO.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
     // Build query to find LPOs at this station with this truck's active entries
     // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
+    // Only search LPOs from the last 40 days to improve performance
     const query: any = {
       isDeleted: false,
       station: { $regex: new RegExp(`^${stationUpper}$`, 'i') },
       'entries.truckNo': { $regex: new RegExp(`^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'), 'i') },
-      'entries.isCancelled': { $ne: true }
+      'entries.isCancelled': { $ne: true },
+      date: { $gte: dateLimitString } // Only search last 40 days
     };
 
     // Exclude current LPO if editing
@@ -1787,12 +1794,19 @@ export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Pro
     // Normalize truck number for case-insensitive matching
     const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
     
+    // Calculate date limit: 40 days ago (1 month + 10 days)
+    const dateLimitForLPO = new Date();
+    dateLimitForLPO.setDate(dateLimitForLPO.getDate() - 40);
+    const dateLimitString = dateLimitForLPO.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
     // Find LPOs where this truck has an active (non-cancelled) entry at the given station
     // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
+    // Only search LPOs from the last 40 days to improve performance
     const query: any = {
       isDeleted: false,
       'entries.truckNo': { $regex: new RegExp(`^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'), 'i') },
-      'entries.isCancelled': { $ne: true }
+      'entries.isCancelled': { $ne: true },
+      date: { $gte: dateLimitString } // Only search last 40 days
     };
 
     // If station is provided, filter by station

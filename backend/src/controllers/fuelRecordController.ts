@@ -123,19 +123,26 @@ export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): P
   try {
     const { doNumber } = req.params;
 
-    // First try to find by goingDo
+    // Calculate date limit: 4 months ago (120 days)
+    const dateLimitForFuelRecords = new Date();
+    dateLimitForFuelRecords.setDate(dateLimitForFuelRecords.getDate() - 120);
+    const dateLimitString = dateLimitForFuelRecords.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+    // First try to find by goingDo, only search last 4 months
     let fuelRecord = await FuelRecord.findOne({
       goingDo: doNumber,
       isDeleted: false,
+      date: { $gte: dateLimitString } // Only search last 4 months
     });
 
     let direction: 'going' | 'returning' = 'going';
 
-    // If not found as goingDo, try returnDo
+    // If not found as goingDo, try returnDo (also within last 4 months)
     if (!fuelRecord) {
       fuelRecord = await FuelRecord.findOne({
         returnDo: doNumber,
         isDeleted: false,
+        date: { $gte: dateLimitString } // Only search last 4 months
       });
       direction = 'returning';
     }

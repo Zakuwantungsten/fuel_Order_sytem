@@ -23,10 +23,25 @@ const Pagination: React.FC<PaginationProps> = ({
   itemsPerPageOptions = [10, 25, 50, 100],
 }) => {
   const [showPerPageDropdown, setShowPerPageDropdown] = useState(false);
+  const [dropdownAlignment, setDropdownAlignment] = useState<'left' | 'right'>('right');
   const perPageDropdownRef = useRef<HTMLDivElement>(null);
   
   const startItem = (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  // Detect if dropdown would overflow viewport and adjust positioning
+  const handleDropdownToggle = () => {
+    if (!showPerPageDropdown && perPageDropdownRef.current) {
+      const rect = perPageDropdownRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const dropdownWidth = 70; // min-w-[70px]
+      const spaceOnRight = viewportWidth - rect.right;
+      
+      // If not enough space on right, align to left
+      setDropdownAlignment(spaceOnRight < dropdownWidth ? 'left' : 'right');
+    }
+    setShowPerPageDropdown(!showPerPageDropdown);
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -99,7 +114,7 @@ const Pagination: React.FC<PaginationProps> = ({
             <div className="relative" ref={perPageDropdownRef}>
               <button
                 type="button"
-                onClick={() => setShowPerPageDropdown(!showPerPageDropdown)}
+                onClick={handleDropdownToggle}
                 className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md pl-3 pr-8 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 cursor-pointer min-w-[70px] flex items-center justify-between"
               >
                 <span className="text-sm">{itemsPerPage}</span>
@@ -108,7 +123,7 @@ const Pagination: React.FC<PaginationProps> = ({
               
               {/* Custom Dropdown Menu */}
               {showPerPageDropdown && (
-                <div className="absolute z-50 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg min-w-[70px]">
+                <div className={`absolute z-50 ${dropdownAlignment === 'right' ? 'right-0' : 'left-0'} mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg min-w-[70px]`}>
                   {itemsPerPageOptions.map((option) => (
                     <button
                       key={option}

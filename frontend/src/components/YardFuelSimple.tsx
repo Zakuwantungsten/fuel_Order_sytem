@@ -153,6 +153,20 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
       return;
     }
 
+    // Check for duplicate entry (same truck with same liters on same date)
+    const formattedTruckNo = formatTruckNumber(formData.truckNo);
+    const duplicate = recentEntries.find(
+      (entry: any) => 
+        entry.truckNo.toUpperCase() === formattedTruckNo.toUpperCase() && 
+        entry.liters === formData.liters && 
+        entry.date === formData.date
+    );
+    
+    if (duplicate) {
+      showMessage('error', `⚠️ Duplicate Entry! Truck ${formattedTruckNo} with ${formData.liters}L already recorded on ${formData.date}. Use different liters if this is a new entry.`);
+      return;
+    }
+
     try {
       setSubmitting(true);
       const response = await yardFuelService.create({
@@ -253,7 +267,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
       </header>
 
       {/* Main Content */}
-      <main className="pb-20 overflow-x-hidden">
+      <main className="pb-20 overflow-x-hidden max-w-7xl mx-auto">
         {/* Message Banner */}
         {message && (
           <div className={`mx-3 sm:mx-4 mt-3 sm:mt-4 p-3 sm:p-4 rounded-lg text-sm sm:text-base ${message.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'}`}>
@@ -311,26 +325,25 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
             </h2>
             
             <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
-              {/* Truck Number */}
-              <div>
-                <label htmlFor="truckNo" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
-                  Truck Number *
-                </label>
-                <input
-                  type="text"
-                  id="truckNo"
-                  name="truckNo"
-                  value={formData.truckNo}
-                  onChange={handleInputChange}
-                  placeholder="e.g., T123ABC"
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-lg uppercase font-semibold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  required
-                  autoComplete="off"
-                />
-              </div>
-
-              {/* Liters and Date in a row on larger screens */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              {/* Form Fields Grid - 2 columns on desktop */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                {/* Truck Number */}
+                <div>
+                  <label htmlFor="truckNo" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    Truck Number *
+                  </label>
+                  <input
+                    type="text"
+                    id="truckNo"
+                    name="truckNo"
+                    value={formData.truckNo}
+                    onChange={handleInputChange}
+                    placeholder="e.g., T123ABC"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-lg uppercase font-semibold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    required
+                    autoComplete="off"
+                  />
+                </div>
                 {/* Liters */}
                 <div>
                   <label htmlFor="liters" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
@@ -365,22 +378,22 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                     required
                   />
                 </div>
-              </div>
 
-              {/* Notes (Optional) */}
-              <div>
-                <label htmlFor="notes" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
-                  Notes (Optional)
-                </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  placeholder="Any additional notes..."
-                  rows={2}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base"
-                />
+                {/* Notes (Optional) - spans full width on all screens */}
+                <div className="md:col-span-2">
+                  <label htmlFor="notes" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    id="notes"
+                    name="notes"
+                    value={formData.notes}
+                    onChange={handleInputChange}
+                    placeholder="Any additional notes..."
+                    rows={2}
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base"
+                  />
+                </div>
               </div>
 
               {/* Submit Button */}
@@ -440,7 +453,9 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                 <p className="text-xs sm:text-sm mt-1">Your fuel dispense records will appear here</p>
               </div>
             ) : (
-              <div className="space-y-2 sm:space-y-3">
+              <>
+              {/* Card View - Mobile/Tablet (below lg) */}
+              <div className="lg:hidden space-y-2 sm:space-y-3">
                 {recentEntries.map((entry, index) => (
                   <div 
                     key={entry._id || index} 
@@ -473,6 +488,72 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                   </div>
                 ))}
               </div>
+
+              {/* Table View - Desktop/Laptop (lg and up) */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Truck Number
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Liters
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Notes
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {recentEntries.map((entry, index) => (
+                      <tr key={entry._id || index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Truck className="w-4 h-4 mr-2 text-gray-400" />
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                              {entry.truckNo}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                          {entry.date}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right">
+                          <div className="flex items-center justify-end">
+                            <Fuel className="w-4 h-4 mr-1 text-blue-500 dark:text-blue-400" />
+                            <span className="font-semibold text-blue-600 dark:text-blue-400">
+                              {entry.liters}L
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${
+                            entry.status === 'linked' 
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' 
+                              : entry.status === 'pending'
+                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                              : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                          }`}>
+                            {entry.status === 'linked' && <CheckCircle className="w-3 h-3 mr-1" />}
+                            {entry.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                          {entry.notes || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              </>
             )}
           </div>
               )}
@@ -509,7 +590,9 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <>
+                    {/* Card View - Mobile/Tablet (below lg) */}
+                    <div className="lg:hidden space-y-3">
                       {rejectionHistory.map((entry, index) => (
                         <div
                           key={entry._id || index}
@@ -581,6 +664,82 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                         </div>
                       ))}
                     </div>
+
+                    {/* Table View - Desktop/Laptop (lg and up) */}
+                    <div className="hidden lg:block overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead className="bg-gray-50 dark:bg-gray-700">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                              Truck Number
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                              Rejected Date
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                              Liters
+                            </th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                              Reason
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                              Rejected By
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                          {rejectionHistory.map((entry, index) => (
+                            <tr key={entry._id || index} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+                              entry.rejectionResolved ? 'bg-green-50/50 dark:bg-green-900/10' : 'bg-red-50/50 dark:bg-red-900/10'
+                            }`}>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <Truck className="w-4 h-4 mr-2 text-gray-400" />
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {entry.truckNo}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                                {new Date(entry.rejectedAt).toLocaleDateString()}
+                                <br />
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  {new Date(entry.rejectedAt).toLocaleTimeString()}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right">
+                                <span className="font-semibold text-red-600 dark:text-red-400">
+                                  {entry.liters}L
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-center">
+                                {entry.rejectionResolved ? (
+                                  <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300">
+                                    <CheckCircle className="w-3 h-3 mr-1" /> RESOLVED
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300">
+                                    REJECTED
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs">
+                                <div className="truncate" title={entry.rejectionReason}>
+                                  {entry.rejectionReason}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                {entry.rejectedBy}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    </>
                   )}
                 </div>
               )}

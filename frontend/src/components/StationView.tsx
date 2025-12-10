@@ -220,7 +220,9 @@ export function StationView({ user }: StationViewProps) {
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Fuel Orders</h3>
         </div>
-        <div className="overflow-x-auto">
+        
+        {/* Table View - Desktop/Laptop (md and up) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
@@ -312,6 +314,90 @@ export function StationView({ user }: StationViewProps) {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Card View - Mobile/Tablet (below md) */}
+        <div className="md:hidden divide-y divide-gray-200 dark:divide-gray-700">
+          {paginatedOrders.map((order) => (
+            <div key={order.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+              <div className="space-y-3">
+                {/* Header: Truck Number & Status */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Truck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div className="ml-3">
+                      <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{order.truckNo}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center mt-0.5">
+                        <MapPin className="w-3 h-3 mr-1" />
+                        {order.destination}
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
+                      order.status === 'fulfilled'
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
+                        : order.status === 'pending'
+                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
+                        : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
+                    }`}
+                  >
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  </span>
+                </div>
+
+                {/* Order Details Grid */}
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">DO Number</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{order.doNo}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">LPO Number</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{order.lpoNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Driver Name</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{order.driverName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">ETA</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{order.estimatedArrival}</p>
+                  </div>
+                </div>
+
+                {/* Fuel Amount */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-700">
+                  <div className="flex items-center">
+                    <Fuel className="w-4 h-4 text-blue-500 dark:text-blue-400 mr-1.5" />
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{order.liters}L</span>
+                  </div>
+
+                  {/* Actions */}
+                  {order.status === 'pending' && (
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleMarkFulfilled(order.id)}
+                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      >
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Fulfill
+                      </button>
+                      <button
+                        onClick={() => handleCancelOrder(order.id)}
+                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
         
         {/* Pagination */}

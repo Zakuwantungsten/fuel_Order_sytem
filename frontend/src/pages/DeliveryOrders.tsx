@@ -1265,14 +1265,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             disabled={order.isCancelled}
                           />
                         </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm font-medium truncate max-w-[60px] md:max-w-none ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm font-medium ${
                           order.isCancelled 
                             ? 'text-gray-400 dark:text-gray-500 line-through' 
                             : 'text-gray-900 dark:text-gray-100'
                         }`}>
                           {order.doType}-{order.doNumber}
                         </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm truncate max-w-[50px] md:max-w-none ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.date}
@@ -1302,22 +1302,22 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             </span>
                           )}
                         </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm truncate max-w-[50px] md:max-w-none ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.clientName}
                         </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm truncate max-w-[50px] md:max-w-none ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.truckNo}
                         </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm truncate max-w-[50px] md:max-w-none ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.destination}
                         </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm ${
+                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
                           order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                         }`}>
                           {order.tonnages}<span className="hidden md:inline"> tons</span>

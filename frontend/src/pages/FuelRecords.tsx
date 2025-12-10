@@ -562,7 +562,7 @@ const FuelRecords = () => {
                     
                     return (
                       <td 
-                        className={`px-2 py-2 whitespace-nowrap text-center ${
+                        className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${
                           isCancelled 
                             ? 'text-red-500 dark:text-red-400 line-through'
                             : hasExtraFuel 
@@ -592,13 +592,13 @@ const FuelRecords = () => {
                       onClick={() => handleRowClick(record)}
                       title={isCancelled ? 'This fuel record has been cancelled' : 'Click to view full details'}
                     >
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
                         {index + 1}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap font-medium ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} title={record.truckNo}>{record.truckNo}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.goingDo}>{record.goingDo}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.returnDo || 'N/A'}>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm font-medium ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} title={record.truckNo}>{record.truckNo}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.goingDo}>{record.goingDo}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.returnDo || 'N/A'}>
                         {isCancelled ? (
                           <span>{record.returnDo || '-'}</span>
                         ) : record.returnDo ? (
@@ -607,32 +607,32 @@ const FuelRecords = () => {
                           <span className="text-orange-500 dark:text-orange-400">-</span>
                         )}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.start}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.start}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
                         {record.from}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
                         {record.to}
                       </td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{(record.totalLts || 0).toLocaleString()}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.extra || '-'}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.mmsaYard || '-'}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{(record.totalLts || 0).toLocaleString()}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.extra || '-'}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.mmsaYard || '-'}</td>
                       {renderFuelCell('tangaYard', record.tangaYard)}
                       {renderFuelCell('darYard', record.darYard)}
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darGoing || '-'}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.moroGoing || '-'}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darGoing || '-'}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.moroGoing || '-'}</td>
                       {renderFuelCell('mbeyaGoing', record.mbeyaGoing)}
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.tdmGoing || '-'}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.zambiaGoing || '-'}</td>
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.congoFuel || '-'}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.tdmGoing || '-'}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.zambiaGoing || '-'}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.congoFuel || '-'}</td>
                       {renderFuelCell('zambiaReturn', record.zambiaReturn)}
                       {renderFuelCell('tundumaReturn', record.tundumaReturn)}
                       {renderFuelCell('mbeyaReturn', record.mbeyaReturn)}
                       {renderFuelCell('moroReturn', record.moroReturn)}
-                      <td className={`px-2 py-2 whitespace-nowrap text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darReturn || '-'}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darReturn || '-'}</td>
                       {renderFuelCell('tangaReturn', record.tangaReturn)}
-                      <td className={`px-2 py-2 whitespace-nowrap text-center font-semibold ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.balance.toLocaleString()}</td>
-                      <td className="px-2 py-2 whitespace-nowrap">
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center font-semibold ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.balance.toLocaleString()}</td>
+                      <td className="px-2 py-2">
                         <div className="flex space-x-1 justify-center">
                           {!isCancelled && (
                             <>

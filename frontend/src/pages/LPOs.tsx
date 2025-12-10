@@ -1052,31 +1052,31 @@ const LPOs = () => {
                     <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.sn}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[40px] md:max-w-none">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.date}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm font-medium text-blue-600 dark:text-blue-400 underline truncate max-w-[50px] md:max-w-none">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm font-medium text-blue-600 dark:text-blue-400 underline">
                       {lpo.lpoNo}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[40px] md:max-w-none">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.dieselAt}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[40px] md:max-w-none">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.doSdo}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[50px] md:max-w-none">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.truckNo}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.ltrs.toLocaleString()}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.pricePerLtr.toFixed(2)}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100 truncate max-w-[40px] md:max-w-none">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
                       {lpo.destinations}
                     </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
                     </td>
                     <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
