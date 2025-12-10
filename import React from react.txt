@@ -315,3 +315,7 @@ Click on any account above to auto-fill credentials - in the login in screen
 
 
 search limits for faster searching - in lpos but not in do - 
+inspect if the system can handle years' worth of data 
+backup at cloudflare 
+see and do research how cloudflare work and backup excel files and also json file both formats 
+button to shutdown the site when under maintainance
