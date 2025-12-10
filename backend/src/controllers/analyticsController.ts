@@ -7,6 +7,7 @@ import { FuelRecord } from '../models/FuelRecord';
 import { LPOEntry } from '../models/LPOEntry';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
+import unifiedExportService from '../services/unifiedExportService';
 
 /**
  * Get comprehensive analytics dashboard data
@@ -660,9 +661,22 @@ async function getFuelReportData(startDate?: string, endDate?: string) {
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const end = endDate ? new Date(endDate) : new Date();
   
-  return await FuelRecord.find({
-    date: { $gte: start, $lte: end }
-  }).select('date truckNo station liters pricePerLiter totalAmount').lean();
+  // Use unified export service to include archived data
+  const allRecords = await unifiedExportService.getAllFuelRecords({
+    startDate: start,
+    endDate: end,
+    includeArchived: true,
+  });
+  
+  // Transform to match expected format
+  return allRecords.map((record: any) => ({
+    date: record.date,
+    truckNo: record.truckNo,
+    station: record.from || record.to,
+    liters: record.totalLts,
+    pricePerLiter: 0, // FuelRecord doesn't have price
+    totalAmount: 0,
+  }));
 }
 
 async function getUserActivityReportData(startDate?: string, endDate?: string) {
@@ -717,9 +731,13 @@ async function exportRevenueToExcel(req: AuthRequest, res: Response, start: Date
 }
 
 async function exportFuelToExcel(req: AuthRequest, res: Response, start: Date, end: Date): Promise<string> {
-  const records = await FuelRecord.find({
-    date: { $gte: start, $lte: end }
-  }).select('truckNo date station fuelType liters pricePerLiter totalAmount odometerReading').sort({ date: -1 }).lean();
+  // Use unified export service to include archived data
+  const records = await unifiedExportService.getAllFuelRecords({
+    startDate: start,
+    endDate: end,
+    includeArchived: true,
+    sort: { date: -1 },
+  });
 
   const data = records.map((record: any) => ({
     'Truck No': record.truckNo,
@@ -814,10 +832,13 @@ async function exportComprehensiveToExcel(req: AuthRequest, res: Response, start
     XLSX.utils.book_append_sheet(workbook, revenueSheet, 'Revenue Details');
   }
 
-  // Fuel Records
-  const fuelRecords = await FuelRecord.find({
-    date: { $gte: start, $lte: end }
-  }).select('truckNo date station fuelType liters pricePerLiter totalAmount').sort({ date: -1 }).lean();
+  // Fuel Records (including archived data)
+  const fuelRecords = await unifiedExportService.getAllFuelRecords({
+    startDate: start,
+    endDate: end,
+    includeArchived: true,
+    sort: { date: -1 },
+  });
 
   if (fuelRecords.length > 0) {
     const fuelData = fuelRecords.map((record: any) => ({

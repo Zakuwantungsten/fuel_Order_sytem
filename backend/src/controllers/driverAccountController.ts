@@ -4,6 +4,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
 import ExcelJS from 'exceljs';
+import unifiedExportService from '../services/unifiedExportService';
 
 /**
  * Get the next available LPO number by checking both LPOSummary and DriverAccountEntry
@@ -547,21 +548,36 @@ export const getDriverAccountSummary = async (req: AuthRequest, res: Response) =
 };
 
 /**
- * Export driver account workbook to Excel
+ * Export driver account workbook to Excel (INCLUDING ARCHIVED DATA)
  */
 export const exportDriverAccountWorkbook = async (req: AuthRequest, res: Response) => {
   const { year } = req.params;
+  const yearNum = parseInt(year);
 
-  const entries = await DriverAccountEntry.find({
-    year: parseInt(year),
-    isDeleted: false,
-  })
-    .sort({ date: 1, createdAt: 1 })
-    .lean();
+  // Get all LPO entries for this year (including archived data)
+  const startDate = new Date(yearNum, 0, 1); // Jan 1
+  const endDate = new Date(yearNum, 11, 31, 23, 59, 59); // Dec 31
+  
+  const allLPOEntries = await unifiedExportService.getAllLPOEntries({
+    startDate,
+    endDate,
+    includeArchived: true,
+  });
+
+  // Filter and sort entries
+  const entries = allLPOEntries
+    .filter((entry: any) => !entry.isDeleted)
+    .sort((a: any, b: any) => {
+      const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (dateCompare !== 0) return dateCompare;
+      return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+    });
 
   if (entries.length === 0) {
     throw new ApiError(404, `No driver account entries found for year ${year}`);
   }
+
+  logger.info(`Exporting ${entries.length} driver account entries for year ${year} (including archived)`);
 
   // Create workbook
   const workbook = new ExcelJS.Workbook();

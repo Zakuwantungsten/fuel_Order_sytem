@@ -10,3 +10,19 @@ export { SystemConfig, ISystemConfigDocument } from './SystemConfig';
 export { DriverAccountEntry, IDriverAccountEntryDocument } from './DriverAccountEntry';
 export { AuditLog, IAuditLogDocument } from './AuditLog';
 export { Notification, INotification } from './Notification';
+
+// Export archived data models
+export {
+  ArchivedFuelRecord,
+  ArchivedLPOEntry,
+  ArchivedLPOSummary,
+  ArchivedYardFuelDispense,
+  ArchivedAuditLog,
+  ArchivalMetadata,
+  IArchivedFuelRecord,
+  IArchivedLPOEntry,
+  IArchivedLPOSummary,
+  IArchivedYardFuelDispense,
+  IArchivedAuditLog,
+  IArchivalMetadata,
+} from './ArchivedData';

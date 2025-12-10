@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
 import ExcelJS from 'exceljs';
+import unifiedExportService from '../services/unifiedExportService';
 
 // Dynamic station to fuel field mapping cache
 let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
@@ -1243,14 +1244,26 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       throw new ApiError(400, 'Invalid year');
     }
 
-    // Get all LPO documents for this year
-    const lpoDocuments = await LPOSummary.find({ year, isDeleted: false })
-      .sort({ lpoNo: 1 })
-      .lean();
+    // Get all LPO documents for this year (INCLUDING ARCHIVED DATA)
+    const startDate = new Date(year, 0, 1); // Jan 1
+    const endDate = new Date(year, 11, 31, 23, 59, 59); // Dec 31
+    
+    const allLPOSummaries = await unifiedExportService.getAllLPOSummaries({
+      startDate,
+      endDate,
+      includeArchived: true,
+    });
+
+    // Filter for this year and not deleted
+    const lpoDocuments = allLPOSummaries
+      .filter((doc: any) => doc.year === year && !doc.isDeleted)
+      .sort((a: any, b: any) => a.lpoNo - b.lpoNo);
 
     if (lpoDocuments.length === 0) {
       throw new ApiError(404, 'No LPO documents found for this year');
     }
+
+    logger.info(`Exporting ${lpoDocuments.length} LPO documents for year ${year} (including archived)`)
 
     // Fetch all DriverAccountEntry records for the year to get approvedBy values
     const driverAccountEntries = await DriverAccountEntry.find({ year })

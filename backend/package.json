@@ -13,7 +13,10 @@
     "test:unit": "jest --testPathPattern=unit",
     "test:integration": "jest --testPathPattern=integration",
     "lint": "eslint . --ext .ts",
-    "seed": "ts-node src/scripts/seedUsers.ts"
+    "seed": "ts-node src/scripts/seedUsers.ts",
+    "archival:test": "ts-node src/scripts/testArchival.js",
+    "archival:run": "ts-node src/scripts/testArchival.js --execute",
+    "archival:stats": "ts-node src/scripts/testArchival.js --stats-only"
   },
   "keywords": [
     "fuel",
@@ -45,6 +48,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.3",
     "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
     "nodemailer": "^7.0.11",
     "pdfkit": "^0.17.2",
     "winston": "^3.11.0",
@@ -59,6 +63,7 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.10.6",
+    "@types/node-cron": "^3.0.11",
     "@types/supertest": "^6.0.2",
     "@typescript-eslint/eslint-plugin": "^6.16.0",
     "@typescript-eslint/parser": "^6.16.0",

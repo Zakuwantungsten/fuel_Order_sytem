@@ -16,6 +16,7 @@ import analyticsRoutes from './analyticsRoutes';
 import configRoutes from './configRoutes';
 import publicConfigRoutes from './publicConfigRoutes';
 import notificationRoutes from './notificationRoutes';
+import archivalRoutes from './archivalRoutes';
 
 const router = Router();
 
@@ -37,5 +38,6 @@ router.use('/trash', trashRoutes);
 router.use('/system-admin', backupRoutes);
 router.use('/system-admin/analytics', analyticsRoutes);
 router.use('/system-admin/config', configRoutes);
+router.use('/archival', archivalRoutes);
 
 export default router;

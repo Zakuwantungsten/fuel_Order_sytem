@@ -47,6 +47,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Compression middleware
 app.use(compression());
 
+// Import archival scheduler
+import { startArchivalScheduler } from './jobs/archivalScheduler';
+
 // Logging middleware
 if (config.nodeEnv === 'development') {
   app.use(morgan('dev'));
@@ -97,10 +100,14 @@ const startServer = async () => {
     // Connect to database
     await connectDatabase();
 
+    // Start archival scheduler (runs monthly at 2 AM on 1st day)
+    startArchivalScheduler();
+
     // Start listening
     app.listen(PORT, () => {
       logger.info(`Server running in ${config.nodeEnv} mode on port ${PORT}`);
       logger.info(`CORS origin: ${config.corsOrigin}`);
+      logger.info('Archival scheduler: Active (runs monthly on 1st day at 2:00 AM)');
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

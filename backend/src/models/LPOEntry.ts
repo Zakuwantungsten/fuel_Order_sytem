@@ -86,8 +86,7 @@ const lpoEntrySchema = new Schema<ILPOEntryDocument>(
 );
 
 // Indexes
-// Note: lpoNo does not have unique constraint, so we keep all indexes
-lpoEntrySchema.index({ lpoNo: 1 });
+// Note: Removed single lpoNo index to avoid duplicate with compound index
 lpoEntrySchema.index({ date: 1 });
 lpoEntrySchema.index({ truckNo: 1 });
 lpoEntrySchema.index({ dieselAt: 1 });
@@ -97,7 +96,7 @@ lpoEntrySchema.index({ isDriverAccount: 1 });
 lpoEntrySchema.index({ referenceDo: 1 });
 lpoEntrySchema.index({ paymentMode: 1 });
 
-// Compound indexes for common queries
+// Compound indexes for common queries (includes lpoNo)
 lpoEntrySchema.index({ lpoNo: 1, date: -1 });
 lpoEntrySchema.index({ dieselAt: 1, date: -1 });
 lpoEntrySchema.index({ truckNo: 1, referenceDo: 1 }); // For fetching NIL entries by journey

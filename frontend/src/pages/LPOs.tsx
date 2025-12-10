@@ -692,9 +692,9 @@ const LPOs = () => {
             Manage fuel purchase orders and diesel supplies
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex flex-wrap gap-3">
+        <div className="mt-4 sm:mt-0 flex flex-wrap gap-2 sm:gap-3">
           {/* View Mode Toggle */}
-          <div className="inline-flex rounded-md shadow-sm">
+          <div className="inline-flex rounded-md shadow-sm overflow-hidden">
             <button
               onClick={() => setViewMode('list')}
               className={`px-3 py-2 text-sm font-medium rounded-l-md border ${
@@ -988,186 +988,320 @@ const LPOs = () => {
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg transition-colors">
-        <div className="w-full">
-          <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  S/N
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  LPO#
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Stn
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  DO
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Truck
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Ltrs
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  $/L
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Dest
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Amt
-                </th>
-                <th className="px-1 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                  Act
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {loading ? (
-                <tr>
-                  <td colSpan={11} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    Loading data...
-                  </td>
-                </tr>
-              ) : filteredLpos.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No LPO entries found
-                  </td>
-                </tr>
-              ) : (
-                paginatedLpos.map((lpo, index) => {
-                  const rowKey = lpo.id ?? `lpo-${index}`;
-                  return (
-                  <tr 
-                    key={rowKey} 
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+        {loading ? (
+          <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm sm:text-base">Loading LPO entries...</p>
+          </div>
+        ) : filteredLpos.length === 0 ? (
+          <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
+            <p className="text-sm sm:text-base">No LPO entries found</p>
+          </div>
+        ) : (
+          <>
+            {/* Card View - Mobile/Tablet (below lg) */}
+            <div className="lg:hidden space-y-3 p-4">
+              {paginatedLpos.map((lpo, index) => {
+                const rowKey = lpo.id ?? `lpo-${index}`;
+                return (
+                  <div
+                    key={rowKey}
                     onClick={() => handleRowClick(lpo)}
+                    className="border border-gray-200 dark:border-gray-600 rounded-xl p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-all cursor-pointer"
                   >
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-900 dark:text-gray-100">
-                      {lpo.sn}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
-                      {lpo.date}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm font-medium text-blue-600 dark:text-blue-400 underline">
-                      {lpo.lpoNo}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
-                      {lpo.dieselAt}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
-                      {lpo.doSdo}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
-                      {lpo.truckNo}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
-                      {lpo.ltrs.toLocaleString()}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
-                      {lpo.pricePerLtr.toFixed(2)}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm text-gray-900 dark:text-gray-100">
-                      {lpo.destinations}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      {(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
-                    </td>
-                    <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex space-x-1 md:space-x-2 relative">
-                        {/* Copy/Download Dropdown */}
-                        <div className="relative">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); toggleDropdown(rowKey, e); }}
-                            className="flex items-center px-1 md:px-2 py-0.5 md:py-1 text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
-                            title="Copy/Download LPO"
-                          >
-                            <Copy className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" />
-                            <ChevronDown className="w-2 h-2 md:w-3 md:h-3" />
-                          </button>
-                          
-                          {openDropdowns[rowKey] && (
-                            <div 
-                              className="fixed w-48 md:w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
-                              style={{
-                                top: `${dropdownPosition.top}px`,
-                                left: `${dropdownPosition.left}px`
-                              }}
-                            >
-                              <div className="py-1">
-                                <div className="px-2 md:px-3 py-1 md:py-2 text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-                                  Copy Options
-                                </div>
-                                <button
-                                  onClick={() => handleCopyImageToClipboard(lpo)}
-                                  className="flex items-center w-full px-3 md:px-4 py-1.5 md:py-2 text-left text-xs md:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                >
-                                  <Image className="w-3 h-3 md:w-4 md:h-4 mr-1.5 md:mr-2" />
-                                  Copy as Image
-                                </button>
-                                <button
-                                  onClick={() => handleCopyWhatsAppText(lpo)}
-                                  className="flex items-center w-full px-3 md:px-4 py-1.5 md:py-2 text-left text-xs md:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                >
-                                  <MessageSquare className="w-3 h-3 md:w-4 md:h-4 mr-1.5 md:mr-2" />
-                                  Copy for WhatsApp
-                                </button>
-                                <button
-                                  onClick={() => handleCopyCsvText(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                >
-                                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                                  Copy as CSV Text
-                                </button>
-                                
-                                <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
-                                
-                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-                                  Download Options
-                                </div>
-                                <button
-                                  onClick={() => handleDownloadPDF(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                >
-                                  <FileDown className="w-4 h-4 mr-2 text-red-600" />
-                                  Download as PDF
-                                </button>
-                                <button
-                                  onClick={() => handleDownloadImage(lpo)}
-                                  className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                >
-                                  <Download className="w-4 h-4 mr-2 text-green-600" />
-                                  Download as Image
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">#{lpo.sn}</span>
+                          <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{lpo.lpoNo}</span>
                         </div>
-                        
-                        <PermissionGuard resource={RESOURCES.LPOS} action={ACTIONS.DELETE}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); lpo.id && handleDelete(lpo.id); }}
-                            className="text-red-600 hover:text-red-900"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </PermissionGuard>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{lpo.date}</p>
                       </div>
-                    </td>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                          ${(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {lpo.ltrs.toLocaleString()}L @ ${lpo.pricePerLtr.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Details Grid */}
+                    <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Station:</span>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{lpo.dieselAt}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">DO/SDO:</span>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{lpo.doSdo}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Truck:</span>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{lpo.truckNo}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Destination:</span>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{lpo.destinations}</p>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative flex-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleDropdown(rowKey, e); }}
+                          className="w-full px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 inline-flex items-center justify-center"
+                        >
+                          <Copy className="w-4 h-4 mr-1" />
+                          Copy/Download
+                          <ChevronDown className="w-3 h-3 ml-1" />
+                        </button>
+                        
+                        {openDropdowns[rowKey] && (
+                          <div 
+                            className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
+                            style={{
+                              top: `${dropdownPosition.top}px`,
+                              left: `${dropdownPosition.left}px`
+                            }}
+                          >
+                            <div className="py-1">
+                              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                Copy Options
+                              </div>
+                              <button
+                                onClick={() => handleCopyImageToClipboard(lpo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              >
+                                <Image className="w-4 h-4 mr-2" />
+                                Copy as Image
+                              </button>
+                              <button
+                                onClick={() => handleCopyWhatsAppText(lpo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              >
+                                <MessageSquare className="w-4 h-4 mr-2" />
+                                Copy for WhatsApp
+                              </button>
+                              <button
+                                onClick={() => handleCopyCsvText(lpo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              >
+                                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                                Copy as CSV Text
+                              </button>
+                              
+                              <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                              
+                              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                Download Options
+                              </div>
+                              <button
+                                onClick={() => handleDownloadPDF(lpo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              >
+                                <FileDown className="w-4 h-4 mr-2 text-red-600" />
+                                Download as PDF
+                              </button>
+                              <button
+                                onClick={() => handleDownloadImage(lpo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              >
+                                <Download className="w-4 h-4 mr-2 text-green-600" />
+                                Download as Image
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <PermissionGuard resource={RESOURCES.LPOS} action={ACTIONS.DELETE}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); lpo.id && handleDelete(lpo.id); }}
+                          className="px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 inline-flex items-center justify-center"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </PermissionGuard>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Table View - Desktop (lg and up) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-800">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      S/N
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      LPO#
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      Station
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      DO/SDO
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      Truck
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      Liters
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      $/L
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      Destination
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {paginatedLpos.map((lpo, index) => {
+                    const rowKey = lpo.id ?? `lpo-${index}`;
+                    return (
+                      <tr 
+                        key={rowKey} 
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+                        onClick={() => handleRowClick(lpo)}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                          {lpo.sn}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                          {lpo.date}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium text-blue-600 dark:text-blue-400 underline">
+                          {lpo.lpoNo}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                          {lpo.dieselAt}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                          {lpo.doSdo}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                          {lpo.truckNo}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                          {lpo.ltrs.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                          {lpo.pricePerLtr.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                          {lpo.destinations}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          {(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex space-x-2 relative">
+                            {/* Copy/Download Dropdown */}
+                            <div className="relative">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleDropdown(rowKey, e); }}
+                                className="flex items-center px-2 py-1 text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                                title="Copy/Download LPO"
+                              >
+                                <Copy className="w-4 h-4 mr-1" />
+                                <ChevronDown className="w-3 h-3" />
+                              </button>
+                              
+                              {openDropdowns[rowKey] && (
+                                <div 
+                                  className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
+                                  style={{
+                                    top: `${dropdownPosition.top}px`,
+                                    left: `${dropdownPosition.left}px`
+                                  }}
+                                >
+                                  <div className="py-1">
+                                    <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                      Copy Options
+                                    </div>
+                                    <button
+                                      onClick={() => handleCopyImageToClipboard(lpo)}
+                                      className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                      <Image className="w-4 h-4 mr-2" />
+                                      Copy as Image
+                                    </button>
+                                    <button
+                                      onClick={() => handleCopyWhatsAppText(lpo)}
+                                      className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                      <MessageSquare className="w-4 h-4 mr-2" />
+                                      Copy for WhatsApp
+                                    </button>
+                                    <button
+                                      onClick={() => handleCopyCsvText(lpo)}
+                                      className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                      <FileSpreadsheet className="w-4 h-4 mr-2" />
+                                      Copy as CSV Text
+                                    </button>
+                                    
+                                    <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                                    
+                                    <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                      Download Options
+                                    </div>
+                                    <button
+                                      onClick={() => handleDownloadPDF(lpo)}
+                                      className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                      <FileDown className="w-4 h-4 mr-2 text-red-600" />
+                                      Download as PDF
+                                    </button>
+                                    <button
+                                      onClick={() => handleDownloadImage(lpo)}
+                                      className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                      <Download className="w-4 h-4 mr-2 text-green-600" />
+                                      Download as Image
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <PermissionGuard resource={RESOURCES.LPOS} action={ACTIONS.DELETE}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); lpo.id && handleDelete(lpo.id); }}
+                                className="text-red-600 hover:text-red-900"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </PermissionGuard>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
         
         {/* Pagination */}
         {!loading && filteredLpos.length > 0 && (

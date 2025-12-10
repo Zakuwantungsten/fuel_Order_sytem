@@ -368,37 +368,37 @@ const FuelRecords = () => {
             Track fuel consumption and usage across all trips
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex space-x-3">
+        <div className="mt-4 sm:mt-0 flex flex-wrap gap-2 sm:gap-3">
           {/* View Toggle */}
           <div className="flex border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
             <button
               onClick={() => setViewMode('records')}
-              className={`px-4 py-2 text-sm font-medium inline-flex items-center ${
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium inline-flex items-center ${
                 viewMode === 'records'
                   ? 'bg-primary-600 text-white'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
-              <List className="w-4 h-4 mr-2" />
-              Records
+              <List className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Records</span>
             </button>
             <button
               onClick={() => setViewMode('analytics')}
-              className={`px-4 py-2 text-sm font-medium border-l dark:border-gray-600 inline-flex items-center ${
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium border-l dark:border-gray-600 inline-flex items-center ${
                 viewMode === 'analytics'
                   ? 'bg-primary-600 text-white'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
-              <BarChart3 className="w-4 h-4 mr-2" />
-              Analytics
+              <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Analytics</span>
             </button>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <select
               value={exportYear}
               onChange={(e) => setExportYear(Number(e.target.value))}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+              className="px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
               title="Select year to export"
             >
               {getAvailableYears().length > 0 ? (
@@ -411,19 +411,20 @@ const FuelRecords = () => {
             </select>
             <button
               onClick={handleExport}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="inline-flex items-center px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
               title={`Export fuel records for ${exportYear}`}
             >
-              <Download className="w-4 h-4 mr-2" />
-              Export
+              <Download className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Export</span>
             </button>
           </div>
           <button
             onClick={handleCreate}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+            className="inline-flex items-center px-3 sm:px-4 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            New Record
+            <Plus className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+            <span className="hidden sm:inline">New Record</span>
+            <span className="sm:hidden">New</span>
           </button>
         </div>
       </div>
@@ -503,9 +504,174 @@ const FuelRecords = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg overflow-hidden transition-colors">
-        <div className="w-full">
-          <table className="w-full text-xs divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+      <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg transition-colors">
+        {loading ? (
+          <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm sm:text-base">Loading fuel records...</p>
+          </div>
+        ) : filteredRecords.length === 0 ? (
+          <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
+            <p className="text-sm sm:text-base">No fuel records found for {getMonthName(selectedMonth)}</p>
+          </div>
+        ) : (
+          <>
+            {/* Card View - Mobile/Tablet (below lg) */}
+            <div className="lg:hidden space-y-3 p-4">
+              {filteredRecords.map((record, index) => {
+                const isCancelled = record.isCancelled === true;
+                const recordId = record.id || (record as any)._id;
+                
+                return (
+                  <div
+                    key={recordId || `record-${index}`}
+                    onClick={() => handleRowClick(record)}
+                    className={`border rounded-xl p-4 transition-all cursor-pointer ${
+                      isCancelled
+                        ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
+                        : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50'
+                    }`}
+                    title={isCancelled ? 'This fuel record has been cancelled - Click for details' : 'Tap to view full fuel breakdown'}
+                  >
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">#{index + 1}</span>
+                          <h3 className={`text-base font-bold ${
+                            isCancelled
+                              ? 'text-red-500 dark:text-red-400 line-through'
+                              : 'text-gray-900 dark:text-gray-100'
+                          }`}>
+                            {record.truckNo}
+                          </h3>
+                          {isCancelled && (
+                            <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+                              Cancelled
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-xs ${isCancelled ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                          {new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-xl font-bold ${
+                          isCancelled
+                            ? 'text-red-500 dark:text-red-400 line-through'
+                            : 'text-blue-600 dark:text-blue-400'
+                        }`}>
+                          {(record.totalLts || 0).toLocaleString()}L
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
+                      </div>
+                    </div>
+
+                    {/* Route Info */}
+                    <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Route:</span>
+                        <p className={`font-medium ${isCancelled ? 'text-red-500 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                          {record.from} → {record.to}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Balance:</span>
+                        <p className={`font-medium ${
+                          isCancelled
+                            ? 'text-red-500 dark:text-red-400 line-through'
+                            : record.balance < 0
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-green-600 dark:text-green-400'
+                        }`}>
+                          {record.balance.toLocaleString()}L
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Going DO:</span>
+                        <p className={`font-medium ${isCancelled ? 'text-red-500 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                          {record.goingDo}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Return DO:</span>
+                        <p className={`font-medium ${
+                          isCancelled
+                            ? 'text-red-500 dark:text-red-400'
+                            : record.returnDo
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-orange-500 dark:text-orange-400'
+                        }`}>
+                          {record.returnDo || 'Pending'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Key Fuel Points */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {record.darYard && (
+                        <div className={`px-2 py-1 text-xs rounded ${
+                          isCancelled
+                            ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                            : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                        }`}>
+                          Dar: {record.darYard}L
+                        </div>
+                      )}
+                      {record.tangaYard && (
+                        <div className={`px-2 py-1 text-xs rounded ${
+                          isCancelled
+                            ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                            : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                        }`}>
+                          Tanga: {record.tangaYard}L
+                        </div>
+                      )}
+                      {record.mbeyaGoing && (
+                        <div className={`px-2 py-1 text-xs rounded ${
+                          isCancelled
+                            ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                            : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                        }`}>
+                          Mbeya: {record.mbeyaGoing}L
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    {!isCancelled && (
+                      <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
+                        <button
+                          onClick={(e) => handleEdit(record, e)}
+                          className="flex-1 px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 inline-flex items-center justify-center"
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            const id = record.id || (record as any)._id;
+                            if (id) handleDelete(id, e);
+                          }}
+                          className="flex-1 px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 inline-flex items-center justify-center"
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2 italic">
+                      Tap card to view full fuel breakdown →
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Table View - Desktop (lg and up) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-xs divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
                 <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">SN</th>
@@ -663,7 +829,9 @@ const FuelRecords = () => {
               )}
             </tbody>
           </table>
-        </div>
+            </div>
+          </>
+        )}
       </div>
         </>
       )}

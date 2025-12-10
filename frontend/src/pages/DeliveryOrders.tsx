@@ -773,7 +773,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             Manage all delivery orders and transportation records
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex space-x-3">
+        <div className="mt-4 sm:mt-0 flex flex-wrap gap-2 sm:gap-3">
           {selectedOrders.length > 0 && (
             <button 
               onClick={handleBatchPrint}
@@ -834,8 +834,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-        <nav className="-mb-px flex space-x-8">
+      <div className="border-b border-gray-200 dark:border-gray-700 mb-6 overflow-x-auto">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max">
           <button
             onClick={() => setActiveTab('list')}
             className={`${
@@ -1212,160 +1212,280 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
           {/* Table */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg overflow-hidden transition-colors">
-            <div className="w-full">
-              <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
-                <thead className="bg-gray-50 dark:bg-gray-800">
-                  <tr>
-                    <th className="px-6 py-3 text-left">
-                      <input
-                        type="checkbox"
-                        checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
-                        onChange={handleSelectAll}
-                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
-                      />
-                    </th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO#</th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Status</th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Dest.</th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tons</th>
-                    <th className="px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Act</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {loading ? (
-                    <tr key="loading-row">
-                      <td colSpan={10} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                        Loading data...
-                      </td>
-                    </tr>
-                  ) : filteredOrders.length === 0 ? (
-                    <tr key="empty-row">
-                      <td colSpan={10} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                        No delivery orders found
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedOrders.map((order) => (
-                      <tr 
-                        key={order.id || `order-${order.doNumber}`} 
-                        className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                          order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
-                        }`}
-                      >
-                        <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap">
+            {loading ? (
+              <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm sm:text-base">Loading delivery orders...</p>
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
+                <p className="text-sm sm:text-base">No delivery orders found</p>
+              </div>
+            ) : (
+              <>
+                {/* Card View - Mobile/Tablet (below lg) */}
+                <div className="lg:hidden space-y-3 p-4">
+                  {paginatedOrders.map((order) => (
+                    <div
+                      key={order.id || `order-${order.doNumber}`}
+                      className={`border rounded-xl p-4 transition-all ${
+                        order.isCancelled
+                          ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
+                          : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50'
+                      }`}
+                    >
+                      {/* Header with checkbox and DO number */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
                           <input
                             type="checkbox"
                             checked={order.id ? selectedOrders.includes(order.id) : false}
                             onChange={() => order.id && handleSelectOrder(order.id)}
-                            className="h-3 w-3 md:h-4 md:w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600 mt-1"
                             disabled={order.isCancelled}
                           />
-                        </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm font-medium ${
-                          order.isCancelled 
-                            ? 'text-gray-400 dark:text-gray-500 line-through' 
-                            : 'text-gray-900 dark:text-gray-100'
-                        }`}>
-                          {order.doType}-{order.doNumber}
-                        </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
-                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
-                        }`}>
-                          {order.date}
-                        </td>
-                        <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap">
-                          <span className={`px-1 md:px-2 py-0.5 md:py-1 inline-flex text-[10px] md:text-xs leading-5 font-semibold rounded-full ${
+                          <div>
+                            <h3 className={`text-base font-bold ${
+                              order.isCancelled
+                                ? 'text-gray-400 dark:text-gray-500 line-through'
+                                : 'text-gray-900 dark:text-gray-100'
+                            }`}>
+                              {order.doType}-{order.doNumber}
+                            </h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{order.date}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className={`px-2 py-1 text-xs font-semibold rounded-full text-center ${
                             order.isCancelled
                               ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                              : order.importOrExport === 'IMPORT' 
-                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' 
+                              : order.importOrExport === 'IMPORT'
+                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
                                 : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                           }`}>
-                            {order.importOrExport === 'IMPORT' ? 'IMP' : 'EXP'}
+                            {order.importOrExport}
                           </span>
-                        </td>
-                        <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap">
                           {order.isCancelled ? (
-                            <span className="px-1 md:px-2 py-0.5 md:py-1 inline-flex text-[10px] md:text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-                              <Ban className="w-2 h-2 md:w-3 md:h-3 mr-0.5 md:mr-1" />
-                              <span className="hidden md:inline">Cancelled</span>
-                              <span className="md:hidden">X</span>
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 inline-flex items-center justify-center">
+                              <Ban className="w-3 h-3 mr-1" />
+                              Cancelled
                             </span>
                           ) : (
-                            <span className="px-1 md:px-2 py-0.5 md:py-1 inline-flex text-[10px] md:text-xs leading-5 font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">
-                              <span className="hidden md:inline">Active</span>
-                              <span className="md:hidden">✓</span>
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 text-center">
+                              Active
                             </span>
                           )}
-                        </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
-                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
-                        }`}>
-                          {order.clientName}
-                        </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
-                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
-                        }`}>
-                          {order.truckNo}
-                        </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
-                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
-                        }`}>
-                          {order.destination}
-                        </td>
-                        <td className={`px-1 md:px-6 py-2 md:py-4 text-[10px] sm:text-xs md:text-sm ${
-                          order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
-                        }`}>
-                          {order.tonnages}<span className="hidden md:inline"> tons</span>
-                        </td>
-                        <td className="px-1 md:px-6 py-2 md:py-4 whitespace-nowrap text-sm font-medium">
-                          <button 
-                            onClick={() => handleViewOrder(order)}
-                            className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300 mr-1 md:mr-3"
-                            title="View Details"
-                          >
-                            <Eye className="w-3 h-3 md:w-4 md:h-4" />
-                          </button>
-                          {!order.isCancelled && (
-                            <>
-                              <button 
-                                onClick={() => handleEditOrder(order)}
-                                className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-1 md:mr-3" 
-                                title="Edit"
-                              >
-                                <Edit className="w-3 h-3 md:w-4 md:h-4" />
-                              </button>
-                              <button 
-                                onClick={() => handleOpenCancelModal(order)}
-                                className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300" 
-                                title="Cancel DO"
-                              >
-                                <Ban className="w-3 h-3 md:w-4 md:h-4" />
-                              </button>
-                            </>
-                          )}
-                          {order.isCancelled && order.cancellationReason && (
-                            <span 
-                              className="text-gray-400 dark:text-gray-500 cursor-help" 
-                              title={`Cancelled: ${order.cancellationReason}`}
+                        </div>
+                      </div>
+
+                      {/* Order Details */}
+                      <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Client:</span>
+                          <p className={`font-medium ${order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                            {order.clientName}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Truck:</span>
+                          <p className={`font-medium ${order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                            {order.truckNo}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Destination:</span>
+                          <p className={`font-medium ${order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                            {order.destination}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Tonnage:</span>
+                          <p className={`font-medium ${order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                            {order.tonnages} tons
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
+                        <button
+                          onClick={() => handleViewOrder(order)}
+                          className="flex-1 px-3 py-2 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/30 inline-flex items-center justify-center"
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View
+                        </button>
+                        {!order.isCancelled && (
+                          <>
+                            <button
+                              onClick={() => handleEditOrder(order)}
+                              className="flex-1 px-3 py-2 text-xs font-medium text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 inline-flex items-center justify-center"
                             >
-                              <RotateCcw className="w-4 h-4 inline" />
-                            </span>
-                          )}
-                        </td>
+                              <Edit className="w-4 h-4 mr-1" />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleOpenCancelModal(order)}
+                              className="flex-1 px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 inline-flex items-center justify-center"
+                            >
+                              <Ban className="w-4 h-4 mr-1" />
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                        {order.isCancelled && order.cancellationReason && (
+                          <div className="flex-1 text-xs text-gray-500 dark:text-gray-400 italic">
+                            Reason: {order.cancellationReason}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Table View - Desktop (lg and up) */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-6 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
+                            onChange={handleSelectAll}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
+                          />
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO#</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Dest.</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tons</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Actions</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* Pagination */}
-            {!loading && filteredOrders.length > 0 && (
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      {paginatedOrders.map((order) => (
+                        <tr
+                          key={order.id || `order-${order.doNumber}`}
+                          className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                            order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
+                          }`}
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={order.id ? selectedOrders.includes(order.id) : false}
+                              onChange={() => order.id && handleSelectOrder(order.id)}
+                              className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
+                              disabled={order.isCancelled}
+                            />
+                          </td>
+                          <td className={`px-6 py-4 text-sm font-medium ${
+                            order.isCancelled
+                              ? 'text-gray-400 dark:text-gray-500 line-through'
+                              : 'text-gray-900 dark:text-gray-100'
+                          }`}>
+                            {order.doType}-{order.doNumber}
+                          </td>
+                          <td className={`px-6 py-4 text-sm ${
+                            order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {order.date}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              order.isCancelled
+                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                                : order.importOrExport === 'IMPORT'
+                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                                  : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                            }`}>
+                              {order.importOrExport}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {order.isCancelled ? (
+                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+                                <Ban className="w-3 h-3 mr-1" />
+                                Cancelled
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">
+                                Active
+                              </span>
+                            )}
+                          </td>
+                          <td className={`px-6 py-4 text-sm ${
+                            order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {order.clientName}
+                          </td>
+                          <td className={`px-6 py-4 text-sm ${
+                            order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {order.truckNo}
+                          </td>
+                          <td className={`px-6 py-4 text-sm ${
+                            order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {order.destination}
+                          </td>
+                          <td className={`px-6 py-4 text-sm ${
+                            order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {order.tonnages} tons
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => handleViewOrder(order)}
+                              className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300 mr-3"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {!order.isCancelled && (
+                              <>
+                                <button
+                                  onClick={() => handleEditOrder(order)}
+                                  className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-3"
+                                  title="Edit"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenCancelModal(order)}
+                                  className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                                  title="Cancel DO"
+                                >
+                                  <Ban className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            {order.isCancelled && order.cancellationReason && (
+                              <span
+                                className="text-gray-400 dark:text-gray-500 cursor-help"
+                                title={`Cancelled: ${order.cancellationReason}`}
+                              >
+                                <RotateCcw className="w-4 h-4 inline" />
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+          
+          {/* Pagination */}
+          {!loading && filteredOrders.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg transition-colors mt-4">
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -1374,8 +1494,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 onPageChange={handlePageChange}
                 onItemsPerPageChange={handleItemsPerPageChange}
               />
-            )}
-          </div>
+            </div>
+          )}
         </>
       ) : activeTab === 'summary' ? (
         <MonthlySummary orders={orders} doType={filterDoType} />

@@ -171,9 +171,97 @@ export function PaymentManager({ user: _user }: { user: any }) {
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 overflow-hidden transition-colors">
-        <div className="overflow-x-auto">
+      {/* Orders Table/Cards */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
+        {/* Card View - Mobile/Tablet (below lg) */}
+        <div className="lg:hidden space-y-3 p-4">
+          {paginatedOrders.map((order) => (
+            <div
+              key={order.id}
+              className="border border-gray-200 dark:border-gray-600 rounded-xl p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-all"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    {order.lpoNumber}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{order.station}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                    ${order.amount}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{order.liters}L</p>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                <div>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Truck:</span>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{order.truckNo}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">DO:</span>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{order.doNo}</p>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center justify-between mb-3">
+                <span
+                  className={`px-2 py-1 text-xs rounded-full ${
+                    order.status === 'active'
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
+                      : order.status === 'cancelled'
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400'
+                  }`}
+                >
+                  {order.status.toUpperCase()}
+                </span>
+                {order.reason && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center" title={order.reason}>
+                    <AlertTriangle className="w-4 h-4 mr-1" />
+                    See reason
+                  </span>
+                )}
+              </div>
+
+              {/* Actions */}
+              {order.status === 'active' && (
+                <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
+                  <button
+                    onClick={() => handlePayOrder(order.id)}
+                    className="flex-1 px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 inline-flex items-center justify-center"
+                  >
+                    <DollarSign className="w-4 h-4 mr-1" />
+                    Pay
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedOrder(order);
+                      setShowCancelModal(true);
+                    }}
+                    className="flex-1 px-3 py-2 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 inline-flex items-center justify-center"
+                  >
+                    <XCircle className="w-4 h-4 mr-1" />
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {order.status === 'cancelled' && order.reason && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 italic pt-3 border-t border-gray-200 dark:border-gray-600">
+                  Reason: {order.reason}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Table View - Desktop (lg and up) */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
               <tr>
