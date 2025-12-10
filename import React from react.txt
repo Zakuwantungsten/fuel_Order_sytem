@@ -246,4 +246,72 @@ LPO 2461 is fully cancelled - all 1 entries have been reverted.
 
 summary isn't updated 
 OKAY FIX THE FILTERS FOR ALL ROUTES IN THE FUEL RECORDS
-notification when yard pending linking 
+notification when yard pending linking - logic 
+kwa overviw page to fetch the percent increase data dyanimcally instead of placeholder values
+cookies not functioning - fuel order maker not remembering dark mode 
+all those interfaces for mobile arenow zoomout way to far - they are kinda okay - but try to do mobile responsiveness to seee which is cooler - to show a table rather than a card - nice idea hamdu
+go through all things one by one - its like they have changed  and there might unlooked or overlooked erros 
+
+implement data archinving and search limit
+implement correct truck entry and option for linking since and implement notification on this to the fuel order maker 
+revelacnt errors when toggling return and going in the lpo making
+in the mobile screen mode for the lpo the drop down appears outside the screen - fix this - fix all drop downs appearing outside screens and table like for do management to shows instead of cards
+making the text responsive or rather not to overlap or show dots 
+remove mbeya yard from reports and analyts
+
+to remove this - Role-Based Access Control
+Our system supports 7 distinct user roles, each with carefully designed permissions to ensure secure and efficient operations.
+
+Demo Accounts:
+superadmin
+SUPER ADMIN
+admin123
+admin
+ADMIN
+admin123
+supermanager
+SUPER MANAGER
+manager123
+mgr_infinity
+MANAGER
+manager123
+mgr_ndola
+MANAGER
+manager123
+supervisor
+SUPERVISOR
+super123
+clerk
+CLERK
+clerk123
+driver1
+DRIVER
+driver123
+viewer
+VIEWER
+viewer123
+fuelorder
+FUEL ORDER_MAKER
+fuel123
+boss
+BOSS
+boss123
+yardman
+YARD PERSONNEL
+yard123
+attendant
+FUEL ATTENDANT
+fuel123
+stationmgr
+STATION MANAGER
+station123
+truck_driver
+DRIVER
+drive123
+paymentmgr
+PAYMENT MANAGER
+payment123
+Click on any account above to auto-fill credentials - in the login in screen 
+
+
+search limits for faster searching - in lpos but not in do - 
