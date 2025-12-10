@@ -30,14 +30,14 @@ function AppContent() {
   }
 
   // Show enhanced dashboard for authenticated users
+  // Note: We don't require DASHBOARD permission here because import/export officers
+  // don't have that permission but should still access the system
   return (
     <Routes>
       <Route
         path="/*"
         element={
-          <ProtectedRoute
-            requiredPermission={{ resource: RESOURCES.DASHBOARD, action: ACTIONS.READ }}
-          >
+          <ProtectedRoute>
             <EnhancedDashboard user={user} onLogout={logout} />
           </ProtectedRoute>
         }

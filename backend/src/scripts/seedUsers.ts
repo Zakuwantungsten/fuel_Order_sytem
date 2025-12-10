@@ -181,6 +181,26 @@ const users = [
     yard: 'MMSA YARD',
     isActive: true,
   },
+  {
+    username: 'import_officer',
+    password: 'import123',
+    email: 'import@company.com',
+    firstName: 'Import',
+    lastName: 'Officer',
+    role: 'import_officer',
+    department: 'Import Operations',
+    isActive: true,
+  },
+  {
+    username: 'export_officer',
+    password: 'export123',
+    email: 'export@company.com',
+    firstName: 'Export',
+    lastName: 'Officer',
+    role: 'export_officer',
+    department: 'Export Operations',
+    isActive: true,
+  },
 ];
 
 async function seedUsers() {

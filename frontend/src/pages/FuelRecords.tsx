@@ -57,6 +57,9 @@ const FuelRecords = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FuelRecord | undefined>();
   const [routeFilter, setRouteFilter] = useState('');
+  const [routeTypeFilter, setRouteTypeFilter] = useState<'IMPORT' | 'EXPORT'>('IMPORT');
+  const [availableRoutes, setAvailableRoutes] = useState<any[]>([]);
+  const [exportYear, setExportYear] = useState<number>(() => new Date().getFullYear());
   const [viewMode, setViewMode] = useState<'records' | 'analytics'>('records');
   
   // Details modal state
@@ -75,8 +78,17 @@ const FuelRecords = () => {
   }, []);
 
   useEffect(() => {
+    extractAvailableRoutes();
+  }, [routeTypeFilter, records]);
+
+  useEffect(() => {
     filterRecords();
-  }, [searchTerm, routeFilter, records, selectedMonth]);
+  }, [searchTerm, routeFilter, records, selectedMonth, routeTypeFilter]);
+
+  // Reset route filter when import/export type changes
+  useEffect(() => {
+    setRouteFilter('');
+  }, [routeTypeFilter]);
 
   const fetchRecords = async () => {
     try {
@@ -107,6 +119,19 @@ const FuelRecords = () => {
     }
   };
 
+  // Extract available routes dynamically from fuel records
+  const extractAvailableRoutes = () => {
+    const routesSet = new Set<string>();
+    records.forEach(record => {
+      if (routeTypeFilter === 'IMPORT' && record.to) {
+        routesSet.add(record.to); // Going routes (destination)
+      } else if (routeTypeFilter === 'EXPORT' && record.from) {
+        routesSet.add(record.from); // Return routes (origin)
+      }
+    });
+    setAvailableRoutes(Array.from(routesSet).sort().map(r => ({ destination: r })));
+  };
+
   const filterRecords = () => {
     let filtered = [...records];
     console.log('Filtering records. Total:', records.length, 'Selected Month:', selectedMonth);
@@ -132,9 +157,13 @@ const FuelRecords = () => {
     }
 
     if (routeFilter) {
-      filtered = filtered.filter(
-        (record) => record.to === routeFilter || record.from === routeFilter
-      );
+      filtered = filtered.filter((record) => {
+        if (routeTypeFilter === 'IMPORT') {
+          return record.to === routeFilter; // Filter by destination for going routes
+        } else {
+          return record.from === routeFilter; // Filter by origin for return routes
+        }
+      });
       console.log('After route filter:', filtered.length, 'records');
     }
 
@@ -187,8 +216,8 @@ const FuelRecords = () => {
   };
 
   const handleExport = () => {
-    // Get the year from selected month
-    const year = new Date(selectedMonth + '-01').getFullYear();
+    // Use the selected export year
+    const year = exportYear;
     
     // Filter all records for the selected year (yearly export)
     const yearlyRecords = records.filter(record => {
@@ -320,6 +349,16 @@ const FuelRecords = () => {
     return new Date(monthKey + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
+  // Get available years from records for export
+  const getAvailableYears = (): number[] => {
+    const years = new Set<number>();
+    records.forEach(record => {
+      const year = new Date(record.date).getFullYear();
+      years.add(year);
+    });
+    return Array.from(years).sort().reverse(); // Most recent first
+  };
+
   return (
     <div>
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -355,13 +394,30 @@ const FuelRecords = () => {
               Analytics
             </button>
           </div>
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </button>
+          <div className="flex items-center space-x-2">
+            <select
+              value={exportYear}
+              onChange={(e) => setExportYear(Number(e.target.value))}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+              title="Select year to export"
+            >
+              {getAvailableYears().length > 0 ? (
+                getAvailableYears().map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))
+              ) : (
+                <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
+              )}
+            </select>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+              title={`Export fuel records for ${exportYear}`}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </button>
+          </div>
           <button
             onClick={handleCreate}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
@@ -379,7 +435,7 @@ const FuelRecords = () => {
         <>
           {/* Filters */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-4 mb-6 transition-colors">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
             <input
@@ -391,18 +447,27 @@ const FuelRecords = () => {
             />
           </div>
           <select
+            value={routeTypeFilter}
+            onChange={(e) => {
+              setRouteTypeFilter(e.target.value as 'IMPORT' | 'EXPORT');
+              setRouteFilter(''); // Reset route filter when changing type
+            }}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          >
+            <option value="IMPORT">Import (Going)</option>
+            <option value="EXPORT">Export (Return)</option>
+          </select>
+          <select
             value={routeFilter}
             onChange={(e) => setRouteFilter(e.target.value)}
             className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
             <option value="">All Routes</option>
-            <option value="DAR">DAR</option>
-            <option value="Kpm">Kpm</option>
-            <option value="Likasi">Likasi</option>
-            <option value="Kolwezi">Kolwezi</option>
-            <option value="COMIKA">COMIKA</option>
-            <option value="ZHANFEI">ZHANFEI</option>
-            <option value="TCC">TCC</option>
+            {availableRoutes.map((route) => (
+              <option key={route._id || route.id} value={route.destination}>
+                {route.destination}
+              </option>
+            ))}
           </select>
           <div className="flex items-center space-x-2">
             <button

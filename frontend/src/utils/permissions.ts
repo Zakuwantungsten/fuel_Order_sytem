@@ -231,6 +231,20 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       { resource: RESOURCES.FUEL_RECORDS, actions: [ACTIONS.READ, ACTIONS.CREATE] },
     ],
   },
+  import_officer: {
+    role: 'import_officer',
+    description: 'Import delivery orders specialist',
+    permissions: [
+      { resource: RESOURCES.DELIVERY_ORDERS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.UPDATE, ACTIONS.EXPORT] },
+    ],
+  },
+  export_officer: {
+    role: 'export_officer',
+    description: 'Export delivery orders specialist',
+    permissions: [
+      { resource: RESOURCES.DELIVERY_ORDERS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.UPDATE, ACTIONS.EXPORT] },
+    ],
+  },
 };
 
 // Helper function to check if user has permission
@@ -296,6 +310,8 @@ export function getRoleColor(role: UserRole): string {
     dar_yard: 'bg-blue-100 text-blue-800',
     tanga_yard: 'bg-green-100 text-green-800',
     mmsa_yard: 'bg-purple-100 text-purple-800',
+    import_officer: 'bg-sky-100 text-sky-800',
+    export_officer: 'bg-violet-100 text-violet-800',
   };
   return colors[role] || colors.viewer;
 }

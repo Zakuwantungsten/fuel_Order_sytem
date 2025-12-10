@@ -10,6 +10,7 @@ interface BulkDOFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (orders: Partial<DeliveryOrder>[]) => Promise<boolean>;
+  user?: any;
 }
 
 interface BulkDORow {
@@ -21,7 +22,14 @@ interface BulkDORow {
   totalAmount?: number;
 }
 
-const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
+const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
+  // Auto-select importOrExport based on user role
+  const getDefaultImportExport = (): 'IMPORT' | 'EXPORT' => {
+    if (user?.role === 'export_officer') return 'EXPORT';
+    if (user?.role === 'import_officer') return 'IMPORT';
+    return 'IMPORT';
+  };
+
   const [commonData, setCommonData] = useState({
     date: (() => {
       const now = new Date();
@@ -30,7 +38,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
       const year = now.getFullYear();
       return `${year}-${month}-${day}`;
     })(),
-    importOrExport: 'IMPORT' as 'IMPORT' | 'EXPORT',
+    importOrExport: getDefaultImportExport(),
     doType: 'DO' as 'DO' | 'SDO',
     clientName: '',
     loadingPoint: '',
@@ -524,15 +532,30 @@ const BulkDOForm = ({ isOpen, onClose, onSave }: BulkDOFormProps) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Import/Export *</label>
-                  <select
-                    name="importOrExport"
-                    value={commonData.importOrExport}
-                    onChange={handleCommonChange}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  >
-                    <option value="IMPORT">IMPORT</option>
-                    <option value="EXPORT">EXPORT</option>
-                  </select>
+                  {(user?.role === 'import_officer' || user?.role === 'export_officer') ? (
+                    <>
+                      <input
+                        type="text"
+                        value={commonData.importOrExport}
+                        readOnly
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-gray-100 cursor-not-allowed"
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Auto-selected based on your role (cannot be changed)
+                      </p>
+                    </>
+                  ) : (
+                    <select
+                      name="importOrExport"
+                      value={commonData.importOrExport}
+                      onChange={handleCommonChange}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    >
+                      <option value="IMPORT">IMPORT</option>
+                      <option value="EXPORT">EXPORT</option>
+                    </select>
+                  )}
                 </div>
 
                 <div>

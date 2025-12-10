@@ -6,11 +6,11 @@ interface DOManagementProps {
   user?: any;
 }
 
-export function DOManagement({ user: _user }: DOManagementProps) {
-  // Your existing DeliveryOrders component with enhanced styling
+export function DOManagement({ user }: DOManagementProps) {
+  // Pass user to DeliveryOrders for role-based DO type selection
   return (
     <div>
-      <DeliveryOrders />
+      <DeliveryOrders user={user} />
     </div>
   );
 }

@@ -61,6 +61,8 @@ const userSchema = new Schema<IUserDocument>(
         'dar_yard',
         'tanga_yard',
         'mmsa_yard',
+        'import_officer',
+        'export_officer',
       ],
       default: 'viewer',
     },

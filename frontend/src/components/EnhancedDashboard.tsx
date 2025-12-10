@@ -32,6 +32,7 @@ import SystemAdminDashboard from './SystemAdminDashboard';
 import SuperAdminDashboard from './SuperAdminDashboard';
 import StandardAdminDashboard from './StandardAdminDashboard';
 import ManagerView from './ManagerView';
+import OfficerPortal from './OfficerPortal';
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
 import { useNavigate } from 'react-router-dom';
@@ -109,8 +110,9 @@ const getInitialTab = (userRole: string): string => {
 };
 
 export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
-  // Check if user is a driver
+  // Check if user is a driver or officer
   const isDriver = user.role === 'driver';
+  const isOfficer = user.role === 'import_officer' || user.role === 'export_officer';
   const isManager = user.role === 'manager' || user.role === 'super_manager' || user.role === 'station_manager';
   
   // For drivers, default to driver_portal, no overview
@@ -326,6 +328,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   
   // Check if user is a yard-specific role
   const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard', 'yard_personnel'].includes(user.role);
+
+  // For import/export officers, show simplified officer portal without sidebar
+  if (isOfficer) {
+    return <OfficerPortal user={user} />;
+  }
 
   // For drivers, show full-screen mobile layout
   if (isDriver) {

@@ -941,6 +941,7 @@ export const driverAccountAPI = {
 
 export interface RouteConfig {
   destination: string;
+  routeType?: 'IMPORT' | 'EXPORT';
   totalLiters: number;
   isActive: boolean;
 }
@@ -1346,8 +1347,9 @@ export const configAPI = {
   },
   
   // Routes (public read-only endpoint for all authenticated users)
-  getRoutes: async () => {
-    const response = await apiClient.get('/config/routes');
+  getRoutes: async (routeType?: 'IMPORT' | 'EXPORT') => {
+    const params = routeType ? { routeType } : {};
+    const response = await apiClient.get('/config/routes', { params });
     return response.data.data;
   },
   
@@ -1356,6 +1358,7 @@ export const configAPI = {
     origin?: string;
     destination: string;
     destinationAliases?: string[];
+    routeType?: 'IMPORT' | 'EXPORT';
     defaultTotalLiters: number;
     formula?: string;
     description?: string;

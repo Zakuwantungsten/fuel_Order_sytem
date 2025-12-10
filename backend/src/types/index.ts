@@ -17,7 +17,9 @@ export type UserRole =
   | 'payment_manager'
   | 'dar_yard'
   | 'tanga_yard'
-  | 'mmsa_yard';
+  | 'mmsa_yard'
+  | 'import_officer'
+  | 'export_officer';
 
 // Audit Log Types
 export type AuditAction = 

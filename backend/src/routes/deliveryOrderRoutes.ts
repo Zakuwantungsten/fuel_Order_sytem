@@ -46,7 +46,7 @@ router.get('/:id', commonValidation.mongoId, validate, asyncHandler(deliveryOrde
 // Create route (requires appropriate role)
 router.post(
   '/',
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker', 'import_officer', 'export_officer'),
   deliveryOrderValidation.create,
   validate,
   asyncHandler(deliveryOrderController.createDeliveryOrder)
@@ -56,7 +56,7 @@ router.post(
 router.put(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker', 'import_officer', 'export_officer'),
   deliveryOrderValidation.update,
   validate,
   asyncHandler(deliveryOrderController.updateDeliveryOrder)
@@ -66,7 +66,7 @@ router.put(
 router.put(
   '/:id/cancel',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'import_officer', 'export_officer'),
   validate,
   asyncHandler(deliveryOrderController.cancelDeliveryOrder)
 );
@@ -75,7 +75,7 @@ router.put(
 router.post(
   '/:id/relink-to-fuel-record',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'import_officer', 'export_officer'),
   validate,
   asyncHandler(deliveryOrderController.relinkExportDOToFuelRecord)
 );

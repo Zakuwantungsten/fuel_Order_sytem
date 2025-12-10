@@ -17,7 +17,11 @@ import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup';
 import Pagination from '../components/Pagination';
 
-const DeliveryOrders = () => {
+interface DeliveryOrdersProps {
+  user?: any;
+}
+
+const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
@@ -1406,6 +1410,7 @@ const DeliveryOrders = () => {
         onClose={() => setIsFormOpen(false)}
         onSave={handleSaveOrder}
         defaultDoType={filterDoType === 'SDO' ? 'SDO' : 'DO'}
+        user={user}
       />
 
       {/* Bulk DO Form */}
@@ -1413,6 +1418,7 @@ const DeliveryOrders = () => {
         isOpen={isBulkFormOpen}
         onClose={() => setIsBulkFormOpen(false)}
         onSave={handleSaveBulkOrders}
+        user={user}
       />
 
       {/* Cancel DO Modal */}

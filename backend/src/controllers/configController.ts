@@ -296,10 +296,19 @@ export const deleteFuelStation = async (req: AuthRequest, res: Response) => {
 /**
  * Get all route configurations
  * GET /api/system-admin/config/routes
+ * Query params: routeType (optional) - filter by 'IMPORT' or 'EXPORT'
  */
 export const getRoutes = async (req: AuthRequest, res: Response) => {
   try {
-    const routes = await RouteConfig.find().sort({ routeName: 1 });
+    const { routeType } = req.query;
+    
+    // Build filter
+    const filter: any = {};
+    if (routeType && (routeType === 'IMPORT' || routeType === 'EXPORT')) {
+      filter.routeType = routeType;
+    }
+    
+    const routes = await RouteConfig.find(filter).sort({ routeName: 1 });
     
     res.json({
       success: true,
@@ -361,6 +370,7 @@ export const createRoute = async (req: AuthRequest, res: Response) => {
       origin,
       destination,
       destinationAliases,
+      routeType,
       defaultTotalLiters,
       description,
     } = req.body;
@@ -387,6 +397,7 @@ export const createRoute = async (req: AuthRequest, res: Response) => {
       origin: origin?.trim().toUpperCase() || undefined,
       destination: destination.trim().toUpperCase(),
       destinationAliases: destinationAliases?.map((alias: string) => alias.trim().toUpperCase()) || [],
+      routeType: routeType || 'IMPORT', // Default to IMPORT if not provided
       defaultTotalLiters,
       description,
       createdBy: req.user?.username || 'system',

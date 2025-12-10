@@ -37,6 +37,7 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
     origin: '',
     destination: '',
     destinationAliases: '',
+    routeType: 'IMPORT' as 'IMPORT' | 'EXPORT',
     defaultTotalLiters: '',
     description: '',
   });
@@ -151,6 +152,7 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
         destinationAliases: routeForm.destinationAliases
           ? routeForm.destinationAliases.split(',').map(a => a.trim()).filter(Boolean)
           : undefined,
+        routeType: routeForm.routeType,
         defaultTotalLiters: parseFloat(routeForm.defaultTotalLiters),
         description: routeForm.description || undefined,
       });
@@ -179,6 +181,7 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
         destinationAliases: routeForm.destinationAliases
           ? routeForm.destinationAliases.split(',').map(a => a.trim()).filter(Boolean)
           : undefined,
+        routeType: routeForm.routeType,
         defaultTotalLiters: parseFloat(routeForm.defaultTotalLiters),
         description: routeForm.description || undefined,
       });
@@ -228,6 +231,7 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
         origin: route.origin || '',
         destination: route.destination,
         destinationAliases: route.destinationAliases?.join(', ') || '',
+        routeType: route.routeType || 'IMPORT',
         defaultTotalLiters: route.defaultTotalLiters.toString(),
         description: route.description || '',
       });
@@ -407,6 +411,7 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Route</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">From → To</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Type</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Default Liters</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Aliases</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Description</th>
@@ -590,11 +595,22 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., DSM, DAR (comma-separated)" />
                   <p className="mt-1 text-xs text-gray-500">Alternative names for destination (e.g., "DSM, DAR" for Dar es Salaam)</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Total Liters *</label>
-                  <input type="number" value={routeForm.defaultTotalLiters} onChange={(e) => setRouteForm({ ...routeForm, defaultTotalLiters: e.target.value })}
-                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="2400" />
-                  <p className="mt-1 text-xs text-gray-500">Default liters assigned when creating new fuel records for this route</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Route Type *</label>
+                    <select value={routeForm.routeType} onChange={(e) => setRouteForm({ ...routeForm, routeType: e.target.value as 'IMPORT' | 'EXPORT' })}
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                      <option value="IMPORT">Import (Going/Outbound)</option>
+                      <option value="EXPORT">Export (Return/Inbound)</option>
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">Import = outgoing routes, Export = return routes</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Total Liters *</label>
+                    <input type="number" value={routeForm.defaultTotalLiters} onChange={(e) => setRouteForm({ ...routeForm, defaultTotalLiters: e.target.value })}
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="2400" />
+                    <p className="mt-1 text-xs text-gray-500">Default liters assigned for this route</p>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (Optional)</label>

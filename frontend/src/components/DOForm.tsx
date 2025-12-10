@@ -13,9 +13,10 @@ interface DOFormProps {
   onClose: () => void;
   onSave: (order: Partial<DeliveryOrder>) => Promise<DeliveryOrder | void>;
   defaultDoType?: 'DO' | 'SDO'; // Default DO type when creating new order
+  user?: any; // User object for role-based auto-selection
 }
 
-const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOFormProps) => {
+const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: DOFormProps) => {
   const getCurrentDate = useCallback(() => {
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
@@ -24,24 +25,34 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
     return `${year}-${month}-${day}`;
   }, []);
 
-  const getDefaultFormData = useCallback((): Partial<DeliveryOrder> => ({
-    // Explicitly no id for new orders
-    date: getCurrentDate(),
-    importOrExport: 'IMPORT',
-    doType: defaultDoType, // Use the passed default type
-    clientName: '',
-    truckNo: '',
-    trailerNo: '',
-    containerNo: 'LOOSE CARGO',
-    cargoType: 'loosecargo',
-    rateType: 'per_ton',
-    loadingPoint: '',
-    destination: '',
-    haulier: '',
-    driverName: '',
-    tonnages: 0,
-    ratePerTon: 0,
-  }), [defaultDoType, getCurrentDate]);
+  const getDefaultFormData = useCallback((): Partial<DeliveryOrder> => {
+    // Auto-select IMPORT/EXPORT based on user role
+    let defaultImportExport: 'IMPORT' | 'EXPORT' = 'IMPORT';
+    if (user?.role === 'export_officer') {
+      defaultImportExport = 'EXPORT';
+    } else if (user?.role === 'import_officer') {
+      defaultImportExport = 'IMPORT';
+    }
+
+    return {
+      // Explicitly no id for new orders
+      date: getCurrentDate(),
+      importOrExport: defaultImportExport,
+      doType: defaultDoType, // Use the passed default type
+      clientName: '',
+      truckNo: '',
+      trailerNo: '',
+      containerNo: 'LOOSE CARGO',
+      cargoType: 'loosecargo',
+      rateType: 'per_ton',
+      loadingPoint: '',
+      destination: '',
+      haulier: '',
+      driverName: '',
+      tonnages: 0,
+      ratePerTon: 0,
+    };
+  }, [defaultDoType, getCurrentDate, user]);
 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
   const [createdOrder, setCreatedOrder] = useState<DeliveryOrder | null>(null);
@@ -66,7 +77,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
       }
       setCreatedOrder(null);
     }
-  }, [isOpen, order, defaultDoType]);
+  }, [isOpen, order, defaultDoType, getDefaultFormData]);
 
   // Fetch next DO/SDO number when component opens
   // Note: When doType changes via handleDOTypeChange, it fetches directly, so we don't need doType in dependencies
@@ -339,16 +350,31 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO' }: DOForm
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Import/Export *</label>
-                <select
-                  name="importOrExport"
-                  value={formData.importOrExport || 'IMPORT'}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="IMPORT">IMPORT</option>
-                  <option value="EXPORT">EXPORT</option>
-                </select>
+                {(user?.role === 'import_officer' || user?.role === 'export_officer') ? (
+                  <>
+                    <input
+                      type="text"
+                      value={formData.importOrExport || 'IMPORT'}
+                      readOnly
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-gray-100 cursor-not-allowed"
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Auto-selected based on your role (cannot be changed)
+                    </p>
+                  </>
+                ) : (
+                  <select
+                    name="importOrExport"
+                    value={formData.importOrExport || 'IMPORT'}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="IMPORT">IMPORT</option>
+                    <option value="EXPORT">EXPORT</option>
+                  </select>
+                )}
               </div>
 
               <div>
