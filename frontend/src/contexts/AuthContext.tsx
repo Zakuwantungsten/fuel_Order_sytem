@@ -2,6 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { AuthState, AuthUser, AuthResponse, LoginCredentials } from '../types';
 import { getRolePermissions } from '../utils/permissions';
 import { authAPI } from '../services/api';
+import { activityTracker } from '../utils/activityTracker';
 
 // Auth Actions
 type AuthAction =
@@ -220,6 +221,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Logout function
   const logout = () => {
+    // Stop activity tracking
+    activityTracker.stop();
+    
     localStorage.removeItem('fuel_order_auth');
     localStorage.removeItem('fuel_order_token');
     localStorage.removeItem('fuel_order_active_tab'); // Clear active tab on logout
@@ -298,6 +302,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.error('Error applying theme:', error);
     }
   }, [state.theme, state.user?.id]);
+
+  // Activity tracking for auto-logout on inactivity
+  useEffect(() => {
+    if (state.isAuthenticated && state.user) {
+      // Start tracking activity when user is authenticated
+      activityTracker.start(() => {
+        console.log('User inactive for 30 minutes, logging out...');
+        logout();
+        // Redirect to login with a message
+        window.location.href = '/login?reason=inactivity';
+      });
+    } else {
+      // Stop tracking when user is not authenticated
+      activityTracker.stop();
+    }
+
+    // Cleanup on unmount
+    return () => {
+      activityTracker.stop();
+    };
+  }, [state.isAuthenticated, state.user]);
 
   const contextValue: AuthContextType = {
     ...state,

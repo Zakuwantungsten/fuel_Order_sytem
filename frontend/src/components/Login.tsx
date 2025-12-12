@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo } from '../utils/permissions';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
+import { useLocation } from 'react-router-dom';
 
 const Login: React.FC = () => {
   const [credentials, setCredentials] = useState({
@@ -12,8 +13,34 @@ const Login: React.FC = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
 
   const { login, isLoading, error, clearError } = useAuth();
+  const location = useLocation();
+
+  // Check for session expiration or inactivity message
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const reason = params.get('reason');
+    
+    if (reason === 'expired') {
+      setSessionMessage('Your session has expired. Please log in again.');
+    } else if (reason === 'inactivity') {
+      setSessionMessage('You were logged out due to 30 minutes of inactivity. Please log in again.');
+    } else if (reason === 'unauthorized') {
+      setSessionMessage('Your session is no longer valid. Please log in again.');
+    }
+
+    // Clear the message after 8 seconds
+    if (reason) {
+      const timer = setTimeout(() => {
+        setSessionMessage(null);
+        // Clean up URL
+        window.history.replaceState({}, '', '/login');
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [location.search]);
 
   // Clear error when component unmounts or credentials change
   useEffect(() => {
@@ -98,6 +125,17 @@ const Login: React.FC = () => {
                 Sign in to Fuel Order Management System
               </p>
             </div>
+
+            {/* Session Message */}
+            {sessionMessage && (
+              <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start space-x-3">
+                <AlertCircle className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-medium text-amber-800 dark:text-amber-300">Session Expired</h4>
+                  <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">{sessionMessage}</p>
+                </div>
+              </div>
+            )}
 
             {/* Error Alert */}
             {error && (

@@ -13,7 +13,7 @@ export const config = {
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'default-refresh-secret-change-in-production',
-  jwtExpire: process.env.JWT_EXPIRE || '24h',
+  jwtExpire: process.env.JWT_EXPIRE || '30m',
   jwtRefreshExpire: process.env.JWT_REFRESH_EXPIRE || '7d',
 
   // CORS

@@ -45,9 +45,21 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Clear auth data
       localStorage.removeItem('fuel_order_auth');
       localStorage.removeItem('fuel_order_token');
-      window.location.href = '/login';
+      
+      // Check if it's a token expiration
+      const errorMessage = error.response?.data?.message || '';
+      const isTokenExpired = errorMessage.toLowerCase().includes('expired') || 
+                            error.response?.data?.error?.name === 'TokenExpiredError';
+      
+      // Redirect to login with appropriate message
+      if (isTokenExpired) {
+        window.location.href = '/login?reason=expired';
+      } else {
+        window.location.href = '/login?reason=unauthorized';
+      }
     }
     return Promise.reject(error);
   }
