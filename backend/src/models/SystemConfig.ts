@@ -37,9 +37,54 @@ export interface IStandardAllocations {
   tangaReturnToMombasa: number;
 }
 
+// System Settings
+export interface ISystemSettings {
+  // General Settings
+  general?: {
+    systemName: string;
+    timezone: string;
+    dateFormat: string;
+    language: string;
+  };
+  // Session & Security Settings
+  session?: {
+    sessionTimeout: number; // minutes
+    jwtExpiry: number; // hours
+    refreshTokenExpiry: number; // days
+    maxLoginAttempts: number;
+    lockoutDuration: number; // minutes
+    allowMultipleSessions: boolean;
+  };
+  // Data Management Settings
+  data?: {
+    archivalEnabled: boolean;
+    archivalMonths: number;
+    auditLogRetention: number; // months
+    trashRetention: number; // days
+    autoCleanupEnabled: boolean;
+    backupFrequency: 'daily' | 'weekly' | 'monthly';
+    backupRetention: number; // days
+  };
+  // Notification Settings
+  notifications?: {
+    emailNotifications: boolean;
+    criticalAlerts: boolean;
+    dailySummary: boolean;
+    weeklyReport: boolean;
+    slowQueryThreshold: number; // ms
+    storageWarningThreshold: number; // percentage
+  };
+  // Maintenance Mode
+  maintenance?: {
+    enabled: boolean;
+    message: string;
+    allowedRoles: string[];
+  };
+}
+
 // System Configuration Document
 export interface ISystemConfig {
-  configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'general';
+  configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'general' | 'system_settings';
   fuelStations?: IFuelStation[];
   routes?: IRouteConfig[];
   truckBatches?: {
@@ -49,6 +94,7 @@ export interface ISystemConfig {
   };
   standardAllocations?: IStandardAllocations;
   defaultFuelPrice?: number;
+  systemSettings?: ISystemSettings;
   lastUpdatedBy: string;
   isDeleted: boolean;
   deletedAt?: Date;
@@ -106,7 +152,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     configType: {
       type: String,
       required: true,
-      enum: ['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'general'],
+      enum: ['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'general', 'system_settings'],
       unique: true,
     },
     fuelStations: [fuelStationSchema],
@@ -118,6 +164,44 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     },
     standardAllocations: standardAllocationsSchema,
     defaultFuelPrice: { type: Number, default: 1450 },
+    systemSettings: {
+      general: {
+        systemName: { type: String, default: 'Fuel Order Management System' },
+        timezone: { type: String, default: 'Africa/Dar_es_Salaam' },
+        dateFormat: { type: String, default: 'DD/MM/YYYY' },
+        language: { type: String, default: 'en' },
+      },
+      session: {
+        sessionTimeout: { type: Number, default: 30 },
+        jwtExpiry: { type: Number, default: 24 },
+        refreshTokenExpiry: { type: Number, default: 7 },
+        maxLoginAttempts: { type: Number, default: 5 },
+        lockoutDuration: { type: Number, default: 15 },
+        allowMultipleSessions: { type: Boolean, default: true },
+      },
+      data: {
+        archivalEnabled: { type: Boolean, default: true },
+        archivalMonths: { type: Number, default: 6 },
+        auditLogRetention: { type: Number, default: 12 },
+        trashRetention: { type: Number, default: 90 },
+        autoCleanupEnabled: { type: Boolean, default: false },
+        backupFrequency: { type: String, default: 'daily' },
+        backupRetention: { type: Number, default: 30 },
+      },
+      notifications: {
+        emailNotifications: { type: Boolean, default: true },
+        criticalAlerts: { type: Boolean, default: true },
+        dailySummary: { type: Boolean, default: false },
+        weeklyReport: { type: Boolean, default: true },
+        slowQueryThreshold: { type: Number, default: 500 },
+        storageWarningThreshold: { type: Number, default: 80 },
+      },
+      maintenance: {
+        enabled: { type: Boolean, default: false },
+        message: { type: String, default: 'System is under maintenance. Please check back later.' },
+        allowedRoles: { type: [String], default: ['super_admin'] },
+      },
+    },
     lastUpdatedBy: { type: String, required: true },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date },

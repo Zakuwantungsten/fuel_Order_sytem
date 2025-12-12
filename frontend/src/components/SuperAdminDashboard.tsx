@@ -27,6 +27,7 @@ import SecurityTab from './SuperAdmin/SecurityTab';
 import BackupRecoveryTab from './SuperAdmin/BackupRecoveryTab';
 import AnalyticsTab from './SuperAdmin/AnalyticsTab';
 import TrashManagementTab from './SuperAdmin/TrashManagementTab';
+import SystemConfigDashboard from './SuperAdmin/SystemConfigDashboard';
 
 interface SuperAdminDashboardProps {
   user: any;
@@ -189,7 +190,7 @@ export default function SuperAdminDashboard({ user, section = 'overview' }: Supe
               <RoutesTab onMessage={showMessage} />
             )}
             {section === 'config' && (
-              <ConfigurationTab onMessage={showMessage} />
+              <SystemConfigDashboard onMessage={showMessage} />
             )}
             {section === 'audit' && (
               <AuditLogsTab onMessage={showMessage} />

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo } from '../utils/permissions';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 
 const Login: React.FC = () => {
   const [credentials, setCredentials] = useState({
@@ -221,9 +221,12 @@ const Login: React.FC = () => {
                   </label>
                 </div>
                 <div className="text-sm">
-                  <a href="#" className="font-medium text-orange-600 dark:text-orange-400 hover:text-orange-500 dark:hover:text-orange-300">
+                  <Link 
+                    to="/forgot-password" 
+                    className="font-medium text-orange-600 dark:text-orange-400 hover:text-orange-500 dark:hover:text-orange-300 transition-colors"
+                  >
                     Forgot password?
-                  </a>
+                  </Link>
                 </div>
               </div>
 

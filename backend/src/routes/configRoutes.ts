@@ -4,7 +4,8 @@ import * as configController from '../controllers/configController';
 
 const router = express.Router();
 
-// All routes require super_admin or admin/boss role
+// Operational configuration routes - accessible by super_admin, admin, boss
+// These are for day-to-day operational settings (routes, stations, rates)
 router.use(authenticate, authorize('super_admin', 'admin', 'boss'));
 
 // Fuel station routes

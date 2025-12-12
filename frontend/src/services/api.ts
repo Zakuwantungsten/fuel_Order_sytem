@@ -724,7 +724,17 @@ export const authAPI = {
   },
 
   changePassword: async (data: { currentPassword: string; newPassword: string }): Promise<void> => {
-    await apiClient.put('/auth/change-password', data);
+    await apiClient.post('/auth/change-password', data);
+  },
+
+  forgotPassword: async (email: string): Promise<{ message: string }> => {
+    const response = await apiClient.post('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (data: { email: string; token: string; newPassword: string }): Promise<{ message: string }> => {
+    const response = await apiClient.post('/auth/reset-password', data);
+    return response.data;
   },
 };
 
@@ -1212,6 +1222,27 @@ export const systemAdminAPI = {
   sendWeeklySummary: async () => {
     const response = await apiClient.post('/admin/email/weekly-summary');
     return response.data;
+  },
+
+  // System Settings
+  getSystemSettings: async () => {
+    const response = await apiClient.get('/admin/system-settings');
+    return response.data.data;
+  },
+
+  updateSystemSettings: async (section: string, settings: any) => {
+    const response = await apiClient.put('/admin/system-settings', { section, settings });
+    return response.data;
+  },
+
+  toggleMaintenanceMode: async () => {
+    const response = await apiClient.post('/admin/maintenance-mode/toggle');
+    return response.data;
+  },
+
+  getMaintenanceStatus: async () => {
+    const response = await apiClient.get('/admin/maintenance-mode/status');
+    return response.data.data;
   },
 };
 

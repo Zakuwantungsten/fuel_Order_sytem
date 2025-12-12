@@ -5,6 +5,9 @@ import { generateTokens, verifyRefreshToken, logger } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { AuthRequest } from '../middleware/auth';
 import { LoginRequest, RegisterRequest, AuthResponse, JWTPayload } from '../types';
+import * as crypto from 'crypto';
+import emailService from '../services/emailService';
+
 
 /**
  * Register a new user
@@ -394,6 +397,9 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
     logger.info(`Password changed for user: ${user.username}`);
 
+    // Send confirmation email
+    await emailService.sendPasswordChangedEmail(user.email, `${user.firstName} ${user.lastName}`);
+
     res.status(200).json({
       success: true,
       message: 'Password changed successfully',
@@ -402,3 +408,147 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     throw error;
   }
 };
+
+/**
+ * Request password reset
+ */
+export const forgotPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new ApiError(400, 'Email is required');
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase(), isDeleted: false });
+
+    // Always return success message for security (don't reveal if email exists)
+    const successMessage = 'If an account with that email exists, a password reset link has been sent.';
+
+    if (!user) {
+      logger.warn(`Password reset requested for non-existent email: ${email}`);
+      // Still return success to prevent email enumeration
+      res.status(200).json({
+        success: true,
+        message: successMessage,
+      });
+      return;
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      logger.warn(`Password reset requested for inactive user: ${email}`);
+      res.status(200).json({
+        success: true,
+        message: successMessage,
+      });
+      return;
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    
+    // Hash token before saving to database
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    // Set token and expiry (30 minutes)
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    await user.save();
+
+    // Create reset URL - adjust frontend URL as needed
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+    // Send email
+    try {
+      await emailService.sendPasswordResetEmail({
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`,
+        resetToken,
+        resetUrl,
+      });
+
+      logger.info(`Password reset email sent to: ${email}`);
+
+      res.status(200).json({
+        success: true,
+        message: successMessage,
+      });
+    } catch (emailError) {
+      // Clear reset token if email fails
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+
+      logger.error('Failed to send password reset email:', emailError);
+      throw new ApiError(500, 'Failed to send password reset email. Please try again later.');
+    }
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Reset password with token
+ */
+export const resetPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { email, token, newPassword } = req.body;
+
+    if (!email || !token || !newPassword) {
+      throw new ApiError(400, 'Email, token, and new password are required');
+    }
+
+    // Validate password length
+    if (newPassword.length < 6) {
+      throw new ApiError(400, 'Password must be at least 6 characters long');
+    }
+
+    // Hash the token to compare with stored hash
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Find user with valid reset token
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: new Date() }, // Token not expired
+      isDeleted: false,
+    }).select('+password +resetPasswordToken +resetPasswordExpires');
+
+    if (!user) {
+      throw new ApiError(400, 'Invalid or expired password reset token');
+    }
+
+    // Update password
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    
+    // Also clear refresh tokens for security
+    user.refreshToken = undefined;
+    
+    await user.save();
+
+    logger.info(`Password reset successful for user: ${user.username}`);
+
+    // Log the password reset action
+    await AuditService.logPasswordReset(
+      user._id.toString(),
+      user.username,
+      req.ip
+    );
+
+    // Send confirmation email
+    await emailService.sendPasswordChangedEmail(user.email, `${user.firstName} ${user.lastName}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully. You can now log in with your new password.',
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+

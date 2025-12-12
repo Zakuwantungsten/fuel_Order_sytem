@@ -179,4 +179,10 @@ router.post('/email/send-test', authorize('super_admin'), asyncHandler(adminCont
 router.post('/email/daily-summary', authorize('super_admin'), asyncHandler(adminController.sendDailySummary));
 router.post('/email/weekly-summary', authorize('super_admin'), asyncHandler(adminController.sendWeeklySummary));
 
+// System Settings
+router.get('/system-settings', authorize('super_admin'), asyncHandler(adminController.getSystemSettings));
+router.put('/system-settings', authorize('super_admin'), asyncHandler(adminController.updateSystemSettings));
+router.post('/maintenance-mode/toggle', authorize('super_admin'), asyncHandler(adminController.toggleMaintenanceMode));
+router.get('/maintenance-mode/status', asyncHandler(adminController.getMaintenanceStatus)); // Public endpoint
+
 export default router;

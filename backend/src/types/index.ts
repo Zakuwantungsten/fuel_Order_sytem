@@ -33,7 +33,9 @@ export type AuditAction =
   | 'PASSWORD_RESET'
   | 'CONFIG_CHANGE'
   | 'BULK_OPERATION'
-  | 'EXPORT';
+  | 'EXPORT'
+  | 'ENABLE_MAINTENANCE'
+  | 'DISABLE_MAINTENANCE';
 
 export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
 
@@ -141,6 +143,8 @@ export interface IUser {
   bannedReason?: string;
   lastLogin?: Date;
   refreshToken?: string;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;

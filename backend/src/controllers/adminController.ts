@@ -1372,3 +1372,222 @@ export const getRecentActivity = async (req: AuthRequest, res: Response): Promis
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+/**
+ * Get system settings
+ */
+export const getSystemSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      // Create default system settings
+      config = await SystemConfig.create({
+        configType: 'system_settings',
+        systemSettings: {
+          general: {
+            systemName: 'Fuel Order Management System',
+            timezone: 'Africa/Dar_es_Salaam',
+            dateFormat: 'DD/MM/YYYY',
+            language: 'en',
+          },
+          session: {
+            sessionTimeout: 30,
+            jwtExpiry: 24,
+            refreshTokenExpiry: 7,
+            maxLoginAttempts: 5,
+            lockoutDuration: 15,
+            allowMultipleSessions: true,
+          },
+          data: {
+            archivalEnabled: true,
+            archivalMonths: 6,
+            auditLogRetention: 12,
+            trashRetention: 90,
+            autoCleanupEnabled: false,
+            backupFrequency: 'daily',
+            backupRetention: 30,
+          },
+          notifications: {
+            emailNotifications: true,
+            criticalAlerts: true,
+            dailySummary: false,
+            weeklyReport: true,
+            slowQueryThreshold: 500,
+            storageWarningThreshold: 80,
+          },
+          maintenance: {
+            enabled: false,
+            message: 'System is under maintenance. Please check back later.',
+            allowedRoles: ['super_admin'],
+          },
+        },
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'System settings retrieved successfully',
+      data: config.systemSettings,
+    });
+  } catch (error: any) {
+    logger.error('Error getting system settings:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update system settings
+ */
+export const updateSystemSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { section, settings } = req.body;
+
+    if (!section || !settings) {
+      throw new ApiError(400, 'Section and settings are required');
+    }
+
+    const validSections = ['general', 'session', 'data', 'notifications', 'maintenance'];
+    if (!validSections.includes(section)) {
+      throw new ApiError(400, 'Invalid section type');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      // Create default config first
+      config = await SystemConfig.create({
+        configType: 'system_settings',
+        systemSettings: {},
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    // Update specific section
+    if (!config.systemSettings) {
+      config.systemSettings = {};
+    }
+
+    config.systemSettings[section as keyof typeof config.systemSettings] = settings;
+    config.lastUpdatedBy = req.user?.username || 'system';
+
+    await config.save();
+
+    // Log the change
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'system_settings',
+      resourceId: config.id,
+      details: `Updated ${section} settings`,
+      severity: 'medium',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    logger.info(`System settings updated: ${section} by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: `${section} settings updated successfully`,
+      data: config.systemSettings,
+    });
+  } catch (error: any) {
+    logger.error('Error updating system settings:', error);
+    throw error;
+  }
+};
+
+/**
+ * Toggle maintenance mode
+ */
+export const toggleMaintenanceMode = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    });
+
+    if (!config || !config.systemSettings) {
+      throw new ApiError(404, 'System settings not found');
+    }
+
+    const currentState = config.systemSettings.maintenance?.enabled || false;
+    const newState = !currentState;
+
+    if (!config.systemSettings.maintenance) {
+      config.systemSettings.maintenance = {
+        enabled: newState,
+        message: 'System is under maintenance. Please check back later.',
+        allowedRoles: ['super_admin'],
+      };
+    } else {
+      config.systemSettings.maintenance.enabled = newState;
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    // Log critical action
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: newState ? 'ENABLE_MAINTENANCE' : 'DISABLE_MAINTENANCE',
+      resourceType: 'system_settings',
+      resourceId: config.id,
+      details: `Maintenance mode ${newState ? 'enabled' : 'disabled'}`,
+      severity: 'critical',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    logger.warn(`Maintenance mode ${newState ? 'ENABLED' : 'DISABLED'} by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Maintenance mode ${newState ? 'enabled' : 'disabled'} successfully`,
+      data: {
+        enabled: newState,
+        message: config.systemSettings.maintenance.message,
+        allowedRoles: config.systemSettings.maintenance.allowedRoles,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error toggling maintenance mode:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check if system is in maintenance mode
+ */
+export const getMaintenanceStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const config = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    });
+
+    const maintenanceMode = config?.systemSettings?.maintenance || {
+      enabled: false,
+      message: 'System is under maintenance. Please check back later.',
+      allowedRoles: ['super_admin'],
+    };
+
+    res.status(200).json({
+      success: true,
+      data: maintenanceMode,
+    });
+  } catch (error: any) {
+    logger.error('Error getting maintenance status:', error);
+    throw error;
+  }
+};

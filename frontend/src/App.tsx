@@ -2,9 +2,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AmendedDOsProvider } from './contexts/AmendedDOsContext';
 import Login from './components/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import ProtectedRoute, { UnauthorizedPage } from './components/ProtectedRoute';
 import EnhancedDashboard from './components/EnhancedDashboard';
-import { RESOURCES, ACTIONS } from './utils/permissions';
 
 // App content with authentication
 function AppContent() {
@@ -26,7 +27,13 @@ function AppContent() {
 
   // Show login if not authenticated
   if (!isAuthenticated) {
-    return <Login />;
+    return (
+      <Routes>
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="*" element={<Login />} />
+      </Routes>
+    );
   }
 
   // Show enhanced dashboard for authenticated users

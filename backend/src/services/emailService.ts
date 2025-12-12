@@ -25,6 +25,13 @@ interface EmailTemplate {
   text?: string;
 }
 
+interface PasswordResetEmailOptions {
+  email: string;
+  name: string;
+  resetToken: string;
+  resetUrl: string;
+}
+
 class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private isConfigured: boolean = false;
@@ -145,6 +152,147 @@ class EmailService {
     } catch (error) {
       logger.error('Failed to send critical email:', error);
       // Don't throw - email failure shouldn't break the main operation
+    }
+  }
+
+  /**
+   * Send password reset email
+   */
+  async sendPasswordResetEmail(options: PasswordResetEmailOptions): Promise<void> {
+    if (!this.isConfigured || !this.transporter) {
+      logger.warn('Email service not configured - cannot send password reset email');
+      throw new Error('Email service is not configured');
+    }
+
+    try {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center;">
+            <h1 style="margin: 0; font-size: 28px;">🔐 Password Reset Request</h1>
+          </div>
+          <div style="padding: 30px; background: #f9fafb;">
+            <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+              <p style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px;">
+                Hello <strong>${options.name}</strong>,
+              </p>
+              <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 15px; line-height: 1.6;">
+                We received a request to reset your password for your Fuel Order Management System account. 
+                Click the button below to reset your password:
+              </p>
+              <div style="text-align: center; margin: 25px 0;">
+                <a href="${options.resetUrl}" 
+                   style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                          color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+                          font-weight: bold; font-size: 16px;">
+                  Reset Password
+                </a>
+              </div>
+              <p style="margin: 15px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                Or copy and paste this link into your browser:
+              </p>
+              <p style="margin: 5px 0 15px 0; color: #4f46e5; font-size: 13px; word-break: break-all;">
+                ${options.resetUrl}
+              </p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;"/>
+              <p style="margin: 0 0 10px 0; color: #dc2626; font-size: 14px; font-weight: bold;">
+                ⚠️ Important Security Information:
+              </p>
+              <ul style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                <li>This link will expire in <strong>30 minutes</strong></li>
+                <li>If you didn't request this, please ignore this email</li>
+                <li>Your password won't change until you create a new one</li>
+                <li>Never share this link with anyone</li>
+              </ul>
+            </div>
+            <div style="text-align: center; color: #6b7280; font-size: 12px;">
+              <p style="margin: 5px 0;">This is an automated email from the Fuel Order Management System.</p>
+              <p style="margin: 5px 0;">Please do not reply to this email.</p>
+              <p style="margin: 5px 0; color: #9ca3af;">Requested at: ${new Date().toLocaleString()}</p>
+            </div>
+          </div>
+          <div style="background: #1f2937; color: white; padding: 15px; text-align: center; font-size: 12px;">
+            <p style="margin: 0;">Fuel Order Management System</p>
+            <p style="margin: 5px 0 0 0; color: #9ca3af;">© ${new Date().getFullYear()} All rights reserved</p>
+          </div>
+        </div>
+      `;
+
+      await this.transporter.sendMail({
+        from: `"Fuel Order System - No Reply" <${process.env.SMTP_USER}>`,
+        to: options.email,
+        subject: '🔐 Password Reset Request - Fuel Order System',
+        html: emailContent,
+        priority: 'high',
+      });
+
+      logger.info(`Password reset email sent to: ${options.email}`);
+    } catch (error) {
+      logger.error('Failed to send password reset email:', error);
+      throw new Error('Failed to send password reset email');
+    }
+  }
+
+  /**
+   * Send password changed confirmation email
+   */
+  async sendPasswordChangedEmail(email: string, name: string): Promise<void> {
+    if (!this.isConfigured || !this.transporter) {
+      logger.warn('Email service not configured - cannot send password changed email');
+      return; // Don't throw - this is just a confirmation
+    }
+
+    try {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center;">
+            <h1 style="margin: 0; font-size: 28px;">✅ Password Changed Successfully</h1>
+          </div>
+          <div style="padding: 30px; background: #f9fafb;">
+            <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+              <p style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px;">
+                Hello <strong>${name}</strong>,
+              </p>
+              <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 15px; line-height: 1.6;">
+                This email confirms that your password for the Fuel Order Management System has been changed successfully.
+              </p>
+              <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0; color: #065f46; font-size: 14px;">
+                  <strong>✓ Changed at:</strong> ${new Date().toLocaleString()}
+                </p>
+              </div>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;"/>
+              <p style="margin: 0 0 10px 0; color: #dc2626; font-size: 14px; font-weight: bold;">
+                ⚠️ Didn't make this change?
+              </p>
+              <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                If you did not change your password, please contact your system administrator immediately 
+                as your account may have been compromised.
+              </p>
+            </div>
+            <div style="text-align: center; color: #6b7280; font-size: 12px;">
+              <p style="margin: 5px 0;">This is an automated security notification.</p>
+              <p style="margin: 5px 0;">Please do not reply to this email.</p>
+            </div>
+          </div>
+          <div style="background: #1f2937; color: white; padding: 15px; text-align: center; font-size: 12px;">
+            <p style="margin: 0;">Fuel Order Management System - Security Team</p>
+            <p style="margin: 5px 0 0 0; color: #9ca3af;">© ${new Date().getFullYear()} All rights reserved</p>
+          </div>
+        </div>
+      `;
+
+      await this.transporter.sendMail({
+        from: `"Fuel Order System - Security" <${process.env.SMTP_USER}>`,
+        to: email,
+        subject: '✅ Password Changed Successfully - Fuel Order System',
+        html: emailContent,
+        priority: 'high',
+      });
+
+      logger.info(`Password changed confirmation email sent to: ${email}`);
+    } catch (error) {
+      logger.error('Failed to send password changed confirmation email:', error);
+      // Don't throw - this is just a confirmation email
     }
   }
 

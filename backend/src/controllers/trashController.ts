@@ -362,14 +362,23 @@ export const emptyTrash = async (req: AuthRequest, res: Response): Promise<void>
  */
 export const getRetentionSettings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // For now, return default settings
-    // In a full implementation, this would be stored in SystemConfig
+    // Get retention settings from SystemConfig
+    const SystemConfig = (await import('../models/SystemConfig')).SystemConfig;
+    const systemConfig = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    });
+
+    const retentionSettings = {
+      retentionDays: systemConfig?.systemSettings?.data?.trashRetention || 90,
+      autoCleanupEnabled: systemConfig?.systemSettings?.data?.autoCleanupEnabled || false,
+      backupRetention: systemConfig?.systemSettings?.data?.backupRetention || 30,
+      archivalMonths: systemConfig?.systemSettings?.data?.archivalMonths || 6,
+    };
+
     res.status(200).json({
       success: true,
-      data: {
-        retentionDays: 90,
-        autoCleanupEnabled: false,
-      },
+      data: retentionSettings,
     });
   } catch (error: any) {
     logger.error('Error getting retention settings:', error);
@@ -382,27 +391,59 @@ export const getRetentionSettings = async (req: AuthRequest, res: Response): Pro
  */
 export const updateRetentionSettings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { retentionDays, autoCleanupEnabled } = req.body;
+    const { retentionDays, autoCleanupEnabled, backupRetention, archivalMonths } = req.body;
 
     if (req.user?.role !== 'super_admin') {
-      res.status(403).json({ success: false, message: 'Unauthorized' });
+      res.status(403).json({ success: false, message: 'Unauthorized - Super Admin only' });
       return;
     }
+
+    // Update retention settings in SystemConfig
+    const SystemConfig = (await import('../models/SystemConfig')).SystemConfig;
+    let systemConfig = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    });
+
+    if (!systemConfig) {
+      res.status(404).json({ success: false, message: 'System configuration not found' });
+      return;
+    }
+
+    const oldSettings = systemConfig.systemSettings?.data;
+
+    // Update data retention settings
+    if (systemConfig.systemSettings?.data) {
+      if (retentionDays !== undefined) systemConfig.systemSettings.data.trashRetention = retentionDays;
+      if (autoCleanupEnabled !== undefined) systemConfig.systemSettings.data.autoCleanupEnabled = autoCleanupEnabled;
+      if (backupRetention !== undefined) systemConfig.systemSettings.data.backupRetention = backupRetention;
+      if (archivalMonths !== undefined) systemConfig.systemSettings.data.archivalMonths = archivalMonths;
+    }
+
+    systemConfig.lastUpdatedBy = req.user.username;
+    await systemConfig.save();
 
     // Log config change
     await AuditService.logConfigChange(
       req.user.userId,
       req.user.username,
-      'trash_retention',
-      null,
-      { retentionDays, autoCleanupEnabled },
+      'retention_policy',
+      oldSettings,
+      systemConfig.systemSettings?.data,
       req.ip
     );
 
+    logger.info(`Retention policy updated by ${req.user.username}`);
+
     res.status(200).json({
       success: true,
-      message: `Retention policy updated to ${retentionDays} days`,
-      data: { retentionDays, autoCleanupEnabled },
+      message: 'Retention policy updated successfully',
+      data: {
+        retentionDays: systemConfig.systemSettings?.data?.trashRetention,
+        autoCleanupEnabled: systemConfig.systemSettings?.data?.autoCleanupEnabled,
+        backupRetention: systemConfig.systemSettings?.data?.backupRetention,
+        archivalMonths: systemConfig.systemSettings?.data?.archivalMonths,
+      },
     });
   } catch (error: any) {
     logger.error('Error updating retention settings:', error);

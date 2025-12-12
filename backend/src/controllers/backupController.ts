@@ -76,14 +76,14 @@ export const getBackups = async (req: AuthRequest, res: Response) => {
  * Get backup by ID
  * GET /api/system-admin/backups/:id
  */
-export const getBackupById = async (req: AuthRequest, res: Response) => {
+export const getBackupById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
     const backup = await Backup.findById(id);
 
     if (!backup) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Backup not found',
       });
@@ -105,7 +105,7 @@ export const getBackupById = async (req: AuthRequest, res: Response) => {
  * Download backup
  * GET /api/system-admin/backups/:id/download
  */
-export const downloadBackup = async (req: AuthRequest, res: Response) => {
+export const downloadBackup = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.username || 'system';
@@ -113,41 +113,39 @@ export const downloadBackup = async (req: AuthRequest, res: Response) => {
     const backup = await Backup.findById(id);
 
     if (!backup) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Backup not found',
       });
-    }
-
-    if (backup.status !== 'completed') {
-      return res.status(400).json({
+    } else if (backup.status !== 'completed') {
+      res.status(400).json({
         success: false,
         message: 'Cannot download incomplete backup',
       });
+    } else {
+      // Generate signed URL (expires in 1 hour)
+      const downloadUrl = await r2Service.getSignedDownloadUrl(backup.r2Key, 3600);
+
+      // Log download
+      await AuditLog.create({
+        user: userId,
+        action: 'backup_downloaded',
+        resource: 'backup',
+        resourceId: backup.id,
+        details: {
+          fileName: backup.fileName,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          url: downloadUrl,
+          fileName: backup.fileName,
+          expiresIn: 3600,
+        },
+      });
     }
-
-    // Generate signed URL (expires in 1 hour)
-    const downloadUrl = await r2Service.getSignedDownloadUrl(backup.r2Key, 3600);
-
-    // Log download
-    await AuditLog.create({
-      user: userId,
-      action: 'backup_downloaded',
-      resource: 'backup',
-      resourceId: backup.id,
-      details: {
-        fileName: backup.fileName,
-      },
-    });
-
-    res.json({
-      success: true,
-      data: {
-        url: downloadUrl,
-        fileName: backup.fileName,
-        expiresIn: 3600,
-      },
-    });
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -160,7 +158,7 @@ export const downloadBackup = async (req: AuthRequest, res: Response) => {
  * Restore backup
  * POST /api/system-admin/backups/:id/restore
  */
-export const restoreBackup = async (req: AuthRequest, res: Response) => {
+export const restoreBackup = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.username || 'system';
@@ -168,21 +166,21 @@ export const restoreBackup = async (req: AuthRequest, res: Response) => {
     const backup = await Backup.findById(id);
 
     if (!backup) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Backup not found',
       });
+    } else {
+      // Start restore in background (in production, use a job queue)
+      backupService.restoreBackup(id, userId).catch(error => {
+        console.error('Restore failed:', error);
+      });
+
+      res.json({
+        success: true,
+        message: 'Backup restore started. This may take several minutes.',
+      });
     }
-
-    // Start restore in background (in production, use a job queue)
-    backupService.restoreBackup(id, userId).catch(error => {
-      console.error('Restore failed:', error);
-    });
-
-    res.json({
-      success: true,
-      message: 'Backup restore started. This may take several minutes.',
-    });
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -195,7 +193,7 @@ export const restoreBackup = async (req: AuthRequest, res: Response) => {
  * Delete backup
  * DELETE /api/system-admin/backups/:id
  */
-export const deleteBackup = async (req: AuthRequest, res: Response) => {
+export const deleteBackup = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.username || 'system';
@@ -203,39 +201,39 @@ export const deleteBackup = async (req: AuthRequest, res: Response) => {
     const backup = await Backup.findById(id);
 
     if (!backup) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Backup not found',
       });
-    }
-
-    // Delete from R2
-    if (backup.r2Key) {
-      try {
-        await r2Service.deleteFile(backup.r2Key);
-      } catch (error) {
-        console.error('Failed to delete from R2:', error);
+    } else {
+      // Delete from R2
+      if (backup.r2Key) {
+        try {
+          await r2Service.deleteFile(backup.r2Key);
+        } catch (error) {
+          console.error('Failed to delete from R2:', error);
+        }
       }
+
+      // Delete backup record
+      await Backup.findByIdAndDelete(id);
+
+      // Log deletion
+      await AuditLog.create({
+        user: userId,
+        action: 'backup_deleted',
+        resource: 'backup',
+        resourceId: backup.id,
+        details: {
+          backupId: backup.id,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'Backup deleted successfully',
+      });
     }
-
-    // Delete backup record
-    await Backup.findByIdAndDelete(id);
-
-    // Log deletion
-    await AuditLog.create({
-      user: userId,
-      action: 'backup_deleted',
-      resource: 'backup',
-      resourceId: backup.id,
-      details: {
-        fileName: backup.fileName,
-      },
-    });
-
-    res.json({
-      success: true,
-      message: 'Backup deleted successfully',
-    });
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -333,7 +331,7 @@ export const createBackupSchedule = async (req: AuthRequest, res: Response) => {
  * Update backup schedule
  * PUT /api/system-admin/backup-schedules/:id
  */
-export const updateBackupSchedule = async (req: AuthRequest, res: Response) => {
+export const updateBackupSchedule = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -346,26 +344,26 @@ export const updateBackupSchedule = async (req: AuthRequest, res: Response) => {
     );
 
     if (!schedule) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Backup schedule not found',
       });
+    } else {
+      // Log update
+      await AuditLog.create({
+        user: userId,
+        action: 'backup_schedule_updated',
+        resource: 'backup_schedule',
+        resourceId: schedule.id,
+        details: updates,
+      });
+
+      res.json({
+        success: true,
+        message: 'Backup schedule updated successfully',
+        data: schedule,
+      });
     }
-
-    // Log update
-    await AuditLog.create({
-      user: userId,
-      action: 'backup_schedule_updated',
-      resource: 'backup_schedule',
-      resourceId: schedule.id,
-      details: updates,
-    });
-
-    res.json({
-      success: true,
-      message: 'Backup schedule updated successfully',
-      data: schedule,
-    });
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -378,7 +376,7 @@ export const updateBackupSchedule = async (req: AuthRequest, res: Response) => {
  * Delete backup schedule
  * DELETE /api/system-admin/backup-schedules/:id
  */
-export const deleteBackupSchedule = async (req: AuthRequest, res: Response) => {
+export const deleteBackupSchedule = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.username || 'system';
@@ -386,27 +384,27 @@ export const deleteBackupSchedule = async (req: AuthRequest, res: Response) => {
     const schedule = await BackupSchedule.findByIdAndDelete(id);
 
     if (!schedule) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Backup schedule not found',
       });
+    } else {
+      // Log deletion
+      await AuditLog.create({
+        user: userId,
+        action: 'backup_schedule_deleted',
+        resource: 'backup_schedule',
+        resourceId: schedule.id,
+        details: {
+          name: schedule.name,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'Backup schedule deleted successfully',
+      });
     }
-
-    // Log deletion
-    await AuditLog.create({
-      user: userId,
-      action: 'backup_schedule_deleted',
-      resource: 'backup_schedule',
-      resourceId: schedule.id,
-      details: {
-        name: schedule.name,
-      },
-    });
-
-    res.json({
-      success: true,
-      message: 'Backup schedule deleted successfully',
-    });
   } catch (error: any) {
     res.status(500).json({
       success: false,

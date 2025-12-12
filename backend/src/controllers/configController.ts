@@ -49,7 +49,7 @@ export const getFuelStations = async (req: AuthRequest, res: Response) => {
  * Create fuel station configuration
  * POST /api/system-admin/config/stations
  */
-export const createFuelStation = async (req: AuthRequest, res: Response) => {
+export const createFuelStation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const {
       stationName,
@@ -64,7 +64,7 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
 
     // Validate required fields
     if (!stationName || defaultRate == null) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Station name and rate are required',
       });
@@ -73,7 +73,7 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
     // At least one default liter value should be provided
     if ((defaultLitersGoing == null || defaultLitersGoing === 0) && 
         (defaultLitersReturning == null || defaultLitersReturning === 0)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'At least one of defaultLitersGoing or defaultLitersReturning must be greater than 0',
       });
@@ -83,7 +83,7 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
     if (formulaGoing && formulaGoing.trim() !== '') {
       const validation = validateFormula(formulaGoing);
       if (!validation.valid) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: `Invalid going formula: ${validation.error}`,
         });
@@ -93,7 +93,7 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
     if (formulaReturning && formulaReturning.trim() !== '') {
       const validation = validateFormula(formulaReturning);
       if (!validation.valid) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: `Invalid returning formula: ${validation.error}`,
         });
@@ -103,7 +103,7 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
     // Check if station already exists
     const existing = await FuelStationConfig.findOne({ stationName });
     if (existing) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Station with this name already exists',
       });
@@ -148,7 +148,7 @@ export const createFuelStation = async (req: AuthRequest, res: Response) => {
  * Update fuel station configuration
  * PUT /api/system-admin/config/stations/:id
  */
-export const updateFuelStation = async (req: AuthRequest, res: Response) => {
+export const updateFuelStation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -176,7 +176,7 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
     if (updates.formulaGoing && typeof updates.formulaGoing === 'string' && updates.formulaGoing.trim()) {
       const validation = validateFormula(updates.formulaGoing);
       if (!validation.valid) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: `Invalid going formula: ${validation.error}`,
         });
@@ -186,7 +186,7 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
     if (updates.formulaReturning && typeof updates.formulaReturning === 'string' && updates.formulaReturning.trim()) {
       const validation = validateFormula(updates.formulaReturning);
       if (!validation.valid) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: `Invalid returning formula: ${validation.error}`,
         });
@@ -195,14 +195,14 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
 
     // Validate required fields
     if (updates.stationName !== undefined && !updates.stationName) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Station name is required',
       });
     }
 
     if (updates.defaultRate !== undefined && (isNaN(updates.defaultRate) || updates.defaultRate < 0)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Valid default rate is required',
       });
@@ -223,7 +223,7 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
     );
 
     if (!station) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Fuel station not found',
       });
@@ -258,33 +258,33 @@ export const updateFuelStation = async (req: AuthRequest, res: Response) => {
  * Delete fuel station configuration
  * DELETE /api/system-admin/config/stations/:id
  */
-export const deleteFuelStation = async (req: AuthRequest, res: Response) => {
+export const deleteFuelStation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
     const station = await FuelStationConfig.findByIdAndDelete(id);
 
     if (!station) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Fuel station not found',
       });
+    } else {
+      // Audit log
+      await AuditLog.create({
+        username: req.user?.username || 'system',
+        action: 'DELETE',
+        resourceType: 'fuel_station_config',
+        resourceId: id,
+        details: JSON.stringify({ stationName: station.stationName }),
+        severity: 'medium',
+      });
+
+      res.json({
+        success: true,
+        message: 'Fuel station deleted successfully',
+      });
     }
-
-    // Audit log
-    await AuditLog.create({
-      username: req.user?.username || 'system',
-      action: 'DELETE',
-      resourceType: 'fuel_station_config',
-      resourceId: id,
-      details: JSON.stringify({ stationName: station.stationName }),
-      severity: 'medium',
-    });
-
-    res.json({
-      success: true,
-      message: 'Fuel station deleted successfully',
-    });
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -326,7 +326,7 @@ export const getRoutes = async (req: AuthRequest, res: Response) => {
  * Find route by destination or alias
  * GET /api/system-admin/config/routes/find/:destination
  */
-export const findRouteByDestination = async (req: AuthRequest, res: Response) => {
+export const findRouteByDestination = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { destination } = req.params;
     const normalizedDest = destination.trim().toUpperCase();
@@ -341,7 +341,7 @@ export const findRouteByDestination = async (req: AuthRequest, res: Response) =>
     });
     
     if (!route) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Route not found',
       });
@@ -363,7 +363,7 @@ export const findRouteByDestination = async (req: AuthRequest, res: Response) =>
  * Create route configuration
  * POST /api/system-admin/config/routes
  */
-export const createRoute = async (req: AuthRequest, res: Response) => {
+export const createRoute = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const {
       routeName,
@@ -377,7 +377,7 @@ export const createRoute = async (req: AuthRequest, res: Response) => {
 
     // Validate required fields
     if (!routeName || !destination || defaultTotalLiters == null) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Route name, destination, and default total liters are required',
       });
@@ -386,7 +386,7 @@ export const createRoute = async (req: AuthRequest, res: Response) => {
     // Check if route already exists
     const existing = await RouteConfig.findOne({ routeName });
     if (existing) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Route with this name already exists',
       });
@@ -430,7 +430,7 @@ export const createRoute = async (req: AuthRequest, res: Response) => {
  * Update route configuration
  * PUT /api/system-admin/config/routes/:id
  */
-export const updateRoute = async (req: AuthRequest, res: Response) => {
+export const updateRoute = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -444,7 +444,7 @@ export const updateRoute = async (req: AuthRequest, res: Response) => {
     );
 
     if (!route) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Route not found',
       });
@@ -477,33 +477,33 @@ export const updateRoute = async (req: AuthRequest, res: Response) => {
  * Delete route configuration
  * DELETE /api/system-admin/config/routes/:id
  */
-export const deleteRoute = async (req: AuthRequest, res: Response) => {
+export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
     const route = await RouteConfig.findByIdAndDelete(id);
 
     if (!route) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Route not found',
       });
+    } else {
+      // Audit log
+      await AuditLog.create({
+        username: req.user?.username || 'system',
+        action: 'DELETE',
+        resourceType: 'route_config',
+        resourceId: id,
+        details: JSON.stringify({ routeName: route.routeName }),
+        severity: 'medium',
+      });
+
+      res.json({
+        success: true,
+        message: 'Route deleted successfully',
+      });
     }
-
-    // Audit log
-    await AuditLog.create({
-      username: req.user?.username || 'system',
-      action: 'DELETE',
-      resourceType: 'route_config',
-      resourceId: id,
-      details: JSON.stringify({ routeName: route.routeName }),
-      severity: 'medium',
-    });
-
-    res.json({
-      success: true,
-      message: 'Route deleted successfully',
-    });
   } catch (error: any) {
     res.status(500).json({
       success: false,

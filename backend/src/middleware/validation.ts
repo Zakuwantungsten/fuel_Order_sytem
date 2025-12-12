@@ -50,6 +50,35 @@ export const userValidation = {
     body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty'),
     body('lastName').optional().trim().notEmpty().withMessage('Last name cannot be empty'),
   ],
+
+  forgotPassword: [
+    body('email')
+      .isEmail()
+      .withMessage('Must be a valid email address')
+      .normalizeEmail()
+      .notEmpty()
+      .withMessage('Email is required'),
+  ],
+
+  resetPassword: [
+    body('email')
+      .isEmail()
+      .withMessage('Must be a valid email address')
+      .normalizeEmail()
+      .notEmpty()
+      .withMessage('Email is required'),
+    body('token')
+      .trim()
+      .notEmpty()
+      .withMessage('Reset token is required')
+      .isLength({ min: 64, max: 64 })
+      .withMessage('Invalid reset token format'),
+    body('newPassword')
+      .isLength({ min: 6 })
+      .withMessage('Password must be at least 6 characters long')
+      .notEmpty()
+      .withMessage('New password is required'),
+  ],
 };
 
 /**

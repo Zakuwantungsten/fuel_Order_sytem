@@ -122,11 +122,11 @@ export const getMonthlyStats = async (req: AuthRequest, res: Response): Promise<
 
     const monthlyStats = {
       totalRecords: fuelRecords.length,
-      totalFuel: fuelRecords.reduce((sum, record) => sum + record.totalLts, 0),
+      totalFuel: fuelRecords.reduce((sum, record) => sum + (record.totalLts || 0), 0),
       totalBalance: fuelRecords.reduce((sum, record) => sum + record.balance, 0),
       averageFuelPerTrip:
         fuelRecords.length > 0
-          ? fuelRecords.reduce((sum, record) => sum + record.totalLts, 0) / fuelRecords.length
+          ? fuelRecords.reduce((sum, record) => sum + (record.totalLts || 0), 0) / fuelRecords.length
           : 0,
     };
 
@@ -238,7 +238,7 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
     // Calculate operations metrics
     const totalTrips = deliveryOrders.length;
     const totalTrucks = new Set(deliveryOrders.map(DO => DO.truckNo)).size;
-    const totalFuel = fuelRecords.reduce((sum, record) => sum + record.totalLts, 0);
+    const totalFuel = fuelRecords.reduce((sum, record) => sum + (record.totalLts || 0), 0);
     const averageFuelPerTrip = totalTrips > 0 ? totalFuel / totalTrips : 0;
 
     // Calculate on-time delivery (placeholder logic - would need actual arrival/expected dates)

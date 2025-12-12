@@ -110,6 +110,14 @@ const userSchema = new Schema<IUserDocument>(
       type: String,
       select: false,
     },
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      select: false,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

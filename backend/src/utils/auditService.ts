@@ -82,6 +82,25 @@ export class AuditService {
   }
 
   /**
+   * Log a password reset
+   */
+  static async logPasswordReset(
+    userId: string,
+    username: string,
+    ipAddress?: string
+  ): Promise<void> {
+    await this.log({
+      userId,
+      username,
+      action: 'PASSWORD_RESET',
+      resourceType: 'auth',
+      ipAddress,
+      details: 'Password reset via email token',
+      severity: 'medium',
+    });
+  }
+
+  /**
    * Log a create operation
    */
   static async logCreate(
@@ -335,6 +354,8 @@ export class AuditService {
       CONFIG_CHANGE: 'high',
       BULK_OPERATION: 'medium',
       EXPORT: 'low',
+      ENABLE_MAINTENANCE: 'critical',
+      DISABLE_MAINTENANCE: 'critical',
     };
     return severityMap[action] || 'low';
   }
