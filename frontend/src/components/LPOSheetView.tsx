@@ -292,7 +292,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const handleCopyImageToClipboard = async () => {
     try {
       const lpoSummary = convertToLPOSummary();
-      const success = await copyLPOImageToClipboard(lpoSummary, user?.username);
+      const success = await copyLPOImageToClipboard(lpoSummary, user?.username, sheet.approvedBy);
       
       if (success) {
         alert('LPO image copied to clipboard successfully!');
@@ -346,7 +346,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const handleDownloadPDF = async () => {
     try {
       const lpoSummary = convertToLPOSummary();
-      await downloadLPOPDF(lpoSummary, undefined, user?.username);
+      await downloadLPOPDF(lpoSummary, undefined, user?.username, sheet.approvedBy);
       alert('✓ LPO PDF downloaded successfully!');
     } catch (error) {
       console.error('Error downloading PDF:', error);
@@ -359,7 +359,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const handleDownloadImage = async () => {
     try {
       const lpoSummary = convertToLPOSummary();
-      await downloadLPOImage(lpoSummary, undefined, user?.username);
+      await downloadLPOImage(lpoSummary, undefined, user?.username, sheet.approvedBy);
       alert('✓ LPO image downloaded successfully!');
     } catch (error) {
       console.error('Error downloading image:', error);

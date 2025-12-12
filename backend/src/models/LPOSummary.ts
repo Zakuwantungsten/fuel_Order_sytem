@@ -187,6 +187,10 @@ const lpoSummarySchema = new Schema<ILPOSummaryDocument>(
       type: String,
       trim: true,
     },
+    approvedBy: {
+      type: String,
+      trim: true,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

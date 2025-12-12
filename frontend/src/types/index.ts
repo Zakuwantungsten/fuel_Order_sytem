@@ -118,6 +118,7 @@ export interface LPOSummary {
   entries: LPODetail[];
   total: number;
   createdBy?: string; // Username of who created this LPO
+  approvedBy?: string; // Name of approver (optional - for any LPO that needs approval signature)
   createdAt?: string;
   updatedAt?: string;
   // Forwarding tracking (if this LPO was forwarded from another)

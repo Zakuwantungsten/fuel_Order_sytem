@@ -346,6 +346,7 @@ export interface ILPOSummary {
     station: string;
   };
   createdBy?: string;  // Username of who created this LPO
+  approvedBy?: string;  // Name of approver (optional - for any LPO that needs approval signature)
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
