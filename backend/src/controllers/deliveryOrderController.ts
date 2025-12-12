@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import ExcelJS from 'exceljs';
@@ -280,11 +280,17 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
     }
 
     if (clientName) {
-      filter.clientName = { $regex: clientName, $options: 'i' };
+      const sanitized = sanitizeRegexInput(clientName as string);
+      if (sanitized) {
+        filter.clientName = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     if (truckNo) {
-      filter.truckNo = { $regex: truckNo, $options: 'i' };
+      const sanitized = sanitizeRegexInput(truckNo as string);
+      if (sanitized) {
+        filter.truckNo = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     if (importOrExport && importOrExport !== 'ALL') {
@@ -292,7 +298,10 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
     }
 
     if (destination) {
-      filter.destination = { $regex: destination, $options: 'i' };
+      const sanitized = sanitizeRegexInput(destination as string);
+      if (sanitized) {
+        filter.destination = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     // Get data with pagination

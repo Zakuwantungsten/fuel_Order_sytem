@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { User } from '../models';
+import { User, DriverCredential } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger } from '../utils';
 import { AuditService } from '../utils/auditService';
@@ -74,80 +74,103 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
 };
 
 /**
- * Login user
+ * Login user or driver
+ * Enhanced with secure driver authentication
  */
 export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { username, password } = req.body as LoginRequest;
 
-    // Check if this might be a driver login (username = truck number)
-    // If username and password are the same, check if it's a valid truck
-    if (username === password) {
-      // Try to find truck in delivery orders (company fleet)
-      const { DeliveryOrder } = require('../models');
-      const trucks = await DeliveryOrder.aggregate([
-        { $match: { isDeleted: false } },
-        {
-          $group: {
-            _id: { $toUpper: '$truckNo' },
-            truckNo: { $first: '$truckNo' },
-          },
-        },
-      ]);
+    // Check if this is a driver login attempt (truck number format)
+    // Pattern: Starts with T followed by digits and letters (e.g., T123-DNH, T456-ABC)
+    const truckPattern = /^T\d{3,4}[-\s]?[A-Z]{3}$/i;
+    const isDriverLogin = truckPattern.test(username);
 
-      const truckExists = trucks.some(
-        (t: any) => t._id === username.toUpperCase()
+    if (isDriverLogin) {
+      // Secure driver authentication using DriverCredential model
+      const truckNo = username.toUpperCase().replace(/[-\s]/g, '-');
+      
+      const driverCredential = await DriverCredential.findOne({
+        truckNo: truckNo,
+        isActive: true,
+      }).select('+pin');
+
+      if (!driverCredential) {
+        // Log failed attempt without revealing if truck exists
+        await AuditService.logLogin(
+          username,
+          false,
+          req.ip,
+          req.get('user-agent')
+        );
+        throw new ApiError(401, 'Invalid credentials');
+      }
+
+      // Verify PIN
+      const isPinValid = await driverCredential.comparePin(password);
+
+      if (!isPinValid) {
+        // Log failed login attempt
+        await AuditService.logLogin(
+          username,
+          false,
+          req.ip,
+          req.get('user-agent')
+        );
+        throw new ApiError(401, 'Invalid credentials');
+      }
+
+      // Update last login
+      driverCredential.lastLogin = new Date();
+      await driverCredential.save();
+
+      // Create driver user object
+      const driverUser = {
+        _id: `driver_${truckNo}`,
+        username: truckNo,
+        email: `${truckNo.toLowerCase()}@driver.local`,
+        firstName: driverCredential.driverName || 'Driver',
+        lastName: truckNo,
+        role: 'driver',
+        department: 'Transport',
+        truckNo: truckNo,
+        isActive: true,
+        createdAt: driverCredential.createdAt,
+        updatedAt: new Date(),
+      };
+
+      // Generate tokens
+      const payload: JWTPayload = {
+        userId: driverUser._id,
+        username: driverUser.username,
+        role: driverUser.role as any,
+      };
+
+      const { accessToken, refreshToken } = generateTokens(payload);
+
+      logger.info(`Driver logged in: ${truckNo}`);
+
+      // Log successful driver login
+      await AuditService.logLogin(
+        driverUser.username,
+        true,
+        req.ip,
+        req.get('user-agent'),
+        driverUser._id
       );
 
-      if (truckExists) {
-        // Create a driver user object for this truck
-        const driverUser = {
-          _id: `driver_${username.toUpperCase()}`,
-          username: username.toUpperCase(),
-          email: `${username.toLowerCase()}@driver.local`,
-          firstName: 'Driver',
-          lastName: username.toUpperCase(),
-          role: 'driver',
-          department: 'Transport',
-          truckNo: username.toUpperCase(),
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+      const response: AuthResponse = {
+        user: driverUser as any,
+        accessToken,
+        refreshToken,
+      };
 
-        // Generate tokens
-        const payload: JWTPayload = {
-          userId: driverUser._id.toString(),
-          username: driverUser.username,
-          role: driverUser.role as any,
-        };
-
-        const { accessToken, refreshToken } = generateTokens(payload);
-
-        logger.info(`Driver logged in: ${username}`);
-
-        // Log driver login
-        await AuditService.logLogin(
-          driverUser.username,
-          true,
-          req.ip,
-          req.get('user-agent'),
-          driverUser._id
-        );
-
-        const response: AuthResponse = {
-          user: driverUser as any,
-          accessToken,
-          refreshToken,
-        };
-
-        res.status(200).json({
-          success: true,
-          message: 'Login successful',
-          data: response,
-        });
-        return;
-      }
+      res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        data: response,
+      });
+      return;
     }
 
     // Regular user login

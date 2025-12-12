@@ -3,11 +3,13 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { config, validateEnv } from './config';
 import connectDatabase from './config/database';
 import routes from './routes';
 import { errorHandler, notFound } from './middleware/errorHandler';
+import { csrfProtection, provideCsrfToken, csrfErrorHandler } from './middleware/csrf';
 import logger from './utils/logger';
 
 // Validate environment variables
@@ -28,6 +30,16 @@ app.use(
   })
 );
 
+// Cookie parser (required for CSRF)
+app.use(cookieParser());
+
+// Body parser middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Compression middleware
+app.use(compression());
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
@@ -39,13 +51,6 @@ const limiter = rateLimit({
 
 // Apply rate limiting to all routes
 app.use('/api/', limiter);
-
-// Body parser middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Compression middleware
-app.use(compression());
 
 // Import archival scheduler
 import { startArchivalScheduler } from './jobs/archivalScheduler';
@@ -62,6 +67,28 @@ if (config.nodeEnv === 'development') {
     })
   );
 }
+
+// CSRF Protection - Apply to state-changing routes
+// GET requests to provide CSRF token to frontend
+app.get('/api/csrf-token', provideCsrfToken, (_req, res) => {
+  res.json({ success: true, message: 'CSRF token set' });
+});
+
+// Apply CSRF protection to all POST, PUT, DELETE, PATCH requests
+app.use('/api/', (req, res, next) => {
+  // Skip CSRF for GET, HEAD, OPTIONS
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    // Provide CSRF token for GET requests
+    provideCsrfToken(req, res, () => next());
+    return;
+  }
+  // Skip CSRF for login/register routes (initial auth)
+  if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/refresh') {
+    return next();
+  }
+  // Apply CSRF protection
+  csrfProtection(req, res, next);
+});
 
 // API routes
 app.use('/api', routes);
@@ -88,6 +115,9 @@ app.get('/health', (_req, res) => {
 
 // 404 handler
 app.use(notFound);
+
+// CSRF error handler (must be before global error handler)
+app.use(csrfErrorHandler);
 
 // Global error handler
 app.use(errorHandler);

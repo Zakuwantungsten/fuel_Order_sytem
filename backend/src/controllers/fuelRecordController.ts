@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
 
@@ -24,19 +24,31 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
     }
 
     if (truckNo) {
-      filter.truckNo = { $regex: truckNo, $options: 'i' };
+      const sanitized = sanitizeRegexInput(truckNo as string);
+      if (sanitized) {
+        filter.truckNo = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     if (from) {
-      filter.from = { $regex: from, $options: 'i' };
+      const sanitized = sanitizeRegexInput(from as string);
+      if (sanitized) {
+        filter.from = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     if (to) {
-      filter.to = { $regex: to, $options: 'i' };
+      const sanitized = sanitizeRegexInput(to as string);
+      if (sanitized) {
+        filter.to = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     if (month) {
-      filter.month = { $regex: month, $options: 'i' };
+      const sanitized = sanitizeRegexInput(month as string);
+      if (sanitized) {
+        filter.month = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     // Get data with pagination
@@ -100,8 +112,13 @@ export const getFuelRecordsByTruck = async (req: AuthRequest, res: Response): Pr
   try {
     const { truckNo } = req.params;
 
+    const sanitizedTruckNo = sanitizeRegexInput(truckNo);
+    if (!sanitizedTruckNo) {
+      throw new ApiError(400, 'Invalid truck number format');
+    }
+
     const fuelRecords = await FuelRecord.find({
-      truckNo: { $regex: truckNo, $options: 'i' },
+      truckNo: { $regex: sanitizedTruckNo, $options: 'i' },
       isDeleted: false,
     }).sort({ date: -1 });
 

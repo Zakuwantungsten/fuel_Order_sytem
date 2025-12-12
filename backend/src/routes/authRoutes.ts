@@ -4,15 +4,48 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth';
 import { userValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
+import { 
+  authRateLimiter, 
+  passwordResetRateLimiter, 
+  registrationRateLimiter 
+} from '../middleware/rateLimiters';
 
 const router = Router();
 
-// Public routes
-router.post('/register', userValidation.register, validate, asyncHandler(authController.register));
-router.post('/login', userValidation.login, validate, asyncHandler(authController.login));
+// Public routes with strict rate limiting
+router.post(
+  '/register', 
+  registrationRateLimiter,
+  userValidation.register, 
+  validate, 
+  asyncHandler(authController.register)
+);
+
+router.post(
+  '/login', 
+  authRateLimiter,
+  userValidation.login, 
+  validate, 
+  asyncHandler(authController.login)
+);
+
 router.post('/refresh', asyncHandler(authController.refreshToken));
-router.post('/forgot-password', userValidation.forgotPassword, validate, asyncHandler(authController.forgotPassword));
-router.post('/reset-password', userValidation.resetPassword, validate, asyncHandler(authController.resetPassword));
+
+router.post(
+  '/forgot-password', 
+  passwordResetRateLimiter,
+  userValidation.forgotPassword, 
+  validate, 
+  asyncHandler(authController.forgotPassword)
+);
+
+router.post(
+  '/reset-password', 
+  passwordResetRateLimiter,
+  userValidation.resetPassword, 
+  validate, 
+  asyncHandler(authController.resetPassword)
+);
 
 // Protected routes
 router.post('/logout', authenticate, asyncHandler(authController.logout));

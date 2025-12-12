@@ -24,15 +24,52 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Enable cookies for CSRF
 });
 
-// Request interceptor to add auth token
+// Function to get CSRF token from cookie
+const getCsrfToken = (): string | null => {
+  const name = 'XSRF-TOKEN=';
+  const decodedCookie = decodeURIComponent(document.cookie);
+  const cookieArray = decodedCookie.split(';');
+  for (let i = 0; i < cookieArray.length; i++) {
+    let cookie = cookieArray[i].trim();
+    if (cookie.indexOf(name) === 0) {
+      return cookie.substring(name.length, cookie.length);
+    }
+  }
+  return null;
+};
+
+// Function to fetch CSRF token from server
+const fetchCsrfToken = async (): Promise<void> => {
+  try {
+    await apiClient.get('/csrf-token');
+  } catch (error) {
+    console.error('Failed to fetch CSRF token:', error);
+  }
+};
+
+// Initialize CSRF token on app load
+fetchCsrfToken();
+
+// Request interceptor to add auth token and CSRF token
 apiClient.interceptors.request.use(
   (config) => {
+    // Add auth token
     const token = localStorage.getItem('fuel_order_token');
     if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add CSRF token for state-changing requests
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(config.method?.toUpperCase() || '')) {
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        config.headers['X-XSRF-TOKEN'] = csrfToken;
+      }
+    }
+    
     return config;
   },
   (error) => {
@@ -40,10 +77,23 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle auth errors
+// Response interceptor to handle auth errors and CSRF errors
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Handle CSRF token errors
+    if (error.response?.status === 403 && error.response?.data?.code === 'CSRF_VALIDATION_FAILED') {
+      // Refresh CSRF token and retry
+      if (!originalRequest._retry) {
+        originalRequest._retry = true;
+        await fetchCsrfToken();
+        return apiClient(originalRequest);
+      }
+    }
+    
+    // Handle auth errors
     if (error.response?.status === 401) {
       // Don't redirect if this is a login attempt - let the login component handle it
       const isLoginRequest = error.config?.url?.includes('/auth/login');

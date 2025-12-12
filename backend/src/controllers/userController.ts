@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { User } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import crypto from 'crypto';
 
@@ -22,11 +22,17 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
     }
 
     if (department) {
-      filter.department = { $regex: department, $options: 'i' };
+      const sanitized = sanitizeRegexInput(department as string);
+      if (sanitized) {
+        filter.department = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     if (station) {
-      filter.station = { $regex: station, $options: 'i' };
+      const sanitized = sanitizeRegexInput(station as string);
+      if (sanitized) {
+        filter.station = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     if (isActive !== undefined) {
