@@ -1105,6 +1105,31 @@ export const adminAPI = {
     return response.data.data;
   },
 
+  // Destination Rules for Truck Batches
+  addDestinationRule: async (data: { 
+    truckSuffix: string; 
+    destination: string; 
+    extraLiters: number 
+  }): Promise<any> => {
+    const response = await apiClient.post('/admin/truck-batches/destination-rules', data);
+    return response.data.data;
+  },
+
+  updateDestinationRule: async (data: { 
+    truckSuffix: string; 
+    oldDestination: string; 
+    newDestination?: string; 
+    extraLiters: number 
+  }): Promise<TruckBatches> => {
+    const response = await apiClient.put('/admin/truck-batches/destination-rules', data);
+    return response.data.data;
+  },
+
+  deleteDestinationRule: async (truckSuffix: string, destination: string): Promise<TruckBatches> => {
+    const response = await apiClient.delete(`/admin/truck-batches/${truckSuffix}/destination-rules/${destination}`);
+    return response.data.data;
+  },
+
   // Standard Allocations
   getStandardAllocations: async (): Promise<StandardAllocations> => {
     const response = await apiClient.get('/admin/standard-allocations');

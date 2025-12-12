@@ -112,6 +112,42 @@ router.delete(
 );
 
 // =====================
+// Destination Rules for Truck Batches
+// =====================
+router.post(
+  '/truck-batches/destination-rules',
+  [
+    body('truckSuffix').notEmpty().withMessage('Truck suffix is required'),
+    body('destination').notEmpty().withMessage('Destination is required'),
+    body('extraLiters').isNumeric().withMessage('Extra liters must be a number'),
+  ],
+  validate,
+  asyncHandler(adminController.addDestinationRule)
+);
+
+router.put(
+  '/truck-batches/destination-rules',
+  [
+    body('truckSuffix').notEmpty().withMessage('Truck suffix is required'),
+    body('oldDestination').notEmpty().withMessage('Old destination is required'),
+    body('newDestination').optional().isString(),
+    body('extraLiters').isNumeric().withMessage('Extra liters must be a number'),
+  ],
+  validate,
+  asyncHandler(adminController.updateDestinationRule)
+);
+
+router.delete(
+  '/truck-batches/:truckSuffix/destination-rules/:destination',
+  [
+    param('truckSuffix').notEmpty().withMessage('Truck suffix is required'),
+    param('destination').notEmpty().withMessage('Destination is required'),
+  ],
+  validate,
+  asyncHandler(adminController.deleteDestinationRule)
+);
+
+// =====================
 // Standard Allocations
 // =====================
 router.get('/standard-allocations', asyncHandler(adminController.getStandardAllocations));

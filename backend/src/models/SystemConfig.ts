@@ -16,10 +16,17 @@ export interface IRouteConfig {
   isActive: boolean;
 }
 
+// Destination-based extra fuel rule
+export interface IDestinationFuelRule {
+  destination: string; // e.g., "Mbeya", "Lusaka", "Dar"
+  extraLiters: number; // Override extra fuel for this destination
+}
+
 // Truck Batch Configuration
 export interface ITruckBatch {
   truckSuffix: string;
-  extraLiters: number; // 60, 80, or 100
+  extraLiters: number; // Default: 60, 80, or 100
+  destinationRules?: IDestinationFuelRule[]; // Optional destination-based overrides
   truckNumber?: string; // Full truck number for reference
   addedBy: string;
   addedAt: Date;
@@ -149,10 +156,19 @@ const routeConfigSchema = new Schema<IRouteConfig>(
   { _id: false }
 );
 
+const destinationFuelRuleSchema = new Schema<IDestinationFuelRule>(
+  {
+    destination: { type: String, required: true },
+    extraLiters: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
 const truckBatchSchema = new Schema<ITruckBatch>(
   {
     truckSuffix: { type: String, required: true },
     extraLiters: { type: Number, required: true, enum: [60, 80, 100] },
+    destinationRules: [destinationFuelRuleSchema],
     truckNumber: { type: String },
     addedBy: { type: String, required: true },
     addedAt: { type: Date, default: Date.now },

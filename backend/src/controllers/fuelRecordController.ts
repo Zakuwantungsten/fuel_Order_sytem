@@ -317,12 +317,15 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       const willHaveTotalLts = fillingTotalLiters ? req.body.totalLts : existingRecord.totalLts;
       const willHaveExtra = fillingExtraFuel ? req.body.extra : existingRecord.extra;
 
+      // Unlock if both values are now filled (not null)
       if (willHaveTotalLts !== null && willHaveExtra !== null) {
         req.body.isLocked = false;
         req.body.pendingConfigReason = null;
         
         // Recalculate balance if both values are now set
         req.body.balance = willHaveTotalLts + willHaveExtra;
+        
+        logger.info(`Unlocking fuel record ${id} - all required fields now provided`);
       }
     }
 

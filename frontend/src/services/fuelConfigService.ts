@@ -6,12 +6,24 @@
 import { adminAPI } from './api';
 import { configService } from './configService';
 
+export interface DestinationFuelRule {
+  destination: string;
+  extraLiters: number;
+}
+
 export interface FuelConfig {
   // Truck batch configurations
   truckBatches: {
     batch_100: string[];
     batch_80: string[];
     batch_60: string[];
+  };
+  
+  // Destination-based rules for each batch
+  batchDestinationRules?: {
+    batch_100: { [truckSuffix: string]: DestinationFuelRule[] };
+    batch_80: { [truckSuffix: string]: DestinationFuelRule[] };
+    batch_60: { [truckSuffix: string]: DestinationFuelRule[] };
   };
   
   // Standard fuel allocations per checkpoint
@@ -361,9 +373,11 @@ export class FuelConfigService {
   
   /**
    * Get truck extra fuel allocation based on truck number with detailed match information
+   * Now supports destination-based rules that override batch defaults
    */
   static getExtraFuel(
     truckNo: string, 
+    destination?: string,
     config?: FuelConfig
   ): { 
     extraFuel: number; 
@@ -371,46 +385,74 @@ export class FuelConfigService {
     batchName?: string;
     truckSuffix: string;
     suggestions?: string[];
+    destinationOverride?: boolean;
   } {
     const cfg = config || this.loadConfig();
     const truckSuffix = truckNo.toLowerCase().split(' ').pop() || '';
     
     if (!truckSuffix) {
       return { 
-        extraFuel: 60, 
+        extraFuel: 0, 
         matched: false, 
         truckSuffix: '' 
       };
     }
     
+    // Determine which batch this truck belongs to
+    let batchName: 'batch_100' | 'batch_80' | 'batch_60' | undefined;
+    let defaultExtraFuel = 0;
+    
     if (cfg.truckBatches.batch_100.includes(truckSuffix)) {
-      return { 
-        extraFuel: 100, 
-        matched: true, 
-        batchName: 'batch_100',
-        truckSuffix 
-      };
+      batchName = 'batch_100';
+      defaultExtraFuel = 100;
     } else if (cfg.truckBatches.batch_80.includes(truckSuffix)) {
-      return { 
-        extraFuel: 80, 
-        matched: true, 
-        batchName: 'batch_80',
-        truckSuffix 
-      };
+      batchName = 'batch_80';
+      defaultExtraFuel = 80;
     } else if (cfg.truckBatches.batch_60.includes(truckSuffix)) {
+      batchName = 'batch_60';
+      defaultExtraFuel = 60;
+    }
+    
+    // If truck is in a batch and destination is provided, check for destination rules
+    if (batchName && destination && cfg.batchDestinationRules) {
+      const batchRules = cfg.batchDestinationRules[batchName];
+      if (batchRules && batchRules[truckSuffix]) {
+        const rules = batchRules[truckSuffix];
+        const normalizedDest = destination.toLowerCase().trim();
+        
+        // Find matching rule (case-insensitive partial match)
+        const matchingRule = rules.find(rule => {
+          const ruleDestination = rule.destination.toLowerCase().trim();
+          return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+        });
+        
+        if (matchingRule) {
+          return {
+            extraFuel: matchingRule.extraLiters,
+            matched: true,
+            batchName,
+            truckSuffix,
+            destinationOverride: true
+          };
+        }
+      }
+    }
+    
+    // Return batch default if matched, or 0 if not configured
+    if (batchName) {
       return { 
-        extraFuel: 60, 
+        extraFuel: defaultExtraFuel, 
         matched: true, 
-        batchName: 'batch_60',
+        batchName,
         truckSuffix 
       };
     }
     
-    // No match found - return default with empty suggestions
-    // (findSimilarStrings feature not implemented)
+    // No match found - return 0 to force manual configuration
+    // Admin will be notified to configure this truck batch
     
     return { 
-      extraFuel: 60, 
+      extraFuel: 0, 
       matched: false, 
       truckSuffix,
       suggestions: undefined
@@ -419,9 +461,10 @@ export class FuelConfigService {
   
   /**
    * Get extra fuel (simplified - for backward compatibility)
+   * When destination is not needed, use this method
    */
   static getExtraFuelSimple(truckNo: string, config?: FuelConfig): number {
-    const result = this.getExtraFuel(truckNo, config);
+    const result = this.getExtraFuel(truckNo, undefined, config);
     return result.extraFuel;
   }
   

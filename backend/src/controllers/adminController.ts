@@ -632,6 +632,166 @@ export const removeTruckFromBatch = async (req: AuthRequest, res: Response): Pro
 };
 
 /**
+ * Add destination fuel rule for a truck in a batch
+ */
+export const addDestinationRule = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckSuffix, destination, extraLiters } = req.body;
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config || !config.truckBatches) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const suffix = truckSuffix.toLowerCase();
+
+    // Find which batch the truck belongs to
+    let truck = config.truckBatches.batch_100.find(t => t.truckSuffix === suffix);
+    if (truck) {
+      if (!truck.destinationRules) truck.destinationRules = [];
+      truck.destinationRules.push({ destination, extraLiters });
+    } else {
+      truck = config.truckBatches.batch_80.find(t => t.truckSuffix === suffix);
+      if (truck) {
+        if (!truck.destinationRules) truck.destinationRules = [];
+        truck.destinationRules.push({ destination, extraLiters });
+      } else {
+        truck = config.truckBatches.batch_60.find(t => t.truckSuffix === suffix);
+        if (truck) {
+          if (!truck.destinationRules) truck.destinationRules = [];
+          truck.destinationRules.push({ destination, extraLiters });
+        } else {
+          throw new ApiError(404, 'Truck not found in any batch');
+        }
+      }
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Destination rule added for truck ${truckSuffix}: ${destination} -> ${extraLiters}L by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Destination rule added successfully',
+      data: truck,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Update destination fuel rule
+ */
+export const updateDestinationRule = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckSuffix, oldDestination, newDestination, extraLiters } = req.body;
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config || !config.truckBatches) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const suffix = truckSuffix.toLowerCase();
+    let found = false;
+
+    // Search all batches
+    const batches = [config.truckBatches.batch_100, config.truckBatches.batch_80, config.truckBatches.batch_60];
+    
+    for (const batch of batches) {
+      const truck = batch.find(t => t.truckSuffix === suffix);
+      if (truck && truck.destinationRules) {
+        const ruleIndex = truck.destinationRules.findIndex(r => r.destination === oldDestination);
+        if (ruleIndex !== -1) {
+          truck.destinationRules[ruleIndex] = { destination: newDestination || oldDestination, extraLiters };
+          found = true;
+          break;
+        }
+      }
+    }
+
+    if (!found) {
+      throw new ApiError(404, 'Destination rule not found');
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Destination rule updated for truck ${truckSuffix}: ${oldDestination} -> ${extraLiters}L by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Destination rule updated successfully',
+      data: config.truckBatches,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Delete destination fuel rule
+ */
+export const deleteDestinationRule = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckSuffix, destination } = req.params;
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config || !config.truckBatches) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const suffix = truckSuffix.toLowerCase();
+    let found = false;
+
+    // Search all batches
+    const batches = [config.truckBatches.batch_100, config.truckBatches.batch_80, config.truckBatches.batch_60];
+    
+    for (const batch of batches) {
+      const truck = batch.find(t => t.truckSuffix === suffix);
+      if (truck && truck.destinationRules) {
+        const originalLength = truck.destinationRules.length;
+        truck.destinationRules = truck.destinationRules.filter(r => r.destination !== destination);
+        if (truck.destinationRules.length < originalLength) {
+          found = true;
+          break;
+        }
+      }
+    }
+
+    if (!found) {
+      throw new ApiError(404, 'Destination rule not found');
+    }
+
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Destination rule deleted for truck ${truckSuffix}: ${destination} by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Destination rule deleted successfully',
+      data: config.truckBatches,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Get standard allocations
  */
 export const getStandardAllocations = async (req: AuthRequest, res: Response): Promise<void> => {

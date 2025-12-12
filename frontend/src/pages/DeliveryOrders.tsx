@@ -544,7 +544,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       }
       
       // Check truck batch configuration for extra fuel
-      const truckBatchInfo = FuelConfigService.getExtraFuel(deliveryOrder.truckNo);
+      // Pass destination to support destination-based fuel rules
+      const truckBatchInfo = FuelConfigService.getExtraFuel(
+        deliveryOrder.truckNo, 
+        deliveryOrder.destination
+      );
       let extraFuel: number | null = truckBatchInfo.matched ? truckBatchInfo.extraFuel : null;
       let missingExtraFuel = !truckBatchInfo.matched && truckBatchInfo.truckSuffix !== '';
       
@@ -553,7 +557,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       if (missingExtraFuel) {
         console.log(`  ⚠️ Truck suffix "${truckBatchInfo.truckSuffix}" not configured - will notify admin`);
       } else {
-        console.log(`  → Extra fuel: ${extraFuel}L (${truckBatchInfo.batchName})`);
+        const overrideInfo = truckBatchInfo.destinationOverride 
+          ? ` (destination override for ${deliveryOrder.destination})` 
+          : ` (${truckBatchInfo.batchName})`;
+        console.log(`  → Extra fuel: ${extraFuel}L${overrideInfo}`);
       }
       
       // Show info message if any configuration is missing

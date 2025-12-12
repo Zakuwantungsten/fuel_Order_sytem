@@ -211,7 +211,7 @@ export const createMissingConfigNotification = async (
         truckSuffix: metadata.truckSuffix,
         missingFields,
       },
-      recipients: ['admin', 'super_admin'],
+      recipients: ['fuel_order_maker', 'admin', 'super_admin'],
       createdBy,
     });
 
