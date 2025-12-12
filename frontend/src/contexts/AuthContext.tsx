@@ -3,6 +3,8 @@ import { AuthState, AuthUser, AuthResponse, LoginCredentials } from '../types';
 import { getRolePermissions } from '../utils/permissions';
 import { authAPI } from '../services/api';
 import { activityTracker } from '../utils/activityTracker';
+import { setSystemTimezone } from '../utils/timezone';
+import systemConfigAPI from '../services/systemConfigService';
 
 // Auth Actions
 type AuthAction =
@@ -156,6 +158,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
 
     checkExistingSession();
+
+    // Load system settings to set timezone
+    const loadSystemSettings = async () => {
+      try {
+        const settings = await systemConfigAPI.getSystemSettings();
+        if (settings?.general?.timezone) {
+          setSystemTimezone(settings.general.timezone);
+        }
+      } catch (error) {
+        // Silently fail - use default timezone
+        console.log('Could not load system settings, using default timezone');
+      }
+    };
+
+    loadSystemSettings();
   }, []);
 
   // Login function

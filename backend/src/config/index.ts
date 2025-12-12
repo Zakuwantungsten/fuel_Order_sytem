@@ -34,6 +34,18 @@ export const config = {
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || '',
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
   r2BucketName: process.env.R2_BUCKET_NAME || 'fuel-order-backups',
+
+  // Email Configuration
+  emailHost: process.env.EMAIL_HOST || process.env.SMTP_HOST || '',
+  emailPort: parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || '587', 10),
+  emailSecure: process.env.EMAIL_SECURE === 'true' || process.env.SMTP_SECURE === 'true',
+  emailUser: process.env.EMAIL_USER || process.env.SMTP_USER || '',
+  emailPassword: process.env.EMAIL_PASSWORD || process.env.SMTP_PASS || '',
+  emailFrom: process.env.EMAIL_FROM || '',
+  emailFromName: process.env.EMAIL_FROM_NAME || 'Fuel Order System',
+
+  // System Timezone
+  timezone: process.env.TZ || 'Africa/Nairobi',
 };
 
 // Validate required environment variables

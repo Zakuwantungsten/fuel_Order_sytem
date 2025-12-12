@@ -13,7 +13,6 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
     requireLowercase: true,
     requireNumbers: true,
     requireSpecialChars: true,
-    expiryDays: 90,
     historyCount: 5,
   });
 
@@ -57,6 +56,24 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
     }
   };
 
+  const savePasswordPolicy = async () => {
+    try {
+      await systemAdminAPI.updateSecuritySettings('password', passwordPolicy);
+      onMessage('success', 'Password policy saved successfully');
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Failed to save password policy');
+    }
+  };
+
+  const saveSessionSettings = async () => {
+    try {
+      await systemAdminAPI.updateSecuritySettings('session', sessionSettings);
+      onMessage('success', 'Session settings saved successfully');
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Failed to save session settings');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -73,29 +90,16 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
           Password Policy
         </h3>
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Minimum Length
-              </label>
-              <input
-                type="number"
-                value={passwordPolicy.minLength}
-                onChange={(e) => setPasswordPolicy({ ...passwordPolicy, minLength: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Password Expiry (days)
-              </label>
-              <input
-                type="number"
-                value={passwordPolicy.expiryDays}
-                onChange={(e) => setPasswordPolicy({ ...passwordPolicy, expiryDays: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Minimum Length
+            </label>
+            <input
+              type="number"
+              value={passwordPolicy.minLength}
+              onChange={(e) => setPasswordPolicy({ ...passwordPolicy, minLength: parseInt(e.target.value) })}
+              className="w-full max-w-xs px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
           </div>
           <div className="space-y-2">
             {[
@@ -115,7 +119,10 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
               </label>
             ))}
           </div>
-          <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+          <button 
+            onClick={savePasswordPolicy}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
             Save Password Policy
           </button>
         </div>
@@ -150,7 +157,10 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
               Allow only one active session per user
             </span>
           </label>
-          <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+          <button 
+            onClick={saveSessionSettings}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
             Save Session Settings
           </button>
         </div>

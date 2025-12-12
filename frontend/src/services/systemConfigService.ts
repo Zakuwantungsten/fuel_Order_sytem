@@ -77,12 +77,15 @@ export interface R2Configuration {
 }
 
 export interface EmailConfiguration {
-  emailHost: string;
-  emailPort: string;
-  emailUser: string;
-  emailPassword: string;
-  emailFrom: string;
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
+  from: string;
+  fromName: string;
   isConfigured: boolean;
+  source?: 'database' | 'environment';
 }
 
 export interface DatabaseConfiguration {
@@ -199,6 +202,15 @@ export const systemConfigAPI = {
   getEmailConfiguration: async (): Promise<EmailConfiguration> => {
     const response = await apiClient.get('/system-admin/config/email');
     return response.data.data;
+  },
+
+  /**
+   * Update email configuration
+   * PUT /api/system-admin/config/email
+   */
+  updateEmailConfiguration: async (config: Partial<EmailConfiguration>) => {
+    const response = await apiClient.put('/system-admin/config/email', config);
+    return response.data;
   },
 
   /**

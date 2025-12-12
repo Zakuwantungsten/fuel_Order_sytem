@@ -32,7 +32,7 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
   const [settings, setSettings] = useState<SystemSettings>({
     general: {
       systemName: 'Fuel Order Management System',
-      timezone: 'Africa/Dar_es_Salaam',
+      timezone: 'Africa/Nairobi',
       dateFormat: 'DD/MM/YYYY',
       language: 'en',
     },
@@ -173,6 +173,24 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
       onMessage('success', result.message);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'R2 connection test failed');
+    }
+  };
+
+  const saveEmailConfiguration = async () => {
+    setSaving(true);
+    try {
+      if (!emailConfig.host || !emailConfig.user || !emailConfig.from) {
+        onMessage('error', 'Please fill in Host, Username, and From Email');
+        return;
+      }
+      await systemConfigAPI.updateEmailConfiguration(emailConfig);
+      onMessage('success', 'Email configuration updated successfully. Email service will be reinitialized.');
+      // Reload email config to get updated masked values
+      await loadIntegrations();
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Failed to update email configuration');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -601,6 +619,154 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                   </div>
                 )}
 
+                {/* Notification Settings */}
+                {activeSection === 'notifications' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Bell className="w-5 h-5 text-blue-600" />
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        Notification Settings
+                      </h3>
+                    </div>
+                    <div className="space-y-4">
+                      {/* Email Notifications Toggle */}
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                        <label className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={settings.notifications.emailNotifications}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                notifications: { ...settings.notifications, emailNotifications: e.target.checked },
+                              })
+                            }
+                            className="w-5 h-5 text-blue-600 rounded"
+                          />
+                          <div>
+                            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 block">
+                              Enable Email Notifications
+                            </span>
+                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                              Send email notifications for important system events
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Alert Types */}
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Alert Types</h4>
+                        <label className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={settings.notifications.criticalAlerts}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                notifications: { ...settings.notifications, criticalAlerts: e.target.checked },
+                              })
+                            }
+                            className="w-4 h-4 text-red-600 rounded"
+                          />
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            Critical Alerts (high priority system issues)
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={settings.notifications.dailySummary}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                notifications: { ...settings.notifications, dailySummary: e.target.checked },
+                              })
+                            }
+                            className="w-4 h-4 text-blue-600 rounded"
+                          />
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            Daily Summary (daily activity reports)
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={settings.notifications.weeklyReport}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                notifications: { ...settings.notifications, weeklyReport: e.target.checked },
+                              })
+                            }
+                            className="w-4 h-4 text-purple-600 rounded"
+                          />
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            Weekly Report (comprehensive weekly statistics)
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Performance Thresholds */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Slow Query Threshold (ms)
+                          </label>
+                          <input
+                            type="number"
+                            value={settings.notifications.slowQueryThreshold}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                notifications: { ...settings.notifications, slowQueryThreshold: parseInt(e.target.value) },
+                              })
+                            }
+                            min="100"
+                            step="100"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Queries slower than this will trigger alerts
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Storage Warning Threshold (%)
+                          </label>
+                          <input
+                            type="number"
+                            value={settings.notifications.storageWarningThreshold}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                notifications: { ...settings.notifications, storageWarningThreshold: parseInt(e.target.value) },
+                              })
+                            }
+                            min="50"
+                            max="95"
+                            step="5"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Alert when storage usage exceeds this percentage
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => saveSettings('notifications')}
+                        disabled={saving}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
+                      >
+                        {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save Notification Settings
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Maintenance Mode */}
                 {activeSection === 'maintenance' && (
                   <div className="space-y-4">
@@ -714,27 +880,121 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <Mail className="w-5 h-5 text-green-600" />
-                      <h4 className="font-semibold text-gray-900 dark:text-gray-100">Email Configuration</h4>
+                      <h4 className="font-semibold text-gray-900 dark:text-gray-100">Email Configuration (SMTP)</h4>
                     </div>
                     {emailConfig?.isConfigured ? (
-                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          ({emailConfig.source === 'database' ? 'Database' : 'Environment'})
+                        </span>
+                      </div>
                     ) : (
                       <XCircle className="w-5 h-5 text-red-600" />
                     )}
                   </div>
                   {emailConfig && (
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Host:</span>
-                        <span className="text-gray-900 dark:text-gray-100 font-mono">{emailConfig.emailHost}</span>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            SMTP Host
+                          </label>
+                          <input
+                            type="text"
+                            value={emailConfig.host || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, host: e.target.value })}
+                            placeholder="smtp.gmail.com"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Port
+                          </label>
+                          <input
+                            type="number"
+                            value={emailConfig.port || 587}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, port: parseInt(e.target.value) })}
+                            placeholder="587"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Username
+                          </label>
+                          <input
+                            type="text"
+                            value={emailConfig.user || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, user: e.target.value })}
+                            placeholder="your-email@example.com"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Password
+                          </label>
+                          <input
+                            type="password"
+                            placeholder="Leave blank to keep current"
+                            onChange={(e) => setEmailConfig({ ...emailConfig, password: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            From Email
+                          </label>
+                          <input
+                            type="email"
+                            value={emailConfig.from || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, from: e.target.value })}
+                            placeholder="noreply@example.com"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            From Name
+                          </label>
+                          <input
+                            type="text"
+                            value={emailConfig.fromName || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, fromName: e.target.value })}
+                            placeholder="Fuel Order System"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Port:</span>
-                        <span className="text-gray-900 dark:text-gray-100 font-mono">{emailConfig.emailPort}</span>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={emailConfig.secure || false}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, secure: e.target.checked })}
+                            className="w-4 h-4 text-green-600 rounded"
+                          />
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            Use SSL/TLS (Port 465)
+                          </span>
+                        </label>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">User:</span>
-                        <span className="text-gray-900 dark:text-gray-100 font-mono">{emailConfig.emailUser}</span>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                        <p className="text-xs text-blue-800 dark:text-blue-200">
+                          💡 <strong>Tip:</strong> For Gmail, use smtp.gmail.com:587 with an App Password. For Office 365, use smtp.office365.com:587
+                        </p>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          onClick={saveEmailConfiguration}
+                          disabled={saving}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50"
+                        >
+                          {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          Save Email Configuration
+                        </button>
                       </div>
                     </div>
                   )}

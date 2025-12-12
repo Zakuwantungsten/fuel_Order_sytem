@@ -185,4 +185,7 @@ router.put('/system-settings', authorize('super_admin'), asyncHandler(adminContr
 router.post('/maintenance-mode/toggle', authorize('super_admin'), asyncHandler(adminController.toggleMaintenanceMode));
 router.get('/maintenance-mode/status', asyncHandler(adminController.getMaintenanceStatus)); // Public endpoint
 
+// Security Settings
+router.put('/security-settings', authorize('super_admin'), asyncHandler(adminController.updateSecuritySettings));
+
 export default router;

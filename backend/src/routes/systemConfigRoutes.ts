@@ -31,6 +31,7 @@ router.post('/r2/test', systemConfigController.testR2Connection);
 
 // Email Configuration
 router.get('/email', systemConfigController.getEmailConfiguration);
+router.put('/email', systemConfigController.updateEmailConfiguration);
 
 // Database Configuration
 router.get('/database', systemConfigController.getDatabaseConfiguration);

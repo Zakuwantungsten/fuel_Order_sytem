@@ -1244,6 +1244,12 @@ export const systemAdminAPI = {
     const response = await apiClient.get('/admin/maintenance-mode/status');
     return response.data.data;
   },
+
+  // Security Settings
+  updateSecuritySettings: async (type: 'password' | 'session', settings: any) => {
+    const response = await apiClient.put('/admin/security-settings', { type, settings });
+    return response.data;
+  },
 };
 
 // Backup & Recovery API

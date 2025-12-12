@@ -1390,7 +1390,7 @@ export const getSystemSettings = async (req: AuthRequest, res: Response): Promis
         systemSettings: {
           general: {
             systemName: 'Fuel Order Management System',
-            timezone: 'Africa/Dar_es_Salaam',
+            timezone: 'Africa/Nairobi',
             dateFormat: 'DD/MM/YYYY',
             language: 'en',
           },
@@ -1588,6 +1588,72 @@ export const getMaintenanceStatus = async (req: AuthRequest, res: Response): Pro
     });
   } catch (error: any) {
     logger.error('Error getting maintenance status:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update security settings (password policy or session settings)
+ */
+export const updateSecuritySettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { type, settings } = req.body;
+
+    if (!type || !settings) {
+      throw new ApiError(400, 'Type and settings are required');
+    }
+
+    const validTypes = ['password', 'session'];
+    if (!validTypes.includes(type)) {
+      throw new ApiError(400, 'Invalid security settings type');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'security_settings',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      // Create default security config
+      config = await SystemConfig.create({
+        configType: 'security_settings',
+        securitySettings: {},
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    // Update specific security setting type
+    if (!config.securitySettings) {
+      config.securitySettings = {};
+    }
+
+    config.securitySettings[type as keyof typeof config.securitySettings] = settings;
+    config.lastUpdatedBy = req.user?.username || 'system';
+
+    await config.save();
+
+    // Log the change
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'security_settings',
+      resourceId: config.id,
+      details: `Updated ${type} security settings`,
+      severity: 'high',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    logger.info(`Security settings updated: ${type} by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: `${type} security settings updated successfully`,
+      data: config.securitySettings,
+    });
+  } catch (error: any) {
+    logger.error('Error updating security settings:', error);
     throw error;
   }
 };

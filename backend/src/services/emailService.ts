@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
-import { User } from '../models';
+import { User, SystemConfig } from '../models';
 import logger from '../utils/logger';
+import { config as appConfig } from '../config';
 
 interface EmailConfig {
   host: string;
@@ -10,6 +11,8 @@ interface EmailConfig {
     user: string;
     pass: string;
   };
+  from?: string;
+  fromName?: string;
 }
 
 interface CriticalEmailOptions {
@@ -35,26 +38,62 @@ interface PasswordResetEmailOptions {
 class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private isConfigured: boolean = false;
+  private currentConfig: EmailConfig | null = null;
 
   constructor() {
     this.initialize();
   }
 
-  private initialize() {
-    const config: EmailConfig = {
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
+  /**
+   * Get email configuration from SystemConfig or environment variables
+   */
+  private async getEmailConfig(): Promise<EmailConfig> {
+    try {
+      // Try to get config from database first
+      const systemConfig = await SystemConfig.findOne({ 
+        configType: 'system',
+        isDeleted: false,
+      });
+
+      if (systemConfig?.systemSettings?.email?.host && systemConfig?.systemSettings?.email?.user) {
+        return {
+          host: systemConfig.systemSettings.email.host,
+          port: systemConfig.systemSettings.email.port || 587,
+          secure: systemConfig.systemSettings.email.secure || false,
+          auth: {
+            user: systemConfig.systemSettings.email.user,
+            pass: systemConfig.systemSettings.email.password,
+          },
+          from: systemConfig.systemSettings.email.from,
+          fromName: systemConfig.systemSettings.email.fromName || 'Fuel Order System',
+        };
+      }
+    } catch (error) {
+      logger.warn('Could not fetch email config from database, falling back to env vars');
+    }
+
+    // Fallback to environment variables
+    return {
+      host: appConfig.emailHost || process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: appConfig.emailPort || parseInt(process.env.SMTP_PORT || '587'),
+      secure: appConfig.emailSecure || process.env.SMTP_SECURE === 'true',
       auth: {
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
+        user: appConfig.emailUser || process.env.SMTP_USER || '',
+        pass: appConfig.emailPassword || process.env.SMTP_PASS || '',
       },
+      from: appConfig.emailFrom || process.env.EMAIL_FROM || '',
+      fromName: appConfig.emailFromName || process.env.EMAIL_FROM_NAME || 'Fuel Order System',
     };
+  }
+
+  private async initialize() {
+    const config = await this.getEmailConfig();
 
     // Only initialize if credentials are provided
     if (config.auth.user && config.auth.pass) {
       try {
         this.transporter = nodemailer.createTransport(config);
+        this.currentConfig = config;
         this.isConfigured = true;
         logger.info('Email service initialized successfully');
       } catch (error) {
@@ -65,6 +104,13 @@ class EmailService {
       logger.warn('Email service not configured - missing SMTP credentials');
       this.isConfigured = false;
     }
+  }
+
+  /**
+   * Reinitialize email service with updated configuration
+   */
+  async reinitialize(): Promise<void> {
+    await this.initialize();
   }
 
   /**
@@ -141,7 +187,9 @@ class EmailService {
       `;
 
       await this.transporter.sendMail({
-        from: `"Fuel Order System" <${process.env.SMTP_USER}>`,
+        from: this.currentConfig?.from 
+          ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
+          : `"${this.currentConfig?.fromName || 'Fuel Order System'}" <${this.currentConfig?.auth.user}>`,
         to: recipients.join(', '),
         subject: `${priorityEmoji[options.priority]} [${options.priority.toUpperCase()}] ${options.subject}`,
         html: emailContent,
@@ -218,7 +266,9 @@ class EmailService {
       `;
 
       await this.transporter.sendMail({
-        from: `"Fuel Order System - No Reply" <${process.env.SMTP_USER}>`,
+        from: this.currentConfig?.from 
+          ? `"${this.currentConfig.fromName} - No Reply" <${this.currentConfig.from}>`
+          : `"Fuel Order System - No Reply" <${this.currentConfig?.auth.user}>`,
         to: options.email,
         subject: '🔐 Password Reset Request - Fuel Order System',
         html: emailContent,
@@ -282,7 +332,9 @@ class EmailService {
       `;
 
       await this.transporter.sendMail({
-        from: `"Fuel Order System - Security" <${process.env.SMTP_USER}>`,
+        from: this.currentConfig?.from 
+          ? `"${this.currentConfig.fromName} - Security" <${this.currentConfig.from}>`
+          : `"Fuel Order System - Security" <${this.currentConfig?.auth.user}>`,
         to: email,
         subject: '✅ Password Changed Successfully - Fuel Order System',
         html: emailContent,
@@ -317,7 +369,9 @@ class EmailService {
       const emailContent = this.generateDailySummaryEmail(stats);
 
       await this.transporter.sendMail({
-        from: `"Fuel Order System" <${process.env.SMTP_USER}>`,
+        from: this.currentConfig?.from 
+          ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
+          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`,
         to: superAdmins.map((admin) => admin.email).join(', '),
         subject: `📊 Daily Summary - ${new Date().toLocaleDateString()}`,
         html: emailContent,
@@ -349,7 +403,9 @@ class EmailService {
       const emailContent = this.generateWeeklySummaryEmail(stats);
 
       await this.transporter.sendMail({
-        from: `"Fuel Order System" <${process.env.SMTP_USER}>`,
+        from: this.currentConfig?.from 
+          ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
+          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`,
         to: superAdmins.map((admin) => admin.email).join(', '),
         subject: `📈 Weekly Report - Week of ${new Date().toLocaleDateString()}`,
         html: emailContent,
@@ -378,7 +434,9 @@ class EmailService {
       const recipients = Array.isArray(to) ? to : [to];
 
       await this.transporter.sendMail({
-        from: `"Fuel Order System" <${process.env.SMTP_USER}>`,
+        from: this.currentConfig?.from 
+          ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
+          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`,
         to: recipients.join(', '),
         subject,
         html: this.wrapInTemplate(subject, message),

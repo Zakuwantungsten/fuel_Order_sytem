@@ -25,7 +25,7 @@ export const getSystemSettings = async (req: AuthRequest, res: Response): Promis
         systemSettings: {
           general: {
             systemName: 'Fuel Order Management System',
-            timezone: 'Africa/Dar_es_Salaam',
+            timezone: 'Africa/Nairobi',
             dateFormat: 'DD/MM/YYYY',
             language: 'en',
           },
@@ -472,13 +472,26 @@ export const testR2Connection = async (req: AuthRequest, res: Response): Promise
  */
 export const getEmailConfiguration = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    // Get from SystemConfig first, fallback to env vars
+    const systemConfig = await SystemConfig.findOne({
+      configType: 'system',
+      isDeleted: false,
+    });
+
     const emailConfig = {
-      emailHost: process.env.EMAIL_HOST || 'Not configured',
-      emailPort: process.env.EMAIL_PORT || 'Not configured',
-      emailUser: process.env.EMAIL_USER || 'Not configured',
-      emailPassword: process.env.EMAIL_PASSWORD ? '***************' : 'Not configured',
-      emailFrom: process.env.EMAIL_FROM || 'Not configured',
-      isConfigured: !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASSWORD),
+      host: systemConfig?.systemSettings?.email?.host || process.env.EMAIL_HOST || '',
+      port: systemConfig?.systemSettings?.email?.port || parseInt(process.env.EMAIL_PORT || '587'),
+      secure: systemConfig?.systemSettings?.email?.secure ?? (process.env.EMAIL_SECURE === 'true'),
+      user: systemConfig?.systemSettings?.email?.user || process.env.EMAIL_USER || '',
+      password: (systemConfig?.systemSettings?.email?.password || process.env.EMAIL_PASSWORD) ? '***************' : '',
+      from: systemConfig?.systemSettings?.email?.from || process.env.EMAIL_FROM || '',
+      fromName: systemConfig?.systemSettings?.email?.fromName || process.env.EMAIL_FROM_NAME || 'Fuel Order System',
+      isConfigured: !!(
+        (systemConfig?.systemSettings?.email?.host || process.env.EMAIL_HOST) && 
+        (systemConfig?.systemSettings?.email?.user || process.env.EMAIL_USER) && 
+        (systemConfig?.systemSettings?.email?.password || process.env.EMAIL_PASSWORD)
+      ),
+      source: systemConfig?.systemSettings?.email?.host ? 'database' : 'environment',
     };
 
     // Audit log
@@ -500,6 +513,86 @@ export const getEmailConfiguration = async (req: AuthRequest, res: Response): Pr
     });
   } catch (error: any) {
     logger.error('Error getting email configuration:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update email configuration
+ * PUT /api/system-config/email
+ * Super Admin Only
+ */
+export const updateEmailConfiguration = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { host, port, secure, user, password, from, fromName } = req.body;
+
+    if (!host || !user || !from) {
+      throw new ApiError(400, 'Host, user, and from address are required');
+    }
+
+    let systemConfig = await SystemConfig.findOne({
+      configType: 'system',
+      isDeleted: false,
+    });
+
+    if (!systemConfig) {
+      // Create default config if it doesn't exist
+      systemConfig = new SystemConfig({
+        configType: 'system',
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    // Initialize systemSettings if not exists
+    if (!systemConfig.systemSettings) {
+      systemConfig.systemSettings = {};
+    }
+
+    // Update email configuration
+    systemConfig.systemSettings.email = {
+      host,
+      port: port || 587,
+      secure: secure || false,
+      user,
+      password: password || systemConfig.systemSettings.email?.password || '',
+      from,
+      fromName: fromName || 'Fuel Order System',
+    };
+
+    systemConfig.lastUpdatedBy = req.user?.username || 'system';
+    await systemConfig.save();
+
+    // Reinitialize email service with new config
+    const emailService = require('../services/emailService').default;
+    await emailService.reinitialize();
+
+    // Audit log
+    await AuditService.log({
+      action: 'CONFIG_CHANGE',
+      resourceType: 'config',
+      resourceId: 'email_configuration',
+      userId: req.user?.userId || 'system',
+      username: req.user?.username || 'system',
+      details: `Email configuration updated: Host=${host}, User=${user}, From=${from}`,
+      severity: 'high',
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Email configuration updated successfully',
+      data: {
+        host,
+        port,
+        secure,
+        user,
+        password: '***************',
+        from,
+        fromName,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error updating email configuration:', error);
     throw error;
   }
 };
@@ -570,7 +663,7 @@ export const getEnvironmentVariables = async (req: AuthRequest, res: Response): 
     const safeEnvVars = {
       nodeEnv: process.env.NODE_ENV || 'development',
       port: process.env.PORT || '5000',
-      timezone: process.env.TZ || 'Africa/Dar_es_Salaam',
+      timezone: process.env.TZ || 'Africa/Nairobi',
       
       // Masked sensitive variables (show only if configured)
       mongoConfigured: !!process.env.MONGODB_URI,

@@ -74,6 +74,16 @@ export interface ISystemSettings {
     slowQueryThreshold: number; // ms
     storageWarningThreshold: number; // percentage
   };
+  // Email Configuration
+  email?: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    password: string;
+    from: string;
+    fromName: string;
+  };
   // Maintenance Mode
   maintenance?: {
     enabled: boolean;
@@ -82,9 +92,25 @@ export interface ISystemSettings {
   };
 }
 
+// Security Settings
+export interface ISecuritySettings {
+  password?: {
+    minLength: number;
+    requireUppercase: boolean;
+    requireLowercase: boolean;
+    requireNumbers: boolean;
+    requireSpecialChars: boolean;
+    historyCount: number;
+  };
+  session?: {
+    timeoutMinutes: number;
+    singleSession: boolean;
+  };
+}
+
 // System Configuration Document
 export interface ISystemConfig {
-  configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'general' | 'system_settings';
+  configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'general' | 'system_settings' | 'security_settings';
   fuelStations?: IFuelStation[];
   routes?: IRouteConfig[];
   truckBatches?: {
@@ -95,6 +121,7 @@ export interface ISystemConfig {
   standardAllocations?: IStandardAllocations;
   defaultFuelPrice?: number;
   systemSettings?: ISystemSettings;
+  securitySettings?: ISecuritySettings;
   lastUpdatedBy: string;
   isDeleted: boolean;
   deletedAt?: Date;
@@ -152,7 +179,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     configType: {
       type: String,
       required: true,
-      enum: ['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'general', 'system_settings'],
+      enum: ['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'general', 'system_settings', 'security_settings'],
       unique: true,
     },
     fuelStations: [fuelStationSchema],
@@ -167,7 +194,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     systemSettings: {
       general: {
         systemName: { type: String, default: 'Fuel Order Management System' },
-        timezone: { type: String, default: 'Africa/Dar_es_Salaam' },
+        timezone: { type: String, default: 'Africa/Nairobi' },
         dateFormat: { type: String, default: 'DD/MM/YYYY' },
         language: { type: String, default: 'en' },
       },
@@ -196,10 +223,33 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         slowQueryThreshold: { type: Number, default: 500 },
         storageWarningThreshold: { type: Number, default: 80 },
       },
+      email: {
+        host: { type: String, default: '' },
+        port: { type: Number, default: 587 },
+        secure: { type: Boolean, default: false },
+        user: { type: String, default: '' },
+        password: { type: String, default: '' },
+        from: { type: String, default: '' },
+        fromName: { type: String, default: 'Fuel Order System' },
+      },
       maintenance: {
         enabled: { type: Boolean, default: false },
         message: { type: String, default: 'System is under maintenance. Please check back later.' },
         allowedRoles: { type: [String], default: ['super_admin'] },
+      },
+    },
+    securitySettings: {
+      password: {
+        minLength: { type: Number, default: 12 },
+        requireUppercase: { type: Boolean, default: true },
+        requireLowercase: { type: Boolean, default: true },
+        requireNumbers: { type: Boolean, default: true },
+        requireSpecialChars: { type: Boolean, default: true },
+        historyCount: { type: Number, default: 5 },
+      },
+      session: {
+        timeoutMinutes: { type: Number, default: 30 },
+        singleSession: { type: Boolean, default: false },
       },
     },
     lastUpdatedBy: { type: String, required: true },

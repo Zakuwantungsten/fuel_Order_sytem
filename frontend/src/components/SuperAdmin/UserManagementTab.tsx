@@ -280,7 +280,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
-              <tr>
+              <tr key="header">
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   User
                 </th>
@@ -303,13 +303,13 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
-                <tr>
+                <tr key="loading">
                   <td colSpan={6} className="px-4 py-8 text-center">
                     <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
-                <tr>
+                <tr key="no-users">
                   <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     No users found
                   </td>
