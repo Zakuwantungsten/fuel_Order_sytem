@@ -246,15 +246,12 @@ LPO 2461 is fully cancelled - all 1 entries have been reverted.
 
 
 
-kwa overviw page to fetch the percent increase data dyanimcally instead of placeholder values
-cookies not functioning - fuel order maker not remembering dark mode 
-all those interfaces for mobile arenow zoomout way to far - they are kinda okay - but try to do mobile responsiveness to seee which is cooler - to show a table rather than a card - nice idea hamdu
+
 go through all things one by one - its like they have changed  and there might unlooked or overlooked erros 
 
 implement data archinving and search limit
 revelacnt errors when toggling return and going in the lpo making
-in the mobile screen mode for the lpo the drop down appears outside the screen - fix this - fix all drop downs appearing outside screens and table like for do management to shows instead of cards
-making the text responsive or rather not to overlap or show dots 
+
 remove mbeya yard from reports and analyts
 
 to remove this - Role-Based Access Control
@@ -311,9 +308,10 @@ PAYMENT MANAGER
 payment123
 Click on any account above to auto-fill credentials - in the login in screen 
 
-
-search limits for faster searching - in lpos but not in do - 
+ 
 inspect if the system can handle years' worth of data 
 backup at cloudflare 
-see and do research how cloudflare work and backup excel files and also json file both formats 
+
 button to shutdown the site when under maintainance
+token expire after inactivity
+check how total is exported in documents
