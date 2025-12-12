@@ -22,7 +22,8 @@ import {
   Users,
   Zap,
   TrendingUp,
-  Route
+  Route,
+  Key
 } from 'lucide-react';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
@@ -32,6 +33,7 @@ import PaymentManager from './PaymentManager';
 import SuperAdminDashboard from './SuperAdminDashboard';
 import StandardAdminDashboard from './StandardAdminDashboard';
 import ManagerView from './ManagerView';
+import DriverCredentialsManager from '../pages/Admin/DriverCredentialsManager';
 import OfficerPortal from './OfficerPortal';
 import PendingYardFuel from './PendingYardFuel';
 import NotificationsPage from './NotificationsPage';
@@ -185,6 +187,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_users', label: 'User Management', icon: Users },
         { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Fuel },
         { id: 'sa_routes', label: 'Routes', icon: Route },
+        { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
         { id: 'sa_config', label: 'Configuration', icon: Settings },
         { id: 'sa_audit', label: 'Audit & Logs', icon: FileSearch },
         { id: 'sa_security', label: 'Security', icon: Shield },
@@ -209,6 +212,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'admin_users', label: 'User Support', icon: Users },
         { id: 'admin_fuel_stations', label: 'Fuel Stations', icon: Fuel },
         { id: 'admin_routes', label: 'Routes', icon: Route },
+        { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
         { id: 'admin_reports', label: 'Admin Reports', icon: TrendingUp },
       ];
     }
@@ -219,7 +223,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'do', label: 'DO Management', icon: FileText },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: ClipboardList },
-        { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
         { id: 'reports', label: 'Reports', icon: BarChart3 },
       ];
     }
@@ -307,6 +310,9 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <StandardAdminDashboard user={user} section="routes" />;
       case 'admin_reports':
         return <StandardAdminDashboard user={user} section="reports" />;
+      
+      case 'driver_credentials':
+        return <DriverCredentialsManager />;
       
       case 'manager_view':
         return <ManagerView user={user} />;

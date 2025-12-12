@@ -17,6 +17,7 @@ import publicConfigRoutes from './publicConfigRoutes';
 import notificationRoutes from './notificationRoutes';
 import archivalRoutes from './archivalRoutes';
 import systemConfigRoutes from './systemConfigRoutes';
+import driverCredentialRoutes from './driverCredentialRoutes';
 
 const router = Router();
 
@@ -39,5 +40,6 @@ router.use('/analytics', analyticsRoutes);
 router.use('/system-config', configRoutes);
 router.use('/system-admin/config', systemConfigRoutes); // Super admin only system configuration
 router.use('/archival', archivalRoutes);
+router.use('/driver-credentials', driverCredentialRoutes); // Driver credential management
 
 export default router;
