@@ -75,7 +75,7 @@ const getInitialTab = (userRole: string): string => {
     if (userRole === 'admin' || userRole === 'boss') {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'reports',
-        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports', 'admin_quick'
+        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports'
       ];
     }
     if (userRole === 'fuel_order_maker') {
@@ -210,7 +210,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'admin_fuel_stations', label: 'Fuel Stations', icon: Fuel },
         { id: 'admin_routes', label: 'Routes', icon: Route },
         { id: 'admin_reports', label: 'Admin Reports', icon: TrendingUp },
-        { id: 'admin_quick', label: 'Quick Actions', icon: Zap },
       ];
     }
 
@@ -308,8 +307,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <StandardAdminDashboard user={user} section="routes" />;
       case 'admin_reports':
         return <StandardAdminDashboard user={user} section="reports" />;
-      case 'admin_quick':
-        return <StandardAdminDashboard user={user} section="quick-actions" />;
       
       case 'manager_view':
         return <ManagerView user={user} />;
