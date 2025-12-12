@@ -4,8 +4,8 @@ import * as configController from '../controllers/configController';
 
 const router = express.Router();
 
-// All routes require system_admin or super_admin role
-router.use(authenticate, authorize('system_admin', 'super_admin'));
+// All routes require super_admin or admin/boss role
+router.use(authenticate, authorize('super_admin', 'admin', 'boss'));
 
 // Fuel station routes
 router.get('/stations', configController.getFuelStations);

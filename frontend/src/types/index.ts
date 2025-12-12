@@ -289,7 +289,7 @@ export interface MasterDOTemplate {
 }
 
 // User Types with Role-Based Authentication (Enhanced with new roles)
-export type UserRole = 'super_admin' | 'system_admin' | 'admin' | 'manager' | 'super_manager' | 'supervisor' | 'clerk' | 'driver' | 'viewer' | 'fuel_order_maker' | 'boss' | 'yard_personnel' | 'fuel_attendant' | 'station_manager' | 'payment_manager' | 'dar_yard' | 'tanga_yard' | 'mmsa_yard' | 'import_officer' | 'export_officer';
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'super_manager' | 'supervisor' | 'clerk' | 'driver' | 'viewer' | 'fuel_order_maker' | 'boss' | 'yard_personnel' | 'fuel_attendant' | 'station_manager' | 'payment_manager' | 'dar_yard' | 'tanga_yard' | 'mmsa_yard' | 'import_officer' | 'export_officer';
 
 // Audit Log Types
 export type AuditAction = 

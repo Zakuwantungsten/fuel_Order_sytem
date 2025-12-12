@@ -74,8 +74,7 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated, restri
 
   const roles = [
     { value: 'super_admin' as UserRole, label: 'Super Admin', description: 'Full system access with all privileges' },
-    { value: 'system_admin' as UserRole, label: 'System Admin', description: 'System monitoring and technical administration' },
-    { value: 'admin' as UserRole, label: 'Admin', description: 'Administrative access' },
+    { value: 'admin' as UserRole, label: 'Admin', description: 'Administrative access with most system privileges' },
     { value: 'super_manager' as UserRole, label: 'Super Manager', description: 'View all station LPOs (except Lake Tunduma)' },
     { value: 'manager' as UserRole, label: 'Station Manager (LPO View)', description: 'View LPOs for assigned station only' },
     { value: 'supervisor' as UserRole, label: 'Supervisor', description: 'Supervisory access' },

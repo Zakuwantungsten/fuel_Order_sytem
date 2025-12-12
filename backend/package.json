@@ -14,6 +14,7 @@
     "test:integration": "jest --testPathPattern=integration",
     "lint": "eslint . --ext .ts",
     "seed": "ts-node src/scripts/seedUsers.ts",
+    "seed:admins": "ts-node src/scripts/seedAdmins.ts",
     "archival:test": "ts-node src/scripts/testArchival.js",
     "archival:run": "ts-node src/scripts/testArchival.js --execute",
     "archival:stats": "ts-node src/scripts/testArchival.js --stats-only"

@@ -7,9 +7,9 @@ import { validate } from '../utils/validate';
 
 const router = Router();
 
-// All routes require authentication and admin privileges
+// All routes require authentication and admin-level access
 router.use(authenticate);
-router.use(authorize('super_admin', 'system_admin', 'admin', 'boss'));
+router.use(authorize('super_admin', 'admin', 'boss'));
 
 // =====================
 // Dashboard Stats
@@ -147,5 +147,36 @@ router.post(
   validate,
   asyncHandler(adminController.resetConfig)
 );
+
+// =====================
+// System Admin Features (Super Admin only)
+// =====================
+
+// Database Monitoring
+router.get('/database/metrics', authorize('super_admin'), asyncHandler(adminController.getDatabaseMetrics));
+router.get('/database/health', authorize('super_admin'), asyncHandler(adminController.getDatabaseHealth));
+router.post('/database/profiling', authorize('super_admin'), asyncHandler(adminController.enableProfiling));
+
+// Audit Logs
+router.get('/audit-logs', authorize('super_admin'), asyncHandler(adminController.getAuditLogs));
+router.get('/audit-logs/summary', authorize('super_admin'), asyncHandler(adminController.getActivitySummary));
+router.get('/audit-logs/critical', authorize('super_admin'), asyncHandler(adminController.getCriticalEvents));
+
+// System Statistics
+router.get('/system-stats', authorize('super_admin'), asyncHandler(adminController.getSystemStats));
+
+// Session Management
+router.get('/sessions/active', authorize('super_admin'), asyncHandler(adminController.getActiveSessions));
+router.post('/sessions/:userId/force-logout', authorize('super_admin'), asyncHandler(adminController.forceLogout));
+
+// Activity Feed
+router.get('/activity-feed', authorize('super_admin'), asyncHandler(adminController.getActivityFeed));
+router.get('/recent-activity', authorize('super_admin'), asyncHandler(adminController.getRecentActivity));
+
+// Email Notifications
+router.get('/email/test-config', authorize('super_admin'), asyncHandler(adminController.testEmailConfig));
+router.post('/email/send-test', authorize('super_admin'), asyncHandler(adminController.sendTestEmail));
+router.post('/email/daily-summary', authorize('super_admin'), asyncHandler(adminController.sendDailySummary));
+router.post('/email/weekly-summary', authorize('super_admin'), asyncHandler(adminController.sendWeeklySummary));
 
 export default router;

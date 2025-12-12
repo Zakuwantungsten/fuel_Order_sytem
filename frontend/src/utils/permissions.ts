@@ -46,26 +46,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       { resource: RESOURCES.NOTIFICATIONS, actions: [ACTIONS.READ, ACTIONS.MANAGE] },
     ],
   },
-  system_admin: {
-    role: 'system_admin',
-    description: 'Technical administrator with system configuration and monitoring access',
-    permissions: [
-      { resource: RESOURCES.DASHBOARD, actions: [ACTIONS.READ, ACTIONS.MANAGE] },
-      { resource: RESOURCES.DELIVERY_ORDERS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.UPDATE, ACTIONS.DELETE, ACTIONS.APPROVE, ACTIONS.EXPORT] },
-      { resource: RESOURCES.LPOS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.UPDATE, ACTIONS.DELETE, ACTIONS.APPROVE, ACTIONS.EXPORT] },
-      { resource: RESOURCES.FUEL_RECORDS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.UPDATE, ACTIONS.DELETE, ACTIONS.EXPORT] },
-      { resource: RESOURCES.USERS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.UPDATE, ACTIONS.DELETE] },
-      { resource: RESOURCES.REPORTS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.EXPORT, ACTIONS.MANAGE] },
-      { resource: RESOURCES.SYSTEM_CONFIG, actions: [ACTIONS.READ, ACTIONS.UPDATE, ACTIONS.MANAGE] },
-      { resource: RESOURCES.AUDIT_LOGS, actions: [ACTIONS.READ, ACTIONS.EXPORT] },
-      { resource: RESOURCES.DATABASE_MONITOR, actions: [ACTIONS.READ] },
-      { resource: RESOURCES.TRASH, actions: [ACTIONS.READ, ACTIONS.RESTORE] },
-      { resource: RESOURCES.NOTIFICATIONS, actions: [ACTIONS.READ] },
-    ],
-  },
   admin: {
     role: 'admin',
-    description: 'Administrative access with most system privileges except user management',
+    description: 'Administrative access with most system privileges',
     permissions: [
       { resource: RESOURCES.DASHBOARD, actions: [ACTIONS.READ, ACTIONS.MANAGE] },
       { resource: RESOURCES.DELIVERY_ORDERS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.UPDATE, ACTIONS.DELETE, ACTIONS.APPROVE, ACTIONS.EXPORT] },
@@ -74,6 +57,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       { resource: RESOURCES.USERS, actions: [ACTIONS.READ, ACTIONS.UPDATE] },
       { resource: RESOURCES.REPORTS, actions: [ACTIONS.READ, ACTIONS.CREATE, ACTIONS.EXPORT] },
       { resource: RESOURCES.SYSTEM_CONFIG, actions: [ACTIONS.READ, ACTIONS.UPDATE] },
+      { resource: RESOURCES.TRASH, actions: [ACTIONS.READ, ACTIONS.RESTORE] },
+      { resource: RESOURCES.AUDIT_LOGS, actions: [ACTIONS.READ] },
     ],
   },
   manager: {
@@ -293,7 +278,6 @@ export function getRoleInfo(role: UserRole) {
 export function getRoleColor(role: UserRole): string {
   const colors: Record<UserRole, string> = {
     super_admin: 'bg-red-100 text-red-800',
-    system_admin: 'bg-orange-100 text-orange-800',
     admin: 'bg-purple-100 text-purple-800',
     manager: 'bg-blue-100 text-blue-800',
     super_manager: 'bg-blue-100 text-blue-800',

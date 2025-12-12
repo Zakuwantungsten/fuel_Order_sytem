@@ -21,9 +21,9 @@ router.post('/run', authenticate, authorize('super_admin'), runArchival);
 /**
  * @route GET /api/archival/stats
  * @desc Get archival statistics (active vs archived record counts)
- * @access Admin, Super Admin, System Admin
+ * @access Admin, Super Admin
  */
-router.get('/stats', authenticate, authorize('admin', 'super_admin', 'system_admin'), getArchivalStats);
+router.get('/stats', authenticate, authorize('admin', 'super_admin'), getArchivalStats);
 
 /**
  * @route POST /api/archival/query
@@ -33,7 +33,7 @@ router.get('/stats', authenticate, authorize('admin', 'super_admin', 'system_adm
 router.post(
   '/query',
   authenticate,
-  authorize('admin', 'super_admin', 'system_admin', 'manager', 'super_manager'),
+  authorize('admin', 'super_admin', 'manager', 'super_manager'),
   queryArchivedData
 );
 
@@ -47,9 +47,9 @@ router.post('/restore', authenticate, authorize('super_admin'), restoreArchivedD
 /**
  * @route GET /api/archival/history
  * @desc Get archival execution history
- * @access Admin, Super Admin, System Admin
+ * @access Admin, Super Admin
  */
-router.get('/history', authenticate, authorize('admin', 'super_admin', 'system_admin'), getArchivalHistory);
+router.get('/history', authenticate, authorize('admin', 'super_admin'), getArchivalHistory);
 
 /**
  * @route POST /api/archival/export

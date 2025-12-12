@@ -32,7 +32,7 @@ interface UserManagementTabProps {
 
 const USER_ROLES = [
   { value: 'super_admin', label: 'Super Admin', color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/30' },
-  { value: 'system_admin', label: 'System Admin', color: 'text-purple-600', bgColor: 'bg-purple-50 dark:bg-purple-900/30' },
+  { value: 'admin', label: 'Admin', color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/30' },
   { value: 'admin', label: 'Admin', color: 'text-indigo-600', bgColor: 'bg-indigo-50 dark:bg-indigo-900/30' },
   { value: 'boss', label: 'Boss', color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/30' },
   { value: 'fuel_order_maker', label: 'Fuel Order Maker', color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-900/30' },

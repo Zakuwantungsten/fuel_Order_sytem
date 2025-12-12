@@ -132,15 +132,6 @@ export const restoreItem = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    // System admin can only restore their own deletions
-    if (req.user?.role === 'system_admin' && item.deletedBy !== req.user.username) {
-      res.status(403).json({
-        success: false,
-        message: 'You can only restore items you deleted',
-      });
-      return;
-    }
-
     item.isDeleted = false;
     item.deletedAt = undefined;
     item.restoredAt = new Date();

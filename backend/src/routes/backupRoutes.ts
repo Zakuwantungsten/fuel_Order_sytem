@@ -4,8 +4,8 @@ import * as backupController from '../controllers/backupController';
 
 const router = express.Router();
 
-// All routes require system_admin or super_admin role
-router.use(authenticate, authorize('system_admin', 'super_admin'));
+// All routes require super_admin role
+router.use(authenticate, authorize('super_admin'));
 
 // Backup routes
 router.post('/backups', backupController.createBackup);

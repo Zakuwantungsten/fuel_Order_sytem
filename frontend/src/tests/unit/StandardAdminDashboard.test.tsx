@@ -67,7 +67,7 @@ const mockStandardAdminUser = {
   email: 'stdadmin@test.com',
   firstName: 'Standard',
   lastName: 'Admin',
-  role: 'standard_admin',
+  role: 'admin',
   isActive: true
 };
 

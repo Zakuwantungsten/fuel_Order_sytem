@@ -12,10 +12,12 @@ import DataManagementTab from './StandardAdmin/DataManagementTab';
 import UserSupportTab from './StandardAdmin/UserSupportTab';
 import BasicReportsTab from './StandardAdmin/BasicReportsTab';
 import QuickActionsPanel from './StandardAdmin/QuickActionsPanel';
+import FuelStationsTab from './SuperAdmin/FuelStationsTab';
+import RoutesTab from './SuperAdmin/RoutesTab';
 
 interface StandardAdminDashboardProps {
   user: any;
-  section?: 'overview' | 'data' | 'users' | 'reports' | 'quick-actions';
+  section?: 'overview' | 'data' | 'users' | 'fuel_stations' | 'routes' | 'reports' | 'quick-actions';
 }
 
 export default function StandardAdminDashboard({ user, section = 'overview' }: StandardAdminDashboardProps) {
@@ -58,6 +60,8 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
       overview: 'Operational Overview',
       data: 'Data Management',
       users: 'User Support',
+      fuel_stations: 'Fuel Stations Management',
+      routes: 'Routes Management',
       reports: 'Reports',
       'quick-actions': 'Quick Actions',
     };
@@ -133,6 +137,8 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
             {section === 'overview' && <OperationalOverviewTab stats={stats} onRefresh={loadData} />}
             {section === 'data' && <DataManagementTab user={user} showMessage={showMessage} />}
             {section === 'users' && <UserSupportTab user={user} showMessage={showMessage} />}
+            {section === 'fuel_stations' && <FuelStationsTab onMessage={showMessage} />}
+            {section === 'routes' && <RoutesTab onMessage={showMessage} />}
             {section === 'reports' && <BasicReportsTab user={user} showMessage={showMessage} />}
             {section === 'quick-actions' && <QuickActionsPanel user={user} showMessage={showMessage} />}
           </>

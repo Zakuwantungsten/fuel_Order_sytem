@@ -45,20 +45,25 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear auth data
-      localStorage.removeItem('fuel_order_auth');
-      localStorage.removeItem('fuel_order_token');
+      // Don't redirect if this is a login attempt - let the login component handle it
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
       
-      // Check if it's a token expiration
-      const errorMessage = error.response?.data?.message || '';
-      const isTokenExpired = errorMessage.toLowerCase().includes('expired') || 
-                            error.response?.data?.error?.name === 'TokenExpiredError';
-      
-      // Redirect to login with appropriate message
-      if (isTokenExpired) {
-        window.location.href = '/login?reason=expired';
-      } else {
-        window.location.href = '/login?reason=unauthorized';
+      if (!isLoginRequest) {
+        // Clear auth data
+        localStorage.removeItem('fuel_order_auth');
+        localStorage.removeItem('fuel_order_token');
+        
+        // Check if it's a token expiration
+        const errorMessage = error.response?.data?.message || '';
+        const isTokenExpired = errorMessage.toLowerCase().includes('expired') || 
+                              error.response?.data?.error?.name === 'TokenExpiredError';
+        
+        // Redirect to login with appropriate message
+        if (isTokenExpired) {
+          window.location.href = '/login?reason=expired';
+        } else {
+          window.location.href = '/login?reason=unauthorized';
+        }
       }
     }
     return Promise.reject(error);
@@ -1117,21 +1122,21 @@ export const adminAPI = {
   },
 };
 
-// System Admin API
+// System Admin API (accessed through admin endpoints, Super Admin only)
 export const systemAdminAPI = {
   // Database Monitoring
   getDatabaseMetrics: async () => {
-    const response = await apiClient.get('/system-admin/database/metrics');
+    const response = await apiClient.get('/admin/database/metrics');
     return response.data.data;
   },
 
   getDatabaseHealth: async () => {
-    const response = await apiClient.get('/system-admin/database/health');
+    const response = await apiClient.get('/admin/database/health');
     return response.data.data;
   },
 
   enableProfiling: async (level: number = 1, slowMs: number = 500) => {
-    const response = await apiClient.post('/system-admin/database/profiling', { level, slowMs });
+    const response = await apiClient.post('/admin/database/profiling', { level, slowMs });
     return response.data;
   },
 
@@ -1146,66 +1151,66 @@ export const systemAdminAPI = {
     page?: number;
     limit?: number;
   }) => {
-    const response = await apiClient.get('/system-admin/audit-logs', { params });
+    const response = await apiClient.get('/admin/audit-logs', { params });
     return response.data;
   },
 
   getActivitySummary: async (days: number = 7) => {
-    const response = await apiClient.get('/system-admin/audit-logs/summary', { params: { days } });
+    const response = await apiClient.get('/admin/audit-logs/summary', { params: { days } });
     return response.data.data;
   },
 
   getCriticalEvents: async (limit: number = 10) => {
-    const response = await apiClient.get('/system-admin/audit-logs/critical', { params: { limit } });
+    const response = await apiClient.get('/admin/audit-logs/critical', { params: { limit } });
     return response.data.data;
   },
 
   // System Stats
   getSystemStats: async () => {
-    const response = await apiClient.get('/system-admin/stats');
+    const response = await apiClient.get('/admin/system-stats');
     return response.data.data;
   },
 
   // Session Management
   getActiveSessions: async () => {
-    const response = await apiClient.get('/system-admin/sessions/active');
+    const response = await apiClient.get('/admin/sessions/active');
     return response.data.data;
   },
 
   forceLogout: async (userId: string) => {
-    const response = await apiClient.post(`/system-admin/sessions/${userId}/force-logout`);
+    const response = await apiClient.post(`/admin/sessions/${userId}/force-logout`);
     return response.data;
   },
 
   // Activity Feed
   getActivityFeed: async (limit: number = 20) => {
-    const response = await apiClient.get('/system-admin/activity-feed', { params: { limit } });
+    const response = await apiClient.get('/admin/activity-feed', { params: { limit } });
     return response.data.data;
   },
 
   getRecentActivity: async (limit: number = 10) => {
-    const response = await apiClient.get('/system-admin/recent-activity', { params: { limit } });
+    const response = await apiClient.get('/admin/recent-activity', { params: { limit } });
     return response.data.data;
   },
 
   // Email Notifications
   testEmailConfig: async () => {
-    const response = await apiClient.get('/system-admin/email/test-config');
+    const response = await apiClient.get('/admin/email/test-config');
     return response.data;
   },
 
   sendTestEmail: async (recipient?: string) => {
-    const response = await apiClient.post('/system-admin/email/send-test', { recipient });
+    const response = await apiClient.post('/admin/email/send-test', { recipient });
     return response.data;
   },
 
   sendDailySummary: async () => {
-    const response = await apiClient.post('/system-admin/email/daily-summary');
+    const response = await apiClient.post('/admin/email/daily-summary');
     return response.data;
   },
 
   sendWeeklySummary: async () => {
-    const response = await apiClient.post('/system-admin/email/weekly-summary');
+    const response = await apiClient.post('/admin/email/weekly-summary');
     return response.data;
   },
 };
@@ -1219,55 +1224,55 @@ export const backupAPI = {
     page?: number;
     limit?: number;
   }) => {
-    const response = await apiClient.get('/system-admin/backups', { params });
+    const response = await apiClient.get('/backup', { params });
     return response.data.data;
   },
 
   // Get backup by ID
   getBackupById: async (id: string) => {
-    const response = await apiClient.get(`/system-admin/backups/${id}`);
+    const response = await apiClient.get(`/backup/${id}`);
     return response.data.data;
   },
 
   // Create manual backup
   createBackup: async () => {
-    const response = await apiClient.post('/system-admin/backups');
+    const response = await apiClient.post('/backup');
     return response.data.data;
   },
 
   // Download backup
   downloadBackup: async (id: string) => {
-    const response = await apiClient.get(`/system-admin/backups/${id}/download`);
+    const response = await apiClient.get(`/backup/${id}/download`);
     return response.data.data;
   },
 
   // Restore backup
   restoreBackup: async (id: string) => {
-    const response = await apiClient.post(`/system-admin/backups/${id}/restore`);
+    const response = await apiClient.post(`/backup/${id}/restore`);
     return response.data;
   },
 
   // Delete backup
   deleteBackup: async (id: string) => {
-    const response = await apiClient.delete(`/system-admin/backups/${id}`);
+    const response = await apiClient.delete(`/backup/${id}`);
     return response.data;
   },
 
   // Get backup statistics
   getStats: async () => {
-    const response = await apiClient.get('/system-admin/backups/stats');
+    const response = await apiClient.get('/backup/stats');
     return response.data.data;
   },
 
   // Cleanup old backups
   cleanupBackups: async (retentionDays: number) => {
-    const response = await apiClient.post('/system-admin/backups/cleanup', { retentionDays });
+    const response = await apiClient.post('/backup/cleanup', { retentionDays });
     return response.data;
   },
 
   // Backup schedules
   getSchedules: async () => {
-    const response = await apiClient.get('/system-admin/backup-schedules');
+    const response = await apiClient.get('/backup-schedules');
     return response.data.data;
   },
 
@@ -1371,17 +1376,17 @@ export const configAPI = {
     formulaGoing?: string;
     formulaReturning?: string;
   }) => {
-    const response = await apiClient.post('/system-admin/config/stations', data);
+    const response = await apiClient.post('/system-config/stations', data);
     return response.data;
   },
   
   updateStation: async (id: string, data: any) => {
-    const response = await apiClient.put(`/system-admin/config/stations/${id}`, data);
+    const response = await apiClient.put(`/system-config/stations/${id}`, data);
     return response.data;
   },
   
   deleteStation: async (id: string) => {
-    const response = await apiClient.delete(`/system-admin/config/stations/${id}`);
+    const response = await apiClient.delete(`/system-config/stations/${id}`);
     return response.data;
   },
   
@@ -1402,17 +1407,17 @@ export const configAPI = {
     formula?: string;
     description?: string;
   }) => {
-    const response = await apiClient.post('/system-admin/config/routes', data);
+    const response = await apiClient.post('/system-config/routes', data);
     return response.data;
   },
   
   updateRoute: async (id: string, data: any) => {
-    const response = await apiClient.put(`/system-admin/config/routes/${id}`, data);
+    const response = await apiClient.put(`/system-config/routes/${id}`, data);
     return response.data;
   },
   
   deleteRoute: async (id: string) => {
-    const response = await apiClient.delete(`/system-admin/config/routes/${id}`);
+    const response = await apiClient.delete(`/system-config/routes/${id}`);
     return response.data;
   },
   

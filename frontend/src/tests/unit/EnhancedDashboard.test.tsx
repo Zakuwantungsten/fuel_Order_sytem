@@ -54,10 +54,6 @@ vi.mock('../../components/PaymentManager', () => ({
   default: () => <div data-testid="payment-manager">Payment Manager</div>
 }));
 
-vi.mock('../../components/SystemAdminDashboard', () => ({
-  default: ({ section }: any) => <div data-testid={`system-admin-${section}`}>System Admin: {section}</div>
-}));
-
 vi.mock('../../components/SuperAdminDashboard', () => ({
   default: ({ section }: any) => <div data-testid={`super-admin-${section}`}>Super Admin: {section}</div>
 }));
@@ -109,16 +105,6 @@ const mockManagerUser = {
   firstName: 'Test',
   lastName: 'Manager',
   role: 'manager',
-  isActive: true
-};
-
-const mockSystemAdminUser = {
-  id: 'sysadmin-1',
-  username: 'sysadmin',
-  email: 'sysadmin@test.com',
-  firstName: 'System',
-  lastName: 'Admin',
-  role: 'system_admin',
   isActive: true
 };
 
@@ -190,15 +176,6 @@ describe('EnhancedDashboard', () => {
       
       await waitFor(() => {
         // Manager view should render
-        expect(document.body).toBeDefined();
-      });
-    });
-
-    it('should show system admin sections for system_admin role', async () => {
-      renderEnhancedDashboard(mockSystemAdminUser);
-      
-      await waitFor(() => {
-        // System admin view should render
         expect(document.body).toBeDefined();
       });
     });

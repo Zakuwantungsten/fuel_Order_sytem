@@ -37,7 +37,7 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
       const data = await usersAPI.getAll();
       // Filter out admin roles - admin can only manage non-admin users
       const nonAdminUsers = data.filter((u: User) => 
-        !['super_admin', 'system_admin', 'admin', 'boss'].includes(u.role)
+        !['super_admin', 'admin', 'boss'].includes(u.role)
       );
       setUsers(nonAdminUsers);
     } catch (err: any) {
@@ -266,7 +266,7 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
             loadUsers();
             setShowCreateUser(false);
           }}
-          restrictedRoles={['super_admin', 'system_admin', 'admin', 'boss']}
+          restrictedRoles={['super_admin', 'admin', 'boss']}
         />
       )}
     </div>

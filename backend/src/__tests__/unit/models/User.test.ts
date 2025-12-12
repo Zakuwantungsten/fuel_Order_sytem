@@ -97,7 +97,7 @@ describe('User Model', () => {
   describe('Role Validation', () => {
     it('should accept valid roles', async () => {
       const validRoles = [
-        'super_admin', 'system_admin', 'admin', 'manager', 
+        'super_admin', 'admin', 'manager', 
         'supervisor', 'clerk', 'driver', 'viewer'
       ];
 

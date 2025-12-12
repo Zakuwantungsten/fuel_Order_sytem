@@ -64,7 +64,7 @@ export const getArchivalStats = async (req: AuthRequest, res: Response): Promise
   try {
     const user = req.user;
     
-    if (!user || !['admin', 'super_admin', 'system_admin'].includes(user.role)) {
+    if (!user || !['admin', 'super_admin'].includes(user.role)) {
       throw new ApiError(403, 'Insufficient permissions');
     }
 
@@ -89,7 +89,7 @@ export const queryArchivedData = async (req: AuthRequest, res: Response): Promis
   try {
     const user = req.user;
     
-    if (!user || !['admin', 'super_admin', 'system_admin', 'manager', 'super_manager'].includes(user.role)) {
+    if (!user || !['admin', 'super_admin', 'manager', 'super_manager'].includes(user.role)) {
       throw new ApiError(403, 'Insufficient permissions to query archived data');
     }
 
@@ -190,7 +190,7 @@ export const getArchivalHistory = async (req: AuthRequest, res: Response): Promi
   try {
     const user = req.user;
     
-    if (!user || !['admin', 'super_admin', 'system_admin'].includes(user.role)) {
+    if (!user || !['admin', 'super_admin'].includes(user.role)) {
       throw new ApiError(403, 'Insufficient permissions');
     }
 

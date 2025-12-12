@@ -8,24 +8,24 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-// Get trash statistics (Super Admin and System Admin)
+// Get trash statistics (Super Admin only)
 router.get(
   '/stats',
-  authorize('super_admin', 'system_admin'),
+  authorize('super_admin'),
   asyncHandler(trashController.getTrashStats)
 );
 
-// Get deleted items by type (Super Admin and System Admin)
+// Get deleted items by type (Super Admin only)
 router.get(
   '/:type',
-  authorize('super_admin', 'system_admin'),
+  authorize('super_admin'),
   asyncHandler(trashController.getDeletedItems)
 );
 
-// Restore single item (Super Admin can restore any, System Admin can restore own)
+// Restore single item (Super Admin only)
 router.post(
   '/:type/:id/restore',
-  authorize('super_admin', 'system_admin'),
+  authorize('super_admin'),
   asyncHandler(trashController.restoreItem)
 );
 

@@ -19,6 +19,8 @@ import {
 import { systemAdminAPI, trashAPI } from '../services/api';
 import DatabaseMonitorTab from './SuperAdmin/DatabaseMonitorTab';
 import UserManagementTab from './SuperAdmin/UserManagementTab';
+import FuelStationsTab from './SuperAdmin/FuelStationsTab';
+import RoutesTab from './SuperAdmin/RoutesTab';
 import ConfigurationTab from './SuperAdmin/ConfigurationTab';
 import AuditLogsTab from './SuperAdmin/AuditLogsTab';
 import SecurityTab from './SuperAdmin/SecurityTab';
@@ -28,7 +30,7 @@ import TrashManagementTab from './SuperAdmin/TrashManagementTab';
 
 interface SuperAdminDashboardProps {
   user: any;
-  section?: 'overview' | 'database' | 'users' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash';
+  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash';
 }
 
 export default function SuperAdminDashboard({ user, section = 'overview' }: SuperAdminDashboardProps) {
@@ -82,6 +84,8 @@ export default function SuperAdminDashboard({ user, section = 'overview' }: Supe
       overview: '🏠 SUPER ADMIN DASHBOARD',
       database: '💾 DATABASE MONITOR',
       users: '👥 USER MANAGEMENT',
+      fuel_stations: '⛽ FUEL STATIONS',
+      routes: '🛣️ ROUTES',
       config: '⚙️ CONFIGURATION',
       audit: '📋 AUDIT & LOGS',
       security: '🔐 SECURITY',
@@ -177,6 +181,12 @@ export default function SuperAdminDashboard({ user, section = 'overview' }: Supe
             )}
             {section === 'users' && (
               <UserManagementTab onMessage={showMessage} />
+            )}
+            {section === 'fuel_stations' && (
+              <FuelStationsTab onMessage={showMessage} />
+            )}
+            {section === 'routes' && (
+              <RoutesTab onMessage={showMessage} />
             )}
             {section === 'config' && (
               <ConfigurationTab onMessage={showMessage} />

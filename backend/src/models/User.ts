@@ -44,7 +44,6 @@ const userSchema = new Schema<IUserDocument>(
       type: String,
       enum: [
         'super_admin',
-        'system_admin',
         'admin',
         'manager',
         'super_manager',
