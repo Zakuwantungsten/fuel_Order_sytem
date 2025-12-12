@@ -128,9 +128,6 @@ export const yardFuelService = {
         case 'MMSA YARD':
           updates.mmsaYard = (record.mmsaYard || 0) - liters;
           break;
-        case 'MBEYA YARD':
-          updates.mbeyaGoing = (record.mbeyaGoing || 0) - liters;
-          break;
       }
 
       // Recalculate balance
@@ -141,7 +138,7 @@ export const yardFuelService = {
         ((yard === 'DAR YARD' ? updates.darYard : record.darYard) || 0) +
         (record.darGoing || 0) +
         (record.moroGoing || 0) +
-        ((yard === 'MBEYA YARD' ? updates.mbeyaGoing : record.mbeyaGoing) || 0) +
+        (record.mbeyaGoing || 0) +
         (record.tdmGoing || 0) +
         (record.zambiaGoing || 0) +
         (record.congoFuel || 0) +

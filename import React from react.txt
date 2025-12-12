@@ -315,3 +315,14 @@ backup at cloudflare
 button to shutdown the site when under maintainance
 token expire after inactivity
 check how total is exported in documents
+
+
+Super Admin:
+2025-12-12 07:30:11 [info]:   Username: superadmin
+2025-12-12 07:30:11 [info]:   Email: superadmin@fuelorder.com
+2025-12-12 07:30:11 [info]:   Default Password: SuperAdmin@123
+2025-12-12 07:30:11 [info]: 
+Admin:
+2025-12-12 07:30:11 [info]:   Username: admin
+2025-12-12 07:30:11 [info]:   Email: admin@fuelorder.com
+2025-12-12 07:30:11 [info]:   Default Password: Admin@123

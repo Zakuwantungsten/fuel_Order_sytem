@@ -44,6 +44,7 @@ import Dashboard from '../pages/Dashboard';
 import DeliveryOrders from '../pages/DeliveryOrders';
 import LPOs from '../pages/LPOs';
 import FuelRecordsPage from '../pages/FuelRecords';
+import TruckBatchesPage from '../pages/TruckBatches';
 
 interface EnhancedDashboardProps {
   user: any;
@@ -73,12 +74,12 @@ const getInitialTab = (userRole: string): string => {
     }
     if (userRole === 'admin' || userRole === 'boss') {
       return [
-        'overview', 'do', 'fuel_records', 'lpo', 'reports',
+        'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'reports',
         'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports', 'admin_quick'
       ];
     }
     if (userRole === 'fuel_order_maker') {
-      return ['overview', 'do', 'fuel_records', 'lpo', 'reports'];
+      return ['overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'reports'];
     }
     if (userRole === 'payment_manager') {
       return ['overview', 'payments'];
@@ -200,6 +201,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'do', label: 'DO Management', icon: FileText },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: ClipboardList },
+        { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
         { id: 'reports', label: 'Reports', icon: BarChart3 },
         // Admin sections - expanded in sidebar
         { id: 'admin_overview', label: 'Operational Overview', icon: BarChart3 },
@@ -218,6 +220,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'do', label: 'DO Management', icon: FileText },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: ClipboardList },
+        { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
         { id: 'reports', label: 'Reports', icon: BarChart3 },
       ];
     }
@@ -255,6 +258,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <FuelRecordsPage />;
       case 'lpo':
         return <LPOs />;
+      case 'truck_batches':
+        return <TruckBatchesPage />;
       case 'yard_fuel':
         return <YardFuelSimple user={user} />;
       case 'driver_portal':

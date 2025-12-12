@@ -159,16 +159,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     checkExistingSession();
 
-    // Load system settings to set timezone
+    // Load system settings to set timezone (only for super admins)
     const loadSystemSettings = async () => {
       try {
-        const settings = await systemConfigAPI.getSystemSettings();
-        if (settings?.general?.timezone) {
-          setSystemTimezone(settings.general.timezone);
+        // Check if user is authenticated first
+        const authData = localStorage.getItem('fuel_order_auth');
+        if (!authData) return;
+        
+        const parsedAuth = JSON.parse(authData);
+        
+        // Only load system settings for super_admin role
+        if (parsedAuth?.role === 'super_admin') {
+          const settings = await systemConfigAPI.getSystemSettings();
+          if (settings?.general?.timezone) {
+            setSystemTimezone(settings.general.timezone);
+          }
+        } else {
+          // Use default timezone for non-super-admin users
+          setSystemTimezone('Africa/Dar_es_Salaam');
         }
       } catch (error) {
         // Silently fail - use default timezone
         console.log('Could not load system settings, using default timezone');
+        setSystemTimezone('Africa/Dar_es_Salaam');
       }
     };
 
@@ -229,6 +242,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // Apply the user's theme immediately after login
       dispatch({ type: 'SET_THEME', payload: userTheme });
+
+      // Load system settings for super admins
+      if (user.role === 'super_admin') {
+        try {
+          const settings = await systemConfigAPI.getSystemSettings();
+          if (settings?.general?.timezone) {
+            setSystemTimezone(settings.general.timezone);
+          }
+        } catch (error) {
+          // Silently fail - timezone already set to default
+          console.log('Could not load system settings after login');
+        }
+      } else {
+        // Set default timezone for non-super-admin users
+        setSystemTimezone('Africa/Dar_es_Salaam');
+      }
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Login failed';
       dispatch({ type: 'AUTH_ERROR', payload: errorMessage });

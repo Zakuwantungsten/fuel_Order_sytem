@@ -517,7 +517,7 @@ export interface YardFuelDispense {
   date: string;
   truckNo: string;
   liters: number;
-  yard: 'DAR YARD' | 'TANGA YARD' | 'MMSA YARD' | 'MBEYA YARD';
+  yard: 'DAR YARD' | 'TANGA YARD' | 'MMSA YARD';
   enteredBy: string;
   timestamp: string;
   notes?: string;

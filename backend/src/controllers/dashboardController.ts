@@ -189,7 +189,6 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
     const fuelByYard: any = {
       'DAR YARD': 0,
       'TANGA YARD': 0,
-      'MBEYA YARD': 0,
       'MMSA YARD': 0,
     };
 
