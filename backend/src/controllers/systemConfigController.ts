@@ -213,6 +213,7 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
       autoCleanupEnabled,
       backupFrequency,
       backupRetention,
+      collectionArchivalSettings,
     } = req.body;
 
     let systemConfig = await SystemConfig.findOne({
@@ -235,6 +236,9 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
       if (autoCleanupEnabled !== undefined) systemConfig.systemSettings.data.autoCleanupEnabled = autoCleanupEnabled;
       if (backupFrequency !== undefined) systemConfig.systemSettings.data.backupFrequency = backupFrequency;
       if (backupRetention !== undefined) systemConfig.systemSettings.data.backupRetention = backupRetention;
+      if (collectionArchivalSettings !== undefined) {
+        systemConfig.systemSettings.data.collectionArchivalSettings = collectionArchivalSettings;
+      }
     }
 
     systemConfig.lastUpdatedBy = req.user?.username || 'system';

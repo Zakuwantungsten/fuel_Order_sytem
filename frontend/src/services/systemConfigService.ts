@@ -52,6 +52,12 @@ export interface SystemSettings {
     autoCleanupEnabled: boolean;
     backupFrequency: 'daily' | 'weekly' | 'monthly';
     backupRetention: number;
+    collectionArchivalSettings?: {
+      [collectionName: string]: {
+        enabled: boolean;
+        retentionMonths: number;
+      };
+    };
   };
   notifications: {
     emailNotifications: boolean;
@@ -152,7 +158,7 @@ export const systemConfigAPI = {
    * Update data retention settings
    * PUT /api/system-admin/config/settings/data-retention
    */
-  updateDataRetentionSettings: async (settings: SystemSettings['data']) => {
+  updateDataRetentionSettings: async (settings: Partial<SystemSettings['data']>) => {
     const response = await apiClient.put('/system-admin/config/settings/data-retention', settings);
     return response.data;
   },

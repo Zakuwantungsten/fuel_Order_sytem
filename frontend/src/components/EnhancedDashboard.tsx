@@ -23,7 +23,8 @@ import {
   Zap,
   TrendingUp,
   Route,
-  Key
+  Key,
+  Archive
 } from 'lucide-react';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
@@ -72,7 +73,7 @@ const getInitialTab = (userRole: string): string => {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'reports',
         'sa_overview', 'sa_database', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_config', 
-        'sa_audit', 'sa_security', 'sa_trash', 'sa_backup', 'sa_analytics'
+        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics'
       ];
     }
     if (userRole === 'admin' || userRole === 'boss') {
@@ -195,6 +196,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_audit', label: 'Audit & Logs', icon: FileSearch },
         { id: 'sa_security', label: 'Security', icon: Shield },
         { id: 'sa_trash', label: 'Trash Management', icon: Trash2 },
+        { id: 'sa_archival', label: 'Data Archival', icon: Archive },
         { id: 'sa_backup', label: 'Backup & Recovery', icon: Database },
         { id: 'sa_analytics', label: 'Analytics & Reports', icon: BarChart3 },
       ];
@@ -295,6 +297,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <SuperAdminDashboard user={user} section="security" onNavigate={setActiveTab} />;
       case 'sa_trash':
         return <SuperAdminDashboard user={user} section="trash" onNavigate={setActiveTab} />;
+      case 'sa_archival':
+        return <SuperAdminDashboard user={user} section="archival" onNavigate={setActiveTab} />;
       case 'sa_backup':
         return <SuperAdminDashboard user={user} section="backup" onNavigate={setActiveTab} />;
       case 'sa_analytics':

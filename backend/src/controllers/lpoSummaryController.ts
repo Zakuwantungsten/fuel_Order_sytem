@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry, LPOEntry } from '../models';
+import { ArchivedLPOSummary } from '../models/ArchivedData';
 import { FuelStationConfig } from '../models/FuelStationConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
@@ -486,17 +487,67 @@ export const getAllLPOSummaries = async (req: AuthRequest, res: Response): Promi
       filter.station = { $regex: station, $options: 'i' };
     }
 
-    const skip = calculateSkip(page, limit);
-    const sortOrder = order === 'asc' ? 1 : -1;
+    // If date or year filter is applied, include archived data
+    const includeArchived = !!(dateFrom || dateTo || year);
+    let lpoSummaries: any[];
+    let total: number;
 
-    const [lpoSummaries, total] = await Promise.all([
-      LPOSummary.find(filter)
-        .sort({ [sort]: sortOrder })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      LPOSummary.countDocuments(filter),
-    ]);
+    if (includeArchived) {
+      // Use unified export service to get both active and archived data
+      const startDate = dateFrom ? new Date(dateFrom as string) : (year ? new Date(parseInt(year as string, 10), 0, 1) : undefined);
+      const endDate = dateTo ? new Date(dateTo as string) : (year ? new Date(parseInt(year as string, 10), 11, 31, 23, 59, 59) : undefined);
+      
+      const allLPOs = await unifiedExportService.getAllLPOSummaries({
+        startDate,
+        endDate,
+        includeArchived: true,
+        filters: { ...filter, isDeleted: { $ne: true } },
+      });
+
+      // Apply additional filters
+      let filteredLPOs = allLPOs;
+      if (lpoNo) {
+        const regex = new RegExp(lpoNo as string, 'i');
+        filteredLPOs = filteredLPOs.filter(l => regex.test(String(l.lpoNo)));
+      }
+      if (station) {
+        const regex = new RegExp(station as string, 'i');
+        filteredLPOs = filteredLPOs.filter(l => regex.test(l.station || ''));
+      }
+      if (year) {
+        const yearNum = parseInt(year as string, 10);
+        filteredLPOs = filteredLPOs.filter(l => l.year === yearNum);
+      }
+
+      // Sort
+      const sortField = sort || 'date';
+      const sortDir = order === 'asc' ? 1 : -1;
+      filteredLPOs.sort((a, b) => {
+        const aVal = a[sortField];
+        const bVal = b[sortField];
+        if (aVal < bVal) return -sortDir;
+        if (aVal > bVal) return sortDir;
+        return 0;
+      });
+
+      // Paginate in memory
+      total = filteredLPOs.length;
+      const skip = calculateSkip(page, limit);
+      lpoSummaries = filteredLPOs.slice(skip, skip + limit);
+    } else {
+      // No date/year filter - only query active data (normal pagination)
+      const skip = calculateSkip(page, limit);
+      const sortOrder = order === 'asc' ? 1 : -1;
+
+      [lpoSummaries, total] = await Promise.all([
+        LPOSummary.find(filter)
+          .sort({ [sort]: sortOrder })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        LPOSummary.countDocuments(filter),
+      ]);
+    }
 
     const response = createPaginatedResponse(lpoSummaries, page, limit, total);
 
@@ -1674,13 +1725,20 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
  */
 export const getAvailableYears = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const years = await LPOSummary.distinct('year', { isDeleted: false });
-    years.sort((a, b) => b - a);
+    // Get years from active data
+    const activeYears = await LPOSummary.distinct('year', { isDeleted: false });
+    
+    // Get years from archived data
+    const archivedYears = await ArchivedLPOSummary.distinct('year');
+    
+    // Combine and deduplicate
+    const allYears = [...new Set([...activeYears, ...archivedYears])];
+    allYears.sort((a, b) => b - a);
 
     res.status(200).json({
       success: true,
-      message: 'Available years retrieved successfully',
-      data: years,
+      message: 'Available years retrieved successfully (including archived)',
+      data: allYears,
     });
   } catch (error: any) {
     throw error;

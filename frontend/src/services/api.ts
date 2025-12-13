@@ -1605,4 +1605,86 @@ export const trashAPI = {
   },
 };
 
+// Archival Management API
+export const archivalAPI = {
+  // Run archival process manually
+  runArchival: async (options: {
+    monthsToKeep?: number;
+    auditLogMonthsToKeep?: number;
+    dryRun?: boolean;
+    collections?: string[];
+  }) => {
+    const response = await apiClient.post('/archival/run', options);
+    return response.data;
+  },
+
+  // Get archival statistics (active vs archived counts)
+  getStats: async () => {
+    const response = await apiClient.get('/archival/stats');
+    return response.data.data;
+  },
+
+  // Query archived data
+  queryArchived: async (params: {
+    collectionName: string;
+    query?: any;
+    limit?: number;
+    skip?: number;
+    sort?: any;
+    select?: string;
+  }) => {
+    const response = await apiClient.post('/archival/query', params);
+    return response.data.data;
+  },
+
+  // Restore archived data (emergency rollback)
+  restoreArchived: async (params: {
+    collectionName: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const response = await apiClient.post('/archival/restore', params);
+    return response.data;
+  },
+
+  // Get archival execution history
+  getHistory: async (params?: {
+    limit?: number;
+    skip?: number;
+  }) => {
+    const response = await apiClient.get('/archival/history', { params });
+    return response.data.data;
+  },
+
+  // Export unified data (active + archived) to Excel
+  exportUnified: async (params: {
+    collectionName: string;
+    startDate?: string;
+    endDate?: string;
+    format?: 'excel' | 'csv';
+  }) => {
+    const response = await apiClient.post('/archival/export', params, {
+      responseType: 'blob'
+    });
+    
+    // Create download link
+    const blob = new Blob([response.data], { 
+      type: params.format === 'csv' 
+        ? 'text/csv' 
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const extension = params.format === 'csv' ? 'csv' : 'xlsx';
+    link.download = `${params.collectionName}_unified_export_${new Date().toISOString().split('T')[0]}.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    return { success: true, filename: link.download };
+  },
+};
+
 export default apiClient;

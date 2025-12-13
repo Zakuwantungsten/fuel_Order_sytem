@@ -12,19 +12,22 @@ import {
   ArchivedLPOEntry,
   ArchivedLPOSummary,
   ArchivedYardFuelDispense,
+  ArchivedDeliveryOrder,
   ArchivedAuditLog,
   ArchivalMetadata,
 } from '../models/ArchivedData';
+import { SystemConfig } from '../models/SystemConfig';
 import logger from '../utils/logger';
 
 /**
  * Archival Service
  * 
  * Strategy for your system:
- * - Active data: Last 6 months (HOT DATA)
- * - Archive: Older than 6 months (COLD DATA)
- * - Exception: DeliveryOrders are NEVER archived (you said DO management is active)
- * - Audit logs: Archive after 12 months
+ * - Active data: Configurable retention period per collection (HOT DATA)
+ * - Archive: Older than retention period (COLD DATA)
+ * - All collections can be archived including DeliveryOrders
+ * - Audit logs: Default 12 months retention
+ * - Other collections: Default 6 months retention
  * 
  * With 15 concurrent users and 4-5 months active data, this will:
  * - Keep your active DB size small (~500MB vs 5GB+)
@@ -56,6 +59,38 @@ export interface ArchivalResult {
 
 class ArchivalService {
   /**
+   * Get collection-specific retention period from system config
+   */
+  private async getCollectionRetention(collectionName: string, defaultMonths: number): Promise<number> {
+    try {
+      const systemConfig = await SystemConfig.findOne({
+        configType: 'system_settings',
+        isDeleted: false,
+      });
+
+      if (systemConfig?.systemSettings?.data?.collectionArchivalSettings) {
+        const collectionSettings = systemConfig.systemSettings.data.collectionArchivalSettings[collectionName];
+        if (collectionSettings && collectionSettings.enabled !== false) {
+          return collectionSettings.retentionMonths || defaultMonths;
+        } else if (collectionSettings && collectionSettings.enabled === false) {
+          // Collection archival is disabled
+          return -1; // Sentinel value to skip archival
+        }
+      }
+
+      // Fall back to global settings or default
+      if (systemConfig?.systemSettings?.data?.archivalEnabled === false) {
+        return -1; // Global archival disabled
+      }
+
+      return systemConfig?.systemSettings?.data?.archivalMonths || defaultMonths;
+    } catch (error) {
+      logger.warn(`Failed to get collection retention for ${collectionName}, using default: ${defaultMonths}`, error);
+      return defaultMonths;
+    }
+  }
+
+  /**
    * Main archival function
    */
   async archiveOldData(
@@ -66,7 +101,7 @@ class ArchivalService {
       monthsToKeep = 6,
       auditLogMonthsToKeep = 12,
       dryRun = false,
-      collections = ['FuelRecord', 'LPOEntry', 'LPOSummary', 'YardFuelDispense', 'AuditLog'],
+      collections = ['FuelRecord', 'LPOEntry', 'LPOSummary', 'YardFuelDispense', 'DeliveryOrder', 'AuditLog'],
       batchSize = 1000,
     } = options;
 
@@ -85,87 +120,146 @@ class ArchivalService {
     logger.info(`Collections to archive: ${collections.join(', ')}`);
 
     try {
-      // Calculate cutoff dates
       const now = new Date();
-      const dataCutoffDate = new Date(now);
-      dataCutoffDate.setMonth(now.getMonth() - monthsToKeep);
 
-      const auditCutoffDate = new Date(now);
-      auditCutoffDate.setMonth(now.getMonth() - auditLogMonthsToKeep);
-
-      logger.info(`Data cutoff date: ${dataCutoffDate.toISOString()}`);
-      logger.info(`Audit log cutoff date: ${auditCutoffDate.toISOString()}`);
-
-      // Archive each collection
+      // Archive each collection with its specific retention period
       if (collections.includes('FuelRecord')) {
-        const fuelRecordResult = await this.archiveCollection(
-          'FuelRecord',
-          FuelRecord,
-          ArchivedFuelRecord,
-          dataCutoffDate,
-          initiatedBy,
-          dryRun,
-          batchSize
-        );
-        result.collectionsArchived['FuelRecord'] = fuelRecordResult;
-        result.totalRecordsArchived += fuelRecordResult.recordsArchived;
+        const retentionMonths = await this.getCollectionRetention('FuelRecord', monthsToKeep);
+        if (retentionMonths > 0) {
+          const cutoffDate = new Date(now);
+          cutoffDate.setMonth(now.getMonth() - retentionMonths);
+          logger.info(`FuelRecord cutoff date: ${cutoffDate.toISOString()} (${retentionMonths} months)`);
+          
+          const fuelRecordResult = await this.archiveCollection(
+            'FuelRecord',
+            FuelRecord,
+            ArchivedFuelRecord,
+            cutoffDate,
+            initiatedBy,
+            dryRun,
+            batchSize
+          );
+          result.collectionsArchived['FuelRecord'] = fuelRecordResult;
+          result.totalRecordsArchived += fuelRecordResult.recordsArchived;
+        } else {
+          logger.info('FuelRecord archival is disabled, skipping');
+        }
       }
 
       if (collections.includes('LPOEntry')) {
-        const lpoEntryResult = await this.archiveCollection(
-          'LPOEntry',
-          LPOEntry,
-          ArchivedLPOEntry,
-          dataCutoffDate,
-          initiatedBy,
-          dryRun,
-          batchSize
-        );
-        result.collectionsArchived['LPOEntry'] = lpoEntryResult;
-        result.totalRecordsArchived += lpoEntryResult.recordsArchived;
+        const retentionMonths = await this.getCollectionRetention('LPOEntry', monthsToKeep);
+        if (retentionMonths > 0) {
+          const cutoffDate = new Date(now);
+          cutoffDate.setMonth(now.getMonth() - retentionMonths);
+          logger.info(`LPOEntry cutoff date: ${cutoffDate.toISOString()} (${retentionMonths} months)`);
+          
+          const lpoEntryResult = await this.archiveCollection(
+            'LPOEntry',
+            LPOEntry,
+            ArchivedLPOEntry,
+            cutoffDate,
+            initiatedBy,
+            dryRun,
+            batchSize
+          );
+          result.collectionsArchived['LPOEntry'] = lpoEntryResult;
+          result.totalRecordsArchived += lpoEntryResult.recordsArchived;
+        } else {
+          logger.info('LPOEntry archival is disabled, skipping');
+        }
       }
 
       if (collections.includes('LPOSummary')) {
-        const lpoSummaryResult = await this.archiveCollection(
-          'LPOSummary',
-          LPOSummary,
-          ArchivedLPOSummary,
-          dataCutoffDate,
-          initiatedBy,
-          dryRun,
-          batchSize
-        );
-        result.collectionsArchived['LPOSummary'] = lpoSummaryResult;
-        result.totalRecordsArchived += lpoSummaryResult.recordsArchived;
+        const retentionMonths = await this.getCollectionRetention('LPOSummary', monthsToKeep);
+        if (retentionMonths > 0) {
+          const cutoffDate = new Date(now);
+          cutoffDate.setMonth(now.getMonth() - retentionMonths);
+          logger.info(`LPOSummary cutoff date: ${cutoffDate.toISOString()} (${retentionMonths} months)`);
+          
+          const lpoSummaryResult = await this.archiveCollection(
+            'LPOSummary',
+            LPOSummary,
+            ArchivedLPOSummary,
+            cutoffDate,
+            initiatedBy,
+            dryRun,
+            batchSize
+          );
+          result.collectionsArchived['LPOSummary'] = lpoSummaryResult;
+          result.totalRecordsArchived += lpoSummaryResult.recordsArchived;
+        } else {
+          logger.info('LPOSummary archival is disabled, skipping');
+        }
       }
 
       if (collections.includes('YardFuelDispense')) {
-        const yardFuelResult = await this.archiveCollection(
-          'YardFuelDispense',
-          YardFuelDispense,
-          ArchivedYardFuelDispense,
-          dataCutoffDate,
-          initiatedBy,
-          dryRun,
-          batchSize
-        );
-        result.collectionsArchived['YardFuelDispense'] = yardFuelResult;
-        result.totalRecordsArchived += yardFuelResult.recordsArchived;
+        const retentionMonths = await this.getCollectionRetention('YardFuelDispense', monthsToKeep);
+        if (retentionMonths > 0) {
+          const cutoffDate = new Date(now);
+          cutoffDate.setMonth(now.getMonth() - retentionMonths);
+          logger.info(`YardFuelDispense cutoff date: ${cutoffDate.toISOString()} (${retentionMonths} months)`);
+          
+          const yardFuelResult = await this.archiveCollection(
+            'YardFuelDispense',
+            YardFuelDispense,
+            ArchivedYardFuelDispense,
+            cutoffDate,
+            initiatedBy,
+            dryRun,
+            batchSize
+          );
+          result.collectionsArchived['YardFuelDispense'] = yardFuelResult;
+          result.totalRecordsArchived += yardFuelResult.recordsArchived;
+        } else {
+          logger.info('YardFuelDispense archival is disabled, skipping');
+        }
+      }
+
+      if (collections.includes('DeliveryOrder')) {
+        const retentionMonths = await this.getCollectionRetention('DeliveryOrder', monthsToKeep);
+        if (retentionMonths > 0) {
+          const cutoffDate = new Date(now);
+          cutoffDate.setMonth(now.getMonth() - retentionMonths);
+          logger.info(`DeliveryOrder cutoff date: ${cutoffDate.toISOString()} (${retentionMonths} months)`);
+          
+          const deliveryOrderResult = await this.archiveCollection(
+            'DeliveryOrder',
+            DeliveryOrder,
+            ArchivedDeliveryOrder,
+            cutoffDate,
+            initiatedBy,
+            dryRun,
+            batchSize
+          );
+          result.collectionsArchived['DeliveryOrder'] = deliveryOrderResult;
+          result.totalRecordsArchived += deliveryOrderResult.recordsArchived;
+        } else {
+          logger.info('DeliveryOrder archival is disabled, skipping');
+        }
       }
 
       if (collections.includes('AuditLog')) {
-        const auditLogResult = await this.archiveCollection(
-          'AuditLog',
-          AuditLog,
-          ArchivedAuditLog,
-          auditCutoffDate,
-          initiatedBy,
-          dryRun,
-          batchSize,
-          'timestamp' // Different date field for audit logs
-        );
-        result.collectionsArchived['AuditLog'] = auditLogResult;
-        result.totalRecordsArchived += auditLogResult.recordsArchived;
+        const retentionMonths = await this.getCollectionRetention('AuditLog', auditLogMonthsToKeep);
+        if (retentionMonths > 0) {
+          const cutoffDate = new Date(now);
+          cutoffDate.setMonth(now.getMonth() - retentionMonths);
+          logger.info(`AuditLog cutoff date: ${cutoffDate.toISOString()} (${retentionMonths} months)`);
+          
+          const auditLogResult = await this.archiveCollection(
+            'AuditLog',
+            AuditLog,
+            ArchivedAuditLog,
+            cutoffDate,
+            initiatedBy,
+            dryRun,
+            batchSize,
+            'timestamp' // Different date field for audit logs
+          );
+          result.collectionsArchived['AuditLog'] = auditLogResult;
+          result.totalRecordsArchived += auditLogResult.recordsArchived;
+        } else {
+          logger.info('AuditLog archival is disabled, skipping');
+        }
       }
 
       result.totalDuration = Date.now() - startTime;
@@ -409,6 +503,9 @@ class ArchivalService {
       case 'YardFuelDispense':
         ArchiveModel = ArchivedYardFuelDispense;
         break;
+      case 'DeliveryOrder':
+        ArchiveModel = ArchivedDeliveryOrder;
+        break;
       case 'AuditLog':
         ArchiveModel = ArchivedAuditLog;
         break;
@@ -444,11 +541,13 @@ class ArchivalService {
       lpoEntryCount,
       lpoSummaryCount,
       yardFuelCount,
+      deliveryOrderCount,
       auditLogCount,
       archivedFuelRecordCount,
       archivedLPOEntryCount,
       archivedLPOSummaryCount,
       archivedYardFuelCount,
+      archivedDeliveryOrderCount,
       archivedAuditLogCount,
       lastArchival,
     ] = await Promise.all([
@@ -456,11 +555,13 @@ class ArchivalService {
       LPOEntry.countDocuments({ isDeleted: { $ne: true } }),
       LPOSummary.countDocuments({ isDeleted: { $ne: true } }),
       YardFuelDispense.countDocuments({ isDeleted: { $ne: true } }),
+      DeliveryOrder.countDocuments({ isDeleted: { $ne: true } }),
       AuditLog.countDocuments({}),
       ArchivedFuelRecord.countDocuments({}),
       ArchivedLPOEntry.countDocuments({}),
       ArchivedLPOSummary.countDocuments({}),
       ArchivedYardFuelDispense.countDocuments({}),
+      ArchivedDeliveryOrder.countDocuments({}),
       ArchivedAuditLog.countDocuments({}),
       ArchivalMetadata.findOne({ status: 'completed' }).sort({ completedAt: -1 }),
     ]);
@@ -470,6 +571,7 @@ class ArchivalService {
       archivedLPOEntryCount +
       archivedLPOSummaryCount +
       archivedYardFuelCount +
+      archivedDeliveryOrderCount +
       archivedAuditLogCount;
 
     // Estimate space saved (rough estimate: 2KB per record)
@@ -481,6 +583,7 @@ class ArchivalService {
         LPOEntry: lpoEntryCount,
         LPOSummary: lpoSummaryCount,
         YardFuelDispense: yardFuelCount,
+        DeliveryOrder: deliveryOrderCount,
         AuditLog: auditLogCount,
       },
       archivedRecords: {
@@ -488,6 +591,7 @@ class ArchivalService {
         LPOEntry: archivedLPOEntryCount,
         LPOSummary: archivedLPOSummaryCount,
         YardFuelDispense: archivedYardFuelCount,
+        DeliveryOrder: archivedDeliveryOrderCount,
         AuditLog: archivedAuditLogCount,
       },
       lastArchivalDate: lastArchival?.completedAt,

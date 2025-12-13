@@ -285,6 +285,64 @@ const archivalMetadataSchema = new Schema<IArchivalMetadata>(
   }
 );
 
+// ============ ARCHIVED DELIVERY ORDERS ============
+export interface IArchivedDeliveryOrder {
+  originalId: mongoose.Types.ObjectId;
+  sn: number;
+  date: string;
+  importOrExport: string;
+  doType: string;
+  doNumber: string;
+  truckNo: string;
+  driverName: string;
+  product: string;
+  quantity: number;
+  tare: number;
+  gross: number;
+  net: number;
+  archivedAt: Date;
+  archivedReason: string;
+  [key: string]: any;
+}
+
+const archivedDeliveryOrderSchema = new Schema<IArchivedDeliveryOrder>(
+  {
+    originalId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+      index: true,
+    },
+    sn: Number,
+    date: String,
+    importOrExport: { type: String, index: true },
+    doType: String,
+    doNumber: String,
+    truckNo: { type: String, index: true },
+    driverName: String,
+    product: String,
+    quantity: Number,
+    tare: Number,
+    gross: Number,
+    net: Number,
+    archivedAt: {
+      type: Date,
+      default: Date.now,
+      index: true,
+    },
+    archivedReason: {
+      type: String,
+      default: 'Automated archival - data older than configured retention period',
+    },
+  },
+  {
+    timestamps: true,
+    strict: false,
+  }
+);
+
+archivedDeliveryOrderSchema.index({ date: -1, archivedAt: -1 });
+archivedDeliveryOrderSchema.index({ doNumber: 1 });
+
 archivalMetadataSchema.index({ collectionName: 1, archivalDate: -1 });
 
 // Export models
@@ -292,5 +350,6 @@ export const ArchivedFuelRecord = mongoose.model('ArchivedFuelRecord', archivedF
 export const ArchivedLPOEntry = mongoose.model('ArchivedLPOEntry', archivedLPOEntrySchema);
 export const ArchivedLPOSummary = mongoose.model('ArchivedLPOSummary', archivedLPOSummarySchema);
 export const ArchivedYardFuelDispense = mongoose.model('ArchivedYardFuelDispense', archivedYardFuelDispenseSchema);
+export const ArchivedDeliveryOrder = mongoose.model('ArchivedDeliveryOrder', archivedDeliveryOrderSchema);
 export const ArchivedAuditLog = mongoose.model('ArchivedAuditLog', archivedAuditLogSchema);
 export const ArchivalMetadata = mongoose.model<IArchivalMetadata>('ArchivalMetadata', archivalMetadataSchema);

@@ -71,6 +71,13 @@ export interface ISystemSettings {
     autoCleanupEnabled: boolean;
     backupFrequency: 'daily' | 'weekly' | 'monthly';
     backupRetention: number; // days
+    // Per-collection archival settings
+    collectionArchivalSettings?: {
+      [collectionName: string]: {
+        enabled: boolean;
+        retentionMonths: number;
+      };
+    };
   };
   // Notification Settings
   notifications?: {

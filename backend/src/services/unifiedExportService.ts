@@ -246,6 +246,7 @@ export async function getAllDeliveryOrders(options: ExportOptions = {}): Promise
   const {
     startDate,
     endDate,
+    includeArchived = true,
     filters = {},
     sort = { date: -1 },
     limit,
@@ -260,13 +261,39 @@ export async function getAllDeliveryOrders(options: ExportOptions = {}): Promise
       if (endDate) query.date.$lte = endDate.toISOString().split('T')[0];
     }
 
+    // Get active records
     let activeQuery = DeliveryOrder.find(query).sort(sort);
     if (limit) activeQuery = activeQuery.limit(limit);
-    const records = await activeQuery.lean();
+    const activeRecords = await activeQuery.lean();
 
-    logger.info(`Retrieved ${records.length} delivery orders for export`);
+    logger.info(`Retrieved ${activeRecords.length} active delivery orders for export`);
 
-    return records;
+    // Get archived records if requested
+    let archivedRecords: any[] = [];
+    if (includeArchived) {
+      try {
+        archivedRecords = await archivalService.queryArchivedData(
+          'DeliveryOrder',
+          query,
+          { limit: limit || 10000, sort }
+        );
+        logger.info(`Retrieved ${archivedRecords.length} archived delivery orders for export`);
+      } catch (error: any) {
+        logger.warn('Failed to fetch archived delivery orders:', error.message);
+      }
+    }
+
+    // Combine and sort
+    const allRecords = [...activeRecords, ...archivedRecords];
+    
+    // Sort combined results
+    allRecords.sort((a, b) => {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      return dateB.getTime() - dateA.getTime(); // Newest first
+    });
+
+    return limit ? allRecords.slice(0, limit) : allRecords;
   } catch (error: any) {
     logger.error('Error fetching all delivery orders:', error);
     throw error;

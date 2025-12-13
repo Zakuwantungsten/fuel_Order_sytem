@@ -1,10 +1,12 @@
 import { Response } from 'express';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../models';
+import { ArchivedDeliveryOrder } from '../models/ArchivedData';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
+import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
@@ -304,18 +306,73 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
       }
     }
 
-    // Get data with pagination
-    const skip = calculateSkip(page, limit);
-    const sortOrder = order === 'asc' ? 1 : -1;
+    // If date filter is applied, include archived data
+    const includeArchived = !!(dateFrom || dateTo);
+    let deliveryOrders: any[];
+    let total: number;
 
-    const [deliveryOrders, total] = await Promise.all([
-      DeliveryOrder.find(filter)
-        .sort({ [sort]: sortOrder })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      DeliveryOrder.countDocuments(filter),
-    ]);
+    if (includeArchived) {
+      // Use unified export service to get both active and archived data
+      const startDate = dateFrom ? new Date(dateFrom as string) : undefined;
+      const endDate = dateTo ? new Date(dateTo as string) : undefined;
+      
+      const allOrders = await unifiedExportService.getAllDeliveryOrders({
+        startDate,
+        endDate,
+        includeArchived: true,
+        filters: { ...filter, isDeleted: { $ne: true } },
+      });
+
+      // Apply additional filters (archived data might not have been filtered)
+      let filteredOrders = allOrders;
+      if (clientName) {
+        const regex = new RegExp(sanitizeRegexInput(clientName as string), 'i');
+        filteredOrders = filteredOrders.filter(o => regex.test(o.clientName));
+      }
+      if (truckNo) {
+        const regex = new RegExp(sanitizeRegexInput(truckNo as string), 'i');
+        filteredOrders = filteredOrders.filter(o => regex.test(o.truckNo));
+      }
+      if (destination) {
+        const regex = new RegExp(sanitizeRegexInput(destination as string), 'i');
+        filteredOrders = filteredOrders.filter(o => regex.test(o.destination || ''));
+      }
+      if (importOrExport && importOrExport !== 'ALL') {
+        filteredOrders = filteredOrders.filter(o => o.importOrExport === importOrExport);
+      }
+      if (doType) {
+        filteredOrders = filteredOrders.filter(o => o.doType === doType);
+      }
+
+      // Sort
+      const sortField = sort || 'date';
+      const sortDir = order === 'asc' ? 1 : -1;
+      filteredOrders.sort((a, b) => {
+        const aVal = a[sortField];
+        const bVal = b[sortField];
+        if (aVal < bVal) return -sortDir;
+        if (aVal > bVal) return sortDir;
+        return 0;
+      });
+
+      // Paginate in memory
+      total = filteredOrders.length;
+      const skip = calculateSkip(page, limit);
+      deliveryOrders = filteredOrders.slice(skip, skip + limit);
+    } else {
+      // No date filter - only query active data (normal pagination)
+      const skip = calculateSkip(page, limit);
+      const sortOrder = order === 'asc' ? 1 : -1;
+
+      [deliveryOrders, total] = await Promise.all([
+        DeliveryOrder.find(filter)
+          .sort({ [sort]: sortOrder })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        DeliveryOrder.countDocuments(filter),
+      ]);
+    }
 
     const response = createPaginatedResponse(deliveryOrders, page, limit, total);
 
@@ -904,12 +961,22 @@ export const getWorkbookByYear = async (req: AuthRequest, res: Response): Promis
     const yearStart = `${year}-01-01`;
     const yearEnd = `${year}-12-31`;
 
-    // Get all DOs for the year - each DO is its own sheet
-    const deliveryOrders = await DeliveryOrder.find({
-      isDeleted: false,
-      doType: 'DO',
-      date: { $gte: yearStart, $lte: yearEnd }
-    }).sort({ date: 1, doNumber: 1 }).lean();
+    // Get all DOs for the year - INCLUDING ARCHIVED DATA
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31, 23, 59, 59);
+    
+    const allDeliveryOrders = await unifiedExportService.getAllDeliveryOrders({
+      startDate,
+      endDate,
+      includeArchived: true,
+      filters: { doType: 'DO' },
+    });
+
+    const deliveryOrders = allDeliveryOrders.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return (a.doNumber || '').localeCompare(b.doNumber || '');
+    });
 
     // Each DO is a sheet (like LPO workbook)
     const workbook = {
@@ -935,17 +1002,26 @@ export const getWorkbookByYear = async (req: AuthRequest, res: Response): Promis
 };
 
 /**
- * Get available years for DO workbooks
+ * Get available years for DO workbooks (INCLUDING ARCHIVED DATA)
  */
 export const getAvailableYears = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const years = await DeliveryOrder.distinct('date', { 
+    // Get years from active data
+    const activeYears = await DeliveryOrder.distinct('date', { 
       isDeleted: false,
       doType: 'DO'
     });
     
+    // Get years from archived data
+    const archivedDates = await ArchivedDeliveryOrder.distinct('date', {
+      doType: 'DO'
+    });
+    
+    // Combine and extract years
+    const allYears = [...activeYears, ...archivedDates];
+    
     const uniqueYears = [...new Set(
-      years
+      allYears
         .map(date => {
           const year = parseInt(date.split('-')[0], 10);
           return isNaN(year) ? null : year;
@@ -977,12 +1053,22 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     const yearStart = `${year}-01-01`;
     const yearEnd = `${year}-12-31`;
 
-    // Get all DOs for the year
-    const deliveryOrders = await DeliveryOrder.find({
-      isDeleted: false,
-      doType: 'DO',
-      date: { $gte: yearStart, $lte: yearEnd }
-    }).sort({ date: 1, doNumber: 1 }).lean();
+    // Get all DOs for the year - INCLUDING ARCHIVED DATA
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31, 23, 59, 59);
+    
+    const allDeliveryOrders = await unifiedExportService.getAllDeliveryOrders({
+      startDate,
+      endDate,
+      includeArchived: true,
+      filters: { doType: 'DO' },
+    });
+
+    const deliveryOrders = allDeliveryOrders.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return (a.doNumber || '').localeCompare(b.doNumber || '');
+    });
 
     if (deliveryOrders.length === 0) {
       throw new ApiError(404, 'No delivery orders found for this year');
@@ -1769,12 +1855,22 @@ export const getSDOWorkbookByYear = async (req: AuthRequest, res: Response): Pro
     const yearStart = `${year}-01-01`;
     const yearEnd = `${year}-12-31`;
 
-    // Get all SDOs for the year - each SDO is its own sheet
-    const sdoOrders = await DeliveryOrder.find({
-      isDeleted: false,
-      doType: 'SDO',
-      date: { $gte: yearStart, $lte: yearEnd }
-    }).sort({ date: 1, doNumber: 1 }).lean();
+    // Get all SDOs for the year - INCLUDING ARCHIVED DATA
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31, 23, 59, 59);
+    
+    const allSDOOrders = await unifiedExportService.getAllDeliveryOrders({
+      startDate,
+      endDate,
+      includeArchived: true,
+      filters: { doType: 'SDO' },
+    });
+
+    const sdoOrders = allSDOOrders.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return (a.doNumber || '').localeCompare(b.doNumber || '');
+    });
 
     // Each SDO is a sheet
     const workbook = {
@@ -1800,17 +1896,26 @@ export const getSDOWorkbookByYear = async (req: AuthRequest, res: Response): Pro
 };
 
 /**
- * Get available years for SDO workbooks
+ * Get available years for SDO workbooks (INCLUDING ARCHIVED DATA)
  */
 export const getAvailableSDOYears = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const years = await DeliveryOrder.distinct('date', { 
+    // Get years from active data
+    const activeYears = await DeliveryOrder.distinct('date', { 
       isDeleted: false,
       doType: 'SDO'
     });
     
+    // Get years from archived data
+    const archivedDates = await ArchivedDeliveryOrder.distinct('date', {
+      doType: 'SDO'
+    });
+    
+    // Combine and extract years
+    const allYears = [...activeYears, ...archivedDates];
+    
     const uniqueYears = [...new Set(
-      years
+      allYears
         .map(date => {
           const year = parseInt(date.split('-')[0], 10);
           return isNaN(year) ? null : year;
@@ -1842,12 +1947,22 @@ export const exportSDOWorkbook = async (req: AuthRequest, res: Response): Promis
     const yearStart = `${year}-01-01`;
     const yearEnd = `${year}-12-31`;
 
-    // Get all SDOs for the year
-    const sdoOrders = await DeliveryOrder.find({
-      isDeleted: false,
-      doType: 'SDO',
-      date: { $gte: yearStart, $lte: yearEnd }
-    }).sort({ date: 1, doNumber: 1 }).lean();
+    // Get all SDOs for the year - INCLUDING ARCHIVED DATA
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31, 23, 59, 59);
+    
+    const allSDOOrders = await unifiedExportService.getAllDeliveryOrders({
+      startDate,
+      endDate,
+      includeArchived: true,
+      filters: { doType: 'SDO' },
+    });
+
+    const sdoOrders = allSDOOrders.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return (a.doNumber || '').localeCompare(b.doNumber || '');
+    });
 
     if (sdoOrders.length === 0) {
       throw new ApiError(404, 'No SDO orders found for this year');
@@ -2346,12 +2461,22 @@ export const exportYearlyMonthlySummaries = async (req: AuthRequest, res: Respon
     const yearStart = `${year}-01-01`;
     const yearEnd = `${year}-12-31`;
 
-    // Get all DOs for the year
-    const deliveryOrders = await DeliveryOrder.find({
-      isDeleted: false,
-      doType: 'DO',
-      date: { $gte: yearStart, $lte: yearEnd }
-    }).sort({ date: 1, doNumber: 1 }).lean();
+    // Get all DOs for the year - INCLUDING ARCHIVED DATA
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31, 23, 59, 59);
+    
+    const allDeliveryOrders = await unifiedExportService.getAllDeliveryOrders({
+      startDate,
+      endDate,
+      includeArchived: true,
+      filters: { doType: 'DO' },
+    });
+
+    const deliveryOrders = allDeliveryOrders.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return (a.doNumber || '').localeCompare(b.doNumber || '');
+    });
 
     if (deliveryOrders.length === 0) {
       throw new ApiError(404, 'No delivery orders found for this year');
@@ -2403,12 +2528,23 @@ export const exportSDOYearlyMonthlySummaries = async (req: AuthRequest, res: Res
     const yearStart = `${year}-01-01`;
     const yearEnd = `${year}-12-31`;
 
-    // Get all SDOs for the year
-    const sdoOrders = await DeliveryOrder.find({
-      isDeleted: false,
-      doType: 'SDO',
-      date: { $gte: yearStart, $lte: yearEnd }
-    }).sort({ date: 1, doNumber: 1 }).lean();
+    // Get all SDOs for the year - INCLUDING ARCHIVED DATA
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31, 23, 59, 59);
+    
+    const allSDOOrders = await unifiedExportService.getAllDeliveryOrders({
+      startDate,
+      endDate,
+      includeArchived: true,
+      filters: { doType: 'SDO' },
+    });
+
+    const sdoOrders = allSDOOrders.filter((order: any) => !order.isDeleted)
+      .sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return (a.doNumber || '').localeCompare(b.doNumber || '');
+      });
 
     if (sdoOrders.length === 0) {
       throw new ApiError(404, 'No SDO orders found for this year');

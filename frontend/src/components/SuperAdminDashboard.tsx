@@ -27,11 +27,12 @@ import SecurityTab from './SuperAdmin/SecurityTab';
 import BackupRecoveryTab from './SuperAdmin/BackupRecoveryTab';
 import AnalyticsTab from './SuperAdmin/AnalyticsTab';
 import TrashManagementTab from './SuperAdmin/TrashManagementTab';
+import ArchivalManagementTab from './SuperAdmin/ArchivalManagementTab';
 import SystemConfigDashboard from './SuperAdmin/SystemConfigDashboard';
 
 interface SuperAdminDashboardProps {
   user: any;
-  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash';
+  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival';
   onNavigate?: (section: string) => void;
 }
 
@@ -92,6 +93,7 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
       audit: '📋 AUDIT & LOGS',
       security: '🔐 SECURITY',
       trash: '🗑️ TRASH MANAGEMENT',
+      archival: '📦 DATA ARCHIVAL',
       backup: '💾 BACKUP & RECOVERY',
       analytics: '📊 ANALYTICS & REPORTS',
     };
@@ -202,6 +204,9 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
             )}
             {section === 'trash' && (
               <TrashManagementTab onMessage={showMessage} />
+            )}
+            {section === 'archival' && (
+              <ArchivalManagementTab onMessage={showMessage} />
             )}
             {section === 'backup' && (
               <BackupRecoveryTab onMessage={showMessage} />
