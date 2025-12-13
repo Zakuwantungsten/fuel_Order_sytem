@@ -814,7 +814,7 @@ export const usersAPI = {
     await apiClient.delete(`/users/${id}`);
   },
 
-  resetPassword: async (id: string | number): Promise<{ temporaryPassword: string }> => {
+  resetPassword: async (id: string | number): Promise<{ temporaryPassword?: string; emailSent: boolean }> => {
     const response = await apiClient.post(`/users/${id}/reset-password`);
     return response.data.data;
   },

@@ -106,6 +106,10 @@ const userSchema = new Schema<IUserDocument>(
     lastLogin: {
       type: Date,
     },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
     refreshToken: {
       type: String,
       select: false,

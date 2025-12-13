@@ -4,6 +4,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
+import { emailService } from '../services/emailService';
 import crypto from 'crypto';
 
 /**
@@ -105,7 +106,7 @@ export const getUserById = async (req: AuthRequest, res: Response): Promise<void
  */
 export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { username, email, password, firstName, lastName, role, department, station, truckNo } = req.body;
+    const { username, email, firstName, lastName, role, department, station, yard, truckNo } = req.body;
 
     // Format truck number to standard format
     const formattedTruckNo = truckNo ? formatTruckNumber(truckNo) : undefined;
@@ -125,20 +126,39 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       }
     }
 
+    // Generate secure temporary password
+    const temporaryPassword = crypto.randomBytes(8).toString('hex'); // 16 character password
+
     // Create new user
     const user = await User.create({
       username,
       email,
-      password,
+      password: temporaryPassword,
       firstName,
       lastName,
       role: role || 'viewer',
       department,
       station,
+      yard,
       truckNo: formattedTruckNo,
       isActive: true,
       isDeleted: false,
+      mustChangePassword: true, // Flag to force password change on first login
     });
+
+    // Send welcome email with credentials
+    try {
+      await emailService.sendWelcomeEmail(
+        email,
+        `${firstName} ${lastName}`,
+        username,
+        temporaryPassword
+      );
+      logger.info(`Welcome email sent to ${email}`);
+    } catch (emailError: any) {
+      logger.error(`Failed to send welcome email to ${email}:`, emailError);
+      // Don't fail user creation if email fails, but log it
+    }
 
     // Remove sensitive data
     const userResponse = user.toJSON();
@@ -151,14 +171,15 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       req.user?.username || 'system',
       'User',
       user._id.toString(),
-      { username, role, department },
+      { username, role, department, station, yard },
       req.ip
     );
 
     res.status(201).json({
       success: true,
-      message: 'User created successfully',
+      message: 'User created successfully. Welcome email sent with login credentials.',
       data: userResponse,
+      emailSent: true,
     });
   } catch (error: any) {
     throw error;
@@ -172,6 +193,25 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
   try {
     const { id } = req.params;
     const { password, refreshToken, ...updateData } = req.body;
+
+    // Check if user exists
+    const existingUser = await User.findOne({ _id: id, isDeleted: false });
+    if (!existingUser) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    // Check for duplicate email if email is being updated
+    if (updateData.email && updateData.email !== existingUser.email) {
+      const emailExists = await User.findOne({
+        email: updateData.email,
+        isDeleted: false,
+        _id: { $ne: id }, // Exclude current user
+      });
+
+      if (emailExists) {
+        throw new ApiError(400, 'Email already exists');
+      }
+    }
 
     // Prevent updating password and refreshToken through this endpoint
     const user = await User.findOneAndUpdate(
@@ -203,6 +243,11 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
       data: user,
     });
   } catch (error: any) {
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0];
+      throw new ApiError(400, `${field} already exists`);
+    }
     throw error;
   }
 };
@@ -267,11 +312,28 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
     // Generate temporary password
     const temporaryPassword = crypto.randomBytes(8).toString('hex');
 
-    // Update password
+    // Update password and flag for password change
     user.password = temporaryPassword;
+    user.mustChangePassword = true;
     await user.save();
 
     logger.info(`Password reset for user: ${user.username} by ${req.user?.username}`);
+
+    // Send password reset email
+    let emailSent = false;
+    try {
+      await emailService.sendPasswordResetByAdminEmail(
+        user.email,
+        `${user.firstName} ${user.lastName}`,
+        user.username,
+        temporaryPassword
+      );
+      emailSent = true;
+      logger.info(`Password reset email sent to ${user.email}`);
+    } catch (emailError: any) {
+      logger.error(`Failed to send password reset email to ${user.email}:`, emailError);
+      // Don't fail the operation if email fails
+    }
 
     // Log audit trail
     await AuditService.log({
@@ -280,15 +342,20 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
       action: 'PASSWORD_RESET',
       resourceType: 'User',
       resourceId: user._id.toString(),
-      details: `Password reset for user: ${user.username}`,
+      details: `Password reset for user: ${user.username}${emailSent ? ' (email sent)' : ' (email failed)'}`,
       ipAddress: req.ip,
       severity: 'medium',
     });
 
     res.status(200).json({
       success: true,
-      message: 'Password reset successfully',
-      data: { temporaryPassword },
+      message: emailSent 
+        ? 'Password reset successfully. New password sent to user\'s email.'
+        : 'Password reset successfully, but email notification failed.',
+      data: { 
+        temporaryPassword: emailSent ? undefined : temporaryPassword, // Only return password if email failed
+        emailSent 
+      },
     });
   } catch (error: any) {
     throw error;

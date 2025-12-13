@@ -108,7 +108,7 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction):
  * Custom CSRF error handler
  */
 export const csrfErrorHandler = (err: any, req: Request, res: Response, next: NextFunction): void => {
-  if (err.code?.startsWith('CSRF_')) {
+  if (typeof err.code === 'string' && err.code.startsWith('CSRF_')) {
     logger.warn(`CSRF error for ${req.method} ${req.path} from IP ${req.ip}`);
     res.status(403).json({
       success: false,

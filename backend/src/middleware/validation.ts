@@ -23,6 +23,7 @@ export const userValidation = {
         'super_admin',
         'admin',
         'manager',
+        'super_manager',
         'supervisor',
         'clerk',
         'driver',
@@ -33,11 +34,52 @@ export const userValidation = {
         'fuel_attendant',
         'station_manager',
         'payment_manager',
+        'import_officer',
+        'export_officer',
         'dar_yard',
         'tanga_yard',
         'mmsa_yard',
       ])
       .withMessage('Invalid role'),
+  ],
+
+  // Admin creates user - password is auto-generated and emailed
+  adminCreate: [
+    body('username')
+      .trim()
+      .isLength({ min: 3, max: 30 })
+      .withMessage('Username must be between 3 and 30 characters')
+      .matches(/^[a-zA-Z0-9_]+$/)
+      .withMessage('Username can only contain letters, numbers, and underscores'),
+    body('email').isEmail().withMessage('Must be a valid email address').normalizeEmail(),
+    body('firstName').trim().notEmpty().withMessage('First name is required'),
+    body('lastName').trim().notEmpty().withMessage('Last name is required'),
+    body('role')
+      .optional()
+      .isIn([
+        'super_admin',
+        'admin',
+        'manager',
+        'super_manager',
+        'supervisor',
+        'clerk',
+        'driver',
+        'viewer',
+        'fuel_order_maker',
+        'boss',
+        'yard_personnel',
+        'fuel_attendant',
+        'station_manager',
+        'payment_manager',
+        'import_officer',
+        'export_officer',
+        'dar_yard',
+        'tanga_yard',
+        'mmsa_yard',
+      ])
+      .withMessage('Invalid role'),
+    body('station').optional().trim(),
+    body('yard').optional().isIn(['DAR YARD', 'TANGA YARD', 'MMSA YARD']).withMessage('Invalid yard'),
   ],
 
   login: [

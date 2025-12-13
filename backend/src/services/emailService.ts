@@ -533,6 +533,165 @@ class EmailService {
     `;
   }
 
+  /**
+   * Send password reset by admin email
+   */
+  async sendPasswordResetByAdminEmail(email: string, name: string, username: string, temporaryPassword: string): Promise<void> {
+    if (!this.isConfigured || !this.transporter) {
+      logger.warn('Email service not configured - cannot send password reset email');
+      throw new Error('Email service is not configured');
+    }
+
+    try {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 30px; text-align: center;">
+            <h1 style="margin: 0; font-size: 28px;">🔑 Password Reset</h1>
+          </div>
+          <div style="padding: 30px; background: #f9fafb;">
+            <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+              <p style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px;">
+                Hello <strong>${name}</strong>,
+              </p>
+              <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 15px; line-height: 1.6;">
+                Your password has been reset by a system administrator. You can now log in using the temporary password below.
+              </p>
+              
+              <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #92400e; font-weight: bold; font-size: 14px;">📋 Your Login Credentials:</p>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #78350f; font-size: 14px;">Username:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: bold; font-size: 14px;">${username}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #78350f; font-size: 14px;">Temporary Password:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: bold; font-size: 14px; font-family: monospace; background: #fef3c7; padding: 8px; border-radius: 4px;">${temporaryPassword}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #991b1b; font-weight: bold; font-size: 14px;">⚠️ Important Security Notice:</p>
+                <ul style="color: #991b1b; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                  <li>This is a <strong>temporary password</strong></li>
+                  <li>You <strong>must change it</strong> immediately after logging in</li>
+                  <li>Your previous password is no longer valid</li>
+                  <li>Keep your credentials <strong>confidential</strong></li>
+                  <li>If you didn't request this reset, contact your administrator immediately</li>
+                </ul>
+              </div>
+
+              <p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                If you have any questions or concerns, please contact your system administrator.
+              </p>
+            </div>
+
+            <div style="text-align: center; padding: 20px 0;">
+              <p style="margin: 0; color: #9ca3af; font-size: 13px;">
+                This email was sent automatically. Please do not reply to this email.
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const from = this.currentConfig?.from || this.currentConfig?.auth.user;
+      const fromName = this.currentConfig?.fromName || 'Fuel Order System';
+
+      await this.transporter.sendMail({
+        from: `"${fromName}" <${from}>`,
+        to: email,
+        subject: 'Your Password Has Been Reset - Action Required',
+        html: emailContent,
+      });
+
+      logger.info(`Password reset email sent to: ${email}`);
+    } catch (error) {
+      logger.error('Failed to send password reset email:', error);
+      throw new Error('Failed to send password reset email');
+    }
+  }
+
+  /**
+   * Send welcome email with login credentials to new user
+   */
+  async sendWelcomeEmail(email: string, name: string, username: string, temporaryPassword: string): Promise<void> {
+    if (!this.isConfigured || !this.transporter) {
+      logger.warn('Email service not configured - cannot send welcome email');
+      throw new Error('Email service is not configured');
+    }
+
+    try {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center;">
+            <h1 style="margin: 0; font-size: 28px;">🎉 Welcome to Fuel Order System</h1>
+          </div>
+          <div style="padding: 30px; background: #f9fafb;">
+            <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+              <p style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px;">
+                Hello <strong>${name}</strong>,
+              </p>
+              <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 15px; line-height: 1.6;">
+                Your account has been created successfully! You can now access the Fuel Order Management System.
+              </p>
+              
+              <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #1e40af; font-weight: bold; font-size: 14px;">📋 Your Login Credentials:</p>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Username:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: bold; font-size: 14px;">${username}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Temporary Password:</td>
+                    <td style="padding: 8px 0; color: #1f2937; font-weight: bold; font-size: 14px; font-family: monospace; background: #f3f4f6; padding: 8px; border-radius: 4px;">${temporaryPassword}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #92400e; font-weight: bold; font-size: 14px;">⚠️ Important Security Notice:</p>
+                <ul style="color: #78350f; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                  <li>This is a <strong>temporary password</strong></li>
+                  <li>You will be required to <strong>change it</strong> on your first login</li>
+                  <li>Keep your credentials <strong>confidential</strong></li>
+                  <li>Never share your password with anyone</li>
+                </ul>
+              </div>
+
+              <p style="margin: 20px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                If you have any questions or need assistance, please contact your system administrator.
+              </p>
+            </div>
+
+            <div style="text-align: center; padding: 20px 0;">
+              <p style="margin: 0; color: #9ca3af; font-size: 13px;">
+                This email was sent automatically. Please do not reply to this email.
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const from = this.currentConfig?.from || this.currentConfig?.auth.user;
+      const fromName = this.currentConfig?.fromName || 'Fuel Order System';
+
+      await this.transporter.sendMail({
+        from: `"${fromName}" <${from}>`,
+        to: email,
+        subject: 'Welcome to Fuel Order Management System - Your Login Credentials',
+        html: emailContent,
+      });
+
+      logger.info(`Welcome email sent to: ${email}`);
+    } catch (error) {
+      logger.error('Failed to send welcome email:', error);
+      throw new Error('Failed to send welcome email');
+    }
+  }
+
   private wrapInTemplate(subject: string, message: string): string {
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

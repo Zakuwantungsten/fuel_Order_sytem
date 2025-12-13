@@ -15,10 +15,10 @@ router.use(authorize('super_admin', 'admin'));
 router.get('/', commonValidation.pagination, validate, asyncHandler(userController.getAllUsers));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(userController.getUserById));
 
-// Create route
+// Create route (Admin creates user - auto-generates password)
 router.post(
   '/',
-  userValidation.register,
+  userValidation.adminCreate,
   validate,
   asyncHandler(userController.createUser)
 );
