@@ -1142,17 +1142,35 @@ function ResetPasswordModal({
   onError: (msg: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleReset = async () => {
     setLoading(true);
     try {
       const result = await usersAPI.resetPassword(user.id);
-      onSuccess(result.temporaryPassword);
+      setTempPassword(result.temporaryPassword);
     } catch (error: any) {
       onError(error.response?.data?.message || 'Failed to reset password');
+      onClose();
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCopy = () => {
+    if (tempPassword) {
+      navigator.clipboard.writeText(tempPassword);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleClose = () => {
+    if (tempPassword) {
+      onSuccess(tempPassword);
+    }
+    onClose();
   };
 
   return (
@@ -1173,28 +1191,93 @@ function ResetPasswordModal({
             </div>
           </div>
 
-          <p className="text-gray-700 dark:text-gray-300 mb-6">
-            Reset password for <strong>{user.username}</strong> ({user.firstName} {user.lastName})?
-            A temporary password will be generated that the user must change on first login.
-          </p>
+          {!tempPassword ? (
+            <>
+              <p className="text-gray-700 dark:text-gray-300 mb-6">
+                Reset password for <strong>{user.username}</strong> ({user.firstName} {user.lastName})?
+                A temporary password will be generated that the user must change on first login.
+              </p>
 
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleReset}
-              disabled={loading}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
-              Reset Password
-            </button>
-          </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={onClose}
+                  disabled={loading}
+                  className="px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReset}
+                  disabled={loading}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  Reset Password
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-2 mb-2">
+                  <Check className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-green-900 dark:text-green-100">
+                      Password Reset Successfully
+                    </p>
+                    <p className="text-sm text-green-800 dark:text-green-200 mt-1">
+                      Please copy this temporary password and share it securely with the user.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Temporary Password
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={tempPassword}
+                    readOnly
+                    className="flex-1 px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-lg font-semibold text-gray-900 dark:text-gray-100"
+                  />
+                  <button
+                    onClick={handleCopy}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Key className="w-4 h-4" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-6">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  <strong>Important:</strong> The user will be required to change this password on their next login.
+                </p>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleClose}
+                  className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                >
+                  Done
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
