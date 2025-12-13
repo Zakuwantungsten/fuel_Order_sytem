@@ -7,12 +7,12 @@ import { config } from '../config';
  */
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 5 : 100, // 5 in prod, 100 in dev
   message: 'Too many authentication attempts. Please try again after 15 minutes.',
   standardHeaders: true,
   legacyHeaders: false,
   // Skip successful requests to allow legitimate users
-  skipSuccessfulRequests: false,
+  skipSuccessfulRequests: true, // Don't count successful logins
 });
 
 /**

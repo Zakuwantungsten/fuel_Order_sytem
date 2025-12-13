@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MapPin, Fuel, Bell, Navigation, Clock, ArrowRight, Info, LogOut, Sun, Moon, RefreshCw, Truck, Wifi, WifiOff, FileText, Calendar } from 'lucide-react';
+import { MapPin, Fuel, Bell, Navigation, Clock, ArrowRight, Info, LogOut, Sun, Moon, RefreshCw, Truck, Wifi, WifiOff, FileText, Calendar, Key, User, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { lposAPI } from '../services/api';
+import ChangePasswordModal from './ChangePasswordModal';
 
 // Real-time update interval (30 seconds)
 const REALTIME_UPDATE_INTERVAL = 30000;
@@ -49,6 +50,9 @@ export function DriverPortal({ user }: DriverPortalProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const { logout, toggleTheme, isDark } = useAuth();
 
@@ -330,6 +334,11 @@ export function DriverPortal({ user }: DriverPortalProps) {
     }
   };
 
+  const handlePasswordChangeSuccess = () => {
+    setSuccessMessage('Password changed successfully!');
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
   const markNotificationRead = (id: string) => {
     setNotifications(prev =>
       prev.map(n => (n.id === id ? { ...n, read: true } : n))
@@ -460,14 +469,49 @@ export function DriverPortal({ user }: DriverPortalProps) {
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                className="p-2 rounded-full bg-red-500 hover:bg-red-400 transition-colors"
-                title="Logout"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+              {/* Profile Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  className="p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
+                  title="Profile Menu"
+                >
+                  <User className="w-5 h-5" />
+                </button>
+                
+                {showProfileMenu && (
+                  <>
+                    <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
+                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
+                      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Signed in as</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.firstName} {user.lastName}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          setShowChangePassword(true);
+                        }}
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        <Key className="w-4 h-4 mr-3" />
+                        Change Password
+                      </button>
+                      <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          handleLogout();
+                        }}
+                        className="w-full flex items-center px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <LogOut className="w-4 h-4 mr-3" />
+                        Sign Out
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
           {/* Last Updated */}
@@ -748,6 +792,24 @@ export function DriverPortal({ user }: DriverPortalProps) {
           </div>
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      {showChangePassword && (
+        <ChangePasswordModal
+          onClose={() => setShowChangePassword(false)}
+          onSuccess={handlePasswordChangeSuccess}
+        />
+      )}
+
+      {/* Success Message */}
+      {successMessage && (
+        <div className="fixed top-4 right-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 px-6 py-3 rounded-lg shadow-lg z-50 flex items-center space-x-3">
+          <span>{successMessage}</span>
+          <button onClick={() => setSuccessMessage('')} className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

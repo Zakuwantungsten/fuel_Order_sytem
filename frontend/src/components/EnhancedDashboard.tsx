@@ -37,6 +37,7 @@ import DriverCredentialsManager from '../pages/Admin/DriverCredentialsManager';
 import OfficerPortal from './OfficerPortal';
 import PendingYardFuel from './PendingYardFuel';
 import NotificationsPage from './NotificationsPage';
+import ChangePasswordModal from './ChangePasswordModal';
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
 import { useNavigate } from 'react-router-dom';
@@ -121,9 +122,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [activeTab, setActiveTab] = useState(() => getInitialTab(user.role));
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [showPendingYardFuel, setShowPendingYardFuel] = useState(false);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [editDoId, setEditDoId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { logout, toggleTheme, isDark } = useAuth();
 
   // Persist active tab to localStorage whenever it changes
@@ -509,6 +512,17 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                       <button
                         onClick={() => {
                           setShowProfileMenu(false);
+                          setShowChangePassword(true);
+                        }}
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        <Key className="w-4 h-4 mr-3" />
+                        Change Password
+                      </button>
+                      <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
                           logout();
                         }}
                         className="w-full flex items-center px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -525,9 +539,32 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         </header>
 
         <main className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 transition-colors">
+          {successMessage && (
+            <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center justify-between">
+              <span className="text-green-800 dark:text-green-200">{successMessage}</span>
+              <button
+                onClick={() => setSuccessMessage(null)}
+                className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
           {renderActiveComponent()}
         </main>
       </div>
+
+      {/* Change Password Modal */}
+      {showChangePassword && (
+        <ChangePasswordModal
+          onClose={() => setShowChangePassword(false)}
+          onSuccess={() => {
+            setShowChangePassword(false);
+            setSuccessMessage('Password changed successfully!');
+            setTimeout(() => setSuccessMessage(null), 5000);
+          }}
+        />
+      )}
 
       {/* Pending Yard Fuel Modal */}
       {showPendingYardFuel && (
