@@ -7,6 +7,7 @@ import { FuelRecord } from '../models/FuelRecord';
 import { LPOEntry } from '../models/LPOEntry';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
+import { logger } from '../utils';
 import unifiedExportService from '../services/unifiedExportService';
 
 /**
@@ -459,8 +460,8 @@ export const exportAnalyticsReport = async (req: AuthRequest, res: Response): Pr
         return;
     }
 
-    // Log export
-    await AuditLog.create({
+    // Log export (don't await to avoid delaying response)
+    AuditLog.create({
       user: req.user?.username || 'system',
       action: 'analytics_exported',
       resource: 'analytics',
@@ -470,13 +471,23 @@ export const exportAnalyticsReport = async (req: AuthRequest, res: Response): Pr
         startDate: start,
         endDate: end,
       },
+    }).catch(err => {
+      logger.error('Failed to log analytics export:', err);
     });
 
+    // Response already sent by export functions - don't send another response
+    return;
+
   } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to export report',
-    });
+    // Only send error response if headers haven't been sent yet
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to export report',
+      });
+    } else {
+      logger.error('Error after headers sent in exportAnalyticsReport:', error);
+    }
   }
 };
 

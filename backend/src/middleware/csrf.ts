@@ -28,17 +28,37 @@ export const provideCsrfToken = (req: Request, res: Response, next: NextFunction
     // Check if token already exists in cookie
     let token = req.cookies[CSRF_COOKIE_NAME];
     
-    // Generate new token if none exists
-    if (!token) {
+    // Generate new token if none exists or if explicitly requesting new token
+    if (!token || req.path === '/csrf-token') {
       token = generateCsrfToken();
+      logger.info(`[CSRF] Generated new token for ${req.path} from IP ${req.ip}`);
     }
     
     // Set cookie with token
-    res.cookie(CSRF_COOKIE_NAME, token, {
+    // Use 'lax' in development for localhost cross-port requests
+    // Use 'strict' in production for same-origin only
+    // Cookie options - different for dev vs production
+    // In dev: Don't set sameSite to allow cross-port localhost cookies
+    // In prod: Use strict + secure for maximum security
+    const cookieOptions: any = {
       httpOnly: false, // Allow JavaScript to read for sending in headers
-      secure: config.nodeEnv === 'production', // HTTPS only in production
-      sameSite: 'strict',
       maxAge: 3600000, // 1 hour
+      path: '/', // Ensure cookie is available for all paths
+    };
+    
+    // In production, use strict and secure settings
+    if (config.nodeEnv === 'production') {
+      cookieOptions.secure = true;
+      cookieOptions.sameSite = 'strict';
+    }
+    // In development, omit sameSite and secure to allow cross-port localhost
+    
+    res.cookie(CSRF_COOKIE_NAME, token, cookieOptions);
+    logger.info(`[CSRF] Set cookie with options:`, { 
+      cookieName: CSRF_COOKIE_NAME,
+      options: cookieOptions,
+      path: req.path,
+      nodeEnv: config.nodeEnv
     });
     
     next();
@@ -67,7 +87,12 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction):
     
     // Both tokens must exist
     if (!cookieToken || !headerToken) {
-      logger.warn(`CSRF validation failed: Missing token for ${req.method} ${req.path} from IP ${req.ip}`);
+      logger.warn(`CSRF validation failed: Missing token for ${req.method} ${req.path} from IP ${req.ip}`, {
+        hasCookie: !!cookieToken,
+        hasHeader: !!headerToken,
+        cookies: Object.keys(req.cookies),
+        headers: Object.keys(req.headers).filter(h => h.toLowerCase().includes('xsrf') || h.toLowerCase().includes('csrf'))
+      });
       res.status(403).json({
         success: false,
         message: 'CSRF token missing. Please refresh the page and try again.',
