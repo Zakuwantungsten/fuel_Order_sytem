@@ -400,6 +400,7 @@ export interface User {
   role: UserRole;
   department?: string;
   station?: string; // For station personnel
+  yard?: string; // For yard personnel
   truckNo?: string; // For drivers
   currentDO?: string; // For drivers - current delivery order
   isActive: boolean;

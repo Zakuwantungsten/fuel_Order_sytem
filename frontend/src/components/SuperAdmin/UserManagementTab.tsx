@@ -34,15 +34,22 @@ interface UserManagementTabProps {
 const USER_ROLES = [
   { value: 'super_admin', label: 'Super Admin', color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/30' },
   { value: 'admin', label: 'Admin', color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/30' },
-  { value: 'admin', label: 'Admin', color: 'text-indigo-600', bgColor: 'bg-indigo-50 dark:bg-indigo-900/30' },
-  { value: 'boss', label: 'Boss', color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/30' },
+  { value: 'super_manager', label: 'Super Manager', color: 'text-purple-600', bgColor: 'bg-purple-50 dark:bg-purple-900/30' },
+  { value: 'boss', label: 'Boss', color: 'text-indigo-600', bgColor: 'bg-indigo-50 dark:bg-indigo-900/30' },
   { value: 'fuel_order_maker', label: 'Fuel Order Maker', color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-900/30' },
   { value: 'payment_manager', label: 'Payment Manager', color: 'text-yellow-600', bgColor: 'bg-yellow-50 dark:bg-yellow-900/30' },
+  { value: 'import_officer', label: 'Import Officer', color: 'text-cyan-600', bgColor: 'bg-cyan-50 dark:bg-cyan-900/30' },
+  { value: 'export_officer', label: 'Export Officer', color: 'text-sky-600', bgColor: 'bg-sky-50 dark:bg-sky-900/30' },
   { value: 'yard_personnel', label: 'Yard Personnel', color: 'text-orange-600', bgColor: 'bg-orange-50 dark:bg-orange-900/30' },
-  { value: 'driver', label: 'Driver', color: 'text-cyan-600', bgColor: 'bg-cyan-50 dark:bg-cyan-900/30' },
   { value: 'fuel_attendant', label: 'Fuel Attendant', color: 'text-teal-600', bgColor: 'bg-teal-50 dark:bg-teal-900/30' },
   { value: 'station_manager', label: 'Station Manager', color: 'text-pink-600', bgColor: 'bg-pink-50 dark:bg-pink-900/30' },
   { value: 'viewer', label: 'Viewer', color: 'text-gray-600', bgColor: 'bg-gray-50 dark:bg-gray-900/30' },
+];
+
+const YARDS = [
+  { value: 'DAR YARD', label: 'DAR YARD' },
+  { value: 'TANGA YARD', label: 'TANGA YARD' },
+  { value: 'MMSA YARD', label: 'MMSA YARD' },
 ];
 
 export default function UserManagementTab({ onMessage }: UserManagementTabProps) {
@@ -901,21 +908,59 @@ function EditUserModal({
     lastName: user.lastName || '',
     email: user.email || '',
     role: user.role || 'viewer' as UserRole,
-    department: user.department || '',
     station: user.station || '',
-    truckNo: user.truckNo || '',
+    yard: user.yard || '',
   });
+  const [stations, setStations] = useState<any[]>([]);
+  const [loadingStations, setLoadingStations] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Fetch stations on mount
+  useEffect(() => {
+    const fetchStations = async () => {
+      setLoadingStations(true);
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'}/config/stations`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('fuel_order_token')}`
+          }
+        });
+        if (response.ok) {
+          const result = await response.json();
+          // Handle both array and object responses
+          const stationsData = result.data || result.stations || result;
+          setStations(Array.isArray(stationsData) ? stationsData : []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch stations:', error);
+      } finally {
+        setLoadingStations(false);
+      }
+    };
+    fetchStations();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const submitData: any = { ...formData };
-      if (!submitData.department) delete submitData.department;
-      if (!submitData.station) delete submitData.station;
-      if (!submitData.truckNo) delete submitData.truckNo;
+      const submitData: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        role: formData.role,
+      };
+      
+      // Only include station if role requires it
+      if (['fuel_attendant', 'station_manager'].includes(formData.role) && formData.station) {
+        submitData.station = formData.station;
+      }
+      
+      // Only include yard if role requires it
+      if (formData.role === 'yard_personnel' && formData.yard) {
+        submitData.yard = formData.yard;
+      }
 
       await usersAPI.update(user.id, submitData);
       onSuccess();
@@ -926,129 +971,216 @@ function EditUserModal({
     }
   };
 
+  const requiresStation = ['fuel_attendant', 'station_manager'].includes(formData.role);
+  const requiresYard = formData.role === 'yard_personnel';
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Edit User: {user.username}
-          </h3>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+              <UserIcon className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">
+                Edit User
+              </h3>
+              <p className="text-sm text-indigo-100">{user.username}</p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                First Name *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.firstName}
-                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
-              />
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-180px)]">
+          <div className="p-6 space-y-6">
+            {/* Personal Information Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-medium">
+                <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center">
+                  <UserIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <h4 className="text-sm font-semibold uppercase tracking-wide">Personal Information</h4>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-10">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    First Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
+                    placeholder="Enter first name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Last Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
+                    placeholder="Enter last name"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Email Address <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
+                    placeholder="user@example.com"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Last Name *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.lastName}
-                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
-              />
+            {/* Role & Permissions Section */}
+            <div className="space-y-4 pt-4 border-t dark:border-gray-700">
+              <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-medium">
+                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                  <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                </div>
+                <h4 className="text-sm font-semibold uppercase tracking-wide">Role & Permissions</h4>
+              </div>
+              
+              <div className="pl-10">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  User Role <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole, station: '', yard: '' })}
+                  className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.25rem' }}
+                >
+                  {USER_ROLES.map(role => (
+                    <option key={role.value} value={role.value}>{role.label}</option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  Defines user's access level and permissions within the system
+                </p>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Email *
-              </label>
-              <input
-                type="email"
-                required
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
+            {/* Station Assignment Section (Conditional) */}
+            {requiresStation && (
+              <div className="space-y-4 pt-4 border-t dark:border-gray-700">
+                <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-medium">
+                  <div className="w-8 h-8 bg-teal-100 dark:bg-teal-900/30 rounded-lg flex items-center justify-center">
+                    <MapPin className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  </div>
+                  <h4 className="text-sm font-semibold uppercase tracking-wide">Station Assignment</h4>
+                </div>
+                
+                <div className="pl-10">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Assigned Station <span className="text-red-500">*</span>
+                  </label>
+                  {loadingStations ? (
+                    <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 py-2">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Loading stations...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        required={requiresStation}
+                        value={formData.station}
+                        onChange={(e) => setFormData({ ...formData, station: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.25rem' }}
+                      >
+                        <option value="">Select a station</option>
+                        {Array.isArray(stations) && stations.filter(s => s.isActive).map(station => (
+                          <option key={station._id} value={station.stationName}>
+                            {station.stationName}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        Fuel station where this user will be assigned to work
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Role *
-              </label>
-              <select
-                required
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
-              >
-                {USER_ROLES.map(role => (
-                  <option key={role.value} value={role.value}>{role.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Department
-              </label>
-              <input
-                type="text"
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Station
-              </label>
-              <input
-                type="text"
-                value={formData.station}
-                onChange={(e) => setFormData({ ...formData, station: e.target.value })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Truck No
-              </label>
-              <input
-                type="text"
-                value={formData.truckNo}
-                onChange={(e) => setFormData({ ...formData, truckNo: e.target.value })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
-              />
-            </div>
+            {/* Yard Assignment Section (Conditional) */}
+            {requiresYard && (
+              <div className="space-y-4 pt-4 border-t dark:border-gray-700">
+                <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-medium">
+                  <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
+                    <Truck className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <h4 className="text-sm font-semibold uppercase tracking-wide">Yard Assignment</h4>
+                </div>
+                
+                <div className="pl-10">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Assigned Yard <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required={requiresYard}
+                    value={formData.yard}
+                    onChange={(e) => setFormData({ ...formData, yard: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.25rem' }}
+                  >
+                    <option value="">Select a yard</option>
+                    {YARDS.map(yard => (
+                      <option key={yard.value} value={yard.value}>
+                        {yard.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    Yard location where this personnel will be assigned
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t dark:border-gray-700">
+          {/* Footer Actions */}
+          <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t dark:border-gray-700 flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              className="px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors font-medium text-gray-700 dark:text-gray-300"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              disabled={loading || (requiresStation && !formData.station) || (requiresYard && !formData.yard)}
+              className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium shadow-lg shadow-indigo-500/30"
             >
               {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
-              Update User
+              {loading ? 'Updating...' : 'Update User'}
             </button>
           </div>
         </form>
