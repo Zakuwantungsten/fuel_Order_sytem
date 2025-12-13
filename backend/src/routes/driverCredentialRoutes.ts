@@ -15,7 +15,7 @@ const router = express.Router();
 
 // All routes require authentication and admin privileges
 router.use(authenticate);
-router.use(authorize('super_admin', 'admin', 'fuel_order_maker'));
+router.use(authorize('super_admin', 'admin'));
 
 // Statistics
 router.get('/stats', getDriverCredentialsStats);
