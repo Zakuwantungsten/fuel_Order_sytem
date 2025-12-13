@@ -35,6 +35,8 @@ const auditLogSchema = new Schema<IAuditLogDocument>(
         'CONFIG_CHANGE',
         'BULK_OPERATION',
         'EXPORT',
+        'ENABLE_MAINTENANCE',
+        'DISABLE_MAINTENANCE',
       ],
       required: true,
       index: true,

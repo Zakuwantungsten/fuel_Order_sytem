@@ -32,9 +32,10 @@ import SystemConfigDashboard from './SuperAdmin/SystemConfigDashboard';
 interface SuperAdminDashboardProps {
   user: any;
   section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash';
+  onNavigate?: (section: string) => void;
 }
 
-export default function SuperAdminDashboard({ user, section = 'overview' }: SuperAdminDashboardProps) {
+export default function SuperAdminDashboard({ user, section = 'overview', onNavigate }: SuperAdminDashboardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -175,6 +176,7 @@ export default function SuperAdminDashboard({ user, section = 'overview' }: Supe
                 trashStats={trashStats}
                 recentActivity={recentActivity}
                 onRefresh={loadData}
+                onNavigate={onNavigate}
               />
             )}
             {section === 'database' && (
@@ -220,13 +222,15 @@ function OverviewTab({
   dbHealth, 
   trashStats,
   recentActivity,
-  onRefresh: _onRefresh 
+  onRefresh: _onRefresh,
+  onNavigate 
 }: { 
   stats: any; 
   dbHealth: any; 
   trashStats: any;
   recentActivity: any[];
   onRefresh: () => void;
+  onNavigate?: (section: string) => void;
 }) {
   // Using underscore prefix to suppress unused variable warning
   void _onRefresh;
@@ -394,19 +398,31 @@ function OverviewTab({
           Quick Actions
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button className="flex items-center gap-2 px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors">
+          <button 
+            onClick={() => onNavigate?.('sa_users')}
+            className="flex items-center gap-2 px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors"
+          >
             <Users className="w-5 h-5" />
             <span className="text-sm font-medium">Create User</span>
           </button>
-          <button className="flex items-center gap-2 px-4 py-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">
+          <button 
+            onClick={() => onNavigate?.('sa_analytics')}
+            className="flex items-center gap-2 px-4 py-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+          >
             <BarChart3 className="w-5 h-5" />
             <span className="text-sm font-medium">Generate Report</span>
           </button>
-          <button className="flex items-center gap-2 px-4 py-3 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors">
+          <button 
+            onClick={() => onNavigate?.('sa_backup')}
+            className="flex items-center gap-2 px-4 py-3 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+          >
             <Database className="w-5 h-5" />
             <span className="text-sm font-medium">Backup Now</span>
           </button>
-          <button className="flex items-center gap-2 px-4 py-3 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+          <button 
+            onClick={() => onNavigate?.('sa_audit')}
+            className="flex items-center gap-2 px-4 py-3 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
+          >
             <FileSearch className="w-5 h-5" />
             <span className="text-sm font-medium">View Logs</span>
           </button>

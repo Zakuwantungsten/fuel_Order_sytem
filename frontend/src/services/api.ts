@@ -1336,55 +1336,55 @@ export const backupAPI = {
     page?: number;
     limit?: number;
   }) => {
-    const response = await apiClient.get('/backup', { params });
+    const response = await apiClient.get('/backup/backups', { params });
     return response.data.data;
   },
 
   // Get backup by ID
   getBackupById: async (id: string) => {
-    const response = await apiClient.get(`/backup/${id}`);
+    const response = await apiClient.get(`/backup/backups/${id}`);
     return response.data.data;
   },
 
   // Create manual backup
   createBackup: async () => {
-    const response = await apiClient.post('/backup');
+    const response = await apiClient.post('/backup/backups');
     return response.data.data;
   },
 
   // Download backup
   downloadBackup: async (id: string) => {
-    const response = await apiClient.get(`/backup/${id}/download`);
+    const response = await apiClient.get(`/backup/backups/${id}/download`);
     return response.data.data;
   },
 
   // Restore backup
   restoreBackup: async (id: string) => {
-    const response = await apiClient.post(`/backup/${id}/restore`);
+    const response = await apiClient.post(`/backup/backups/${id}/restore`);
     return response.data;
   },
 
   // Delete backup
   deleteBackup: async (id: string) => {
-    const response = await apiClient.delete(`/backup/${id}`);
+    const response = await apiClient.delete(`/backup/backups/${id}`);
     return response.data;
   },
 
   // Get backup statistics
   getStats: async () => {
-    const response = await apiClient.get('/backup/stats');
+    const response = await apiClient.get('/backup/backups/stats');
     return response.data.data;
   },
 
   // Cleanup old backups
   cleanupBackups: async (retentionDays: number) => {
-    const response = await apiClient.post('/backup/cleanup', { retentionDays });
+    const response = await apiClient.post('/backup/backups/cleanup', { retentionDays });
     return response.data;
   },
 
   // Backup schedules
   getSchedules: async () => {
-    const response = await apiClient.get('/backup-schedules');
+    const response = await apiClient.get('/backup/backup-schedules');
     return response.data.data;
   },
 
@@ -1396,17 +1396,17 @@ export const backupAPI = {
     dayOfMonth?: number;
     retentionDays: number;
   }) => {
-    const response = await apiClient.post('/system-admin/backup-schedules', data);
+    const response = await apiClient.post('/backup/backup-schedules', data);
     return response.data.data;
   },
 
   updateSchedule: async (id: string, data: any) => {
-    const response = await apiClient.put(`/system-admin/backup-schedules/${id}`, data);
+    const response = await apiClient.put(`/backup/backup-schedules/${id}`, data);
     return response.data.data;
   },
 
   deleteSchedule: async (id: string) => {
-    const response = await apiClient.delete(`/system-admin/backup-schedules/${id}`);
+    const response = await apiClient.delete(`/backup/backup-schedules/${id}`);
     return response.data;
   },
 };

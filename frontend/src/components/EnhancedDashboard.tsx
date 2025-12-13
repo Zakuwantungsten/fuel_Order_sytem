@@ -275,27 +275,27 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       
       // Super Admin sections
       case 'sa_overview':
-        return <SuperAdminDashboard user={user} section="overview" />;
+        return <SuperAdminDashboard user={user} section="overview" onNavigate={setActiveTab} />;
       case 'sa_database':
-        return <SuperAdminDashboard user={user} section="database" />;
+        return <SuperAdminDashboard user={user} section="database" onNavigate={setActiveTab} />;
       case 'sa_users':
-        return <SuperAdminDashboard user={user} section="users" />;
+        return <SuperAdminDashboard user={user} section="users" onNavigate={setActiveTab} />;
       case 'sa_fuel_stations':
-        return <SuperAdminDashboard user={user} section="fuel_stations" />;
+        return <SuperAdminDashboard user={user} section="fuel_stations" onNavigate={setActiveTab} />;
       case 'sa_routes':
-        return <SuperAdminDashboard user={user} section="routes" />;
+        return <SuperAdminDashboard user={user} section="routes" onNavigate={setActiveTab} />;
       case 'sa_config':
-        return <SuperAdminDashboard user={user} section="config" />;
+        return <SuperAdminDashboard user={user} section="config" onNavigate={setActiveTab} />;
       case 'sa_audit':
-        return <SuperAdminDashboard user={user} section="audit" />;
+        return <SuperAdminDashboard user={user} section="audit" onNavigate={setActiveTab} />;
       case 'sa_security':
-        return <SuperAdminDashboard user={user} section="security" />;
+        return <SuperAdminDashboard user={user} section="security" onNavigate={setActiveTab} />;
       case 'sa_trash':
-        return <SuperAdminDashboard user={user} section="trash" />;
+        return <SuperAdminDashboard user={user} section="trash" onNavigate={setActiveTab} />;
       case 'sa_backup':
-        return <SuperAdminDashboard user={user} section="backup" />;
+        return <SuperAdminDashboard user={user} section="backup" onNavigate={setActiveTab} />;
       case 'sa_analytics':
-        return <SuperAdminDashboard user={user} section="analytics" />;
+        return <SuperAdminDashboard user={user} section="analytics" onNavigate={setActiveTab} />;
       
       // Admin sections (admin/boss roles)
       case 'admin_overview':

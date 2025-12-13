@@ -21,9 +21,10 @@ import {
   ChevronDown,
   Ban,
   ShieldOff,
-  ShieldCheck
+  ShieldCheck,
+  LogOut
 } from 'lucide-react';
-import { usersAPI } from '../../services/api';
+import { usersAPI, systemAdminAPI } from '../../services/api';
 import type { User, UserRole } from '../../types';
 
 interface UserManagementTabProps {
@@ -56,6 +57,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [showBanModal, setShowBanModal] = useState(false);
   const [showUnbanModal, setShowUnbanModal] = useState(false);
+  const [showForceLogoutModal, setShowForceLogoutModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -116,6 +118,24 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
   const handleUnbanUser = (user: User) => {
     setSelectedUser(user);
     setShowUnbanModal(true);
+  };
+
+  const handleForceLogout = (user: User) => {
+    setSelectedUser(user);
+    setShowForceLogoutModal(true);
+  };
+
+  const confirmForceLogout = async () => {
+    if (!selectedUser) return;
+    try {
+      await systemAdminAPI.forceLogout(String(selectedUser.id));
+      onMessage('success', `User ${selectedUser.username} has been logged out successfully`);
+      setShowForceLogoutModal(false);
+      setSelectedUser(null);
+      loadUsers();
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Failed to force logout user');
+    }
   };
 
   const getRoleInfo = (role: string) => {
@@ -423,6 +443,15 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                           >
                             <Key className="w-4 h-4" />
                           </button>
+                          {user.lastLogin && (
+                            <button
+                              onClick={() => handleForceLogout(user)}
+                              className="p-2 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 rounded-lg transition-colors"
+                              title="Force logout"
+                            >
+                              <LogOut className="w-4 h-4" />
+                            </button>
+                          )}
                           {user.isBanned ? (
                             <button
                               onClick={() => handleUnbanUser(user)}
@@ -553,6 +582,72 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
           }}
           onError={(msg) => onMessage('error', msg)}
         />
+      )}
+
+      {showForceLogoutModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
+                <LogOut className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Force Logout User
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Terminate active session
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                This will immediately log out <strong>{selectedUser.username}</strong> and clear their active session. 
+                They will need to log in again to access the system.
+              </p>
+            </div>
+
+            <div className="space-y-2 mb-6">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">User:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {selectedUser.firstName} {selectedUser.lastName}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">Username:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {selectedUser.username}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">Last Login:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {selectedUser.lastLogin ? new Date(selectedUser.lastLogin).toLocaleString() : 'Never'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowForceLogoutModal(false);
+                  setSelectedUser(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmForceLogout}
+                className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium"
+              >
+                Force Logout
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -36,7 +36,7 @@ router.use('/driver-accounts', driverAccountRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/trash', trashRoutes);
 router.use('/backup', backupRoutes);
-router.use('/analytics', analyticsRoutes);
+router.use('/system-admin/analytics', analyticsRoutes); // Super admin analytics
 router.use('/system-config', configRoutes);
 router.use('/system-admin/config', systemConfigRoutes); // Super admin only system configuration
 router.use('/archival', archivalRoutes);

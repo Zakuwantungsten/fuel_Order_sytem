@@ -3,6 +3,7 @@ import { YardFuelDispense, FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
+import { AuditService } from '../utils/auditService';
 
 /**
  * Get all yard fuel dispenses with pagination and filters
@@ -122,6 +123,16 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
 
     logger.info(
       `Yard fuel dispense created: ${yardFuelDispense.truckNo} at ${yardFuelDispense.yard} by ${req.user?.username}`
+    );
+
+    // Log audit trail
+    await AuditService.logCreate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'YardFuelDispense',
+      yardFuelDispense._id.toString(),
+      { truckNo: yardFuelDispense.truckNo, liters: yardFuelDispense.liters, yard: yardFuelDispense.yard },
+      req.ip
     );
 
     // Auto-update fuel record if exists
@@ -266,6 +277,17 @@ export const updateYardFuelDispense = async (req: AuthRequest, res: Response): P
       `Yard fuel dispense updated: ${yardFuelDispense.truckNo} by ${req.user?.username}`
     );
 
+    // Log audit trail
+    await AuditService.logUpdate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'YardFuelDispense',
+      yardFuelDispense._id.toString(),
+      {},
+      { truckNo: yardFuelDispense.truckNo, liters: yardFuelDispense.liters },
+      req.ip
+    );
+
     res.status(200).json({
       success: true,
       message: 'Yard fuel dispense updated successfully',
@@ -295,6 +317,16 @@ export const deleteYardFuelDispense = async (req: AuthRequest, res: Response): P
 
     logger.info(
       `Yard fuel dispense deleted: ${yardFuelDispense.truckNo} by ${req.user?.username}`
+    );
+
+    // Log audit trail
+    await AuditService.logDelete(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'YardFuelDispense',
+      yardFuelDispense._id.toString(),
+      { truckNo: yardFuelDispense.truckNo, liters: yardFuelDispense.liters },
+      req.ip
     );
 
     res.status(200).json({
