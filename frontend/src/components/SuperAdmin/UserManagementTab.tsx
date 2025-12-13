@@ -128,12 +128,25 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
   const confirmForceLogout = async () => {
     if (!selectedUser) return;
     try {
-      await systemAdminAPI.forceLogout(String(selectedUser.id));
-      onMessage('success', `User ${selectedUser.username} has been logged out successfully`);
+      const userId = selectedUser.id || (selectedUser as any)._id;
+      if (!userId) {
+        onMessage('error', 'User ID not found');
+        return;
+      }
+      const response = await systemAdminAPI.forceLogout(String(userId));
+      
+      // Close modal first
       setShowForceLogoutModal(false);
       setSelectedUser(null);
+      
+      // Show success message
+      onMessage('success', response.message || `User ${selectedUser.username} has been logged out successfully`);
+      
+      // Reload users list
       loadUsers();
     } catch (error: any) {
+      setShowForceLogoutModal(false);
+      setSelectedUser(null);
       onMessage('error', error.response?.data?.message || 'Failed to force logout user');
     }
   };

@@ -53,7 +53,13 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
       User.countDocuments(filter),
     ]);
 
-    const response = createPaginatedResponse(users, page, limit, total);
+    // Transform _id to id for frontend compatibility
+    const transformedUsers = users.map((user: any) => ({
+      ...user,
+      id: user._id.toString(),
+    }));
+
+    const response = createPaginatedResponse(transformedUsers, page, limit, total);
 
     res.status(200).json({
       success: true,
@@ -72,16 +78,22 @@ export const getUserById = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { id } = req.params;
 
-    const user = await User.findOne({ _id: id, isDeleted: false }).select('-password -refreshToken');
+    const user = await User.findOne({ _id: id, isDeleted: false }).select('-password -refreshToken').lean();
 
     if (!user) {
       throw new ApiError(404, 'User not found');
     }
 
+    // Transform _id to id for frontend compatibility
+    const transformedUser = {
+      ...user,
+      id: user._id.toString(),
+    };
+
     res.status(200).json({
       success: true,
       message: 'User retrieved successfully',
-      data: user,
+      data: transformedUser,
     });
   } catch (error: any) {
     throw error;
