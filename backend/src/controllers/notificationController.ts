@@ -104,23 +104,34 @@ export const markAsRead = async (req: AuthRequest, res: Response): Promise<void>
 export const dismissNotification = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
 
-    const notification = await Notification.findByIdAndUpdate(
+    // First check if notification exists and user has access
+    const notification = await Notification.findOne({
+      _id: id,
+      recipients: { $in: [userRole, userId] },
+      isDeleted: false,
+    });
+
+    if (!notification) {
+      logger.warn(`User ${req.user?.username} (role: ${userRole}) attempted to dismiss notification ${id} but was not found or user lacks access`);
+      throw new ApiError(404, 'Notification not found or you do not have permission to dismiss it');
+    }
+
+    // Update the notification
+    const updatedNotification = await Notification.findByIdAndUpdate(
       id,
       { status: 'dismissed', isRead: true },
       { new: true }
     );
-
-    if (!notification) {
-      throw new ApiError(404, 'Notification not found');
-    }
 
     logger.info(`Notification ${id} dismissed by ${req.user?.username}`);
 
     res.status(200).json({
       success: true,
       message: 'Notification dismissed',
-      data: notification,
+      data: updatedNotification,
     });
   } catch (error: any) {
     throw error;

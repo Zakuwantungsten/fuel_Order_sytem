@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck } from 'lucide-react';
+import api from '../services/api';
 
 interface Notification {
   id?: string;
@@ -62,24 +63,18 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
   const loadNotifications = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('fuel_order_token') || localStorage.getItem('token');
-      const response = await fetch('/api/notifications?status=pending', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const response = await api.get('/notifications', {
+        params: { status: 'pending' }
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        setNotifications(data.data || []);
-        setUnreadCount(data.unreadCount || 0);
-        
-        // Count pending yard fuel notifications
-        const pendingCount = (data.data || []).filter(
-          (n: Notification) => n.type === 'truck_pending_linking'
-        ).length;
-        setPendingYardFuelCount(pendingCount);
-      }
+      setNotifications(response.data.data || []);
+      setUnreadCount(response.data.unreadCount || 0);
+      
+      // Count pending yard fuel notifications
+      const pendingCount = (response.data.data || []).filter(
+        (n: Notification) => n.type === 'truck_pending_linking'
+      ).length;
+      setPendingYardFuelCount(pendingCount);
     } catch (error) {
       console.error('Failed to load notifications:', error);
     } finally {
@@ -89,13 +84,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
 
   const markAsRead = async (id: string) => {
     try {
-      const token = localStorage.getItem('fuel_order_token') || localStorage.getItem('token');
-      await fetch(`/api/notifications/${id}/read`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      await api.patch(`/notifications/${id}/read`);
       loadNotifications();
     } catch (error) {
       console.error('Failed to mark as read:', error);
@@ -104,13 +93,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
 
   const dismissNotification = async (id: string) => {
     try {
-      const token = localStorage.getItem('fuel_order_token') || localStorage.getItem('token');
-      await fetch(`/api/notifications/${id}/dismiss`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      await api.patch(`/notifications/${id}/dismiss`);
       loadNotifications();
     } catch (error) {
       console.error('Failed to dismiss notification:', error);
@@ -132,21 +115,13 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
         }
       } else {
         // Default behavior: call API directly
-        const token = localStorage.getItem('fuel_order_token') || localStorage.getItem('token');
-        const response = await fetch(`/api/delivery-orders/${doId}/relink-to-fuel-record`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        const response = await api.post(`/delivery-orders/${doId}/relink-to-fuel-record`);
         
-        const result = await response.json();
-        if (result.success && result.data?.fuelRecord) {
+        if (response.data.success && response.data.data?.fuelRecord) {
           alert(`✓ Successfully linked DO-${notification.metadata?.doNumber} to fuel record!`);
           loadNotifications();
         } else {
-          alert(`Could not link: ${result.message}\n\nPlease edit the DO to correct the truck number.`);
+          alert(`Could not link: ${response.data.message}\n\nPlease edit the DO to correct the truck number.`);
         }
       }
     } catch (error) {

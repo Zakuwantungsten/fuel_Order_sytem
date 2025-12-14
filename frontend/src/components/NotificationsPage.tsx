@@ -7,7 +7,7 @@ interface Notification {
   type: string;
   title: string;
   message: string;
-  status: 'pending' | 'resolved';
+  status: 'pending' | 'resolved' | 'dismissed';
   isRead: boolean;
   createdAt: string;
   metadata?: any;
@@ -53,8 +53,12 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose }) => {
 
   const dismissNotification = async (id: string) => {
     try {
-      await api.delete(`/notifications/${id}`);
-      setNotifications(notifications.filter((n) => n._id !== id));
+      await api.patch(`/notifications/${id}/dismiss`);
+      setNotifications(
+        notifications.map((n) =>
+          n._id === id ? { ...n, status: 'dismissed', isRead: true } : n
+        )
+      );
     } catch (error) {
       console.error('Failed to dismiss notification:', error);
     }
@@ -108,15 +112,17 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose }) => {
   };
 
   const filteredNotifications = notifications.filter((n) => {
+    // Don't show dismissed notifications in the list
+    if (n.status === 'dismissed') return false;
     if (filter === 'all') return true;
     return n.status === filter;
   });
 
   const stats = {
-    total: notifications.length,
+    total: notifications.filter((n) => n.status !== 'dismissed').length,
     pending: notifications.filter((n) => n.status === 'pending').length,
     resolved: notifications.filter((n) => n.status === 'resolved').length,
-    unread: notifications.filter((n) => !n.isRead).length,
+    unread: notifications.filter((n) => !n.isRead && n.status !== 'dismissed').length,
   };
 
   return (
