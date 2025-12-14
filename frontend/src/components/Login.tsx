@@ -107,21 +107,21 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-6 transition-all duration-500">
-      <div className="w-full max-w-6xl flex bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20 dark:border-gray-700/50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-3 sm:p-6 transition-all duration-500">
+      <div className="w-full max-w-6xl flex flex-col lg:flex-row bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-white/20 dark:border-gray-700/50">
         {/* Left side - Login Form */}
-        <div className="w-full lg:w-1/2 p-8 lg:p-12">
+        <div className="w-full lg:w-1/2 p-4 sm:p-8 lg:p-12">
           <div className="max-w-md mx-auto">
             {/* Logo and Title */}
-            <div className="text-center mb-8">
-              <div className="w-40 h-24 mx-auto mb-4">
+            <div className="text-center mb-6 sm:mb-8">
+              <div className="w-32 h-20 sm:w-40 sm:h-24 mx-auto mb-3 sm:mb-4">
                 <img src={tahmeedLogo} alt="Tahmeed Logo" className="w-full h-full object-contain dark:hidden" />
                 <img src={tahmeedLogoDark} alt="Tahmeed Logo" className="w-full h-full object-contain hidden dark:block" />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
                 Welcome Back
               </h1>
-              <p className="text-gray-600 dark:text-gray-400">
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
                 Sign in to Fuel Order Management System
               </p>
             </div>
@@ -149,15 +149,15 @@ const Login: React.FC = () => {
             )}
 
             {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
               {/* Username Field */}
               <div>
-                <label htmlFor="username" className="block text-sm font-semibold text-slate-700 dark:text-gray-300 mb-3">
+                <label htmlFor="username" className="block text-sm font-semibold text-slate-700 dark:text-gray-300 mb-2 sm:mb-3">
                   Username
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-slate-400 dark:text-gray-500" />
+                  <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+                    <User className="h-4 w-4 sm:h-5 sm:w-5 text-slate-400 dark:text-gray-500" />
                   </div>
                   <input
                     id="username"
@@ -166,7 +166,7 @@ const Login: React.FC = () => {
                     required
                     value={credentials.username}
                     onChange={handleInputChange}
-                    className="block w-full pl-12 pr-4 py-4 border-2 border-slate-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white/80 dark:bg-gray-700 text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-gray-500 backdrop-blur transition-all duration-200"
+                    className="block w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-base border-2 border-slate-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white/80 dark:bg-gray-700 text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-gray-500 backdrop-blur transition-all duration-200"
                     placeholder="Enter your username"
                   />
                 </div>
@@ -174,12 +174,12 @@ const Login: React.FC = () => {
 
               {/* Password Field */}
               <div>
-                <label htmlFor="password" className="block text-sm font-semibold text-slate-700 dark:text-gray-300 mb-3">
+                <label htmlFor="password" className="block text-sm font-semibold text-slate-700 dark:text-gray-300 mb-2 sm:mb-3">
                   Password
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-slate-400 dark:text-gray-500" />
+                  <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
+                    <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-slate-400 dark:text-gray-500" />
                   </div>
                   <input
                     id="password"
@@ -188,16 +188,16 @@ const Login: React.FC = () => {
                     required
                     value={credentials.password}
                     onChange={handleInputChange}
-                    className="block w-full pl-12 pr-14 py-4 border-2 border-slate-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white/80 dark:bg-gray-700 text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-gray-500 backdrop-blur transition-all duration-200"
+                    className="block w-full pl-10 sm:pl-12 pr-12 sm:pr-14 py-3 sm:py-4 text-base border-2 border-slate-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white/80 dark:bg-gray-700 text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-gray-500 backdrop-blur transition-all duration-200"
                     placeholder="Enter your password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center transition-colors"
+                    className="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center transition-colors"
                   >
                     {showPassword ? (
-                      <EyeOff className="h-5 w-5 text-slate-400 hover:text-slate-600 dark:text-gray-400 dark:hover:text-gray-300" />
+                      <EyeOff className="h-4 w-4 sm:h-5 sm:w-5 text-slate-400 hover:text-slate-600 dark:text-gray-400 dark:hover:text-gray-300" />
                     ) : (
                       <Eye className="h-5 w-5 text-slate-400 hover:text-slate-600 dark:text-gray-400 dark:hover:text-gray-300" />
                     )}

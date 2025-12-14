@@ -438,46 +438,46 @@ export function DriverPortal({ user }: DriverPortalProps) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-6 transition-colors">
       {/* Header - Fixed */}
-      <div className="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto">
+      <div className="bg-indigo-600 text-white p-3 sm:p-4 shadow-md sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto px-2 sm:px-0">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold flex items-center">
-                <Truck className="w-5 h-5 mr-2" />
-                Driver Portal
+            <div className="min-w-0 flex-1 mr-2">
+              <h1 className="text-lg sm:text-xl font-bold flex items-center">
+                <Truck className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                <span className="truncate">Driver Portal</span>
               </h1>
-              <p className="text-sm opacity-90">{user.firstName} {user.lastName}</p>
+              <p className="text-xs sm:text-sm opacity-90 truncate">{user.firstName} {user.lastName}</p>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
               {/* Connection Status */}
-              <div className={`p-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} title={isOnline ? 'Online' : 'Offline'}>
-                {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+              <div className={`p-1.5 sm:p-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} title={isOnline ? 'Online' : 'Offline'}>
+                {isOnline ? <Wifi className="w-3 h-3 sm:w-4 sm:h-4" /> : <WifiOff className="w-3 h-3 sm:w-4 sm:h-4" />}
               </div>
               {/* Refresh Button */}
               <button
                 onClick={handleManualRefresh}
                 disabled={isRefreshing || !isOnline}
-                className={`p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors ${isRefreshing ? 'animate-spin' : ''}`}
+                className={`p-1.5 sm:p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors ${isRefreshing ? 'animate-spin' : ''}`}
                 title="Refresh data"
               >
-                <RefreshCw className="w-5 h-5" />
+                <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
               {/* Theme Toggle */}
               <button
                 onClick={toggleTheme}
-                className="p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
+                className="p-1.5 sm:p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
                 title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
-                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
               </button>
               {/* Profile Menu */}
               <div className="relative">
                 <button
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className="p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
+                  className="p-1.5 sm:p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
                   title="Profile Menu"
                 >
-                  <User className="w-5 h-5" />
+                  <User className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
                 
                 {showProfileMenu && (
@@ -525,9 +525,9 @@ export function DriverPortal({ user }: DriverPortalProps) {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-2xl mx-auto p-4">
+      <div className="max-w-2xl mx-auto p-3 sm:p-4">
         {/* Truck Info Card - Current Journey */}
-        <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-4 sm:p-6 text-white mb-4">
+        <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-3 sm:p-4 md:p-6 text-white mb-3 sm:mb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 space-y-2 sm:space-y-0">
             <div>
               <div className="text-sm opacity-90">Your Truck</div>
