@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Truck, Trash2, Plus, Fuel, Search, MapPin, X } from 'lucide-react';
-import FuelConfigService from '../services/fuelConfigService';
-import { adminAPI } from '../services/api';
+import {
+  useTruckBatches,
+  useAddTruckBatch,
+  useRemoveTruckBatch,
+  useAddDestinationRule,
+  useDeleteDestinationRule,
+} from '../hooks/useTruckBatches';
 
 interface DestinationRule {
   destination: string;
@@ -9,40 +14,20 @@ interface DestinationRule {
 }
 
 export default function TruckBatches() {
-  const [batches, setBatches] = useState<{
-    batch_100: any[];
-    batch_80: any[];
-    batch_60: any[];
-  }>({
-    batch_100: [],
-    batch_80: [],
-    batch_60: [],
-  });
+  // Use React Query hooks instead of manual state/API calls
+  const { data: batches, isLoading: loading } = useTruckBatches();
+  const addTruckMutation = useAddTruckBatch();
+  const removeTruckMutation = useRemoveTruckBatch();
+  const addRuleMutation = useAddDestinationRule();
+  const deleteRuleMutation = useDeleteDestinationRule();
+
   const [newTruck, setNewTruck] = useState({ suffix: '', batch: 60 as 100 | 80 | 60 });
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
   
   // Destination rules modal state
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [selectedTruck, setSelectedTruck] = useState<{ suffix: string; batch: 100 | 80 | 60; rules: DestinationRule[] } | null>(null);
   const [newRule, setNewRule] = useState({ destination: '', extraLiters: 0 });
-
-  useEffect(() => {
-    loadBatches();
-  }, []);
-
-  const loadBatches = async () => {
-    setLoading(true);
-    try {
-      // Load directly from backend to get full truck objects with rules
-      const response = await adminAPI.getTruckBatches();
-      setBatches(response);
-    } catch (error) {
-      console.error('Error loading truck batches:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAddTruck = async () => {
     const suffix = newTruck.suffix.trim().toLowerCase();
@@ -51,6 +36,8 @@ export default function TruckBatches() {
       alert('Please enter a truck suffix (e.g., DNH, EAG)');
       return;
     }
+
+    if (!batches) return;
 
     // Check if already exists
     const allTrucks = [
@@ -63,22 +50,40 @@ export default function TruckBatches() {
       return;
     }
 
-    await FuelConfigService.updateTruckBatch(suffix, newTruck.batch);
-    setNewTruck({ suffix: '', batch: 60 });
-    loadBatches();
+    try {
+      await addTruckMutation.mutateAsync({
+        truckSuffix: suffix,
+        extraLiters: newTruck.batch,
+      });
+      setNewTruck({ suffix: '', batch: 60 });
+      alert(`✓ Truck ${suffix.toUpperCase()} added to ${newTruck.batch}L batch`);
+    } catch (error: any) {
+      alert(`Failed to add truck: ${error.message}`);
+    }
   };
 
   const handleMoveTruck = async (suffix: string, newBatch: 100 | 80 | 60) => {
-    if (confirm(`Move "${suffix.toUpperCase()}" to ${newBatch}L batch?`)) {
-      await FuelConfigService.updateTruckBatch(suffix, newBatch);
-      loadBatches();
+    if (!confirm(`Move "${suffix.toUpperCase()}" to ${newBatch}L batch?`)) return;
+
+    try {
+      await addTruckMutation.mutateAsync({
+        truckSuffix: suffix,
+        extraLiters: newBatch,
+      });
+      alert(`✓ Truck ${suffix.toUpperCase()} moved to ${newBatch}L batch`);
+    } catch (error: any) {
+      alert(`Failed to move truck: ${error.message}`);
     }
   };
 
   const handleDeleteTruck = async (suffix: string) => {
-    if (confirm(`Remove "${suffix.toUpperCase()}" from batch configuration?\nIt will revert to default 60L extra fuel.`)) {
-      await FuelConfigService.removeTruckFromBatches(suffix);
-      loadBatches();
+    if (!confirm(`Remove "${suffix.toUpperCase()}" from batch configuration?\nIt will revert to default 60L extra fuel.`)) return;
+
+    try {
+      await removeTruckMutation.mutateAsync(suffix);
+      alert(`✓ Truck ${suffix.toUpperCase()} removed from batches`);
+    } catch (error: any) {
+      alert(`Failed to remove truck: ${error.message}`);
     }
   };
 
@@ -96,24 +101,25 @@ export default function TruckBatches() {
       return;
     }
 
+    if (!batches) return;
+
     try {
-      await adminAPI.addDestinationRule({
+      await addRuleMutation.mutateAsync({
         truckSuffix: selectedTruck.suffix,
         destination: newRule.destination.trim(),
         extraLiters: newRule.extraLiters
       });
       
-      // Reload batches to get updated rules
-      await loadBatches();
-      
-      // Update selected truck's rules
-      const batch = batches[`batch_${selectedTruck.batch}` as keyof typeof batches];
+      // React Query will auto-refresh batches, update selected truck
+      const batchKey = `batch_${selectedTruck.batch}` as keyof typeof batches;
+      const batch = batches[batchKey];
       const truck = batch.find((t: any) => (typeof t === 'string' ? t : t.truckSuffix) === selectedTruck.suffix);
       if (truck && typeof truck !== 'string') {
         setSelectedTruck({ ...selectedTruck, rules: truck.destinationRules || [] });
       }
       
       setNewRule({ destination: '', extraLiters: selectedTruck.batch });
+      alert(`✓ Destination rule added for ${selectedTruck.suffix.toUpperCase()}`);
     } catch (error: any) {
       alert(`Failed to add rule: ${error.response?.data?.error || error.message}`);
     }
@@ -123,19 +129,23 @@ export default function TruckBatches() {
     if (!selectedTruck) return;
     
     if (!confirm(`Remove destination rule for "${destination}"?`)) return;
+    if (!batches) return;
 
     try {
-      await adminAPI.deleteDestinationRule(selectedTruck.suffix, destination);
+      await deleteRuleMutation.mutateAsync({
+        truckSuffix: selectedTruck.suffix,
+        destination
+      });
       
-      // Reload batches
-      await loadBatches();
-      
-      // Update selected truck's rules
-      const batch = batches[`batch_${selectedTruck.batch}` as keyof typeof batches];
+      // React Query will auto-refresh batches, update selected truck
+      const batchKey = `batch_${selectedTruck.batch}` as keyof typeof batches;
+      const batch = batches[batchKey];
       const truck = batch.find((t: any) => (typeof t === 'string' ? t : t.truckSuffix) === selectedTruck.suffix);
       if (truck && typeof truck !== 'string') {
         setSelectedTruck({ ...selectedTruck, rules: truck.destinationRules || [] });
       }
+      
+      alert(`✓ Destination rule deleted for ${selectedTruck.suffix.toUpperCase()}`);
     } catch (error: any) {
       alert(`Failed to delete rule: ${error.response?.data?.error || error.message}`);
     }
@@ -153,7 +163,9 @@ export default function TruckBatches() {
     return typeof truck === 'string' ? truck : truck.truckSuffix;
   };
 
-  const totalTrucks = batches.batch_100.length + batches.batch_80.length + batches.batch_60.length;
+  const totalTrucks = batches 
+    ? batches.batch_100.length + batches.batch_80.length + batches.batch_60.length 
+    : 0;
 
   const renderBatchCard = (batchSize: 100 | 80 | 60, trucks: any[], color: string) => {
     const filteredTrucks = filterTrucks(trucks);
@@ -251,7 +263,7 @@ export default function TruckBatches() {
     );
   };
 
-  if (loading) {
+  if (loading || !batches) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -273,7 +285,7 @@ export default function TruckBatches() {
               Truck Batch Configuration
             </h1>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Manage extra fuel allocations by truck suffix
+              Manage extra fuel allocations by truck suffix (API-based, no localStorage!)
             </p>
           </div>
         </div>

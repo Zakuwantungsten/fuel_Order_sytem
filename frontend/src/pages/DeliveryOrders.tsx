@@ -4,7 +4,6 @@ import { Search, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarC
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
 import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
-import FuelConfigService from '../services/fuelConfigService';
 import DODetailModal from '../components/DODetailModal';
 import DOForm from '../components/DOForm';
 import BulkDOForm from '../components/BulkDOForm';
@@ -16,6 +15,8 @@ import AmendedDOsModal from '../components/AmendedDOsModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup';
 import Pagination from '../components/Pagination';
+import { useTruckBatches, getExtraFuelFromBatches } from '../hooks/useTruckBatches';
+import { useRoutes, getTotalLitersFromRoutes } from '../hooks/useRoutes';
 
 interface DeliveryOrdersProps {
   user?: any;
@@ -48,6 +49,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   
   // Amended DOs context for session tracking
   const { addAmendedDO, count: amendedDOsCount } = useAmendedDOs();
+  
+  // React Query hooks - Replace localStorage with API
+  const { data: truckBatches } = useTruckBatches();
+  const { data: routes } = useRoutes();
   
   // Workbook state
   const [workbooks, setWorkbooks] = useState<DOWorkbookType[]>([]);
@@ -527,11 +532,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         throw new Error(message);
       }
       
-      // Get total liters based on origin (POL) + destination with match information from database
-      const destinationMatch = await FuelConfigService.getTotalLitersByRoute(
-        deliveryOrder.loadingPoint || '',
-        deliveryOrder.destination
-      );
+      // Get total liters from API data (NOT localStorage)
+      const destinationMatch = getTotalLitersFromRoutes(routes, deliveryOrder.destination);
       let totalLiters: number | null = destinationMatch.matched ? destinationMatch.liters : null;
       let missingTotalLiters = !destinationMatch.matched;
       
@@ -544,10 +546,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         console.log(`  → Total Liters: ${totalLiters}L`);
       }
       
-      // Check truck batch configuration for extra fuel
+      // Check truck batch configuration for extra fuel from API data (NOT localStorage)
       // Pass destination to support destination-based fuel rules
-      const truckBatchInfo = FuelConfigService.getExtraFuel(
-        deliveryOrder.truckNo, 
+      const truckBatchInfo = getExtraFuelFromBatches(
+        deliveryOrder.truckNo,
+        truckBatches,
         deliveryOrder.destination
       );
       let extraFuel: number | null = truckBatchInfo.matched ? truckBatchInfo.extraFuel : null;

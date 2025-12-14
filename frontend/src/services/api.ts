@@ -1139,6 +1139,10 @@ export interface TruckBatch {
   truckSuffix: string;
   extraLiters: number;
   truckNumber?: string;
+  destinationRules?: {
+    destination: string;
+    extraLiters: number;
+  }[];
   addedBy: string;
   addedAt: string;
 }
