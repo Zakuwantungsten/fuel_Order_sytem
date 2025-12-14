@@ -971,9 +971,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   const handleHeaderChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    // Auto-uppercase text fields for consistency
+    const uppercaseFields = ['lpoNo'];
+    const finalValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
+    
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: finalValue,
     }));
 
     // When station changes, update rates for existing entries (no auto-forwarding)
@@ -1020,8 +1024,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   // Handle truck number change with auto-fetch
   const handleTruckNoChange = async (index: number, truckNo: string) => {
-    // Format the truck number to standard format: T(number)(space)(letters)
-    const formattedTruckNo = formatTruckNumber(truckNo);
+    // Format the truck number to standard format: T(number)(space)(letters) and uppercase
+    const formattedTruckNo = formatTruckNumber(truckNo).toUpperCase();
     
     // Check for duplicate truck numbers within the current form entries
     const currentEntries = formData.entries || [];
@@ -1187,9 +1191,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   const handleEntryChange = (index: number, field: keyof LPODetail, value: string | number) => {
     const updatedEntries = [...(formData.entries || [])];
+    // Auto-uppercase text fields for consistency
+    const uppercaseFields = ['doNo', 'dest'];
+    const finalValue = (typeof value === 'string' && uppercaseFields.includes(field)) ? value.toUpperCase() : value;
+    
     updatedEntries[index] = {
       ...updatedEntries[index],
-      [field]: value,
+      [field]: finalValue,
     };
 
     // Auto-calculate amount when liters or rate changes

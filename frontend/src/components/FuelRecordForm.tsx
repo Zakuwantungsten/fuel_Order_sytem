@@ -113,14 +113,21 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
       return;
     }
     
+    // Auto-uppercase text fields for consistency
+    const uppercaseFields = ['truckNo', 'start', 'from', 'to', 'goingDo', 'returnDo'];
+    let finalValue: string | number = value;
+    
+    if (['totalLts', 'extra', 'mmsaYard', 'tangaYard', 'darYard', 'darGoing', 
+         'moroGoing', 'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel',
+         'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn'].includes(name)) {
+      finalValue = parseFloat(value) || 0;
+    } else if (uppercaseFields.includes(name)) {
+      finalValue = value.toUpperCase();
+    }
+    
     setFormData((prev) => ({
       ...prev,
-      [name]: ['totalLts', 'extra', 'mmsaYard', 'tangaYard', 'darYard', 'darGoing', 
-               'moroGoing', 'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel',
-               'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn', 
-               'darReturn', 'tangaReturn', 'balance'].includes(name)
-        ? parseFloat(value) || 0
-        : value,
+      [name]: finalValue,
     }));
   };
 
@@ -255,6 +262,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
                   value={formData.truckNo}
                   onChange={handleChange}
                   required
+                  style={{ textTransform: 'uppercase' }}
                   placeholder="e.g., T705 DXY"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />

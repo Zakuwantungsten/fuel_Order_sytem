@@ -76,7 +76,10 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setCommonData((prev) => ({ ...prev, [name]: value }));
+    // Auto-uppercase text fields for consistency
+    const uppercaseFields = ['clientName', 'loadingPoint', 'destination', 'haulier', 'containerNo'];
+    const finalValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
+    setCommonData((prev) => ({ ...prev, [name]: finalValue }));
   };
 
   const handleDOTypeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,9 +122,9 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
             const tonnage = parseFloat(parts[3]) || 0;
             const rate = parseFloat(parts[4]) || 0;
             rows.push({
-              truckNo: parts[0],
-              trailerNo: parts[1],
-              driverName: parts[2],
+              truckNo: parts[0].toUpperCase(),
+              trailerNo: parts[1].toUpperCase(),
+              driverName: parts[2].toUpperCase(),
               tonnages: tonnage,
               ratePerTon: rate,
               totalAmount: tonnage * rate,
@@ -132,9 +135,9 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
           if (parts.length >= 4) {
             const totalAmount = parseFloat(parts[3]) || 0;
             rows.push({
-              truckNo: parts[0],
-              trailerNo: parts[1],
-              driverName: parts[2],
+              truckNo: parts[0].toUpperCase(),
+              trailerNo: parts[1].toUpperCase(),
+              driverName: parts[2].toUpperCase(),
               tonnages: 0,
               ratePerTon: totalAmount,
               totalAmount: totalAmount,
@@ -564,6 +567,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                     value={commonData.clientName}
                     onChange={handleCommonChange}
                     required
+                    style={{ textTransform: 'uppercase' }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="Enter client name"
                   />

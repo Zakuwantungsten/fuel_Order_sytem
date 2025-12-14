@@ -159,11 +159,21 @@ const LPOForm: React.FC<LPOFormProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    // Auto-uppercase text fields for consistency
+    const uppercaseFields = ['truckNo', 'doSdo', 'destinations'];
+    let finalValue: string | number = value;
+    
+    if (['sn', 'ltrs', 'pricePerLtr'].includes(name)) {
+      finalValue = parseFloat(value) || 0;
+    } else if (name === 'truckNo') {
+      finalValue = formatTruckNumber(value).toUpperCase();
+    } else if (uppercaseFields.includes(name)) {
+      finalValue = value.toUpperCase();
+    }
+    
     setFormData((prev) => ({
       ...prev,
-      [name]: ['sn', 'ltrs', 'pricePerLtr'].includes(name)
-        ? parseFloat(value) || 0
-        : name === 'truckNo' ? formatTruckNumber(value) : value,
+      [name]: finalValue,
     }));
     
     // When CASH station is selected, enable cash mode
@@ -812,6 +822,7 @@ const LPOForm: React.FC<LPOFormProps> = ({
                 value={formData.truckNo}
                 onChange={handleChange}
                 required
+                style={{ textTransform: 'uppercase' }}
                 placeholder="e.g., T530 DRF"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />

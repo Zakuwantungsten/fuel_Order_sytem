@@ -88,12 +88,26 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
     if (isDriverLogin) {
       // Secure driver authentication using DriverCredential model
-      const truckNo = username.toUpperCase().replace(/[-\s]/g, '-');
+      // Normalize truck number format - try both space and hyphen formats
+      const inputTruck = username.toUpperCase().trim();
       
-      const driverCredential = await DriverCredential.findOne({
-        truckNo: truckNo,
+      // Try to find with the exact format entered
+      let driverCredential = await DriverCredential.findOne({
+        truckNo: inputTruck,
         isActive: true,
       }).select('+pin');
+      
+      // If not found, try alternative format (space <-> hyphen)
+      if (!driverCredential) {
+        const alternateFormat = inputTruck.includes('-') 
+          ? inputTruck.replace(/-/g, ' ') 
+          : inputTruck.replace(/\s+/g, '-');
+        
+        driverCredential = await DriverCredential.findOne({
+          truckNo: alternateFormat,
+          isActive: true,
+        }).select('+pin');
+      }
 
       if (!driverCredential) {
         // Log failed attempt without revealing if truck exists
@@ -124,16 +138,19 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       driverCredential.lastLogin = new Date();
       await driverCredential.save();
 
+      // Use the actual truck number from the credential (database format)
+      const actualTruckNo = driverCredential.truckNo;
+
       // Create driver user object
       const driverUser = {
-        _id: `driver_${truckNo}`,
-        username: truckNo,
-        email: `${truckNo.toLowerCase()}@driver.local`,
+        _id: `driver_${actualTruckNo}`,
+        username: actualTruckNo,
+        email: `${actualTruckNo.toLowerCase().replace(/\s+/g, '')}@driver.local`,
         firstName: driverCredential.driverName || 'Driver',
-        lastName: truckNo,
+        lastName: actualTruckNo,
         role: 'driver',
         department: 'Transport',
-        truckNo: truckNo,
+        truckNo: actualTruckNo,
         isActive: true,
         createdAt: driverCredential.createdAt,
         updatedAt: new Date(),
@@ -148,7 +165,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
       const { accessToken, refreshToken } = generateTokens(payload);
 
-      logger.info(`Driver logged in: ${truckNo}`);
+      logger.info(`Driver logged in: ${actualTruckNo}`);
 
       // Log successful driver login
       await AuditService.logLogin(

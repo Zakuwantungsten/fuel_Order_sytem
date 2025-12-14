@@ -113,9 +113,17 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       return;
     }
     
+    // Auto-uppercase text fields for consistency
+    const uppercaseFields = ['truckNo', 'trailerNo', 'destination', 'loadingPoint', 'clientName', 'haulier', 'containerNo', 'driverName', 'invoiceNos', 'borderEntryDRC'];
+    const finalValue = ['tonnages', 'ratePerTon'].includes(name) 
+      ? parseFloat(value) || 0 
+      : uppercaseFields.includes(name) 
+        ? value.toUpperCase() 
+        : value;
+    
     setFormData((prev) => ({
       ...prev,
-      [name]: ['tonnages', 'ratePerTon'].includes(name) ? parseFloat(value) || 0 : value,
+      [name]: finalValue,
     }));
   };
 
@@ -430,6 +438,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   value={formData.clientName || ''}
                   onChange={handleChange}
                   required
+                  style={{ textTransform: 'uppercase' }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter client name"
                 />
@@ -442,6 +451,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   name="haulier"
                   value={formData.haulier || ''}
                   onChange={handleChange}
+                  style={{ textTransform: 'uppercase' }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter haulier name"
                 />
@@ -464,6 +474,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   value={formData.truckNo || ''}
                   onChange={handleChange}
                   required
+                  style={{ textTransform: 'uppercase' }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., T844 EKS"
                 />
@@ -479,6 +490,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   value={formData.trailerNo || ''}
                   onChange={handleChange}
                   required
+                  style={{ textTransform: 'uppercase' }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., T629 ELE"
                 />
@@ -565,6 +577,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   value={formData.loadingPoint || ''}
                   onChange={handleChange}
                   required
+                  style={{ textTransform: 'uppercase' }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., DAR"
                 />
@@ -580,6 +593,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   value={formData.destination || ''}
                   onChange={handleChange}
                   required
+                  style={{ textTransform: 'uppercase' }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="e.g., CCR KOLWEZI"
                 />
