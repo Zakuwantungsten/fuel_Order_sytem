@@ -37,8 +37,9 @@ const DEFAULT_ROUTES = [
   { destination: 'LUSAKA', totalLiters: 1900, isActive: true },
 ];
 
+// Default truck batches - now using dynamic structure
 const DEFAULT_TRUCK_BATCHES = {
-  batch_100: [
+  '100': [
     { truckSuffix: 'dnh', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
     { truckSuffix: 'dny', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
     { truckSuffix: 'dpn', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
@@ -49,12 +50,12 @@ const DEFAULT_TRUCK_BATCHES = {
     { truckSuffix: 'eaf', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
     { truckSuffix: 'dtb', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
   ],
-  batch_80: [
+  '80': [
     { truckSuffix: 'dvk', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
     { truckSuffix: 'dvl', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
     { truckSuffix: 'dwk', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
   ],
-  batch_60: [
+  '60': [
     { truckSuffix: 'dyy', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
     { truckSuffix: 'dzy', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
     { truckSuffix: 'eag', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
@@ -510,18 +511,18 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
 };
 
 /**
- * Add truck to a batch
+ * Add truck to a batch (now supports dynamic batch creation)
  */
 export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { truckSuffix, extraLiters, truckNumber } = req.body;
 
-    if (!truckSuffix || !extraLiters) {
+    if (!truckSuffix || extraLiters === undefined) {
       throw new ApiError(400, 'Missing required fields: truckSuffix, extraLiters');
     }
 
-    if (![60, 80, 100].includes(extraLiters)) {
-      throw new ApiError(400, 'extraLiters must be 60, 80, or 100');
+    if (extraLiters < 0 || extraLiters > 10000) {
+      throw new ApiError(400, 'extraLiters must be between 0 and 10000');
     }
 
     let config = await SystemConfig.findOne({
@@ -532,41 +533,46 @@ export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<
     if (!config) {
       config = await SystemConfig.create({
         configType: 'truck_batches',
-        truckBatches: { batch_100: [], batch_80: [], batch_60: [] },
+        truckBatches: {},
         lastUpdatedBy: req.user?.username || 'system',
       });
     }
 
     const suffix = truckSuffix.toLowerCase();
+    const batchKey = extraLiters.toString();
 
-    // Remove from all batches first (in case of moving)
-    if (config.truckBatches) {
-      config.truckBatches.batch_100 = config.truckBatches.batch_100.filter(t => t.truckSuffix !== suffix);
-      config.truckBatches.batch_80 = config.truckBatches.batch_80.filter(t => t.truckSuffix !== suffix);
-      config.truckBatches.batch_60 = config.truckBatches.batch_60.filter(t => t.truckSuffix !== suffix);
-
-      // Add to appropriate batch
-      const newTruck = {
-        truckSuffix: suffix,
-        extraLiters,
-        truckNumber,
-        addedBy: req.user?.username || 'system',
-        addedAt: new Date(),
-      };
-
-      if (extraLiters === 100) {
-        config.truckBatches.batch_100.push(newTruck);
-      } else if (extraLiters === 80) {
-        config.truckBatches.batch_80.push(newTruck);
-      } else {
-        config.truckBatches.batch_60.push(newTruck);
-      }
+    // Initialize truckBatches if not exists
+    if (!config.truckBatches) {
+      config.truckBatches = {};
     }
 
+    // Remove from all batches first (in case of moving)
+    Object.keys(config.truckBatches).forEach(key => {
+      if (config.truckBatches && Array.isArray(config.truckBatches[key])) {
+        config.truckBatches[key] = config.truckBatches[key].filter((t: any) => t.truckSuffix !== suffix);
+      }
+    });
+
+    // Create batch if doesn't exist
+    if (!config.truckBatches[batchKey]) {
+      config.truckBatches[batchKey] = [];
+    }
+
+    // Add truck to batch
+    const newTruck = {
+      truckSuffix: suffix,
+      extraLiters,
+      truckNumber,
+      addedBy: req.user?.username || 'system',
+      addedAt: new Date(),
+    };
+
+    config.truckBatches[batchKey].push(newTruck);
+    config.markModified('truckBatches');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
 
-    logger.info(`Truck ${truckSuffix} added to batch ${extraLiters} by ${req.user?.username}`);
+    logger.info(`Truck ${truckSuffix} added to batch ${extraLiters}L by ${req.user?.username}`);
 
     res.status(201).json({
       success: true,
@@ -579,7 +585,7 @@ export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<
 };
 
 /**
- * Remove truck from batches
+ * Remove truck from batches (now supports dynamic batches)
  */
 export const removeTruckFromBatch = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -597,25 +603,22 @@ export const removeTruckFromBatch = async (req: AuthRequest, res: Response): Pro
     const suffix = truckSuffix.toLowerCase();
     let found = false;
 
-    // Remove from all batches
-    const originalLen100 = config.truckBatches.batch_100.length;
-    const originalLen80 = config.truckBatches.batch_80.length;
-    const originalLen60 = config.truckBatches.batch_60.length;
-
-    config.truckBatches.batch_100 = config.truckBatches.batch_100.filter(t => t.truckSuffix !== suffix);
-    config.truckBatches.batch_80 = config.truckBatches.batch_80.filter(t => t.truckSuffix !== suffix);
-    config.truckBatches.batch_60 = config.truckBatches.batch_60.filter(t => t.truckSuffix !== suffix);
-
-    found = (
-      config.truckBatches.batch_100.length < originalLen100 ||
-      config.truckBatches.batch_80.length < originalLen80 ||
-      config.truckBatches.batch_60.length < originalLen60
-    );
+    // Remove from all batches dynamically
+    Object.keys(config.truckBatches).forEach(key => {
+      if (config.truckBatches && Array.isArray(config.truckBatches[key])) {
+        const originalLength = config.truckBatches[key].length;
+        config.truckBatches[key] = config.truckBatches[key].filter((t: any) => t.truckSuffix !== suffix);
+        if (config.truckBatches[key].length < originalLength) {
+          found = true;
+        }
+      }
+    });
 
     if (!found) {
       throw new ApiError(404, 'Truck not found in any batch');
     }
 
+    config.markModified('truckBatches');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
 
@@ -649,27 +652,28 @@ export const addDestinationRule = async (req: AuthRequest, res: Response): Promi
 
     const suffix = truckSuffix.toLowerCase();
 
-    // Find which batch the truck belongs to
-    let truck = config.truckBatches.batch_100.find(t => t.truckSuffix === suffix);
-    if (truck) {
-      if (!truck.destinationRules) truck.destinationRules = [];
-      truck.destinationRules.push({ destination, extraLiters });
-    } else {
-      truck = config.truckBatches.batch_80.find(t => t.truckSuffix === suffix);
-      if (truck) {
-        if (!truck.destinationRules) truck.destinationRules = [];
-        truck.destinationRules.push({ destination, extraLiters });
-      } else {
-        truck = config.truckBatches.batch_60.find(t => t.truckSuffix === suffix);
-        if (truck) {
-          if (!truck.destinationRules) truck.destinationRules = [];
-          truck.destinationRules.push({ destination, extraLiters });
-        } else {
-          throw new ApiError(404, 'Truck not found in any batch');
+    // Find truck across all batches dynamically
+    let truck: any = null;
+    for (const batchKey of Object.keys(config.truckBatches)) {
+      if (Array.isArray(config.truckBatches[batchKey])) {
+        const foundTruck = config.truckBatches[batchKey].find((t: any) => t.truckSuffix === suffix);
+        if (foundTruck) {
+          truck = foundTruck;
+          break;
         }
       }
     }
 
+    if (!truck) {
+      throw new ApiError(404, 'Truck not found in any batch');
+    }
+
+    if (!truck.destinationRules) {
+      truck.destinationRules = [];
+    }
+    truck.destinationRules.push({ destination, extraLiters });
+
+    config.markModified('truckBatches');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
 
@@ -704,17 +708,17 @@ export const updateDestinationRule = async (req: AuthRequest, res: Response): Pr
     const suffix = truckSuffix.toLowerCase();
     let found = false;
 
-    // Search all batches
-    const batches = [config.truckBatches.batch_100, config.truckBatches.batch_80, config.truckBatches.batch_60];
-    
-    for (const batch of batches) {
-      const truck = batch.find(t => t.truckSuffix === suffix);
-      if (truck && truck.destinationRules) {
-        const ruleIndex = truck.destinationRules.findIndex(r => r.destination === oldDestination);
-        if (ruleIndex !== -1) {
-          truck.destinationRules[ruleIndex] = { destination: newDestination || oldDestination, extraLiters };
-          found = true;
-          break;
+    // Search all batches dynamically
+    for (const batchKey of Object.keys(config.truckBatches)) {
+      if (Array.isArray(config.truckBatches[batchKey])) {
+        const truck = config.truckBatches[batchKey].find((t: any) => t.truckSuffix === suffix);
+        if (truck && truck.destinationRules) {
+          const ruleIndex = truck.destinationRules.findIndex((r: any) => r.destination === oldDestination);
+          if (ruleIndex !== -1) {
+            truck.destinationRules[ruleIndex] = { destination: newDestination || oldDestination, extraLiters };
+            found = true;
+            break;
+          }
         }
       }
     }
@@ -723,6 +727,7 @@ export const updateDestinationRule = async (req: AuthRequest, res: Response): Pr
       throw new ApiError(404, 'Destination rule not found');
     }
 
+    config.markModified('truckBatches');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
 
@@ -757,17 +762,17 @@ export const deleteDestinationRule = async (req: AuthRequest, res: Response): Pr
     const suffix = truckSuffix.toLowerCase();
     let found = false;
 
-    // Search all batches
-    const batches = [config.truckBatches.batch_100, config.truckBatches.batch_80, config.truckBatches.batch_60];
-    
-    for (const batch of batches) {
-      const truck = batch.find(t => t.truckSuffix === suffix);
-      if (truck && truck.destinationRules) {
-        const originalLength = truck.destinationRules.length;
-        truck.destinationRules = truck.destinationRules.filter(r => r.destination !== destination);
-        if (truck.destinationRules.length < originalLength) {
-          found = true;
-          break;
+    // Search all batches dynamically
+    for (const batchKey of Object.keys(config.truckBatches)) {
+      if (Array.isArray(config.truckBatches[batchKey])) {
+        const truck = config.truckBatches[batchKey].find((t: any) => t.truckSuffix === suffix);
+        if (truck && truck.destinationRules) {
+          const originalLength = truck.destinationRules.length;
+          truck.destinationRules = truck.destinationRules.filter((r: any) => r.destination !== destination);
+          if (truck.destinationRules.length < originalLength) {
+            found = true;
+            break;
+          }
         }
       }
     }
@@ -776,6 +781,7 @@ export const deleteDestinationRule = async (req: AuthRequest, res: Response): Pr
       throw new ApiError(404, 'Destination rule not found');
     }
 
+    config.markModified('truckBatches');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
 
@@ -784,6 +790,163 @@ export const deleteDestinationRule = async (req: AuthRequest, res: Response): Pr
     res.status(200).json({
       success: true,
       message: 'Destination rule deleted successfully',
+      data: config.truckBatches,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Create a new batch with custom extra liters
+ */
+export const createBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { extraLiters } = req.body;
+
+    if (extraLiters === undefined || extraLiters < 0 || extraLiters > 10000) {
+      throw new ApiError(400, 'extraLiters must be between 0 and 10000');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'truck_batches',
+        truckBatches: {},
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    const batchKey = extraLiters.toString();
+
+    if (!config.truckBatches) {
+      config.truckBatches = {};
+    }
+
+    if (config.truckBatches[batchKey]) {
+      throw new ApiError(400, `Batch with ${extraLiters}L already exists`);
+    }
+
+    config.truckBatches[batchKey] = [];
+    config.markModified('truckBatches');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`New batch created: ${extraLiters}L by ${req.user?.username}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Batch ${extraLiters}L created successfully`,
+      data: config.truckBatches,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Update a batch (change extraLiters allocation)
+ */
+export const updateBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { oldExtraLiters, newExtraLiters } = req.body;
+
+    if (!oldExtraLiters || !newExtraLiters) {
+      throw new ApiError(400, 'Missing required fields: oldExtraLiters, newExtraLiters');
+    }
+
+    if (newExtraLiters < 0 || newExtraLiters > 10000) {
+      throw new ApiError(400, 'newExtraLiters must be between 0 and 10000');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config || !config.truckBatches) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const oldKey = oldExtraLiters.toString();
+    const newKey = newExtraLiters.toString();
+
+    if (!config.truckBatches[oldKey]) {
+      throw new ApiError(404, `Batch ${oldExtraLiters}L not found`);
+    }
+
+    if (config.truckBatches[newKey]) {
+      throw new ApiError(400, `Batch ${newExtraLiters}L already exists`);
+    }
+
+    // Move trucks to new batch and update their extraLiters
+    const trucks = config.truckBatches[oldKey];
+    trucks.forEach((truck: any) => {
+      truck.extraLiters = newExtraLiters;
+    });
+    config.truckBatches[newKey] = trucks;
+    delete config.truckBatches[oldKey];
+
+    config.markModified('truckBatches');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Batch updated: ${oldExtraLiters}L → ${newExtraLiters}L by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Batch updated from ${oldExtraLiters}L to ${newExtraLiters}L successfully`,
+      data: config.truckBatches,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Delete a batch (only if empty)
+ */
+export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { extraLiters } = req.params;
+
+    if (!extraLiters) {
+      throw new ApiError(400, 'extraLiters parameter is required');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config || !config.truckBatches) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const batchKey = extraLiters.toString();
+
+    if (!config.truckBatches[batchKey]) {
+      throw new ApiError(404, `Batch ${extraLiters}L not found`);
+    }
+
+    if (config.truckBatches[batchKey].length > 0) {
+      throw new ApiError(400, `Cannot delete batch ${extraLiters}L with ${config.truckBatches[batchKey].length} trucks assigned. Move trucks first.`);
+    }
+
+    delete config.truckBatches[batchKey];
+    config.markModified('truckBatches');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Batch deleted: ${extraLiters}L by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Batch ${extraLiters}L deleted successfully`,
       data: config.truckBatches,
     });
   } catch (error: any) {

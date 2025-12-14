@@ -21,11 +21,11 @@ export function useTruckBatches() {
     queryKey: truckBatchKeys.all,
     queryFn: async () => {
       const batches = await adminAPI.getTruckBatches();
-      console.log('✓ Fetched truck batches from API:', {
-        batch_100: batches.batch_100.length,
-        batch_80: batches.batch_80.length,
-        batch_60: batches.batch_60.length,
-      });
+      const batchSummary = Object.entries(batches).reduce((acc, [key, trucks]) => {
+        acc[key] = Array.isArray(trucks) ? trucks.length : 0;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log('✓ Fetched truck batches from API:', batchSummary);
       return batches;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -107,6 +107,72 @@ export function useAddDestinationRule() {
 }
 
 /**
+ * Create a new batch with custom extra liters
+ */
+export function useCreateBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { extraLiters: number }) => {
+      console.log('→ Creating batch:', data);
+      const result = await adminAPI.createBatch(data);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      console.log(`✓ Batch ${variables.extraLiters}L created`);
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to create batch:', error);
+    },
+  });
+}
+
+/**
+ * Update batch allocation
+ */
+export function useUpdateBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { oldExtraLiters: number; newExtraLiters: number }) => {
+      console.log('→ Updating batch:', data);
+      const result = await adminAPI.updateBatch(data);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      console.log(`✓ Batch updated: ${variables.oldExtraLiters}L → ${variables.newExtraLiters}L`);
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to update batch:', error);
+    },
+  });
+}
+
+/**
+ * Delete a batch (only if empty)
+ */
+export function useDeleteBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (extraLiters: number) => {
+      console.log('→ Deleting batch:', extraLiters);
+      const result = await adminAPI.deleteBatch(extraLiters);
+      return result;
+    },
+    onSuccess: (_, extraLiters) => {
+      console.log(`✓ Batch ${extraLiters}L deleted`);
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to delete batch:', error);
+    },
+  });
+}
+
+/**
  * Delete destination rule
  */
 export function useDeleteDestinationRule() {
@@ -129,7 +195,7 @@ export function useDeleteDestinationRule() {
 }
 
 /**
- * Helper function to get extra fuel from batches data
+ * Helper function to get extra fuel from batches data (now supports dynamic batches)
  * This replaces FuelConfigService.getExtraFuel() but accepts data as parameter
  */
 export function getExtraFuelFromBatches(
@@ -153,74 +219,39 @@ export function getExtraFuelFromBatches(
     return { extraFuel: 0, matched: false, truckSuffix: '' };
   }
 
-  // Check batch_100
-  const truck100 = batches.batch_100.find(t => t.truckSuffix === truckSuffix);
-  if (truck100) {
-    // Check destination rules if destination provided
-    if (destination && truck100.destinationRules && truck100.destinationRules.length > 0) {
-      const normalizedDest = destination.toLowerCase().trim();
-      const matchingRule = truck100.destinationRules.find((rule: any) => {
-        const ruleDestination = rule.destination.toLowerCase().trim();
-        return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
-      });
+  // Search dynamically across all batches
+  for (const [extraLitersStr, trucks] of Object.entries(batches)) {
+    if (!Array.isArray(trucks)) continue;
+    
+    const truck = trucks.find(t => t.truckSuffix === truckSuffix);
+    if (truck) {
+      // Check destination rules if destination provided
+      if (destination && truck.destinationRules && truck.destinationRules.length > 0) {
+        const normalizedDest = destination.toLowerCase().trim();
+        const matchingRule = truck.destinationRules.find((rule: any) => {
+          const ruleDestination = rule.destination.toLowerCase().trim();
+          return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+        });
 
-      if (matchingRule) {
-        return {
-          extraFuel: matchingRule.extraLiters,
-          matched: true,
-          batchName: 'batch_100',
-          truckSuffix,
-          destinationOverride: true,
-        };
+        if (matchingRule) {
+          return {
+            extraFuel: matchingRule.extraLiters,
+            matched: true,
+            batchName: `batch_${extraLitersStr}`,
+            truckSuffix,
+            destinationOverride: true,
+          };
+        }
       }
+
+      // Return batch default
+      return {
+        extraFuel: parseInt(extraLitersStr),
+        matched: true,
+        batchName: `batch_${extraLitersStr}`,
+        truckSuffix,
+      };
     }
-    return { extraFuel: 100, matched: true, batchName: 'batch_100', truckSuffix };
-  }
-
-  // Check batch_80
-  const truck80 = batches.batch_80.find(t => t.truckSuffix === truckSuffix);
-  if (truck80) {
-    if (destination && truck80.destinationRules && truck80.destinationRules.length > 0) {
-      const normalizedDest = destination.toLowerCase().trim();
-      const matchingRule = truck80.destinationRules.find((rule: any) => {
-        const ruleDestination = rule.destination.toLowerCase().trim();
-        return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
-      });
-
-      if (matchingRule) {
-        return {
-          extraFuel: matchingRule.extraLiters,
-          matched: true,
-          batchName: 'batch_80',
-          truckSuffix,
-          destinationOverride: true,
-        };
-      }
-    }
-    return { extraFuel: 80, matched: true, batchName: 'batch_80', truckSuffix };
-  }
-
-  // Check batch_60
-  const truck60 = batches.batch_60.find(t => t.truckSuffix === truckSuffix);
-  if (truck60) {
-    if (destination && truck60.destinationRules && truck60.destinationRules.length > 0) {
-      const normalizedDest = destination.toLowerCase().trim();
-      const matchingRule = truck60.destinationRules.find((rule: any) => {
-        const ruleDestination = rule.destination.toLowerCase().trim();
-        return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
-      });
-
-      if (matchingRule) {
-        return {
-          extraFuel: matchingRule.extraLiters,
-          matched: true,
-          batchName: 'batch_60',
-          truckSuffix,
-          destinationOverride: true,
-        };
-      }
-    }
-    return { extraFuel: 60, matched: true, batchName: 'batch_60', truckSuffix };
   }
 
   // Not found in any batch

@@ -93,17 +93,53 @@ router.delete(
 // =====================
 router.get('/truck-batches', asyncHandler(adminController.getTruckBatches));
 
+// Create new batch with custom liters
+router.post(
+  '/truck-batches/batches',
+  [
+    body('extraLiters').isNumeric().isInt({ min: 0, max: 10000 })
+      .withMessage('Extra liters must be a number between 0 and 10000'),
+  ],
+  validate,
+  asyncHandler(adminController.createBatch)
+);
+
+// Update batch allocation
+router.put(
+  '/truck-batches/batches',
+  [
+    body('oldExtraLiters').isNumeric().withMessage('Old extra liters is required'),
+    body('newExtraLiters').isNumeric().isInt({ min: 0, max: 10000 })
+      .withMessage('New extra liters must be between 0 and 10000'),
+  ],
+  validate,
+  asyncHandler(adminController.updateBatch)
+);
+
+// Delete batch (only if empty)
+router.delete(
+  '/truck-batches/batches/:extraLiters',
+  [
+    param('extraLiters').isNumeric().withMessage('Extra liters is required'),
+  ],
+  validate,
+  asyncHandler(adminController.deleteBatch)
+);
+
+// Add truck to batch (now supports any liter amount)
 router.post(
   '/truck-batches',
   [
     body('truckSuffix').notEmpty().withMessage('Truck suffix is required'),
-    body('extraLiters').isIn([60, 80, 100]).withMessage('Extra liters must be 60, 80, or 100'),
+    body('extraLiters').isNumeric().isInt({ min: 0, max: 10000 })
+      .withMessage('Extra liters must be between 0 and 10000'),
     body('truckNumber').optional().isString(),
   ],
   validate,
   asyncHandler(adminController.addTruckToBatch)
 );
 
+// Remove truck from batches
 router.delete(
   '/truck-batches/:truckSuffix',
   [param('truckSuffix').notEmpty().withMessage('Truck suffix is required')],

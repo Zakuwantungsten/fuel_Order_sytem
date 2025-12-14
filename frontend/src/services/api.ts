@@ -1148,9 +1148,7 @@ export interface TruckBatch {
 }
 
 export interface TruckBatches {
-  batch_100: TruckBatch[];
-  batch_80: TruckBatch[];
-  batch_60: TruckBatch[];
+  [extraLiters: string]: TruckBatch[];  // Dynamic keys for any liter amount
 }
 
 export interface StandardAllocations {
@@ -1231,14 +1229,34 @@ export const adminAPI = {
   // Truck Batches
   getTruckBatches: async (): Promise<TruckBatches> => {
     const response = await apiClient.get('/admin/truck-batches');
-    return response.data.data || { batch_100: [], batch_80: [], batch_60: [] };
+    return response.data.data || {};
   },
 
+  // Create new batch with custom liters
+  createBatch: async (data: { extraLiters: number }): Promise<TruckBatches> => {
+    const response = await apiClient.post('/admin/truck-batches/batches', data);
+    return response.data.data;
+  },
+
+  // Update batch allocation
+  updateBatch: async (data: { oldExtraLiters: number; newExtraLiters: number }): Promise<TruckBatches> => {
+    const response = await apiClient.put('/admin/truck-batches/batches', data);
+    return response.data.data;
+  },
+
+  // Delete batch (only if empty)
+  deleteBatch: async (extraLiters: number): Promise<TruckBatches> => {
+    const response = await apiClient.delete(`/admin/truck-batches/batches/${extraLiters}`);
+    return response.data.data;
+  },
+
+  // Add truck to batch (supports any liter amount now)
   addTruckToBatch: async (data: { truckSuffix: string; extraLiters: number; truckNumber?: string }): Promise<TruckBatches> => {
     const response = await apiClient.post('/admin/truck-batches', data);
     return response.data.data;
   },
 
+  // Remove truck from batches
   removeTruckFromBatch: async (truckSuffix: string): Promise<TruckBatches> => {
     const response = await apiClient.delete(`/admin/truck-batches/${truckSuffix}`);
     return response.data.data;

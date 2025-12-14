@@ -128,9 +128,7 @@ export interface ISystemConfig {
   fuelStations?: IFuelStation[];
   routes?: IRouteConfig[];
   truckBatches?: {
-    batch_100: ITruckBatch[];
-    batch_80: ITruckBatch[];
-    batch_60: ITruckBatch[];
+    [extraLiters: string]: ITruckBatch[];  // Dynamic keys for any liter amount
   };
   standardAllocations?: IStandardAllocations;
   defaultFuelPrice?: number;
@@ -174,7 +172,7 @@ const destinationFuelRuleSchema = new Schema<IDestinationFuelRule>(
 const truckBatchSchema = new Schema<ITruckBatch>(
   {
     truckSuffix: { type: String, required: true },
-    extraLiters: { type: Number, required: true, enum: [60, 80, 100] },
+    extraLiters: { type: Number, required: true, min: 0, max: 10000 },
     destinationRules: [destinationFuelRuleSchema],
     truckNumber: { type: String },
     addedBy: { type: String, required: true },
@@ -208,9 +206,8 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     fuelStations: [fuelStationSchema],
     routes: [routeConfigSchema],
     truckBatches: {
-      batch_100: [truckBatchSchema],
-      batch_80: [truckBatchSchema],
-      batch_60: [truckBatchSchema],
+      type: Schema.Types.Mixed,  // Allow dynamic keys
+      default: {},
     },
     standardAllocations: standardAllocationsSchema,
     defaultFuelPrice: { type: Number, default: 1450 },

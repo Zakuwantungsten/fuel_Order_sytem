@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { Truck, Trash2, Plus, Fuel, Search, MapPin, X } from 'lucide-react';
+import { Truck, Trash2, Plus, Fuel, Search, MapPin, X, Edit2 } from 'lucide-react';
 import {
   useTruckBatches,
   useAddTruckBatch,
   useRemoveTruckBatch,
   useAddDestinationRule,
   useDeleteDestinationRule,
+  useCreateBatch,
+  useUpdateBatch,
+  useDeleteBatch,
 } from '../hooks/useTruckBatches';
 
 interface DestinationRule {
@@ -14,19 +17,28 @@ interface DestinationRule {
 }
 
 export default function TruckBatches() {
-  // Use React Query hooks instead of manual state/API calls
+  // Use React Query hooks
   const { data: batches, isLoading: loading } = useTruckBatches();
   const addTruckMutation = useAddTruckBatch();
   const removeTruckMutation = useRemoveTruckBatch();
   const addRuleMutation = useAddDestinationRule();
   const deleteRuleMutation = useDeleteDestinationRule();
+  const createBatchMutation = useCreateBatch();
+  const updateBatchMutation = useUpdateBatch();
+  const deleteBatchMutation = useDeleteBatch();
 
-  const [newTruck, setNewTruck] = useState({ suffix: '', batch: 60 as 100 | 80 | 60 });
+  const [newTruck, setNewTruck] = useState({ suffix: '', batch: 0 });
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Batch management modal state
+  const [showCreateBatchModal, setShowCreateBatchModal] = useState(false);
+  const [newBatchLiters, setNewBatchLiters] = useState<number>(0);
+  const [showEditBatchModal, setShowEditBatchModal] = useState(false);
+  const [editingBatch, setEditingBatch] = useState<{ extraLiters: number; trucks: any[] } | null>(null);
   
   // Destination rules modal state
   const [showRulesModal, setShowRulesModal] = useState(false);
-  const [selectedTruck, setSelectedTruck] = useState<{ suffix: string; batch: 100 | 80 | 60; rules: DestinationRule[] } | null>(null);
+  const [selectedTruck, setSelectedTruck] = useState<{ suffix: string; batch: number; rules: DestinationRule[] } | null>(null);
   const [newRule, setNewRule] = useState({ destination: '', extraLiters: 0 });
 
   const handleAddTruck = async () => {
@@ -37,14 +49,21 @@ export default function TruckBatches() {
       return;
     }
 
+    if (newTruck.batch <= 0) {
+      alert('Please select a valid batch');
+      return;
+    }
+
     if (!batches) return;
 
-    // Check if already exists
-    const allTrucks = [
-      ...batches.batch_100.map(t => typeof t === 'string' ? t : t.truckSuffix),
-      ...batches.batch_80.map(t => typeof t === 'string' ? t : t.truckSuffix),
-      ...batches.batch_60.map(t => typeof t === 'string' ? t : t.truckSuffix)
-    ];
+    // Check if already exists in any batch
+    const allTrucks: string[] = [];
+    Object.values(batches).forEach(trucks => {
+      if (Array.isArray(trucks)) {
+        allTrucks.push(...trucks.map(t => t.truckSuffix));
+      }
+    });
+    
     if (allTrucks.includes(suffix)) {
       alert(`Truck suffix "${suffix.toUpperCase()}" is already configured. Use the move option to change its batch.`);
       return;
@@ -55,14 +74,14 @@ export default function TruckBatches() {
         truckSuffix: suffix,
         extraLiters: newTruck.batch,
       });
-      setNewTruck({ suffix: '', batch: 60 });
+      setNewTruck({ suffix: '', batch: 0 });
       alert(`✓ Truck ${suffix.toUpperCase()} added to ${newTruck.batch}L batch`);
     } catch (error: any) {
       alert(`Failed to add truck: ${error.message}`);
     }
   };
 
-  const handleMoveTruck = async (suffix: string, newBatch: 100 | 80 | 60) => {
+  const handleMoveTruck = async (suffix: string, newBatch: number) => {
     if (!confirm(`Move "${suffix.toUpperCase()}" to ${newBatch}L batch?`)) return;
 
     try {
@@ -87,12 +106,69 @@ export default function TruckBatches() {
     }
   };
 
-  const handleManageRules = (truck: any, batch: 100 | 80 | 60) => {
+  const handleManageRules = (truck: any, batch: number) => {
     const suffix = typeof truck === 'string' ? truck : truck.truckSuffix;
     const rules = typeof truck === 'string' ? [] : (truck.destinationRules || []);
     setSelectedTruck({ suffix, batch, rules });
     setShowRulesModal(true);
     setNewRule({ destination: '', extraLiters: batch }); // Default to batch size
+  };
+
+  const handleCreateBatch = async () => {
+    if (newBatchLiters <= 0) {
+      alert('Please enter a valid liter amount greater than 0');
+      return;
+    }
+
+    try {
+      await createBatchMutation.mutateAsync({ extraLiters: newBatchLiters });
+      setNewBatchLiters(0);
+      setShowCreateBatchModal(false);
+      alert(`✓ New batch ${newBatchLiters}L created successfully`);
+    } catch (error: any) {
+      alert(`Failed to create batch: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const handleUpdateBatch = async () => {
+    if (!editingBatch || newBatchLiters <= 0) {
+      alert('Please enter a valid liter amount greater than 0');
+      return;
+    }
+
+    if (!confirm(`Update batch from ${editingBatch.extraLiters}L to ${newBatchLiters}L?`)) return;
+
+    try {
+      await updateBatchMutation.mutateAsync({ 
+        oldExtraLiters: editingBatch.extraLiters, 
+        newExtraLiters: newBatchLiters 
+      });
+      setEditingBatch(null);
+      setNewBatchLiters(0);
+      setShowEditBatchModal(false);
+      alert(`✓ Batch updated: ${editingBatch.extraLiters}L → ${newBatchLiters}L`);
+    } catch (error: any) {
+      alert(`Failed to update batch: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const handleDeleteBatch = async (extraLiters: number) => {
+    const batchKey = extraLiters.toString();
+    const batch = batches?.[batchKey];
+    
+    if (batch && batch.length > 0) {
+      alert(`Cannot delete batch ${extraLiters}L with ${batch.length} trucks assigned. Move trucks first.`);
+      return;
+    }
+
+    if (!confirm(`Delete batch ${extraLiters}L? This cannot be undone.`)) return;
+
+    try {
+      await deleteBatchMutation.mutateAsync(extraLiters);
+      alert(`✓ Batch ${extraLiters}L deleted successfully`);
+    } catch (error: any) {
+      alert(`Failed to delete batch: ${error.response?.data?.error || error.message}`);
+    }
   };
 
   const handleAddRule = async () => {
@@ -163,16 +239,32 @@ export default function TruckBatches() {
     return typeof truck === 'string' ? truck : truck.truckSuffix;
   };
 
-  const totalTrucks = batches 
-    ? batches.batch_100.length + batches.batch_80.length + batches.batch_60.length 
-    : 0;
+  // Generate dynamic batch list
+  const batchList = batches
+    ? Object.entries(batches).map(([extraLitersStr, trucks]) => ({
+        extraLiters: parseInt(extraLitersStr),
+        trucks: Array.isArray(trucks) ? trucks : [],
+        count: Array.isArray(trucks) ? trucks.length : 0,
+      }))
+    : [];
 
-  const renderBatchCard = (batchSize: 100 | 80 | 60, trucks: any[], color: string) => {
+  // Sort by extraLiters descending
+  batchList.sort((a, b) => b.extraLiters - a.extraLiters);
+
+  const totalTrucks = batchList.reduce((sum, batch) => sum + batch.count, 0);
+
+  const getColorForIndex = (index: number) => {
+    const colors = ['green', 'yellow', 'blue', 'purple', 'pink', 'indigo', 'red', 'orange', 'teal', 'cyan'];
+    return colors[index % colors.length];
+  };
+
+  const renderBatchCard = (batchSize: number, trucks: any[], colorIndex: number) => {
     const filteredTrucks = filterTrucks(trucks);
-    const bgColor = color === 'green' ? 'bg-green-50' : color === 'yellow' ? 'bg-yellow-50' : 'bg-blue-50';
-    const borderColor = color === 'green' ? 'border-green-200' : color === 'yellow' ? 'border-yellow-200' : 'border-blue-200';
-    const textColor = color === 'green' ? 'text-green-900' : color === 'yellow' ? 'text-yellow-900' : 'text-blue-900';
-    const badgeColor = color === 'green' ? 'bg-green-600' : color === 'yellow' ? 'bg-yellow-600' : 'bg-blue-600';
+    const color = getColorForIndex(colorIndex);
+    const bgColor = `bg-${color}-50`;
+    const borderColor = `border-${color}-200`;
+    const textColor = `text-${color}-900`;
+    const badgeColor = `bg-${color}-600`;
 
     return (
       <div className={`${bgColor} ${borderColor} border-2 rounded-lg p-6`}>
@@ -190,6 +282,26 @@ export default function TruckBatches() {
                 {searchQuery && trucks.length !== filteredTrucks.length && ` · ${trucks.length} total`}
               </p>
             </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setEditingBatch({ extraLiters: batchSize, trucks });
+                setNewBatchLiters(batchSize);
+                setShowEditBatchModal(true);
+              }}
+              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Edit batch"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleDeleteBatch(batchSize)}
+              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete batch"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -232,16 +344,16 @@ export default function TruckBatches() {
                         <MapPin className="w-3 h-3" />
                         Rules
                       </button>
-                      {[100, 80, 60].map((size) => {
-                        if (size === batchSize) return null;
+                      {batchList.slice(0, 3).map((batch) => {
+                        if (batch.extraLiters === batchSize) return null;
                         return (
                           <button
-                            key={size}
-                            onClick={() => handleMoveTruck(suffix, size as 100 | 80 | 60)}
+                            key={batch.extraLiters}
+                            onClick={() => handleMoveTruck(suffix, batch.extraLiters)}
                             className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                            title={`Move to ${size}L batch`}
+                            title={`Move to ${batch.extraLiters}L batch`}
                           >
-                            → {size}L
+                            → {batch.extraLiters}L
                           </button>
                         );
                       })}
@@ -278,36 +390,46 @@ export default function TruckBatches() {
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Truck className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Truck Batch Configuration
-            </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Manage extra fuel allocations by truck suffix (API-based, no localStorage!)
-            </p>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <Truck className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                Truck Batch Configuration
+              </h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Create and manage custom fuel allocation batches
+              </p>
+            </div>
           </div>
+          <button
+            onClick={() => setShowCreateBatchModal(true)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Create Batch
+          </button>
         </div>
 
-        {/* Stats */}
+        {/* Dynamic Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">Total Batches</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{batchList.length}</p>
+          </div>
           <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
             <p className="text-sm text-gray-600 dark:text-gray-400">Total Trucks</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalTrucks}</p>
           </div>
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-            <p className="text-sm text-green-700 dark:text-green-400">100L Batch</p>
-            <p className="text-2xl font-bold text-green-900 dark:text-green-100">{batches.batch_100.length}</p>
-          </div>
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
-            <p className="text-sm text-yellow-700 dark:text-yellow-400">80L Batch</p>
-            <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">{batches.batch_80.length}</p>
-          </div>
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-            <p className="text-sm text-blue-700 dark:text-blue-400">60L Batch</p>
-            <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{batches.batch_60.length}</p>
-          </div>
+          {batchList.slice(0, 2).map((batch, idx) => {
+            const color = getColorForIndex(idx);
+            return (
+              <div key={batch.extraLiters} className={`bg-${color}-50 dark:bg-${color}-900/20 rounded-lg p-4`}>
+                <p className={`text-sm text-${color}-700 dark:text-${color}-400`}>{batch.extraLiters}L Batch</p>
+                <p className={`text-2xl font-bold text-${color}-900 dark:text-${color}-100`}>{batch.count}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -332,16 +454,19 @@ export default function TruckBatches() {
           </div>
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Batch (Extra Fuel)
+              Select Batch
             </label>
             <select
               value={newTruck.batch}
-              onChange={(e) => setNewTruck({ ...newTruck, batch: parseInt(e.target.value) as 100 | 80 | 60 })}
+              onChange={(e) => setNewTruck({ ...newTruck, batch: parseInt(e.target.value) })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
             >
-              <option value={100}>100 Liters</option>
-              <option value={80}>80 Liters</option>
-              <option value={60}>60 Liters</option>
+              <option value={0}>-- Select Batch --</option>
+              {batchList.map((batch) => (
+                <option key={batch.extraLiters} value={batch.extraLiters}>
+                  {batch.extraLiters} Liters ({batch.count} trucks)
+                </option>
+              ))}
             </select>
           </div>
           <button
@@ -368,12 +493,22 @@ export default function TruckBatches() {
         </div>
       </div>
 
-      {/* Batches Grid */}
+      {/* Dynamic Batches Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {renderBatchCard(100, batches.batch_100, 'green')}
-        {renderBatchCard(80, batches.batch_80, 'yellow')}
-        {renderBatchCard(60, batches.batch_60, 'blue')}
+        {batchList.map((batch, index) => renderBatchCard(batch.extraLiters, batch.trucks, index))}
       </div>
+
+      {batchList.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+          <p className="text-yellow-800 mb-2">No batches configured yet</p>
+          <button
+            onClick={() => setShowCreateBatchModal(true)}
+            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+          >
+            Create Your First Batch
+          </button>
+        </div>
+      )}
 
       {/* Info */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -383,13 +518,12 @@ export default function TruckBatches() {
         <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
           <li>• Truck suffixes determine extra fuel allocation (e.g., T 123 <strong>DNH</strong>)</li>
           <li>• Each truck gets <strong>ONE fixed allocation</strong> for both going AND returning</li>
-          <li>• 100L batch: Premium trucks (100L extra fuel for entire journey)</li>
-          <li>• 80L batch: Standard trucks (80L extra fuel for entire journey)</li>
-          <li>• 60L batch: Basic trucks (60L extra fuel for entire journey)</li>
+          <li>• Create custom batches with any liter amount (e.g., 120L, 150L, 200L batches)</li>
+          <li>• Assign trucks to batches based on their fuel capacity needs</li>
           <li>• ⚠️ Trucks NOT in any batch will require <strong>manual extra fuel input</strong></li>
           <li>• 🎯 <strong>Destination Rules:</strong> Override batch defaults for specific destinations</li>
           <li>• Admin will be notified when unconfigured trucks are used</li>
-          <li>• You can move trucks between batches or remove them entirely</li>
+          <li>• You can create, edit, delete batches and move trucks between them</li>
         </ul>
       </div>
 
@@ -508,6 +642,148 @@ export default function TruckBatches() {
                 💡 <strong>Tip:</strong> Destination matching is case-insensitive and uses partial matching.
                 For example, a rule for "LUBUMBASHI" will match "lubumbashi", "LUBUMBASHI YARD", etc.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Batch Modal */}
+      {showCreateBatchModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  Create New Batch
+                </h2>
+                <button
+                  onClick={() => setShowCreateBatchModal(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Extra Fuel Allocation (Liters)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="10000"
+                  value={newBatchLiters === 0 ? '' : newBatchLiters}
+                  onChange={(e) => setNewBatchLiters(Number(e.target.value))}
+                  placeholder="Enter liter amount (e.g., 120, 150, 200)"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Must be between 0 and 10,000 liters
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowCreateBatchModal(false)}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateBatch}
+                disabled={newBatchLiters <= 0 || newBatchLiters > 10000}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Create Batch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Batch Modal */}
+      {showEditBatchModal && editingBatch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  Edit Batch
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowEditBatchModal(false);
+                    setEditingBatch(null);
+                  }}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Current Extra Fuel Allocation
+                </label>
+                <input
+                  type="text"
+                  value={`${editingBatch.extraLiters}L`}
+                  disabled
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-900 text-gray-500 dark:text-gray-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  New Extra Fuel Allocation (Liters)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="10000"
+                  value={newBatchLiters === 0 ? '' : newBatchLiters}
+                  onChange={(e) => setNewBatchLiters(Number(e.target.value))}
+                  placeholder="Enter new liter amount"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Must be between 0 and 10,000 liters
+                </p>
+              </div>
+
+              {editingBatch.trucks.length > 0 && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                    ⚠️ This batch contains {editingBatch.trucks.length} truck(s). Their extra fuel allocation will be updated to the new value.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowEditBatchModal(false);
+                  setEditingBatch(null);
+                }}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateBatch}
+                disabled={newBatchLiters <= 0 || newBatchLiters > 10000 || newBatchLiters === editingBatch.extraLiters}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Edit2 className="w-4 h-4" />
+                Update Batch
+              </button>
             </div>
           </div>
         </div>
