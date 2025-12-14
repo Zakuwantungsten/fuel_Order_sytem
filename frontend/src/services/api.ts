@@ -241,6 +241,18 @@ export const deliveryOrdersAPI = {
   }): Promise<void> => {
     await apiClient.post('/delivery-orders/notify-unlinked-export', data);
   },
+
+  // Create notification for bulk DO creation failures/skips
+  createBulkFailureNotification: async (data: {
+    totalAttempted: number;
+    successCount: number;
+    skippedCount: number;
+    failedCount: number;
+    skippedReasons?: { truck: string; reason: string }[];
+    failedReasons?: { truck: string; reason: string }[];
+  }): Promise<void> => {
+    await apiClient.post('/delivery-orders/notify-bulk-failures', data);
+  },
 };
 
 // DO Workbook API (Excel-like workbook management - one workbook per year with monthly sheets)

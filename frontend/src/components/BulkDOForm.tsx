@@ -9,7 +9,7 @@ import { deliveryOrdersAPI } from '../services/api';
 interface BulkDOFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (orders: Partial<DeliveryOrder>[]) => Promise<boolean>;
+  onSave: (orders: Partial<DeliveryOrder>[], onProgress?: (current: number, total: number, status: string) => void) => Promise<{ success: boolean; createdOrders: Partial<DeliveryOrder>[] }>;
   user?: any;
 }
 
@@ -67,6 +67,10 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   const [bulkInput, setBulkInput] = useState('');
   const [parsedRows, setParsedRows] = useState<BulkDORow[]>([]);
   const [createdOrders, setCreatedOrders] = useState<Partial<DeliveryOrder>[]>([]);
+  
+  // Progress tracking state
+  const [isCreating, setIsCreating] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
 
   const handleCommonChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -212,30 +216,42 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         doNumber: order.doNumber?.toString().padStart(4, '0') || '0001'
       }));
       
-      // Set created orders for display and manual re-download
-      setCreatedOrders(paddedOrders);
+      // Initialize progress tracking
+      setIsCreating(true);
+      setProgress({ current: 0, total: paddedOrders.length, status: 'Preparing...' });
+      setCreatedOrders([]);
       
-      // Save to backend
+      // Save to backend with progress callback
       console.log('Calling onSave with orders...');
-      const success = await onSave(paddedOrders);
+      const result = await onSave(paddedOrders, (current, total, status) => {
+        setProgress({ current, total, status });
+      });
       
-      if (!success) {
-        console.error('onSave returned false');
+      if (!result.success || result.createdOrders.length === 0) {
+        console.error('No orders were created');
+        setIsCreating(false);
         setCreatedOrders([]);
-        alert('Failed to create delivery orders. Check console for details.');
+        alert('Failed to create any delivery orders. Check console for details.');
         return;
       }
       
-      console.log('✓ All orders saved successfully!');
+      console.log(`✓ Successfully created ${result.createdOrders.length} out of ${paddedOrders.length} orders!`);
+      
+      // Set only the actually created orders for display and PDF generation
+      setCreatedOrders(result.createdOrders);
+      setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Generating PDF...' });
       
       // Wait for DOM to render the hidden DO elements
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Automatically download PDF - pass orders directly to avoid state timing issues
+      // Automatically download PDF - use only the successfully created orders
       console.log('Starting PDF download...');
       try {
-        await downloadAllAsPDF(paddedOrders);
+        await downloadAllAsPDF(result.createdOrders);
         console.log('✓ PDF downloaded successfully!');
+        
+        setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Complete!' });
+        setIsCreating(false);
         
         // Show success message with download confirmation - dynamic based on order type
         const orderTypeLabel = commonData.doType === 'SDO' ? 'special delivery orders (SDOs)' : 'delivery orders';
@@ -243,9 +259,14 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
           ? '' 
           : ' with fuel records and LPOs';
         
-        alert(`✓ Success!\n\nCreated ${orders.length} ${orderTypeLabel}${additionalInfo}.\n\nPDF file has been downloaded to your Downloads folder.`);
+        const successMsg = result.createdOrders.length === paddedOrders.length
+          ? `✓ Success!\n\nCreated ${result.createdOrders.length} ${orderTypeLabel}${additionalInfo}.\n\nPDF file has been downloaded to your Downloads folder.`
+          : `✓ Partially Complete\n\nCreated ${result.createdOrders.length} out of ${paddedOrders.length} ${orderTypeLabel}.\n\nPDF includes only successfully created orders.\n\nSee summary for skipped/failed orders.`;
+        
+        alert(successMsg);
       } catch (pdfError) {
         console.error('PDF generation error:', pdfError);
+        setIsCreating(false);
         alert(`Orders created successfully, but PDF download failed.\n\nYou can download the PDF again using the button below.`);
       }
       
@@ -377,7 +398,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         {/* Background overlay */}
         <div
           className="fixed inset-0 transition-opacity bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-80"
-          onClick={onClose}
+          onClick={isCreating ? undefined : onClose}
         />
 
         {/* Modal panel */}
@@ -387,10 +408,40 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
             <h3 className="text-lg font-semibold text-white">
               Bulk Delivery Order Creation
             </h3>
-            <button onClick={onClose} className="p-2 text-white hover:bg-primary-700 dark:hover:bg-primary-600 rounded">
+            <button 
+              onClick={onClose} 
+              disabled={isCreating}
+              className={`p-2 text-white rounded ${isCreating ? 'opacity-50 cursor-not-allowed' : 'hover:bg-primary-700 dark:hover:bg-primary-600'}`}
+            >
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Progress Bar */}
+          {isCreating && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 px-6 py-4 border-b border-blue-200 dark:border-blue-800">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 dark:border-blue-400 mr-3"></div>
+                  <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                    {progress.status}
+                  </span>
+                </div>
+                <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                  {progress.current} / {progress.total}
+                </span>
+              </div>
+              <div className="w-full bg-blue-200 dark:bg-blue-900/40 rounded-full h-2.5">
+                <div 
+                  className="bg-blue-600 dark:bg-blue-500 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-blue-700 dark:text-blue-400 mt-2">
+                Please wait while the delivery orders are being created. Do not close this window.
+              </p>
+            </div>
+          )}
 
           {/* Form */}
           <div className="bg-white dark:bg-gray-800 px-6 py-6 max-h-[80vh] overflow-y-auto">
@@ -623,8 +674,9 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
               <textarea
                 value={bulkInput}
                 onChange={(e) => setBulkInput(e.target.value)}
+                disabled={isCreating}
                 rows={8}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm ${isCreating ? 'opacity-50 cursor-not-allowed' : ''}`}
                 placeholder={commonData.rateType === 'per_ton'
                   ? "T844 EKS\tT629 ELE\tJohn Doe\t30\t1850\nT845 ABC\tT630 DEF\tJane Smith\t28\t1850"
                   : "T844 EKS\tT629 ELE\tJohn Doe\t55500\nT845 ABC\tT630 DEF\tJane Smith\t51800"}
@@ -632,7 +684,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
               <button
                 type="button"
                 onClick={parseBulkData}
-                className="mt-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600"
+                disabled={isCreating}
+                className={`mt-2 px-4 py-2 text-white rounded-md ${isCreating ? 'opacity-50 cursor-not-allowed bg-gray-400 dark:bg-gray-600' : 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600'}`}
               >
                 <Plus className="w-4 h-4 inline mr-2" />
                 Parse Data ({bulkInput.split('\n').filter(l => l.trim()).length} rows)
@@ -710,7 +763,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
           {/* Footer */}
           <div className="bg-gray-50 dark:bg-gray-700 px-6 py-4 flex justify-between items-center">
             <div>
-              {createdOrders.length > 0 && (
+              {createdOrders.length > 0 && !isCreating && (
                 <button
                   onClick={() => downloadAllAsPDF()}
                   className="px-4 py-2 bg-green-600 dark:bg-green-500 text-white rounded-md hover:bg-green-700 dark:hover:bg-green-600 flex items-center"
@@ -724,8 +777,11 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
               <button
                 type="button"
                 onClick={onClose}
+                disabled={isCreating}
                 className={`px-4 py-2 border rounded-md shadow-sm text-sm font-medium ${
-                  createdOrders.length > 0
+                  isCreating
+                    ? 'opacity-50 cursor-not-allowed bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600'
+                    : createdOrders.length > 0
                     ? 'bg-primary-600 dark:bg-primary-500 text-white hover:bg-primary-700 dark:hover:bg-primary-600 border-transparent'
                     : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-600'
                 }`}
@@ -735,9 +791,14 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
               {parsedRows.length > 0 && createdOrders.length === 0 && (
                 <button
                   onClick={generateDOs}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 dark:bg-primary-500 hover:bg-primary-700 dark:hover:bg-primary-600"
+                  disabled={isCreating}
+                  className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                    isCreating
+                      ? 'opacity-50 cursor-not-allowed bg-gray-400 dark:bg-gray-600'
+                      : 'bg-primary-600 dark:bg-primary-500 hover:bg-primary-700 dark:hover:bg-primary-600'
+                  }`}
                 >
-                  Create {parsedRows.length} {commonData.doType}s
+                  {isCreating ? 'Creating...' : `Create ${parsedRows.length} ${commonData.doType}s`}
                 </button>
               )}
             </div>

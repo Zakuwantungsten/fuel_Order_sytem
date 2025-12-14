@@ -524,7 +524,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       if (existingOpenRecord) {
         const message = `Truck ${deliveryOrder.truckNo} already has an open fuel record (Going DO: ${existingOpenRecord.goingDo}). Please complete the return journey (Export DO) first before creating a new IMPORT fuel record.`;
         console.warn('  ✗', message);
-        alert(message);
         throw new Error(message);
       }
       
@@ -565,19 +564,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         console.log(`  → Extra fuel: ${extraFuel}L${overrideInfo}`);
       }
       
-      // Show info message if any configuration is missing
+      // Log info message if any configuration is missing (no alert in bulk mode)
       if (missingTotalLiters || missingExtraFuel) {
-        let infoMessage = '⚠️ Missing Configuration\n\n';
+        console.log('  ⚠️ Missing configuration detected:');
         if (missingTotalLiters) {
-          infoMessage += `• Route "${deliveryOrder.destination}" needs total liters\n`;
+          console.log(`  - Route "${deliveryOrder.destination}" needs total liters`);
         }
         if (missingExtraFuel) {
-          infoMessage += `• Truck suffix "${truckBatchInfo.truckSuffix.toUpperCase()}" needs batch assignment\n`;
+          console.log(`  - Truck suffix "${truckBatchInfo.truckSuffix.toUpperCase()}" needs batch assignment`);
         }
-        infoMessage += '\nFuel record will be created but LOCKED until admin configures these values.\n';
-        infoMessage += 'Admin will be notified automatically.';
-        
-        alert(infoMessage);
+        console.log('  → Fuel record will be created but LOCKED until admin configures these values');
       }
       
       // For now, use default loading point. Later, this can come from a configuration dialog
@@ -705,15 +701,25 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     }
   };
 
-  const handleSaveBulkOrders = async (orders: Partial<DeliveryOrder>[]): Promise<boolean> => {
-    try {
-      console.log('=== Starting Bulk DO Creation ===');
-      console.log(`Total orders to create: ${orders.length}`);
-      const createdOrders: DeliveryOrder[] = [];
+  const handleSaveBulkOrders = async (
+    orders: Partial<DeliveryOrder>[], 
+    onProgress?: (current: number, total: number, status: string) => void
+  ): Promise<{ success: boolean; createdOrders: Partial<DeliveryOrder>[] }> => {
+    console.log('=== Starting Bulk DO Creation ===');
+    console.log(`Total orders to create: ${orders.length}`);
+    const createdOrders: DeliveryOrder[] = [];
+    const skippedOrders: Array<{ order: Partial<DeliveryOrder>; reason: string }> = [];
+    const failedOrders: Array<{ order: Partial<DeliveryOrder>; error: string }> = [];
+    
+    for (let i = 0; i < orders.length; i++) {
+      const order = orders[i];
+      console.log(`\n[${i + 1}/${orders.length}] Creating DO:`, order.doNumber, order.importOrExport);
       
-      for (let i = 0; i < orders.length; i++) {
-        const order = orders[i];
-        console.log(`\n[${i + 1}/${orders.length}] Creating DO:`, order.doNumber, order.importOrExport);
+      try {
+        // Update progress
+        if (onProgress) {
+          onProgress(i + 1, orders.length, `Creating ${order.doType}-${order.doNumber}...`);
+        }
         
         const savedOrder = await deliveryOrdersAPI.create(order);
         console.log(`✓ DO ${savedOrder.doNumber} saved successfully with ID:`, savedOrder.id);
@@ -721,31 +727,121 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         
         // Handle fuel record creation/update ONLY for DO type (not SDO)
         if (savedOrder.doType === 'DO') {
-          if (savedOrder.importOrExport === 'IMPORT') {
-            console.log(`→ Creating fuel record for IMPORT DO ${savedOrder.doNumber}`);
-            await handleCreateFuelRecordForImport(savedOrder);
-            console.log(`✓ Fuel record created for DO ${savedOrder.doNumber}`);
-          } else if (savedOrder.importOrExport === 'EXPORT') {
-            console.log(`→ Updating fuel record for EXPORT DO ${savedOrder.doNumber}`);
-            await handleUpdateFuelRecordForExport(savedOrder);
-            console.log(`✓ Fuel record updated for DO ${savedOrder.doNumber}`);
+          try {
+            if (savedOrder.importOrExport === 'IMPORT') {
+              console.log(`→ Creating fuel record for IMPORT DO ${savedOrder.doNumber}`);
+              if (onProgress) {
+                onProgress(i + 1, orders.length, `Creating fuel record for ${order.doType}-${order.doNumber}...`);
+              }
+              await handleCreateFuelRecordForImport(savedOrder);
+              console.log(`✓ Fuel record created for DO ${savedOrder.doNumber}`);
+            } else if (savedOrder.importOrExport === 'EXPORT') {
+              console.log(`→ Updating fuel record for EXPORT DO ${savedOrder.doNumber}`);
+              if (onProgress) {
+                onProgress(i + 1, orders.length, `Updating fuel record for ${order.doType}-${order.doNumber}...`);
+              }
+              await handleUpdateFuelRecordForExport(savedOrder);
+              console.log(`✓ Fuel record updated for DO ${savedOrder.doNumber}`);
+            }
+          } catch (fuelError: any) {
+            // Log the fuel record error but don't fail the entire batch
+            const fuelErrorMsg = fuelError.message || 'Unknown fuel record error';
+            console.warn(`⚠️ Fuel record operation failed for DO ${savedOrder.doNumber}:`, fuelErrorMsg);
+            
+            // If it's an "already has open fuel record" error, track it as skipped
+            if (fuelErrorMsg.includes('already has an open fuel record')) {
+              skippedOrders.push({
+                order: savedOrder,
+                reason: `Truck ${savedOrder.truckNo} has open fuel record`
+              });
+              console.log(`→ Skipped fuel record for DO ${savedOrder.doNumber} - truck has open record`);
+            } else {
+              // Other fuel errors - log but continue
+              console.warn(`→ DO ${savedOrder.doNumber} created but fuel record failed: ${fuelErrorMsg}`);
+            }
           }
         } else {
           console.log(`✓ SDO ${savedOrder.doNumber} created - skipping fuel record operations`);
         }
+      } catch (doError: any) {
+        // DO creation itself failed - track and continue
+        const doErrorMsg = doError.response?.data?.message || doError.message || 'Unknown error';
+        console.error(`✗ Failed to create DO ${order.doNumber}:`, doErrorMsg);
+        failedOrders.push({
+          order,
+          error: doErrorMsg
+        });
+      }
+    }
+    
+    console.log('\n=== Reloading orders list ===');
+    if (onProgress) {
+      onProgress(orders.length, orders.length, 'Refreshing data...');
+    }
+    await loadOrders();
+    
+    // Show summary of results
+    console.log(`\n=== Bulk Creation Summary ===`);
+    console.log(`✓ Successfully created: ${createdOrders.length}`);
+    console.log(`⚠️ Skipped (open fuel records): ${skippedOrders.length}`);
+    console.log(`✗ Failed: ${failedOrders.length}`);
+    
+    // Create notification for skipped/failed orders (runs in background)
+    if (skippedOrders.length > 0 || failedOrders.length > 0) {
+      try {
+        const skippedReasons = skippedOrders.map(({ order, reason }) => ({
+          truck: `${order.doType}-${order.doNumber} (${order.truckNo})`,
+          reason
+        }));
+        
+        const failedReasons = failedOrders.map(({ order, error }) => ({
+          truck: `${order.doType}-${order.doNumber} (${order.truckNo})`,
+          reason: error
+        }));
+        
+        await deliveryOrdersAPI.createBulkFailureNotification({
+          totalAttempted: orders.length,
+          successCount: createdOrders.length,
+          skippedCount: skippedOrders.length,
+          failedCount: failedOrders.length,
+          skippedReasons,
+          failedReasons
+        });
+        console.log('✓ Notification created for bulk creation issues');
+      } catch (notifError) {
+        console.warn('Failed to create notification:', notifError);
+      }
+    }
+    
+    // Show user-friendly summary
+    if (skippedOrders.length > 0 || failedOrders.length > 0) {
+      let summaryMsg = `Bulk Creation Complete:\n\n`;
+      summaryMsg += `✓ Successfully created: ${createdOrders.length} DOs\n`;
+      
+      if (skippedOrders.length > 0) {
+        summaryMsg += `\n⚠️ Skipped ${skippedOrders.length} DOs (trucks with open fuel records):\n`;
+        skippedOrders.forEach(({ order }) => {
+          summaryMsg += `  • ${order.doType}-${order.doNumber} - ${order.truckNo}\n`;
+        });
+        summaryMsg += `\nThese trucks must complete their return journey (EXPORT DO) first.`;
       }
       
-      console.log('\n=== Reloading orders list ===');
-      await loadOrders();
-      console.log(`\n✓✓✓ Successfully created ${createdOrders.length} delivery orders`);
-      return true;
-    } catch (error: any) {
-      console.error('✗✗✗ Failed to save bulk orders:', error);
-      console.error('Error details:', error.response?.data);
-      const errorMessage = error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'Failed to create some delivery orders';
-      alert(errorMessage);
-      return false;
+      if (failedOrders.length > 0) {
+        summaryMsg += `\n\n✗ Failed to create ${failedOrders.length} DOs:\n`;
+        failedOrders.forEach(({ order, error }) => {
+          summaryMsg += `  • ${order.doType}-${order.doNumber} - ${error.substring(0, 50)}...\n`;
+        });
+      }
+      
+      summaryMsg += `\n\nℹ️ Check the notification bell for details.`;
+      alert(summaryMsg);
     }
+    
+    // Return success flag and list of actually created orders
+    return {
+      success: createdOrders.length > 0,
+      createdOrders: createdOrders
+    };
   };
 
   const handleSelectOrder = (orderId: string | number) => {

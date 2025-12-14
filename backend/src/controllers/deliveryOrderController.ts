@@ -2724,3 +2724,46 @@ export const createUnlinkedExportNotification = async (req: AuthRequest, res: Re
     throw error;
   }
 };
+
+/**
+ * Create notification for bulk DO creation failures/skips
+ * Called from frontend after bulk DO creation completes with issues
+ */
+export const createBulkDOFailureNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { 
+      totalAttempted, 
+      successCount, 
+      skippedCount, 
+      failedCount,
+      skippedReasons,
+      failedReasons 
+    } = req.body;
+    const username = req.user?.username || 'system';
+
+    if (totalAttempted === undefined || successCount === undefined || 
+        skippedCount === undefined || failedCount === undefined) {
+      throw new ApiError(400, 'Missing required fields: totalAttempted, successCount, skippedCount, failedCount');
+    }
+
+    const { createBulkDOFailureNotification } = await import('./notificationController');
+    await createBulkDOFailureNotification(
+      {
+        totalAttempted,
+        successCount,
+        skippedCount,
+        failedCount,
+        skippedReasons,
+        failedReasons,
+      },
+      username
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Notification created for bulk DO creation issues',
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};

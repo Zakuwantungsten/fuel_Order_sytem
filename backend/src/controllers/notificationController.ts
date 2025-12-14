@@ -567,6 +567,82 @@ export const resolvePendingYardFuelNotifications = async (
   }
 };
 
+/**
+ * Create notification for bulk DO creation failures/skips
+ */
+export const createBulkDOFailureNotification = async (
+  metadata: {
+    totalAttempted: number;
+    successCount: number;
+    skippedCount: number;
+    failedCount: number;
+    skippedTrucks?: string[];
+    failedTrucks?: string[];
+    skippedReasons?: { truck: string; reason: string }[];
+    failedReasons?: { truck: string; reason: string }[];
+  },
+  createdBy: string
+): Promise<void> => {
+  try {
+    // Only create notification if there are failures or skips
+    if (metadata.skippedCount === 0 && metadata.failedCount === 0) {
+      return;
+    }
+
+    let title = 'Bulk DO Creation Issues';
+    let message = `Bulk DO creation completed with ${metadata.successCount}/${metadata.totalAttempted} successful. `;
+
+    // Add skip details
+    if (metadata.skippedCount > 0) {
+      message += `${metadata.skippedCount} skipped: `;
+      if (metadata.skippedReasons && metadata.skippedReasons.length > 0) {
+        const skipDetails = metadata.skippedReasons
+          .map(s => `${s.truck} (${s.reason})`)
+          .join(', ');
+        message += skipDetails;
+      } else if (metadata.skippedTrucks) {
+        message += metadata.skippedTrucks.join(', ');
+      }
+      message += '. ';
+    }
+
+    // Add failure details
+    if (metadata.failedCount > 0) {
+      message += `${metadata.failedCount} failed: `;
+      if (metadata.failedReasons && metadata.failedReasons.length > 0) {
+        const failDetails = metadata.failedReasons
+          .map(f => `${f.truck} (${f.reason})`)
+          .join(', ');
+        message += failDetails;
+      } else if (metadata.failedTrucks) {
+        message += metadata.failedTrucks.join(', ');
+      }
+      message += '.';
+    }
+
+    await Notification.create({
+      type: 'bulk_do_creation_issues',
+      title,
+      message,
+      relatedModel: 'DeliveryOrder',
+      metadata: {
+        totalAttempted: metadata.totalAttempted,
+        successCount: metadata.successCount,
+        skippedCount: metadata.skippedCount,
+        failedCount: metadata.failedCount,
+        skippedReasons: metadata.skippedReasons,
+        failedReasons: metadata.failedReasons,
+      },
+      recipients: ['fuel_order_maker', 'admin', 'super_admin'],
+      createdBy,
+    });
+
+    logger.info(`Created bulk DO failure notification: ${metadata.skippedCount} skipped, ${metadata.failedCount} failed`);
+  } catch (error) {
+    logger.error('Failed to create bulk DO failure notification:', error);
+  }
+};
+
 export default {
   getNotifications,
   getNotificationCount,
@@ -582,4 +658,5 @@ export default {
   createTruckEntryRejectedNotification,
   createYardFuelLinkedNotification,
   resolvePendingYardFuelNotifications,
+  createBulkDOFailureNotification,
 };

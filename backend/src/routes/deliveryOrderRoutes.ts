@@ -87,6 +87,13 @@ router.post(
   asyncHandler(deliveryOrderController.createUnlinkedExportNotification)
 );
 
+// Create notification for bulk DO creation failures
+router.post(
+  '/notify-bulk-failures',
+  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker'),
+  asyncHandler(deliveryOrderController.createBulkDOFailureNotification)
+);
+
 // Delete route (requires appropriate role)
 router.delete(
   '/:id',
