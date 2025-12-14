@@ -98,6 +98,22 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
     }
   }, [isOpen, fuelRecordId]);
 
+  // Handle Escape key with propagation prevention
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        onClose();
+      }
+    };
+    
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [isOpen, onClose]);
+
   const fetchFuelRecord = async () => {
     setLoading(true);
     setError(null);
@@ -119,16 +135,28 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
   const totalFuel = fuelRecord ? calculateTotalFuel(fuelRecord) : 0;
   const mbeyaBalance = fuelRecord ? calculateMbeyaReturnBalance(fuelRecord) : null;
 
+  // Handle close with event propagation prevention
+  const handleClose = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleClose}
       />
       
       {/* Modal */}
-      <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+      <div 
+        className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-500 to-purple-600">
           <div className="flex items-center gap-3">
@@ -148,7 +176,7 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 hover:bg-white/20 rounded-lg transition-colors"
           >
             <X className="h-5 w-5 text-white" />
@@ -412,7 +440,7 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end items-center">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors"
           >
             Close

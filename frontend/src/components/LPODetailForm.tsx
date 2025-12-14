@@ -350,8 +350,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     });
   };
 
-  // Close inspect modal
-  const handleCloseInspectModal = () => {
+  // Close inspect modal - prevent event propagation to parent modal
+  const handleCloseInspectModal = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    // Stop event propagation to prevent closing parent LPO form
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
     setInspectModal(prev => ({ ...prev, isOpen: false }));
   };
 
@@ -1018,10 +1023,34 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     // Format the truck number to standard format: T(number)(space)(letters)
     const formattedTruckNo = formatTruckNumber(truckNo);
     
+    // Check for duplicate truck numbers within the current form entries
+    const currentEntries = formData.entries || [];
+    const duplicateIndex = currentEntries.findIndex((entry, idx) => 
+      idx !== index && 
+      entry.truckNo.toUpperCase() === formattedTruckNo.toUpperCase() && 
+      formattedTruckNo.length >= 5
+    );
+    
     // Update the truck number immediately
-    const updatedEntries = [...(formData.entries || [])];
+    const updatedEntries = [...currentEntries];
     updatedEntries[index] = { ...updatedEntries[index], truckNo: formattedTruckNo };
     setFormData(prev => ({ ...prev, entries: updatedEntries }));
+    
+    // If duplicate found within form, show warning and don't fetch data
+    if (duplicateIndex !== -1) {
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { 
+          direction: prev[index]?.direction || 'going',
+          loading: false, 
+          fetched: false,
+          fuelRecord: null,
+          warningType: 'not_found' as const,
+          warningMessage: `⚠️ DUPLICATE: Truck ${formattedTruckNo} is already entered in row ${duplicateIndex + 1}. Please use a different truck number or remove the duplicate entry.`
+        }
+      }));
+      return;
+    }
 
     // If truck number is valid, fetch data
     if (formattedTruckNo && formattedTruckNo.length >= 5) {
@@ -1288,6 +1317,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     );
     if (invalidEntries.length > 0) {
       alert('All entries must have a truck number');
+      return;
+    }
+    
+    // Check for duplicate truck numbers within the form
+    const truckNumbers = formData.entries.map(e => e.truckNo.toUpperCase());
+    const duplicateTrucks = truckNumbers.filter((truck, index) => 
+      truckNumbers.indexOf(truck) !== index
+    );
+    if (duplicateTrucks.length > 0) {
+      const uniqueDuplicates = [...new Set(duplicateTrucks)];
+      alert(`Cannot submit: The following trucks are entered multiple times in this form:\n\n${uniqueDuplicates.join(', ')}\n\nPlease remove the duplicate entries before submitting.`);
       return;
     }
 
@@ -2273,10 +2313,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             {/* No fuel record warning - allow manual entry */}
                             {hasNoRecordWarning && (
                               <div className="mt-1 text-xs text-amber-600 dark:text-amber-400" title={autoFill.warningMessage}>
-                                {autoFill.warningType === 'not_found' && '⚠️ No record found'}
-                                {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
-                                {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
-                                <span className="block text-[10px] text-gray-500 dark:text-gray-400">Manual entry allowed</span>
+                                {autoFill.warningMessage?.includes('DUPLICATE') ? (
+                                  <span className="text-red-600 dark:text-red-400 font-semibold">⚠️ Already entered</span>
+                                ) : (
+                                  <>
+                                    {autoFill.warningType === 'not_found' && '⚠️ No record found'}
+                                    {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
+                                    {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
+                                  </>
+                                )}
+                                <span className="block text-[10px] text-gray-500 dark:text-gray-400">
+                                  {autoFill.warningMessage?.includes('DUPLICATE') ? 'Remove duplicate or use different truck' : 'Manual entry allowed'}
+                                </span>
                               </div>
                             )}
                             {/* Duplicate allocation warning */}
