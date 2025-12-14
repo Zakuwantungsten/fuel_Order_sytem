@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
-import { fuelRecordsAPI, lposAPI, configAPI } from '../services/api';
+import { fuelRecordsAPI, lposAPI } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
@@ -122,9 +122,9 @@ const FuelRecords = () => {
         order: 'desc'
       };
       
-      // Add search filter (backend only supports truckNo search currently)
+      // Add search filter (searches truckNo, goingDo, returnDo)
       if (searchTerm) {
-        filters.truckNo = searchTerm;
+        filters.search = searchTerm;
       }
       
       // Add route filter
@@ -193,9 +193,34 @@ const FuelRecords = () => {
 
   const fetchRoutes = async () => {
     try {
-      const data = await configAPI.getRoutes(routeTypeFilter);
-      console.log(`Fetched ${routeTypeFilter} routes:`, data);
-      setAvailableRoutes(data || []);
+      // Fetch ALL fuel records to extract actual routes used
+      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
+      const allRecords = response.data;
+      
+      // Extract unique routes based on route type filter
+      const routesSet = new Set<string>();
+      
+      allRecords.forEach(record => {
+        if (routeTypeFilter === 'IMPORT') {
+          // IMPORT = Going routes (records with goingDo)
+          if (record.goingDo && record.to) {
+            routesSet.add(record.to);
+          }
+        } else {
+          // EXPORT = Return routes (records with returnDo)
+          if (record.returnDo && record.from) {
+            routesSet.add(record.from);
+          }
+        }
+      });
+      
+      // Convert to array and sort
+      const routes = Array.from(routesSet)
+        .sort()
+        .map(destination => ({ destination }));
+      
+      console.log(`Extracted ${routeTypeFilter} routes from records:`, routes);
+      setAvailableRoutes(routes);
     } catch (error) {
       console.error('Error fetching routes:', error);
       setAvailableRoutes([]);
@@ -416,23 +441,28 @@ const FuelRecords = () => {
     return availableMonths;
   };
 
-  // Update selected month if it's not in available months (but allow empty for "All Months")
+  // Update selected month if it's not in available months
   useEffect(() => {
-    if (selectedMonth && availableMonths.length > 0 && !availableMonths.includes(selectedMonth)) {
-      // Set to the most recent month only if a month was selected but not available
-      const latestMonth = availableMonths[availableMonths.length - 1];
-      console.log('Selected month not available, switching to:', latestMonth);
-      setSelectedMonth(latestMonth);
+    if (availableMonths.length > 0) {
+      // If no month selected or selected month not available, use current month or closest available
+      if (!selectedMonth || !availableMonths.includes(selectedMonth)) {
+        const now = new Date();
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (availableMonths.includes(currentMonthKey)) {
+          // Current month has records
+          setSelectedMonth(currentMonthKey);
+        } else {
+          // Use most recent month with records
+          setSelectedMonth(availableMonths[availableMonths.length - 1]);
+        }
+      }
     }
-  }, [availableMonths, selectedMonth]);
+  }, [availableMonths]);
 
   const goToPreviousMonth = () => {
-    if (!selectedMonth) {
-      // If "All Months" is selected, go to current month
-      const now = new Date();
-      setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-      return;
-    }
+    if (!selectedMonth) return;
+    
     const date = new Date(selectedMonth + '-01');
     date.setMonth(date.getMonth() - 1);
     const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -440,16 +470,25 @@ const FuelRecords = () => {
   };
 
   const goToNextMonth = () => {
-    if (!selectedMonth) {
-      // If "All Months" is selected, go to current month
-      const now = new Date();
-      setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-      return;
-    }
+    if (!selectedMonth) return;
+    
     const date = new Date(selectedMonth + '-01');
     date.setMonth(date.getMonth() + 1);
     const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     setSelectedMonth(newMonth);
+  };
+  
+  // Check if previous/next month has records
+  const canGoToPreviousMonth = () => {
+    if (!selectedMonth || availableMonths.length === 0) return false;
+    const currentIndex = availableMonths.indexOf(selectedMonth);
+    return currentIndex > 0;
+  };
+  
+  const canGoToNextMonth = () => {
+    if (!selectedMonth || availableMonths.length === 0) return false;
+    const currentIndex = availableMonths.indexOf(selectedMonth);
+    return currentIndex < availableMonths.length - 1 && currentIndex !== -1;
   };
 
   const getMonthName = (monthKey: string) => {
@@ -575,8 +614,13 @@ const FuelRecords = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={goToPreviousMonth}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-              title="Previous Month"
+              disabled={!canGoToPreviousMonth()}
+              className={`p-2 rounded-md transition-colors ${
+                canGoToPreviousMonth()
+                  ? 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+                  : 'opacity-40 cursor-not-allowed'
+              }`}
+              title={canGoToPreviousMonth() ? "Previous Month" : "No earlier records"}
             >
               <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </button>
@@ -585,7 +629,6 @@ const FuelRecords = () => {
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
-              <option value="">All Months</option>
               {getAvailableMonths().map(month => (
                 <option key={month} value={month}>
                   {getMonthName(month)}
@@ -594,8 +637,13 @@ const FuelRecords = () => {
             </select>
             <button
               onClick={goToNextMonth}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-              title="Next Month"
+              disabled={!canGoToNextMonth()}
+              className={`p-2 rounded-md transition-colors ${
+                canGoToNextMonth()
+                  ? 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+                  : 'opacity-40 cursor-not-allowed'
+              }`}
+              title={canGoToNextMonth() ? "Next Month" : "No later records"}
             >
               <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </button>

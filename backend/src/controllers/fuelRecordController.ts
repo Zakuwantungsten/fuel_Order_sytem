@@ -12,7 +12,7 @@ import { createMissingConfigNotification, autoResolveNotifications } from './not
 export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, truckNo, from, to, month } = req.query;
+    const { dateFrom, dateTo, truckNo, from, to, month, search } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -23,7 +23,18 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       if (dateTo) filter.date.$lte = dateTo;
     }
 
-    if (truckNo) {
+    // Multi-field search - searches truckNo, goingDo, and returnDo
+    if (search) {
+      const sanitized = sanitizeRegexInput(search as string);
+      if (sanitized) {
+        filter.$or = [
+          { truckNo: { $regex: sanitized, $options: 'i' } },
+          { goingDo: { $regex: sanitized, $options: 'i' } },
+          { returnDo: { $regex: sanitized, $options: 'i' } }
+        ];
+      }
+    } else if (truckNo) {
+      // Fallback to truckNo for backwards compatibility
       const sanitized = sanitizeRegexInput(truckNo as string);
       if (sanitized) {
         filter.truckNo = { $regex: sanitized, $options: 'i' };
