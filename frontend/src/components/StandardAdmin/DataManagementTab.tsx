@@ -50,11 +50,14 @@ export default function DataManagementTab({ showMessage }: DataManagementTabProp
       let items: any[] = [];
       
       if (activeSection === 'do') {
-        items = await deliveryOrdersAPI.getAll({ limit: 10, sort: 'createdAt', order: 'desc' });
+        const response = await deliveryOrdersAPI.getAll({ limit: 10, sort: 'createdAt', order: 'desc' });
+        items = response.data;
       } else if (activeSection === 'lpo') {
-        items = await lposAPI.getAll({ limit: 10, sort: 'createdAt', order: 'desc' });
+        const response = await lposAPI.getAll({ limit: 10, sort: 'createdAt', order: 'desc' });
+        items = response.data;
       } else {
-        items = await fuelRecordsAPI.getAll({ limit: 10, sort: 'createdAt', order: 'desc' });
+        const response = await fuelRecordsAPI.getAll({ limit: 10, sort: 'createdAt', order: 'desc' });
+        items = response.data;
       }
       
       setData(items);

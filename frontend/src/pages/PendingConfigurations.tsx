@@ -30,7 +30,7 @@ export default function PendingConfigurations() {
   const loadLockedRecords = async () => {
     try {
       setLoading(true);
-      const response = await fuelRecordsAPI.getAll();
+      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
       // Response is the array directly, not response.data
       const records = Array.isArray(response) ? response : [];
       const locked = records.filter((record: any) => record.isLocked);

@@ -65,7 +65,8 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
         
       } else if (dataType === 'fuel-records') {
         // Get fuel records - add page parameter to satisfy validation
-        const data = await fuelRecordsAPI.getAll({ page: 1, limit: 1000, sort: 'createdAt', order: 'desc' });
+        const response = await fuelRecordsAPI.getAll({ page: 1, limit: 1000, sort: 'createdAt', order: 'desc' });
+        const data = response.data;
         
         if (data.length === 0) {
           showMessage('error', 'No fuel records found. Creating empty report...');
@@ -98,7 +99,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
         const [doYears, lpoYears, fuelData] = await Promise.all([
           doWorkbookAPI.getAvailableYears().catch(() => []),
           lpoWorkbookAPI.getAvailableYears().catch(() => []),
-          fuelRecordsAPI.getAll({ page: 1, limit: 1000, sort: 'createdAt', order: 'desc' }).catch(() => []),
+          fuelRecordsAPI.getAll({ page: 1, limit: 1000, sort: 'createdAt', order: 'desc' }).then(r => r.data).catch(() => []),
         ]);
         
         const wb = XLSX.utils.book_new();
@@ -175,7 +176,8 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
           showMessage('success', `LPO Excel for ${yearToExport} downloaded!`);
           
         } else if (dataType === 'fuel-records') {
-          const data = await fuelRecordsAPI.getAll({ page: 1, limit: 1000, sort: 'createdAt', order: 'desc' });
+          const response = await fuelRecordsAPI.getAll({ page: 1, limit: 1000, sort: 'createdAt', order: 'desc' });
+          const data = response.data;
           
           const ws = XLSX.utils.json_to_sheet(data.length > 0 ? data.map((item: any) => ({
             'Truck': item.truckNo,
@@ -202,9 +204,9 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
       } else if (format === 'pdf') {
         // PDF export - collect data and show info
         const [dos, lpos, fuelRecords] = await Promise.all([
-          deliveryOrdersAPI.getAll({ limit: 100, sort: 'createdAt', order: 'desc' }).catch(() => []),
-          lposAPI.getAll({ limit: 100, sort: 'createdAt', order: 'desc' }).catch(() => []),
-          fuelRecordsAPI.getAll({ page: 1, limit: 100, sort: 'createdAt', order: 'desc' }).catch(() => []),
+          deliveryOrdersAPI.getAll({ limit: 100, sort: 'createdAt', order: 'desc' }).then(r => r.data).catch(() => []),
+          lposAPI.getAll({ limit: 100, sort: 'createdAt', order: 'desc' }).then(r => r.data).catch(() => []),
+          fuelRecordsAPI.getAll({ page: 1, limit: 100, sort: 'createdAt', order: 'desc' }).then(r => r.data).catch(() => []),
         ]);
         
         const totalRecords = dos.length + lpos.length + fuelRecords.length;
@@ -218,7 +220,8 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
       } else if (format === 'csv') {
         // CSV export based on data type
         if (dataType === 'delivery-orders') {
-          const data = await deliveryOrdersAPI.getAll({ limit: 1000, sort: 'createdAt', order: 'desc' });
+          const response = await deliveryOrdersAPI.getAll({ limit: 1000, sort: 'createdAt', order: 'desc' });
+          const data = response.data;
           
           const ws = XLSX.utils.json_to_sheet(data.length > 0 ? data.map((item: any) => ({
             'DO Number': item.doNumber,
@@ -235,7 +238,8 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
           showMessage('success', data.length > 0 ? `CSV with ${data.length} delivery orders downloaded!` : 'Empty CSV downloaded');
           
         } else if (dataType === 'lpo') {
-          const data = await lposAPI.getAll({ limit: 1000, sort: 'createdAt', order: 'desc' });
+          const response = await lposAPI.getAll({ limit: 1000, sort: 'createdAt', order: 'desc' });
+          const data = response.data;
           
           const ws = XLSX.utils.json_to_sheet(data.length > 0 ? data.map((item: any) => ({
             'LPO Number': item.lpoNo,
@@ -251,7 +255,8 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
           showMessage('success', data.length > 0 ? `CSV with ${data.length} LPO documents downloaded!` : 'Empty LPO CSV downloaded');
           
         } else if (dataType === 'fuel-records') {
-          const data = await fuelRecordsAPI.getAll({ page: 1, limit: 1000, sort: 'createdAt', order: 'desc' });
+          const response = await fuelRecordsAPI.getAll({ page: 1, limit: 1000, sort: 'createdAt', order: 'desc' });
+          const data = response.data;
           
           const ws = XLSX.utils.json_to_sheet(data.length > 0 ? data.map((item: any) => ({
             'Truck': item.truckNo,

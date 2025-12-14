@@ -21,11 +21,13 @@ export const yardFuelService = {
       const dateFrom = sevenDaysAgo.toISOString().split('T')[0];
       const dateTo = new Date().toISOString().split('T')[0];
       
-      const fuelRecords = await fuelRecordsAPI.getAll({ 
+      const response = await fuelRecordsAPI.getAll({ 
         truckNo,
         dateFrom,
-        dateTo
+        dateTo,
+        limit: 10000
       });
+      const fuelRecords = response.data;
       
       // Filter out cancelled fuel records
       return fuelRecords.filter((r: FuelRecord) => !r.isCancelled);

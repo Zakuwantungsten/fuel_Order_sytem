@@ -138,9 +138,9 @@ const LPOs = () => {
   const fetchLpos = async () => {
     try {
       setLoading(true);
-      const data = await lposAPI.getAll();
-      // Ensure data is always an array
-      const lposData = Array.isArray(data) ? data : [];
+      const response = await lposAPI.getAll({ limit: 10000 }); // Fetch all for client-side filtering
+      // Extract data from new API response format
+      const lposData = Array.isArray(response.data) ? response.data : [];
       setLpos(lposData);
       setFilteredLpos(lposData);
     } catch (error) {

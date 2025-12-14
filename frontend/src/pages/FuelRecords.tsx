@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
-import { fuelRecordsAPI, lposAPI } from '../services/api';
+import { fuelRecordsAPI, lposAPI, configAPI } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
+import Pagination from '../components/Pagination';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 
 // Standard fuel allocations - used to highlight extra fuel (fuel exceeding standard allocation)
@@ -71,38 +72,109 @@ const FuelRecords = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  
+  // Pagination state (server-side)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  
+  // Available months and years for filters (fetched separately)
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
 
   useEffect(() => {
-    fetchRecords();
     fetchLpos();
+    fetchRoutes();
+    fetchAvailableMonthsAndYears();
   }, []);
 
+  // Fetch records when pagination or filters change
   useEffect(() => {
-    extractAvailableRoutes();
-  }, [routeTypeFilter, records]);
+    fetchRecords();
+  }, [currentPage, itemsPerPage, searchTerm, routeFilter, selectedMonth, routeTypeFilter]);
 
-  useEffect(() => {
-    filterRecords();
-  }, [searchTerm, routeFilter, records, selectedMonth, routeTypeFilter]);
+  // Remove client-side filtering useEffect - filtering now happens on server
+  // useEffect(() => {
+  //   filterRecords();
+  // }, [searchTerm, routeFilter, records, selectedMonth, routeTypeFilter]);
 
-  // Reset route filter when import/export type changes
+  // Reset route filter and fetch routes when import/export type changes
   useEffect(() => {
     setRouteFilter('');
+    fetchRoutes();
   }, [routeTypeFilter]);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, routeFilter, selectedMonth, routeTypeFilter]);
 
   const fetchRecords = async () => {
     try {
       setLoading(true);
-      const data = await fuelRecordsAPI.getAll();
-      // Ensure data is always an array
-      const records = Array.isArray(data) ? data : [];
-      console.log('Fetched fuel records:', records.length, records);
-      setRecords(records);
-      // Don't set filtered records here - let useEffect handle it
+      
+      // Build filters for backend
+      const filters: any = {
+        page: currentPage,
+        limit: itemsPerPage,
+        sort: 'date',
+        order: 'desc'
+      };
+      
+      // Add search filter (backend only supports truckNo search currently)
+      if (searchTerm) {
+        filters.truckNo = searchTerm;
+      }
+      
+      // Add route filter
+      if (routeFilter) {
+        if (routeTypeFilter === 'IMPORT') {
+          filters.to = routeFilter;
+        } else {
+          filters.from = routeFilter;
+        }
+      }
+      
+      // Add month filter - backend expects 'month' field which contains "Month YYYY" format
+      // Convert from "YYYY-MM" to "Month YYYY"
+      if (selectedMonth) {
+        const [year, monthNum] = selectedMonth.split('-');
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = monthNames[parseInt(monthNum) - 1];
+        filters.month = `${monthName} ${year}`;
+      }
+      
+      const response = await fuelRecordsAPI.getAll(filters);
+      
+      console.log('Fetched fuel records:', {
+        recordCount: response.data.length,
+        pagination: response.pagination,
+        filters
+      });
+      
+      // Store all records for export purposes (we still need them)
+      setRecords(response.data);
+      
+      // For server-side pagination, filtered records are same as fetched records
+      setFilteredRecords(response.data);
+      
+      // Update pagination metadata from server
+      if (response.pagination) {
+        setTotalItems(response.pagination.total);
+        setTotalPages(response.pagination.totalPages);
+      } else {
+        // Fallback if no pagination (all data returned)
+        setTotalItems(response.data.length);
+        setTotalPages(Math.ceil(response.data.length / itemsPerPage));
+      }
     } catch (error) {
       console.error('Error fetching fuel records:', error);
       setRecords([]);
       setFilteredRecords([]);
+      setTotalItems(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
@@ -110,65 +182,45 @@ const FuelRecords = () => {
 
   const fetchLpos = async () => {
     try {
-      const data = await lposAPI.getAll();
-      // Ensure data is always an array
-      setLpos(Array.isArray(data) ? data : []);
+      const response = await lposAPI.getAll({ limit: 10000 });
+      // Extract data from new API response format
+      setLpos(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching LPOs:', error);
       setLpos([]);
     }
   };
 
-  // Extract available routes dynamically from fuel records
-  const extractAvailableRoutes = () => {
-    const routesSet = new Set<string>();
-    records.forEach(record => {
-      if (routeTypeFilter === 'IMPORT' && record.to) {
-        routesSet.add(record.to); // Going routes (destination)
-      } else if (routeTypeFilter === 'EXPORT' && record.from) {
-        routesSet.add(record.from); // Return routes (origin)
-      }
-    });
-    setAvailableRoutes(Array.from(routesSet).sort().map(r => ({ destination: r })));
+  const fetchRoutes = async () => {
+    try {
+      const data = await configAPI.getRoutes(routeTypeFilter);
+      console.log(`Fetched ${routeTypeFilter} routes:`, data);
+      setAvailableRoutes(data || []);
+    } catch (error) {
+      console.error('Error fetching routes:', error);
+      setAvailableRoutes([]);
+    }
   };
 
-  const filterRecords = () => {
-    let filtered = [...records];
-    console.log('Filtering records. Total:', records.length, 'Selected Month:', selectedMonth);
-
-    // Filter by selected month first
-    if (selectedMonth) {
-      filtered = filtered.filter((record) => {
-        const recordDate = new Date(record.date);
-        const recordMonth = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
-        return recordMonth === selectedMonth;
-      });
-      console.log('After month filter:', filtered.length, 'records');
-    }
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (record) =>
-          record.truckNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          record.goingDo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (record.returnDo && record.returnDo.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-      console.log('After search filter:', filtered.length, 'records');
-    }
-
-    if (routeFilter) {
-      filtered = filtered.filter((record) => {
-        if (routeTypeFilter === 'IMPORT') {
-          return record.to === routeFilter; // Filter by destination for going routes
-        } else {
-          return record.from === routeFilter; // Filter by origin for return routes
-        }
-      });
-      console.log('After route filter:', filtered.length, 'records');
-    }
-
-    console.log('Final filtered records:', filtered.length);
-    setFilteredRecords(filtered);
+  // filterRecords is no longer needed - filtering happens on server
+  // Keeping it here commented out for reference
+  // const filterRecords = () => { ... };
+  
+  // Server-side pagination - no need to slice, backend already returned the right page
+  const paginatedRecords = filteredRecords;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // fetchRecords will be called automatically via useEffect
+    // Scroll to top of table when page changes
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset to first page when changing items per page
+    // fetchRecords will be called automatically via useEffect with new limit
   };
 
   const handleCreate = () => {
@@ -204,8 +256,11 @@ const FuelRecords = () => {
 
   const handleSubmit = async (data: Partial<FuelRecord>) => {
     try {
-      if (selectedRecord?.id) {
-        await fuelRecordsAPI.update(selectedRecord.id, data);
+      if (selectedRecord) {
+        const recordId = selectedRecord.id || (selectedRecord as any)._id;
+        if (recordId) {
+          await fuelRecordsAPI.update(recordId, data);
+        }
       } else {
         await fuelRecordsAPI.create(data);
       }
@@ -215,15 +270,30 @@ const FuelRecords = () => {
     }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     // Use the selected export year
     const year = exportYear;
     
-    // Filter all records for the selected year (yearly export)
-    const yearlyRecords = records.filter(record => {
-      const recordDate = new Date(record.date);
-      return recordDate.getFullYear() === year;
-    });
+    // Fetch ALL records for the selected year (no pagination for export)
+    try {
+      const response = await fuelRecordsAPI.getAll({
+        limit: 10000, // Very high limit to get all records
+        sort: 'date',
+        order: 'desc'
+      });
+      
+      const allRecords = response.data;
+      
+      // Filter all records for the selected year (yearly export)
+      const yearlyRecords = allRecords.filter(record => {
+        const recordDate = new Date(record.date);
+        return recordDate.getFullYear() === year;
+      });
+    
+      if (yearlyRecords.length === 0) {
+        alert(`No records found for year ${year}`);
+        return;
+      }
     
     // Group records by month
     const recordsByMonth: { [key: string]: typeof yearlyRecords } = {};
@@ -305,33 +375,64 @@ const FuelRecords = () => {
       columnWidths: [8, 10, 8, 8, 6, 8, 10, 8, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10, 8, 8, 8, 8, 8],
       strikethroughCancelledRows: true,
     });
+    } catch (error) {
+      console.error('Error exporting fuel records:', error);
+      alert('Failed to export fuel records. Please try again.');
+    }
   };
 
+  // Fetch available months and years for filters
+  const fetchAvailableMonthsAndYears = async () => {
+    try {
+      // Fetch all records (high limit) to get months and years
+      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
+      const allRecords = response.data;
+      
+      const months = new Set<string>();
+      const years = new Set<number>();
+      
+      allRecords.forEach(record => {
+        const date = new Date(record.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        months.add(monthKey);
+        years.add(date.getFullYear());
+      });
+      
+      const sortedMonths = Array.from(months).sort();
+      const sortedYears = Array.from(years).sort().reverse(); // Most recent first
+      
+      console.log('Available months:', sortedMonths);
+      console.log('Available years:', sortedYears);
+      
+      setAvailableMonths(sortedMonths);
+      setAvailableYears(sortedYears);
+    } catch (error) {
+      console.error('Error fetching available months/years:', error);
+    }
+  };
+  
   // Month navigation helpers
   const getAvailableMonths = () => {
-    const months = new Set<string>();
-    records.forEach(record => {
-      const date = new Date(record.date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      months.add(monthKey);
-    });
-    const sortedMonths = Array.from(months).sort();
-    console.log('Available months:', sortedMonths);
-    return sortedMonths;
+    return availableMonths;
   };
 
-  // Update selected month if it's not in available months
+  // Update selected month if it's not in available months (but allow empty for "All Months")
   useEffect(() => {
-    const availableMonths = getAvailableMonths();
-    if (availableMonths.length > 0 && !availableMonths.includes(selectedMonth)) {
-      // Set to the most recent month
+    if (selectedMonth && availableMonths.length > 0 && !availableMonths.includes(selectedMonth)) {
+      // Set to the most recent month only if a month was selected but not available
       const latestMonth = availableMonths[availableMonths.length - 1];
       console.log('Selected month not available, switching to:', latestMonth);
       setSelectedMonth(latestMonth);
     }
-  }, [records]);
+  }, [availableMonths, selectedMonth]);
 
   const goToPreviousMonth = () => {
+    if (!selectedMonth) {
+      // If "All Months" is selected, go to current month
+      const now = new Date();
+      setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+      return;
+    }
     const date = new Date(selectedMonth + '-01');
     date.setMonth(date.getMonth() - 1);
     const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -339,6 +440,12 @@ const FuelRecords = () => {
   };
 
   const goToNextMonth = () => {
+    if (!selectedMonth) {
+      // If "All Months" is selected, go to current month
+      const now = new Date();
+      setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+      return;
+    }
     const date = new Date(selectedMonth + '-01');
     date.setMonth(date.getMonth() + 1);
     const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -349,14 +456,9 @@ const FuelRecords = () => {
     return new Date(monthKey + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
-  // Get available years from records for export
+  // Get available years from state
   const getAvailableYears = (): number[] => {
-    const years = new Set<number>();
-    records.forEach(record => {
-      const year = new Date(record.date).getFullYear();
-      years.add(year);
-    });
-    return Array.from(years).sort().reverse(); // Most recent first
+    return availableYears.length > 0 ? availableYears : [new Date().getFullYear()];
   };
 
   return (
@@ -483,6 +585,7 @@ const FuelRecords = () => {
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
+              <option value="">All Months</option>
               {getAvailableMonths().map(month => (
                 <option key={month} value={month}>
                   {getMonthName(month)}
@@ -498,7 +601,7 @@ const FuelRecords = () => {
             </button>
           </div>
           <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-            Total Records: <span className="ml-2 font-semibold">{filteredRecords.length}</span>
+            Total Records: <span className="ml-2 font-semibold">{totalItems}</span>
           </div>
         </div>
       </div>
@@ -510,17 +613,20 @@ const FuelRecords = () => {
             <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm sm:text-base">Loading fuel records...</p>
           </div>
-        ) : filteredRecords.length === 0 ? (
+        ) : totalItems === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
-            <p className="text-sm sm:text-base">No fuel records found for {getMonthName(selectedMonth)}</p>
+            <p className="text-sm sm:text-base">
+              {selectedMonth ? `No fuel records found for ${getMonthName(selectedMonth)}` : 'No fuel records found'}
+            </p>
           </div>
         ) : (
           <>
             {/* Card View - Mobile/Tablet (below lg) */}
             <div className="lg:hidden space-y-3 p-4">
-              {filteredRecords.map((record, index) => {
+              {paginatedRecords.map((record, index) => {
                 const isCancelled = record.isCancelled === true;
                 const recordId = record.id || (record as any)._id;
+                const actualIndex = startIndex + index; // Calculate actual index across all pages
                 
                 return (
                   <div
@@ -537,7 +643,7 @@ const FuelRecords = () => {
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs text-gray-500 dark:text-gray-400">#{index + 1}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">#{actualIndex + 1}</span>
                           <h3 className={`text-base font-bold ${
                             isCancelled
                               ? 'text-red-500 dark:text-red-400 line-through'
@@ -710,16 +816,17 @@ const FuelRecords = () => {
                     Loading data...
                   </td>
                 </tr>
-              ) : filteredRecords.length === 0 ? (
+              ) : totalItems === 0 ? (
                 <tr>
                   <td colSpan={26} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No fuel records found for {getMonthName(selectedMonth)}
+                    {selectedMonth ? `No fuel records found for ${getMonthName(selectedMonth)}` : 'No fuel records found'}
                   </td>
                 </tr>
               ) : (
-                filteredRecords.map((record, index) => {
+                paginatedRecords.map((record, index) => {
                   // Check if record is cancelled
                   const isCancelled = record.isCancelled === true;
+                  const actualIndex = startIndex + index; // Calculate actual index across all pages
                   
                   // Helper to render fuel cell with highlighting for extra fuel
                   const renderFuelCell = (field: string, value: number | undefined) => {
@@ -759,7 +866,7 @@ const FuelRecords = () => {
                       title={isCancelled ? 'This fuel record has been cancelled' : 'Click to view full details'}
                     >
                       <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
-                        {index + 1}
+                        {actualIndex + 1}
                       </td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm font-medium ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} title={record.truckNo}>{record.truckNo}</td>
@@ -831,6 +938,21 @@ const FuelRecords = () => {
           </table>
             </div>
           </>
+        )}
+        
+        {/* Pagination */}
+        {!loading && totalItems > 0 && (
+          <div className="p-4">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handleItemsPerPageChange}
+              showItemsPerPage={true}
+            />
+          </div>
         )}
       </div>
         </>

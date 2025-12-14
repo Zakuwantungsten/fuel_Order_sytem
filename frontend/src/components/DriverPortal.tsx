@@ -113,7 +113,8 @@ export function DriverPortal({ user }: DriverPortalProps) {
       let lpoEntriesData: LPOEntryData[] = [];
       try {
         // Get all LPO entries for this truck
-        const lpoData = await lposAPI.getAll({ truckNo: truck });
+        const response = await lposAPI.getAll({ truckNo: truck, limit: 10000 });
+        const lpoData = response.data;
         
         // Filter entries for this journey
         const filteredLpoData = (lpoData || []).filter((entry: any) => {

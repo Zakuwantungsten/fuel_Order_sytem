@@ -162,9 +162,20 @@ apiClient.interceptors.response.use(
 
 // Delivery Orders API
 export const deliveryOrdersAPI = {
-  getAll: async (filters?: any): Promise<DeliveryOrder[]> => {
+  getAll: async (filters?: any): Promise<{ data: DeliveryOrder[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
     const response = await apiClient.get('/delivery-orders', { params: filters });
-    return response.data.data?.data || response.data.data || [];
+    // Check if response has pagination metadata (server-side pagination)
+    if (response.data.data?.pagination) {
+      return {
+        data: response.data.data.data || [],
+        pagination: response.data.data.pagination
+      };
+    }
+    // Fallback for non-paginated responses (all data)
+    return {
+      data: response.data.data?.data || response.data.data || [],
+      pagination: undefined
+    };
   },
   
   getById: async (id: string | number): Promise<DeliveryOrder> => {
@@ -449,9 +460,20 @@ export const amendedDOsAPI = {
 
 // LPOs API (Summary LPOS entries)
 export const lposAPI = {
-  getAll: async (filters?: any): Promise<LPOEntry[]> => {
+  getAll: async (filters?: any): Promise<{ data: LPOEntry[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
     const response = await apiClient.get('/lpo-entries', { params: filters });
-    return response.data.data?.data || response.data.data || [];
+    // Check if response has pagination metadata (server-side pagination)
+    if (response.data.data?.pagination) {
+      return {
+        data: response.data.data.data || [],
+        pagination: response.data.data.pagination
+      };
+    }
+    // Fallback for non-paginated responses (all data)
+    return {
+      data: response.data.data?.data || response.data.data || [],
+      pagination: undefined
+    };
   },
   
   getById: async (id: string | number): Promise<LPOEntry> => {
@@ -722,9 +744,20 @@ export interface FuelRecordDetails {
 
 // Fuel Records API
 export const fuelRecordsAPI = {
-  getAll: async (filters?: any): Promise<FuelRecord[]> => {
+  getAll: async (filters?: any): Promise<{ data: FuelRecord[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
     const response = await apiClient.get('/fuel-records', { params: filters });
-    return response.data.data?.data || response.data.data || [];
+    // Check if response has pagination metadata (server-side pagination)
+    if (response.data.data?.pagination) {
+      return {
+        data: response.data.data.data || [],
+        pagination: response.data.data.pagination
+      };
+    }
+    // Fallback for non-paginated responses (all data)
+    return {
+      data: response.data.data?.data || response.data.data || [],
+      pagination: undefined
+    };
   },
   
   getById: async (id: string | number): Promise<FuelRecord> => {

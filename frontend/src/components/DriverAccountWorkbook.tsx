@@ -847,7 +847,8 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
     setIsFetchingDO(index);
     try {
       // Fetch all DOs for this truck
-      const allDOs = await deliveryOrdersAPI.getAll({ truckNo });
+      const response = await deliveryOrdersAPI.getAll({ truckNo, limit: 10000 });
+      const allDOs = response.data;
       
       if (allDOs && allDOs.length > 0) {
         // Get the most recent DO based on journey direction

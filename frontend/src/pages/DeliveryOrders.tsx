@@ -129,12 +129,13 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const data = await deliveryOrdersAPI.getAll({
+      const response = await deliveryOrdersAPI.getAll({
         importOrExport: filterType,
         doType: filterDoType === 'ALL' ? undefined : filterDoType,
+        limit: 10000, // Fetch all for client-side filtering
       });
-      // Ensure data is always an array and clean any corrupted data
-      const rawOrders = Array.isArray(data) ? data : [];
+      // Extract data from new API response format
+      const rawOrders = Array.isArray(response.data) ? response.data : [];
       
       // Clean corrupted data and log any issues found
       const cleanedOrders = cleanDeliveryOrders(rawOrders);
@@ -514,7 +515,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       
       // Check if truck already has an open fuel record (without returnDo)
       // This validation only applies to IMPORT DOs (going journey)
-      const allRecords = await fuelRecordsAPI.getAll();
+      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
+      const allRecords = response.data;
       const existingOpenRecord = allRecords.find(
         (record: any) => record.truckNo === deliveryOrder.truckNo && !record.returnDo
       );
@@ -621,7 +623,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const handleUpdateFuelRecordForExport = async (deliveryOrder: DeliveryOrder) => {
     try {
       // Find the matching going record for this truck
-      const allRecords = await fuelRecordsAPI.getAll();
+      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
+      const allRecords = response.data;
       const matchingRecord = fuelRecordService.findMatchingGoingRecord(
         deliveryOrder.truckNo,
         allRecords

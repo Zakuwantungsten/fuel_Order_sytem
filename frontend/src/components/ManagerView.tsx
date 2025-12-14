@@ -182,7 +182,11 @@ export function ManagerView({ user }: ManagerViewProps) {
     
     try {
       const currentYear = new Date().getFullYear();
-      const entries = await lposAPI.getAll({ year: currentYear });
+      // Use dateFrom/dateTo instead of year parameter (which backend doesn't support)
+      const dateFrom = `${currentYear}-01-01`;
+      const dateTo = `${currentYear}-12-31`;
+      const response = await lposAPI.getAll({ dateFrom, dateTo, limit: 10000 });
+      const entries = response.data;
       
       const processedEntries: LPODisplayEntry[] = entries
         .map((entry: LPOEntry) => {

@@ -112,7 +112,8 @@ export function getStationFuelDefaults(station: string, doType: 'going' | 'retur
  */
 async function hasTakenZambiaGoingFuel(truckNo: string, doNumber: string): Promise<boolean> {
   try {
-    const fuelRecords = await fuelRecordsAPI.getAll({ truckNo });
+    const response = await fuelRecordsAPI.getAll({ truckNo, limit: 10000 });
+    const fuelRecords = response.data;
     
     // Filter out cancelled fuel records
     const activeFuelRecords = fuelRecords.filter((r: FuelRecord) => !r.isCancelled);
@@ -154,14 +155,16 @@ export async function findCorrectDOForTruck(
     const dateLimit = fourMonthsAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
     
     // Fetch DOs for this truck from last 4 months only
-    const allDOs = await deliveryOrdersAPI.getAll({ truckNo, dateFrom: dateLimit });
+    const doResponse = await deliveryOrdersAPI.getAll({ truckNo, dateFrom: dateLimit, limit: 10000 });
+    const allDOs = doResponse.data;
     
     if (!allDOs || allDOs.length === 0) {
       return null;
     }
     
     // Get fuel records for this truck from last 4 months only
-    const fuelRecords = await fuelRecordsAPI.getAll({ truckNo, dateFrom: dateLimit });
+    const response = await fuelRecordsAPI.getAll({ truckNo, dateFrom: dateLimit, limit: 10000 });
+    const fuelRecords = response.data;
     
     // Filter out cancelled DOs - only work with active DOs
     const activeDOs = allDOs.filter((do_: DeliveryOrder) => !do_.isCancelled);
@@ -406,10 +409,12 @@ export async function deductFuelFromRecord(
     const dateLimit = fourMonthsAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
     
     // Find the fuel record for this DO from last 4 months only
-    const fuelRecords = await fuelRecordsAPI.getAll({ 
+    const response = await fuelRecordsAPI.getAll({ 
       truckNo: lpoEntry.truckNo,
-      dateFrom: dateLimit
+      dateFrom: dateLimit,
+      limit: 10000
     });
+    const fuelRecords = response.data;
     
     // Filter out cancelled fuel records - only work with active records
     const activeFuelRecords = fuelRecords.filter((r: FuelRecord) => !r.isCancelled);

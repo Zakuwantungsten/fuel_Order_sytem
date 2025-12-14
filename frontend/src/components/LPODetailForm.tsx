@@ -655,7 +655,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
     try {
       // Fetch all fuel records for this truck
-      const fuelRecords = await fuelRecordsAPI.getAll({ truckNo: truckNo.trim() });
+      const response = await fuelRecordsAPI.getAll({ truckNo: truckNo.trim(), limit: 10000 });
+      const fuelRecords = response.data;
       
       // Filter out cancelled fuel records - ignore them as if they don't exist
       const activeFuelRecords = (fuelRecords || []).filter((r: FuelRecord) => !r.isCancelled);
