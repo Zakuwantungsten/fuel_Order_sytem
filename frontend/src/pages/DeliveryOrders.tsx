@@ -363,8 +363,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   };
 
   const handleNewDO = () => {
+    console.log('=== handleNewDO clicked ===');
+    console.log('Filter DO type:', filterDoType);
     setEditingOrder(null);
     setIsFormOpen(true);
+    console.log('Form should now be open');
   };
 
   const handleEditOrder = (order: DeliveryOrder) => {
@@ -376,7 +379,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
   const handleSaveOrder = async (orderData: Partial<DeliveryOrder>): Promise<DeliveryOrder | void> => {
     try {
-      console.log('Saving order:', orderData);
+      console.log('=== handleSaveOrder START ===');
+      console.log('Order data received:', orderData);
       console.log('editingOrder:', editingOrder);
       console.log('editingOrder?.id:', editingOrder?.id);
       
@@ -386,8 +390,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       
       // Check for id in multiple formats
       const orderId = editingOrder?.id || (editingOrder as any)?._id;
+      console.log('Determined orderId:', orderId);
       
       if (orderId) {
+        console.log('=== UPDATE MODE ===');
         // Track which fields changed for amended DOs tracking
         const originalOrder = editingOrder!;
         const editableFields = ['truckNo', 'trailerNo', 'destination', 'loadingPoint', 'tonnages', 'ratePerTon', 'driverName', 'clientName', 'haulier', 'containerNo', 'invoiceNos', 'cargoType'];
@@ -444,7 +450,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         }
       } else {
         // Create new DO
+        console.log('=== CREATE MODE ===');
+        console.log('Calling deliveryOrdersAPI.create with:', orderData);
         savedOrder = await deliveryOrdersAPI.create(orderData);
+        console.log('API returned saved order:', savedOrder);
         
         // Handle fuel record creation/update ONLY for DO type (not SDO)
         // SDO orders are standalone and don't interact with fuel records
@@ -461,11 +470,15 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         }
       }
       
+      console.log('Reloading orders...');
       loadOrders();
+      console.log('=== handleSaveOrder END - SUCCESS ===');
       return savedOrder;
     } catch (error) {
+      console.error('=== handleSaveOrder END - ERROR ===');
       console.error('Failed to save order:', error);
-      alert('Failed to save delivery order');
+      alert('Failed to save delivery order. Error: ' + (error as any).message);
+      throw error;
     }
   };
 

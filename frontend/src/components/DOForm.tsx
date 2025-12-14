@@ -39,6 +39,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       date: getCurrentDate(),
       importOrExport: defaultImportExport,
       doType: defaultDoType, // Use the passed default type
+      doNumber: '', // Will be populated by useEffect
       clientName: '',
       truckNo: '',
       trailerNo: '',
@@ -133,6 +134,9 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('=== DOForm handleSubmit START ===');
+    console.log('Form data before clean:', formData);
+    
     // Check for corrupted data and alert user if found
     if (isCorruptedDriverName(formData.driverName)) {
       alert('Driver name field contains invalid data (appears to be tonnage data). Please enter a valid driver name.');
@@ -142,20 +146,38 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     // Clean and validate data before saving
     const cleanedFormData = cleanDeliveryOrder(formData);
     
+    console.log('Cleaned form data:', cleanedFormData);
+    
     // For new orders, remove id/_id to prevent MongoDB conflicts
     if (!order) {
       delete cleanedFormData.id;
       delete (cleanedFormData as any)._id;
+      console.log('Creating new DO (removed id/_id)');
+    } else {
+      console.log('Updating existing DO:', order.id || (order as any)._id);
     }
     
-    const savedOrder = await onSave(cleanedFormData);
-    if (!order && savedOrder) {
-      // For new DOs, show download option
-      setCreatedOrder(savedOrder as DeliveryOrder);
-    } else {
-      // For edits, just close
-      onClose();
+    console.log('Calling onSave with data:', cleanedFormData);
+    
+    try {
+      const savedOrder = await onSave(cleanedFormData);
+      console.log('onSave returned:', savedOrder);
+      
+      if (!order && savedOrder) {
+        // For new DOs, show download option
+        console.log('Setting created order for download');
+        setCreatedOrder(savedOrder as DeliveryOrder);
+      } else {
+        // For edits, just close
+        console.log('Edit complete, closing form');
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      alert('Failed to save delivery order. Check console for details.');
     }
+    
+    console.log('=== DOForm handleSubmit END ===');
   };
 
   const handleDownload = async () => {
