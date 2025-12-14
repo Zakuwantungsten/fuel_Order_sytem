@@ -828,14 +828,14 @@ const FuelRecords = () => {
               <table className="w-full text-xs divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
-                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">SN</th>
-                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Date</th>
+                <th className="w-12 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">SN</th>
+                <th className="w-16 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Date</th>
                 <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Truck</th>
                 <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Go</th>
                 <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Ret</th>
                 <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">St</th>
-                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Fr</th>
-                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">To</th>
+                <th className="w-24 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Fr</th>
+                <th className="w-28 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">To</th>
                 <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Tot</th>
                 <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Ex</th>
                 <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MMS</th>
@@ -929,10 +929,10 @@ const FuelRecords = () => {
                         )}
                       </td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.start}</td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm truncate ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.from}>
                         {record.from}
                       </td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm truncate ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.to}>
                         {record.to}
                       </td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs md:text-sm text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{(record.totalLts || 0).toLocaleString()}</td>
