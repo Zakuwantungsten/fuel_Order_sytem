@@ -281,10 +281,14 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
     try {
       const updatedEntries = [...editedSheet.entries];
+      const originalEntry = updatedEntries[index];
+      
+      // Preserve the cancellationPoint - backend needs it to update the correct fuel field
       updatedEntries[index] = {
-        ...updatedEntries[index],
+        ...originalEntry,
         isCancelled: false,
-        cancellationPoint: undefined
+        // Keep cancellationPoint - don't set to undefined
+        // Backend will use it to know which fuel field to update
       };
 
       // Recalculate total

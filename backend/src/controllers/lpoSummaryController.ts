@@ -1026,6 +1026,29 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     for (const [key, oldEntry] of oldEntriesMap) {
       const newEntry = newEntriesMap.get(key);
       
+      // Handle restoration first (when entry was cancelled but now is being uncancelled)
+      if (newEntry && !newEntry.isCancelled && oldEntry.isCancelled) {
+        // Entry was restored/uncancelled - deduct fuel again
+        logger.info(`Entry restored: ${key}, deducting ${newEntry.liters}L from fuel record`);
+        await updateFuelRecordForLPOEntry(
+          newEntry.doNo,
+          newEntry.liters, // Positive value to deduct from fuel record
+          newData.station || existingLpo.station,
+          newEntry.truckNo,
+          newEntry.cancellationPoint || oldEntry.cancellationPoint, // Pass cancellation point for CASH entries
+          (newEntry.isCustomStation || oldEntry.isCustomStation) ? {
+            isCustomStation: newEntry.isCustomStation || oldEntry.isCustomStation,
+            customGoingCheckpoint: newEntry.customGoingCheckpoint || oldEntry.customGoingCheckpoint,
+            customReturnCheckpoint: newEntry.customReturnCheckpoint || oldEntry.customReturnCheckpoint,
+          } : undefined
+        );
+        
+        // Clear cancellation timestamp and reason
+        newEntry.cancelledAt = undefined;
+        newEntry.cancellationReason = undefined;
+        continue; // Move to next entry
+      }
+      
       // Skip if old entry was already cancelled or driver account (no fuel record to revert)
       if (oldEntry.isCancelled || oldEntry.isDriverAccount) {
         continue;
