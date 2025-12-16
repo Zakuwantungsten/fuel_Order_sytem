@@ -740,11 +740,19 @@ export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response):
   try {
     const { truckNo } = req.params;
 
-    // Get all DOs for this truck, sorted by date descending (most recent first)
-    const deliveryOrders = await DeliveryOrder.find({
-      truckNo: { $regex: truckNo, $options: 'i' },
+    // Normalize truck number - remove spaces and hyphens for flexible matching
+    const normalizedInput = truckNo.replace(/[\s-]/g, '').toUpperCase();
+    
+    // Get all DOs and filter in code for flexible matching
+    const allOrders = await DeliveryOrder.find({
       isDeleted: false,
     }).sort({ date: -1 }).lean();
+    
+    // Filter to match truck number flexibly (ignoring spaces/hyphens)
+    const deliveryOrders = allOrders.filter((order: any) => {
+      const normalizedOrderTruck = order.truckNo.replace(/[\s-]/g, '').toUpperCase();
+      return normalizedOrderTruck === normalizedInput;
+    });
 
     if (deliveryOrders.length === 0) {
       res.status(200).json({
