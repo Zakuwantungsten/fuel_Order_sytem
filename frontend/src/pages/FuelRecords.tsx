@@ -543,11 +543,11 @@ const FuelRecords = () => {
               title="Select year to export"
             >
               {getAvailableYears().length > 0 ? (
-                getAvailableYears().map(year => (
-                  <option key={year} value={year}>{year}</option>
+                getAvailableYears().map((year, index) => (
+                  <option key={`year-${year}-${index}`} value={year}>{year}</option>
                 ))
               ) : (
-                <option key={new Date().getFullYear()} value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
+                <option key={`year-current-${new Date().getFullYear()}`} value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
               )}
             </select>
             <button

@@ -210,16 +210,6 @@ const Layout = ({ children }: LayoutProps) => {
       <div className={`transition-all duration-300 ease-in-out ${shouldShowText ? 'lg:pl-64' : 'lg:pl-16'}`}>
         {/* Top bar */}
         <div className="sticky top-0 z-50 flex items-center h-16 bg-white dark:bg-gray-800 shadow-sm px-4 lg:px-8 border-b dark:border-gray-700 transition-colors">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden mr-4 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors group"
-          >
-            <div className="flex flex-col space-y-1.5">
-              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
-              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
-              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
-            </div>
-          </button>
           <div className="flex-1">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
               {navigation.find(item => isActive(item.href))?.name || 'Dashboard'}
@@ -353,6 +343,19 @@ const Layout = ({ children }: LayoutProps) => {
               )}
             </div>
           </div>
+          
+          {/* Hamburger Menu - Moved to rightmost position */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden ml-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors group"
+            aria-label="Open menu"
+          >
+            <div className="flex flex-col space-y-1.5">
+              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
+              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
+              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
+            </div>
+          </button>
         </div>
 
         {/* Page content */}

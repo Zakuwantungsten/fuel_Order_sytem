@@ -343,8 +343,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     return (
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden transition-colors">
         {/* Mobile Header for Drivers */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-4 flex items-center justify-between flex-shrink-0 md:hidden">
-          <div className="flex items-center space-x-3">
+        <header className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-4 flex items-center flex-shrink-0 md:hidden">
+          <div className="flex items-center space-x-3 flex-1">
             <Truck className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
             <span className="font-bold text-gray-800 dark:text-gray-100">Driver Portal</span>
           </div>
@@ -399,8 +399,18 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden transition-colors">
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-gray-600 bg-opacity-75 z-20 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      
       {/* Sidebar */}
-      <div className={`bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col ${sidebarOpen ? 'w-64' : 'w-16'}`}>
+      <div className={`bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-30 transform ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      } lg:translate-x-0 w-64 ${!sidebarOpen && 'lg:w-16'}`}>
         <div className="p-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             {sidebarOpen && (
@@ -411,9 +421,14 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             )}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors lg:ml-auto"
+              aria-label={sidebarOpen ? 'Close menu' : 'Toggle menu'}
             >
-              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {/* On mobile: always show X, on desktop: toggle between X and Menu */}
+              <X className="w-5 h-5 lg:hidden" />
+              <span className="hidden lg:block">
+                {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </span>
             </button>
           </div>
         </div>
@@ -424,7 +439,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setSidebarOpen(false);
+                }}
                 className={`w-full flex items-center px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                   activeTab === item.id 
                     ? 'bg-indigo-50 dark:bg-indigo-900/30 border-r-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' 
@@ -458,8 +476,101 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-4 flex-shrink-0 transition-colors">
-          <div className="flex items-center justify-between">
+        {/* Mobile Header */}
+        <header className="lg:hidden bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-3 flex items-center gap-2 flex-shrink-0 transition-colors">
+          <div className="flex-1 min-w-0 mr-2">
+            <h2 className="text-base font-bold text-gray-800 dark:text-gray-100 truncate">
+              {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+            </h2>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button 
+              onClick={toggleTheme}
+              className="p-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0"
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            
+            <div className="flex-shrink-0">
+              <NotificationBell 
+              onNotificationClick={(notification) => {
+                if (notification.metadata?.fuelRecordId) {
+                  setActiveTab('fuel_records');
+                }
+              }}
+              onEditDO={(doId) => {
+                setActiveTab('do');
+                setEditDoId(doId);
+              }}
+              onViewPendingYardFuel={() => {
+                setShowPendingYardFuel(true);
+              }}
+              onViewAllNotifications={() => {
+                setShowNotificationsPage(true);
+              }}
+              />
+            </div>
+            
+            <div className="relative flex-shrink-0">
+              <button 
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">
+                    {user.firstName?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              </button>
+              
+              {showProfileMenu && (
+                <>
+                  <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
+                    <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Signed in as</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.firstName} {user.lastName}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        setShowChangePassword(true);
+                      }}
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      <Key className="w-4 h-4 mr-3" />
+                      Change Password
+                    </button>
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        logout();
+                      }}
+                      className="w-full flex items-center px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      <LogOut className="w-4 h-4 mr-3" />
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            </button>
+          </div>
+        </header>
+        
+        {/* Desktop Header */}
+        <header className="hidden lg:flex bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-4 flex-shrink-0 transition-colors">
+          <div className="flex items-center justify-between w-full">
             <div>
               <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
                 {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}

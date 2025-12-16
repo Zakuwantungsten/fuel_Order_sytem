@@ -440,7 +440,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
       {/* Header - Fixed */}
       <div className="bg-indigo-600 text-white p-3 sm:p-4 shadow-md sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-2 sm:px-0">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <h1 className="text-lg sm:text-xl font-bold flex items-center">
                 <Truck className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
@@ -462,10 +462,10 @@ export function DriverPortal({ user }: DriverPortalProps) {
               >
                 <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
-              {/* Theme Toggle - Hidden on mobile, shown in menu */}
+              {/* Theme Toggle - Now visible on mobile */}
               <button
                 onClick={toggleTheme}
-                className="hidden sm:block p-1.5 sm:p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
+                className="p-1.5 sm:p-2 rounded-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
                 title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
@@ -489,16 +489,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{driverData.truckNo}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.firstName} {user.lastName}</p>
                       </div>
-                      <button
-                        onClick={() => {
-                          setShowProfileMenu(false);
-                          toggleTheme();
-                        }}
-                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 sm:hidden"
-                      >
-                        {isDark ? <Sun className="w-4 h-4 mr-3" /> : <Moon className="w-4 h-4 mr-3" />}
-                        {isDark ? 'Light Mode' : 'Dark Mode'}
-                      </button>
+
                       <button
                         onClick={() => {
                           setShowProfileMenu(false);
