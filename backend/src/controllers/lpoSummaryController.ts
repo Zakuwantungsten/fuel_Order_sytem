@@ -261,12 +261,22 @@ async function updateFuelRecordForLPOEntry(
   }
 ): Promise<void> {
   try {
+    // Check for NIL DO or Driver Account entries
+    const doNoUpper = (doNumber || '').toString().trim().toUpperCase();
+    const isNilDO = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A';
+    
     logger.info(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}, cancellationPoint=${cancellationPoint || 'N/A'}, customInfo=${JSON.stringify(customCheckpointInfo || {})}`);
+    
+    // Skip fuel record update for NIL DOs (expected for Driver Account and CASH entries)
+    if (isNilDO) {
+      logger.info(`Skipping fuel record update for NIL DO - likely Driver Account or CASH entry (truck: ${truckNo})`);
+      return;
+    }
     
     const result = await findFuelRecordWithDirection(doNumber, truckNo);
     
     if (!result) {
-      logger.warn(`No fuel record found for DO ${doNumber} or truck ${truckNo} to update`);
+      logger.warn(`No fuel record found for DO ${doNumber} or truck ${truckNo} to update - possible data inconsistency`);
       return;
     }
 
@@ -1936,8 +1946,11 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
     }
 
     const entry = lpo.entries[entryIndex];
+    const isDriverAccount = entry.isDriverAccount === true;
+    const doNoUpper = (entry.doNo || '').toString().trim().toUpperCase();
+    const isNilDO = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A';
 
-    // Revert the fuel record deduction
+    // Revert the fuel record deduction (will be skipped for NIL DO/Driver Account entries)
     await updateFuelRecordForLPOEntry(
       entry.doNo,
       -entry.liters,
@@ -1954,7 +1967,16 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
     // Mark the entry as cancelled
     lpo.entries[entryIndex].isCancelled = true;
     lpo.entries[entryIndex].cancellationPoint = cancellationPoint;
-    lpo.entries[entryIndex].cancellationReason = reason || 'Entry cancelled - fuel allocation reverted';
+    
+    // Set appropriate cancellation reason based on entry type
+    if (isDriverAccount) {
+      lpo.entries[entryIndex].cancellationReason = reason || 'Driver Account entry cancelled - no fuel record affected';
+    } else if (isNilDO) {
+      lpo.entries[entryIndex].cancellationReason = reason || 'Entry cancelled - no fuel record found';
+    } else {
+      lpo.entries[entryIndex].cancellationReason = reason || 'Entry cancelled - fuel allocation reverted';
+    }
+    
     lpo.entries[entryIndex].cancelledAt = new Date();
 
     // Recalculate total (excluding cancelled entries)
@@ -1964,12 +1986,23 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
 
     await lpo.save();
 
-    logger.info(`Truck ${truckNo} cancelled in LPO ${lpo.lpoNo} at ${cancellationPoint} by ${req.user?.username}`);
+    // Log with entry type context
+    const entryTypeLog = isDriverAccount ? '(Driver Account)' : isNilDO ? '(NIL DO)' : '';
+    logger.info(`Truck ${truckNo} cancelled ${entryTypeLog} in LPO ${lpo.lpoNo} at ${cancellationPoint} by ${req.user?.username}`);
+
+    // Generate appropriate response message
+    let message = `Successfully cancelled truck ${truckNo} in LPO ${lpo.lpoNo}`;
+    if (isDriverAccount) {
+      message += ' (Driver Account - no fuel record affected)';
+    } else if (isNilDO) {
+      message += ' (NIL DO - no fuel record affected)';
+    }
 
     res.status(200).json({
       success: true,
-      message: `Successfully cancelled truck ${truckNo} in LPO ${lpo.lpoNo}`,
+      message,
       data: lpo,
+      entryType: isDriverAccount ? 'driver-account' : isNilDO ? 'nil-do' : 'regular',
     });
   } catch (error: any) {
     throw error;

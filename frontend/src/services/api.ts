@@ -794,10 +794,12 @@ export const fuelRecordsAPI = {
       }
       return null;
     } catch (error: any) {
-      // If not found, return null
+      // If not found, return null (expected for NIL DOs and driver account entries)
       if (error.response?.status === 404) {
         return null;
       }
+      // Only log non-404 errors
+      console.error('Error fetching fuel record:', error);
       throw error;
     }
   },

@@ -37,6 +37,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [detectedCancellationPoint, setDetectedCancellationPoint] = useState<CancellationPoint | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionError, setDetectionError] = useState<string | null>(null);
+  const [entryTypeMessage, setEntryTypeMessage] = useState<string | null>(null);
+  const [entryType, setEntryType] = useState<'driver-account' | 'nil-do' | 'regular' | null>(null);
 
   useEffect(() => {
     setEditedSheet(sheet);
@@ -145,39 +147,68 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setDetectedDirection(null);
     setDetectedCancellationPoint(null);
     setDetectionError(null);
+    setEntryTypeMessage(null);
+    setEntryType(null);
     setIsDetecting(true);
     setShowCancelModal(true);
 
     const entry = editedSheet.entries[index];
+    const doNo = entry.doNo?.trim().toUpperCase() || '';
+    const isNilDO = doNo === 'NIL' || doNo === '' || doNo === 'N/A';
+    const isDriverAccount = entry.isDriverAccount === true;
     
     try {
-      // Try to find the fuel record by DO number to determine direction
-      const result = await fuelRecordsAPI.getByDoNumber(entry.doNo);
-      
-      let direction: 'going' | 'returning' = 'going';
-      
-      if (result) {
-        direction = result.direction;
-      } else {
-        // If no fuel record found, try to infer from DO number format
-        // DOs starting with higher numbers or containing certain patterns might be returns
-        // For now, default to 'going' but the user can see this in the confirmation
-        console.log(`No fuel record found for DO ${entry.doNo}, defaulting to 'going' direction`);
+      // Check for Driver Account entries first
+      if (isDriverAccount) {
+        setEntryType('driver-account');
+        setEntryTypeMessage('This is a Driver\'s Account entry (fuel misuse/theft). No fuel record exists or will be affected by this cancellation.');
+        setDetectedDirection('going'); // Default, but irrelevant for driver account
+        const cancellationPoint = getAutoCancellationPoint(editedSheet.station, 'going');
+        setDetectedCancellationPoint(cancellationPoint);
+        setIsDetecting(false);
+        return;
       }
       
-      setDetectedDirection(direction);
+      // Check for NIL DO entries (skip API call to avoid 404)
+      if (isNilDO) {
+        setEntryType('nil-do');
+        setEntryTypeMessage('⚠️ No Delivery Order assigned (NIL). No fuel record was found for this entry. Cancellation will only update this LPO sheet.');
+        setDetectionError('No fuel record available - this entry has no valid DO number.');
+        setDetectedDirection('going'); // Default fallback
+        const cancellationPoint = getAutoCancellationPoint(editedSheet.station, 'going');
+        setDetectedCancellationPoint(cancellationPoint);
+        setIsDetecting(false);
+        return;
+      }
       
-      // Auto-determine the cancellation point based on station and direction
-      const cancellationPoint = getAutoCancellationPoint(editedSheet.station, direction);
-      setDetectedCancellationPoint(cancellationPoint);
+      // For regular entries with valid DO, try to find the fuel record
+      const result = await fuelRecordsAPI.getByDoNumber(entry.doNo);
+      
+      if (result) {
+        setEntryType('regular');
+        setEntryTypeMessage('✓ Fuel record found. Cancelling this entry will revert the fuel allocation in the fuel record.');
+        setDetectedDirection(result.direction);
+        const cancellationPoint = getAutoCancellationPoint(editedSheet.station, result.direction);
+        setDetectedCancellationPoint(cancellationPoint);
+      } else {
+        // Valid DO format but no fuel record found
+        setEntryType('nil-do');
+        setEntryTypeMessage('⚠️ No fuel record found for DO ' + entry.doNo + '. This may be a data inconsistency. Cancellation will only update the LPO.');
+        setDetectionError('Fuel record not found for this DO number.');
+        setDetectedDirection('going');
+        const cancellationPoint = getAutoCancellationPoint(editedSheet.station, 'going');
+        setDetectedCancellationPoint(cancellationPoint);
+      }
       
     } catch (error) {
-      console.error('Error detecting fuel record direction:', error);
-      // Default to going direction if detection fails
+      console.error('Error detecting fuel record details:', error);
+      // Fallback for unexpected errors
+      setEntryType('nil-do');
       setDetectedDirection('going');
       const cancellationPoint = getAutoCancellationPoint(editedSheet.station, 'going');
       setDetectedCancellationPoint(cancellationPoint);
-      setDetectionError('Could not auto-detect direction. Using default settings.');
+      setDetectionError('Could not verify fuel record. Proceeding with caution.');
+      setEntryTypeMessage('⚠️ Unable to verify fuel record status. Cancellation will proceed but may not update fuel allocations.');
     } finally {
       setIsDetecting(false);
     }
@@ -217,12 +248,24 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       onUpdate(savedSheet);
       setEditedSheet(savedSheet);
       
+      // Generate success message based on entry type
+      let successMessage = '✓ Entry cancelled successfully!';
+      if (entryType === 'driver-account') {
+        successMessage = '✓ Driver Account entry cancelled successfully! (No fuel record affected)';
+      } else if (entryType === 'regular') {
+        successMessage = '✓ Entry cancelled successfully! Fuel record has been updated.';
+      } else if (entryType === 'nil-do') {
+        successMessage = '✓ Entry cancelled successfully! (No fuel record was affected)';
+      }
+      
       setShowCancelModal(false);
       setCancellingEntryIndex(null);
       setDetectedDirection(null);
       setDetectedCancellationPoint(null);
+      setEntryType(null);
+      setEntryTypeMessage(null);
       
-      alert('✓ Entry cancelled successfully! Fuel record has been updated.');
+      alert(successMessage);
     } catch (error) {
       console.error('Error cancelling entry:', error);
       alert('Error cancelling entry. Please try again.');
@@ -883,18 +926,47 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 <p className="text-sm text-red-700 dark:text-red-300">
                   <strong>Cancelling:</strong> Truck {editedSheet.entries[cancellingEntryIndex].truckNo} - {editedSheet.entries[cancellingEntryIndex].liters}L
                 </p>
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                  This will revert the fuel record deduction and mark this entry as cancelled.
-                </p>
               </div>
 
               {isDetecting ? (
                 <div className="flex items-center justify-center py-6">
                   <Loader2 className="w-6 h-6 animate-spin text-blue-600 dark:text-blue-400 mr-2" />
-                  <span className="text-gray-600 dark:text-gray-400">Detecting fuel record details...</span>
+                  <span className="text-gray-600 dark:text-gray-400">Verifying entry type and fuel record...</span>
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Entry Type Message - Prominent display */}
+                  {entryTypeMessage && (
+                    <div className={`p-4 rounded-lg border-2 ${
+                      entryType === 'driver-account' 
+                        ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700'
+                        : entryType === 'regular'
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
+                        : 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700'
+                    }`}>
+                      <p className={`text-sm font-medium ${
+                        entryType === 'driver-account'
+                          ? 'text-purple-800 dark:text-purple-200'
+                          : entryType === 'regular'
+                          ? 'text-green-800 dark:text-green-200'
+                          : 'text-amber-800 dark:text-amber-200'
+                      }`}>
+                        {entryType === 'driver-account' && '🔒 Driver Account Entry'} 
+                        {entryType === 'regular' && '✓ Regular Entry with Fuel Record'}
+                        {entryType === 'nil-do' && '⚠️ Entry Without Fuel Record'}
+                      </p>
+                      <p className={`text-xs mt-2 ${
+                        entryType === 'driver-account'
+                          ? 'text-purple-700 dark:text-purple-300'
+                          : entryType === 'regular'
+                          ? 'text-green-700 dark:text-green-300'
+                          : 'text-amber-700 dark:text-amber-300'
+                      }`}>
+                        {entryTypeMessage}
+                      </p>
+                    </div>
+                  )}
+                  
                   {detectionError && (
                     <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                       <p className="text-sm text-amber-700 dark:text-amber-300 flex items-center">
@@ -943,7 +1015,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
                   <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                     <p className="text-xs text-blue-700 dark:text-blue-300">
-                      <strong>Action:</strong> The fuel deduction of {editedSheet.entries[cancellingEntryIndex].liters}L will be reverted from the {detectedDirection} checkpoint ({detectedCancellationPoint ? getCancellationPointDisplayName(detectedCancellationPoint) : 'Unknown'}).
+                      <strong>What will happen:</strong>{' '}
+                      {entryType === 'driver-account' && (
+                        `This LPO entry will be marked as cancelled. No fuel record will be affected since Driver Account entries don't create fuel records.`
+                      )}
+                      {entryType === 'regular' && (
+                        `The fuel deduction of ${editedSheet.entries[cancellingEntryIndex].liters}L will be reverted from the ${detectedDirection} checkpoint (${detectedCancellationPoint ? getCancellationPointDisplayName(detectedCancellationPoint) : 'Unknown'}).`
+                      )}
+                      {entryType === 'nil-do' && (
+                        `This LPO entry will be marked as cancelled. No fuel record reversal will occur since no fuel record was found for this entry.`
+                      )}
                     </p>
                   </div>
                 </div>

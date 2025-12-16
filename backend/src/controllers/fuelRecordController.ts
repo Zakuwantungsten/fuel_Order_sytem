@@ -150,6 +150,10 @@ export const getFuelRecordsByTruck = async (req: AuthRequest, res: Response): Pr
 export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { doNumber } = req.params;
+    
+    // Check for NIL DO - these are expected for Driver Account and CASH entries
+    const doNoUpper = (doNumber || '').toString().trim().toUpperCase();
+    const isNilDO = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A';
 
     // Calculate date limit: 4 months ago (120 days)
     const dateLimitForFuelRecords = new Date();
@@ -176,6 +180,10 @@ export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): P
     }
 
     if (!fuelRecord) {
+      // Don't log 404 for NIL DOs as they are expected
+      if (!isNilDO) {
+        logger.info(`Fuel record not found for DO: ${doNumber} (searched last 4 months)`);
+      }
       throw new ApiError(404, 'Fuel record not found');
     }
 
