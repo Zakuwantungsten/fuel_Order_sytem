@@ -21,6 +21,7 @@ router.get('/workbooks/:year/export', asyncHandler(lpoSummaryController.exportWo
 router.get('/next-number', asyncHandler(lpoSummaryController.getNextLPONumber));
 router.get('/find-at-checkpoint', asyncHandler(lpoSummaryController.findLPOsAtCheckpoint));
 router.get('/check-duplicate', asyncHandler(lpoSummaryController.checkDuplicateAllocation));
+router.get('/driver-entries/:truckNo', asyncHandler(lpoSummaryController.getDriverLPOEntries));
 router.get('/', commonValidation.pagination, validate, asyncHandler(lpoSummaryController.getAllLPOSummaries));
 router.get('/lpo/:lpoNo', asyncHandler(lpoSummaryController.getLPOSummaryByLPONo));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(lpoSummaryController.getLPOSummaryById));

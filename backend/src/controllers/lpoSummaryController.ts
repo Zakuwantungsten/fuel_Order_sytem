@@ -2159,6 +2159,87 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
   }
 };
 
+/**
+ * Get flattened LPO entries for a specific truck (Driver Portal)
+ * Returns all entries from LPOSummary with cancellation status and updates
+ */
+export const getDriverLPOEntries = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo } = req.params;
+    const { limit = 100 } = req.query;
+
+    if (!truckNo) {
+      throw new ApiError(400, 'Truck number is required');
+    }
+
+    // Normalize truck number for case-insensitive matching
+    const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
+
+    // Find all LPOs containing this truck (including cancelled entries)
+    // Use case-insensitive regex that allows optional spaces
+    const truckRegexPattern = truckNoNormalized.split('').join('\\s*');
+    const lpos = await LPOSummary.find({
+      'entries.truckNo': new RegExp(`^${truckRegexPattern}$`, 'i'),
+      isDeleted: false,
+    })
+      .sort({ date: -1 })
+      .limit(parseInt(limit as string))
+      .lean();
+
+    // Flatten entries for this truck
+    const flattenedEntries: any[] = [];
+    
+    for (const lpo of lpos) {
+      for (let i = 0; i < lpo.entries.length; i++) {
+        const entry = lpo.entries[i];
+        const entryTruckNormalized = (entry.truckNo || '').replace(/\s+/g, '').toUpperCase();
+        if (entryTruckNormalized === truckNoNormalized) {
+          // Generate unique ID from LPO + index since subdocuments have _id
+          const entryId = (entry as any)._id || `${lpo._id}-${i}`;
+          flattenedEntries.push({
+            _id: entryId.toString ? entryId.toString() : entryId,
+            date: lpo.date,
+            lpoNo: lpo.lpoNo,
+            station: lpo.station,
+            doSdo: entry.doNo,
+            truckNo: entry.truckNo,
+            ltrs: entry.liters,
+            pricePerLtr: entry.rate,
+            amount: entry.amount,
+            destinations: entry.dest,
+            // Cancellation fields
+            isCancelled: entry.isCancelled || false,
+            cancellationPoint: entry.cancellationPoint,
+            cancellationReason: entry.cancellationReason,
+            cancelledAt: entry.cancelledAt,
+            // Amendment tracking
+            originalLiters: entry.originalLiters,
+            amendedAt: entry.amendedAt,
+            // Driver account fields
+            isDriverAccount: entry.isDriverAccount,
+            referenceDo: entry.referenceDo,
+            // Custom station fields
+            isCustomStation: entry.isCustomStation,
+            customStationName: entry.customStationName,
+            customGoingCheckpoint: entry.customGoingCheckpoint,
+            customReturnCheckpoint: entry.customReturnCheckpoint,
+          });
+        }
+      }
+    }
+
+    logger.info(`Driver LPO entries fetched for truck ${truckNo}: ${flattenedEntries.length} entries`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Driver LPO entries retrieved successfully',
+      data: flattenedEntries,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
 // Legacy methods for backward compatibility
 export const addSheetToWorkbook = async (req: AuthRequest, res: Response): Promise<void> => {
   return createLPOSummary(req, res);

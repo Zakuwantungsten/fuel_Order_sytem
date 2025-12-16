@@ -3,7 +3,6 @@ import { MapPin, Fuel, Bell, Navigation, Clock, ArrowRight, Info, LogOut, Sun, M
 import { toast } from 'react-toastify';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { lposAPI } from '../services/api';
 import ChangePasswordModal from './ChangePasswordModal';
 
 // Real-time update interval (30 seconds)
@@ -21,6 +20,11 @@ interface LPOEntryData {
   amount: number;
   destination: string;
   isCancelled?: boolean;
+  cancellationPoint?: string;
+  cancellationReason?: string;
+  cancelledAt?: string;
+  amendedAt?: string;
+  originalLiters?: number;
   isDriverAccount?: boolean;
 }
 
@@ -110,11 +114,13 @@ export function DriverPortal({ user }: DriverPortalProps) {
       // 1. Entries matching current journey DOs (going/returning)
       // 2. NIL DO/destination entries (driver's account/cash) with referenceDo matching journey
       // 3. NIL entries without referenceDo (legacy entries - include all for this truck)
+      // 4. Cancelled entries (marked with isCancelled flag)
+      // 5. Updated entries (with amendedAt timestamp)
       let lpoEntriesData: LPOEntryData[] = [];
       try {
-        // Get all LPO entries for this truck
-        const response = await lposAPI.getAll({ truckNo: truck, limit: 10000 });
-        const lpoData = response.data;
+        // Get all LPO entries for this truck from LPOSummary (includes cancellation and update info)
+        const response = await api.get(`/lpo-documents/driver-entries/${truck}`, { params: { limit: 10000 } });
+        const lpoData = response.data.data || [];
         
         // Filter entries for this journey
         const filteredLpoData = (lpoData || []).filter((entry: any) => {
@@ -155,7 +161,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
         });
         
         lpoEntriesData = filteredLpoData.map((entry: any) => {
-          // Use correct field names from backend LPOEntry model
+          // New endpoint returns flattened LPOSummary entries with correct field names
           const entryDoNo = entry.doSdo?.toString()?.trim()?.toUpperCase() || '';
           const entryDest = entry.destinations?.toString()?.trim()?.toUpperCase() || '';
           const isNilDO = entryDoNo === 'NIL' || entryDoNo === '' || entryDoNo === 'N/A';
@@ -165,14 +171,19 @@ export function DriverPortal({ user }: DriverPortalProps) {
             id: entry._id || entry.id,
             date: entry.date,
             lpoNo: entry.lpoNo,
-            station: entry.dieselAt || 'N/A',  // Backend field: dieselAt
-            doNo: isNilDO ? 'NIL' : (entry.doSdo || 'N/A'),  // Backend field: doSdo
+            station: entry.station || 'N/A',  // LPOSummary field: station
+            doNo: isNilDO ? 'NIL' : (entry.doSdo || 'N/A'),  // Flattened field: doSdo
             truckNo: entry.truckNo,
-            liters: entry.ltrs || 0,  // Backend field: ltrs
-            rate: entry.pricePerLtr || 0,  // Backend field: pricePerLtr
-            amount: (entry.ltrs || 0) * (entry.pricePerLtr || 0),
-            destination: isNilDest ? 'NIL' : (entry.destinations || 'N/A'),  // Backend field: destinations
-            isCancelled: entry.isCancelled,
+            liters: entry.ltrs || 0,  // Flattened field: ltrs
+            rate: entry.pricePerLtr || 0,  // Flattened field: pricePerLtr
+            amount: entry.amount || 0,  // Direct from LPOSummary entry
+            destination: isNilDest ? 'NIL' : (entry.destinations || 'N/A'),  // Flattened field: destinations
+            isCancelled: entry.isCancelled || false,  // Cancellation status
+            cancellationPoint: entry.cancellationPoint,  // Where it was cancelled
+            cancellationReason: entry.cancellationReason,  // Why it was cancelled
+            cancelledAt: entry.cancelledAt,  // When it was cancelled
+            amendedAt: entry.amendedAt,  // When liters were updated
+            originalLiters: entry.originalLiters,  // Original liter amount before update
             isDriverAccount: entry.isDriverAccount || isNilDO, // Mark NIL DO as driver account type
           };
         });
@@ -767,6 +778,29 @@ export function DriverPortal({ user }: DriverPortalProps) {
                           <div className="text-xs text-gray-500 dark:text-gray-500">
                             Dest: <span className={entry.destination === 'NIL' ? 'text-orange-500' : ''}>{entry.destination}</span>
                           </div>
+                          {/* Show cancellation details */}
+                          {entry.isCancelled && (
+                            <div className="mt-2 text-xs bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 p-2 rounded border-l-2 border-red-500">
+                              <div className="font-semibold">Cancelled at: {entry.cancellationPoint || 'Unknown'}</div>
+                              {entry.cancellationReason && (
+                                <div className="mt-0.5">Reason: {entry.cancellationReason}</div>
+                              )}
+                              {entry.cancelledAt && (
+                                <div className="mt-0.5 text-[10px] text-red-600 dark:text-red-400">
+                                  {new Date(entry.cancelledAt).toLocaleString()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {/* Show amendment details */}
+                          {!entry.isCancelled && entry.amendedAt && entry.originalLiters && (
+                            <div className="mt-2 text-xs bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 p-2 rounded border-l-2 border-yellow-500">
+                              <div className="font-semibold">Updated: {entry.originalLiters}L → {entry.liters}L</div>
+                              <div className="mt-0.5 text-[10px] text-yellow-600 dark:text-yellow-400">
+                                {new Date(entry.amendedAt).toLocaleString()}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
