@@ -1228,9 +1228,9 @@ export const adminAPI = {
     await apiClient.delete(`/admin/routes/${encodeURIComponent(destination)}`);
   },
 
-  // Truck Batches
+  // Truck Batches (read-only from public config endpoint)
   getTruckBatches: async (): Promise<TruckBatches> => {
-    const response = await apiClient.get('/admin/truck-batches');
+    const response = await apiClient.get('/config/truck-batches');
     return response.data.data || {};
   },
 

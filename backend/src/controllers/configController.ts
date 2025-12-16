@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { FuelStationConfig } from '../models/FuelStationConfig';
 import { RouteConfig } from '../models/RouteConfig';
+import { SystemConfig } from '../models/SystemConfig';
 import { AuditLog } from '../models/AuditLog';
 
 // Formula validation helper
@@ -563,6 +564,41 @@ export const getFormulaVariables = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch formula variables',
+    });
+  }
+};
+
+/**
+ * Get truck batches configuration (read-only)
+ * GET /api/config/truck-batches
+ * Public endpoint for all authenticated users
+ */
+export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      // Return empty batches if not configured yet
+      res.status(200).json({
+        success: true,
+        message: 'Truck batches retrieved successfully',
+        data: {},
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Truck batches retrieved successfully',
+      data: config.truckBatches || {},
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch truck batches',
     });
   }
 };

@@ -16,6 +16,9 @@ router.get('/stations', configController.getFuelStations);
 router.get('/routes', configController.getRoutes);
 router.get('/routes/find/:destination', configController.findRouteByDestination);
 
+// Truck batches (read-only)
+router.get('/truck-batches', configController.getTruckBatches);
+
 // Formula helpers
 router.get('/formula-variables', configController.getFormulaVariables);
 
