@@ -542,13 +542,9 @@ const FuelRecords = () => {
               className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
               title="Select year to export"
             >
-              {getAvailableYears().length > 0 ? (
-                getAvailableYears().map((year, index) => (
-                  <option key={`year-${year}-${index}`} value={year}>{year}</option>
-                ))
-              ) : (
-                <option key={`year-current-${new Date().getFullYear()}`} value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
-              )}
+              {getAvailableYears().map((year) => (
+                <option key={`export-year-${year}`} value={year}>{year}</option>
+              ))}
             </select>
             <button
               onClick={handleExport}
@@ -606,7 +602,7 @@ const FuelRecords = () => {
           >
             <option key="all-routes" value="">All Routes</option>
             {availableRoutes.map((route) => (
-              <option key={route._id || route.id} value={route.destination}>
+              <option key={`route-${route.destination}`} value={route.destination}>
                 {route.destination}
               </option>
             ))}
