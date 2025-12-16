@@ -514,32 +514,32 @@ const FuelRecords = () => {
           <div className="flex border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
             <button
               onClick={() => setViewMode('records')}
-              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium inline-flex items-center ${
+              className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium inline-flex items-center ${
                 viewMode === 'records'
                   ? 'bg-primary-600 text-white'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
-              <List className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <List className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Records</span>
             </button>
             <button
               onClick={() => setViewMode('analytics')}
-              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium border-l dark:border-gray-600 inline-flex items-center ${
+              className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium border-l dark:border-gray-600 inline-flex items-center ${
                 viewMode === 'analytics'
                   ? 'bg-primary-600 text-white'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
-              <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <BarChart3 className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Analytics</span>
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <select
               value={exportYear}
               onChange={(e) => setExportYear(Number(e.target.value))}
-              className="px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
+              className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
               title="Select year to export"
             >
               {getAvailableYears().length > 0 ? (
@@ -552,18 +552,18 @@ const FuelRecords = () => {
             </select>
             <button
               onClick={handleExport}
-              className="inline-flex items-center px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="inline-flex items-center px-2 sm:px-4 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
               title={`Export fuel records for ${exportYear}`}
             >
-              <Download className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+              <Download className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Export</span>
             </button>
           </div>
           <button
             onClick={handleCreate}
-            className="inline-flex items-center px-3 sm:px-4 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+            className="inline-flex items-center px-2 sm:px-4 py-1.5 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
           >
-            <Plus className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+            <Plus className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">New Record</span>
             <span className="sm:hidden">New</span>
           </button>
