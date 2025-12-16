@@ -6,6 +6,7 @@ import {
   Unlock,
   RotateCcw,
   Search as ScanIcon,
+  Search,
   Copy,
   X,
   AlertTriangle,
@@ -14,6 +15,7 @@ import {
   Loader
 } from 'lucide-react';
 import api from '../../services/api';
+import Pagination from '../../components/Pagination';
 
 interface DriverCredential {
   _id: string;
@@ -48,6 +50,14 @@ const DriverCredentialsManager: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Pagination and search state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+
   // Dialog states
   const [showNewCredentials, setShowNewCredentials] = useState(false);
   const [newCredentials, setNewCredentials] = useState<NewCredential[]>([]);
@@ -59,15 +69,38 @@ const DriverCredentialsManager: React.FC = () => {
   const [newPIN, setNewPIN] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchCredentials();
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    fetchCredentials();
+  }, [currentPage, itemsPerPage, searchTerm, statusFilter]);
 
   const fetchCredentials = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/driver-credentials');
-      setCredentials(response.data.data.data || []);
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+      });
+      
+      if (searchTerm) {
+        params.append('search', searchTerm);
+      }
+      
+      if (statusFilter !== 'all') {
+        params.append('status', statusFilter);
+      }
+      
+      const response = await api.get(`/driver-credentials?${params}`);
+      const apiData = response.data.data;
+      
+      // Backend returns { data: [], pagination: { page, limit, total, totalPages } }
+      setCredentials(apiData.data || []);
+      setCurrentPage(apiData.pagination?.page || 1);
+      setItemsPerPage(apiData.pagination?.limit || 10);
+      setTotalPages(apiData.pagination?.totalPages || 1);
+      setTotalItems(apiData.pagination?.total || 0);
       setError(null);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch driver credentials');
@@ -232,6 +265,38 @@ const DriverCredentialsManager: React.FC = () => {
         </div>
       </div>
 
+      {/* Search and Filters */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by truck number..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
+            />
+          </div>
+          
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as 'all' | 'active' | 'inactive');
+              setCurrentPage(1);
+            }}
+            className="w-full sm:w-48 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive Only</option>
+          </select>
+        </div>
+      </div>
+
       {/* Statistics Cards */}
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -360,6 +425,23 @@ const DriverCredentialsManager: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Pagination */}
+      {credentials.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow mt-4">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+            onPageChange={(page) => setCurrentPage(page)}
+            onItemsPerPageChange={(limit) => {
+              setItemsPerPage(limit);
+              setCurrentPage(1);
+            }}
+          />
+        </div>
+      )}
 
       {/* New Credentials Dialog */}
       {showNewCredentials && (
