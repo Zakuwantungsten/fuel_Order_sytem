@@ -39,7 +39,30 @@ export const authenticate = async (
     // Verify token
     const decoded = jwt.verify(token, config.jwtSecret) as JWTPayload;
 
-    // Check if user still exists
+    // Handle virtual driver users (they don't exist in User collection)
+    // Driver tokens have userId starting with 'driver_' prefix
+    if (decoded.userId.startsWith('driver_')) {
+      // Virtual driver user - validate role and attach to request
+      if (decoded.role !== 'driver') {
+        res.status(401).json({
+          success: false,
+          message: 'Invalid driver token.',
+        });
+        return;
+      }
+
+      // Attach virtual driver user to request
+      req.user = {
+        userId: decoded.userId,
+        username: decoded.username,
+        role: decoded.role,
+      };
+
+      next();
+      return;
+    }
+
+    // Regular user - verify existence in database
     const user = await User.findById(decoded.userId);
     
     if (!user || !user.isActive || user.isDeleted) {

@@ -118,8 +118,9 @@ export function DriverPortal({ user }: DriverPortalProps) {
         
         // Filter entries for this journey
         const filteredLpoData = (lpoData || []).filter((entry: any) => {
-          const entryDoNo = entry.doNo?.toString()?.trim()?.toUpperCase() || '';
-          const entryDest = entry.dest?.toString()?.trim()?.toUpperCase() || entry.destination?.toString()?.trim()?.toUpperCase() || '';
+          // Use correct field names from backend LPOEntry model
+          const entryDoNo = entry.doSdo?.toString()?.trim()?.toUpperCase() || '';
+          const entryDest = entry.destinations?.toString()?.trim()?.toUpperCase() || '';
           const entryReferenceDo = entry.referenceDo?.toString()?.trim()?.toUpperCase() || '';
           
           // Check if this is a NIL DO/destination entry (driver's account or cash)
@@ -154,8 +155,9 @@ export function DriverPortal({ user }: DriverPortalProps) {
         });
         
         lpoEntriesData = filteredLpoData.map((entry: any) => {
-          const entryDoNo = entry.doNo?.toString()?.trim()?.toUpperCase() || '';
-          const entryDest = entry.dest?.toString()?.trim()?.toUpperCase() || entry.destination?.toString()?.trim()?.toUpperCase() || '';
+          // Use correct field names from backend LPOEntry model
+          const entryDoNo = entry.doSdo?.toString()?.trim()?.toUpperCase() || '';
+          const entryDest = entry.destinations?.toString()?.trim()?.toUpperCase() || '';
           const isNilDO = entryDoNo === 'NIL' || entryDoNo === '' || entryDoNo === 'N/A';
           const isNilDest = entryDest === 'NIL' || entryDest === '' || entryDest === 'N/A';
           
@@ -163,13 +165,13 @@ export function DriverPortal({ user }: DriverPortalProps) {
             id: entry._id || entry.id,
             date: entry.date,
             lpoNo: entry.lpoNo,
-            station: entry.station,
-            doNo: isNilDO ? 'NIL' : (entry.doNo || 'N/A'),
+            station: entry.dieselAt || 'N/A',  // Backend field: dieselAt
+            doNo: isNilDO ? 'NIL' : (entry.doSdo || 'N/A'),  // Backend field: doSdo
             truckNo: entry.truckNo,
-            liters: entry.liters,
-            rate: entry.rate || 0,
-            amount: entry.amount || (entry.liters * (entry.rate || 0)),
-            destination: isNilDest ? 'NIL' : (entry.dest || entry.destination || 'N/A'),
+            liters: entry.ltrs || 0,  // Backend field: ltrs
+            rate: entry.pricePerLtr || 0,  // Backend field: pricePerLtr
+            amount: (entry.ltrs || 0) * (entry.pricePerLtr || 0),
+            destination: isNilDest ? 'NIL' : (entry.destinations || 'N/A'),  // Backend field: destinations
             isCancelled: entry.isCancelled,
             isDriverAccount: entry.isDriverAccount || isNilDO, // Mark NIL DO as driver account type
           };
@@ -367,13 +369,6 @@ export function DriverPortal({ user }: DriverPortalProps) {
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
-              <button
-                onClick={handleLogout}
-                className="p-2 rounded-full bg-red-500 hover:bg-red-400 transition-colors"
-                title="Logout"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
             </div>
           </div>
         </div>
@@ -413,13 +408,6 @@ export function DriverPortal({ user }: DriverPortalProps) {
                 title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
-              <button
-                onClick={handleLogout}
-                className="p-2 rounded-full bg-red-500 hover:bg-red-400 transition-colors"
-                title="Logout"
-              >
-                <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -470,7 +458,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
               >
                 {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
               </button>
-              {/* Profile Menu - Always visible, at far right */}
+              {/* Profile Menu with Account Actions */}
               <div className="relative">
                 <button
                   onClick={() => setShowProfileMenu(!showProfileMenu)}

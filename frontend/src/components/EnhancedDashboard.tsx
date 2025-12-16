@@ -7,7 +7,6 @@ import {
   LogOut, 
   Menu, 
   X,
-  Bell,
   TruckIcon,
   MapPin,
   DollarSign,
@@ -20,7 +19,6 @@ import {
   FileSearch,
   Trash2,
   Users,
-  Zap,
   TrendingUp,
   Route,
   Key,
@@ -41,7 +39,6 @@ import NotificationsPage from './NotificationsPage';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
-import { useNavigate } from 'react-router-dom';
 
 // Import your existing components
 import Dashboard from '../pages/Dashboard';
@@ -338,39 +335,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     return <OfficerPortal user={user} />;
   }
 
-  // For drivers, show full-screen mobile layout
+  // For drivers, render DriverPortal directly without wrapper
+  // DriverPortal has its own complete header with all controls
   if (isDriver) {
-    return (
-      <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden transition-colors">
-        {/* Mobile Header for Drivers */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-4 flex items-center flex-shrink-0 md:hidden">
-          <div className="flex items-center space-x-3 flex-1">
-            <Truck className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-            <span className="font-bold text-gray-800 dark:text-gray-100">Driver Portal</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={toggleTheme}
-              className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <button
-              onClick={logout}
-              className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </header>
-
-        {/* Driver Content */}
-        <main className="flex-1 overflow-y-auto">
-          {renderActiveComponent()}
-        </main>
-      </div>
-    );
+    return renderActiveComponent();
   }
 
   // For station managers (station_manager, manager, super_manager), show full-screen layout without sidebar

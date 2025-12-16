@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { User, DriverCredential } from '../models';
 import { ApiError } from '../middleware/errorHandler';
-import { generateTokens, verifyRefreshToken, logger } from '../utils';
+import { generateTokens, verifyRefreshToken, logger, createDriverUserId } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { AuthRequest } from '../middleware/auth';
 import { LoginRequest, RegisterRequest, AuthResponse, JWTPayload } from '../types';
@@ -141,9 +141,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       // Use the actual truck number from the credential (database format)
       const actualTruckNo = driverCredential.truckNo;
 
-      // Create driver user object
+      // Create driver user object with safe ID (uses underscores instead of spaces)
+      // This prevents MongoDB ObjectId casting errors in authentication middleware
       const driverUser = {
-        _id: `driver_${actualTruckNo}`,
+        _id: createDriverUserId(actualTruckNo), // e.g., "driver_T991_EFN"
         username: actualTruckNo,
         email: `${actualTruckNo.toLowerCase().replace(/\s+/g, '')}@driver.local`,
         firstName: driverCredential.driverName || 'Driver',
