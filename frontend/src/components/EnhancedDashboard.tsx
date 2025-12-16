@@ -408,9 +408,9 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       )}
       
       {/* Sidebar */}
-      <div className={`bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-30 transform ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } lg:translate-x-0 w-64 ${!sidebarOpen && 'lg:w-16'}`}>
+      <div className={`bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 right-0 lg:right-auto lg:left-0 z-30 transform ${
+        sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
+      } w-64 ${!sidebarOpen && 'lg:w-16'}`}>
         <div className="p-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             {sidebarOpen && (

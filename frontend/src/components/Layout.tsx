@@ -118,9 +118,9 @@ const Layout = ({ children }: LayoutProps) => {
       {/* Sidebar */}
       <div 
         className={`
-          fixed inset-y-0 left-0 z-30 bg-white dark:bg-gray-800 shadow-lg transform transition-all duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:translate-x-0
+          fixed inset-y-0 z-30 bg-white dark:bg-gray-800 shadow-lg transform transition-all duration-300 ease-in-out
+          right-0 lg:right-auto lg:left-0
+          ${sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
           ${shouldShowText ? 'w-64' : 'w-16'}
         `}
         onMouseEnter={() => setIsHovered(true)}
@@ -208,8 +208,120 @@ const Layout = ({ children }: LayoutProps) => {
 
       {/* Main content */}
       <div className={`transition-all duration-300 ease-in-out ${shouldShowText ? 'lg:pl-64' : 'lg:pl-16'}`}>
-        {/* Top bar */}
-        <div className="sticky top-0 z-50 flex items-center h-16 bg-white dark:bg-gray-800 shadow-sm px-4 lg:px-8 border-b dark:border-gray-700 transition-colors">
+        {/* Mobile Header */}
+        <header className="lg:hidden bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-3 flex items-center gap-2 flex-shrink-0 transition-colors sticky top-0 z-50">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200 truncate">
+              {navigation.find(item => isActive(item.href))?.name || 'Dashboard'}
+            </h2>
+          </div>
+          
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0"
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun className="w-5 h-5 text-gray-600 dark:text-gray-300" /> : <Moon className="w-5 h-5 text-gray-600 dark:text-gray-300" />}
+            </button>
+
+            {/* Notification Bell */}
+            <div className="flex-shrink-0">
+              <NotificationBell 
+                onNotificationClick={(notification) => {
+                  if (notification.metadata?.fuelRecordId) {
+                    navigate(`/fuel-records?id=${notification.metadata.fuelRecordId}`);
+                  }
+                }}
+                onEditDO={(doId) => {
+                  navigate(`/delivery-orders?edit=${doId}`);
+                }}
+              />
+            </div>
+
+            {/* Profile Menu */}
+            <div className="relative flex-shrink-0">
+              <button 
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">
+                    {user?.firstName?.[0]}{user?.lastName?.[0]}
+                  </span>
+                </div>
+              </button>
+              
+              {showUserMenu && (
+                <>
+                  <div className="fixed inset-0 z-[100]" onClick={() => setShowUserMenu(false)} />
+                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
+                          <span className="text-white font-medium">
+                            {user?.firstName?.[0]}{user?.lastName?.[0]}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-gray-100">
+                            {user?.firstName} {user?.lastName}
+                          </div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">{user?.email}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRoleInfo(user?.role || 'viewer').color}`}>
+                          <Shield className="w-3 h-3 mr-1" />
+                          {getRoleInfo(user?.role || 'viewer').name}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      <User className="w-4 h-4 mr-3" />
+                      Profile Settings
+                    </button>
+                    
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        logout();
+                        navigate('/login');
+                      }}
+                      className="w-full flex items-center px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      <LogOut className="w-4 h-4 mr-3" />
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0"
+              aria-label="Open menu"
+            >
+              <div className="flex flex-col space-y-1">
+                <div className="w-5 h-0.5 bg-gray-600 dark:bg-gray-300"></div>
+                <div className="w-5 h-0.5 bg-gray-600 dark:bg-gray-300"></div>
+                <div className="w-5 h-0.5 bg-gray-600 dark:bg-gray-300"></div>
+              </div>
+            </button>
+          </div>
+        </header>
+
+        {/* Desktop Top bar */}
+        <div className="hidden lg:flex sticky top-0 z-50 items-center h-16 bg-white dark:bg-gray-800 shadow-sm px-4 lg:px-8 border-b dark:border-gray-700 transition-colors">
           <div className="flex-1">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
               {navigation.find(item => isActive(item.href))?.name || 'Dashboard'}
@@ -343,19 +455,6 @@ const Layout = ({ children }: LayoutProps) => {
               )}
             </div>
           </div>
-          
-          {/* Hamburger Menu - Moved to rightmost position */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden ml-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors group"
-            aria-label="Open menu"
-          >
-            <div className="flex flex-col space-y-1.5">
-              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
-              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
-              <div className="w-6 h-0.5 bg-gray-600 dark:bg-gray-300 group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"></div>
-            </div>
-          </button>
         </div>
 
         {/* Page content */}
