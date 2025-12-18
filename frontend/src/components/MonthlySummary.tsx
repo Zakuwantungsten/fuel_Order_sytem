@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Download, Calendar, Filter, Fuel, DollarSign } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Download, Calendar, Filter, Fuel, DollarSign, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../types';
 import { exportToXLSX } from '../utils/csvParser';
 
@@ -37,6 +37,29 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
   const [groupBy, setGroupBy] = useState<'none' | 'client' | 'destination'>('none');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+
+  // Dropdown states
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
+
+  // Refs for click-outside detection
+  const monthDropdownRef = useRef<HTMLDivElement>(null);
+  const groupByDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside detection for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (monthDropdownRef.current && !monthDropdownRef.current.contains(event.target as Node)) {
+        setShowMonthDropdown(false);
+      }
+      if (groupByDropdownRef.current && !groupByDropdownRef.current.contains(event.target as Node)) {
+        setShowGroupByDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter orders by doType
   const filteredOrders = useMemo(() => {
@@ -203,15 +226,34 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
           
           <div className="flex flex-wrap items-center gap-3">
             {/* Month Selector */}
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
-            >
-              {availableMonths.map(month => (
-                <option key={month} value={month}>{month}</option>
-              ))}
-            </select>
+            <div className="relative" ref={monthDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors flex items-center gap-2"
+              >
+                <span>{selectedMonth}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+              {showMonthDropdown && (
+                <div className="absolute z-50 mt-1 w-full min-w-[120px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+                  {availableMonths.map(month => (
+                    <button
+                      key={month}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMonth(month);
+                        setShowMonthDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                    >
+                      <span>{month}</span>
+                      {selectedMonth === month && <Check className="w-4 h-4 text-primary-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* View Mode Toggle */}
             <div className="flex border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
@@ -241,15 +283,38 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
             {viewMode === 'detailed' && (
               <div className="flex items-center gap-2">
                 <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                <select
-                  value={groupBy}
-                  onChange={(e) => setGroupBy(e.target.value as any)}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
-                >
-                  <option value="none">No Grouping</option>
-                  <option value="client">Group by Client</option>
-                  <option value="destination">Group by Destination</option>
-                </select>
+                <div className="relative" ref={groupByDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowGroupByDropdown(!showGroupByDropdown)}
+                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors flex items-center gap-2"
+                  >
+                    <span>
+                      {groupBy === 'none' ? 'No Grouping' : 
+                       groupBy === 'client' ? 'Group by Client' : 
+                       'Group by Destination'}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  </button>
+                  {showGroupByDropdown && (
+                    <div className="absolute z-50 mt-1 w-full min-w-[180px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+                      {[{value: 'none', label: 'No Grouping'}, {value: 'client', label: 'Group by Client'}, {value: 'destination', label: 'Group by Destination'}].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setGroupBy(option.value as any);
+                            setShowGroupByDropdown(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                        >
+                          <span>{option.label}</span>
+                          {groupBy === option.value && <Check className="w-4 h-4 text-primary-600" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit } from 'lucide-react';
+import { Search, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
 import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
@@ -61,6 +61,39 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [selectedWorkbookId, setSelectedWorkbookId] = useState<string | number | null>(null);
   const [previousFilterDoType, setPreviousFilterDoType] = useState<'ALL' | 'DO' | 'SDO'>('DO'); // Remember filter before opening workbook
   const [exportingYear, setExportingYear] = useState<number | null>(null);
+
+  // Filter dropdown states
+  const [showWorkbookYearDropdown, setShowWorkbookYearDropdown] = useState(false);
+  const [showDoTypeDropdown, setShowDoTypeDropdown] = useState(false);
+  const [showFilterTypeDropdown, setShowFilterTypeDropdown] = useState(false);
+  const [showFilterStatusDropdown, setShowFilterStatusDropdown] = useState(false);
+
+  // Refs for click-outside detection
+  const workbookYearDropdownRef = useRef<HTMLDivElement>(null);
+  const doTypeDropdownRef = useRef<HTMLDivElement>(null);
+  const filterTypeDropdownRef = useRef<HTMLDivElement>(null);
+  const filterStatusDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside detection for filter dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (workbookYearDropdownRef.current && !workbookYearDropdownRef.current.contains(event.target as Node)) {
+        setShowWorkbookYearDropdown(false);
+      }
+      if (doTypeDropdownRef.current && !doTypeDropdownRef.current.contains(event.target as Node)) {
+        setShowDoTypeDropdown(false);
+      }
+      if (filterTypeDropdownRef.current && !filterTypeDropdownRef.current.contains(event.target as Node)) {
+        setShowFilterTypeDropdown(false);
+      }
+      if (filterStatusDropdownRef.current && !filterStatusDropdownRef.current.contains(event.target as Node)) {
+        setShowFilterStatusDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     loadOrders();
@@ -1047,17 +1080,34 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
               <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Export Workbook</h3>
                 <div className="flex items-center gap-4">
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  >
-                    {availableYears.map((year) => (
-                      <option key={year} value={year}>
-                        {filterDoType === 'SDO' ? `SDO ${year}` : `DELIVERY ORDERS ${year}`}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative" ref={workbookYearDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setShowWorkbookYearDropdown(!showWorkbookYearDropdown)}
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2 min-w-[200px]"
+                    >
+                      <span>{filterDoType === 'SDO' ? `SDO ${selectedYear}` : `DELIVERY ORDERS ${selectedYear}`}</span>
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    </button>
+                    {showWorkbookYearDropdown && (
+                      <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+                        {availableYears.map((year) => (
+                          <button
+                            key={year}
+                            type="button"
+                            onClick={() => {
+                              setSelectedYear(year);
+                              setShowWorkbookYearDropdown(false);
+                            }}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                          >
+                            <span>{filterDoType === 'SDO' ? `SDO ${year}` : `DELIVERY ORDERS ${year}`}</span>
+                            {selectedYear === year && <Check className="w-4 h-4 text-primary-600" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleExportWorkbook(selectedYear)}
                     disabled={exportingYear !== null}
@@ -1298,33 +1348,103 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
-              <select 
-                value={filterDoType}
-                onChange={(e) => { setFilterDoType(e.target.value as 'ALL' | 'DO' | 'SDO'); setCurrentPage(1); }}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              >
-                <option value="DO">DO - Delivery Orders</option>
-                <option value="SDO">SDO - Special Delivery Orders</option>
-                <option value="ALL">All Order Types</option>
-              </select>
-              <select 
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              >
-                <option value="ALL">All Types</option>
-                <option value="IMPORT">Import</option>
-                <option value="EXPORT">Export</option>
-              </select>
-              <select 
-                value={filterStatus}
-                onChange={(e) => handleFilterStatusChange(e.target.value as 'all' | 'active' | 'cancelled')}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              <div className="relative" ref={doTypeDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowDoTypeDropdown(!showDoTypeDropdown)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                >
+                  <span>
+                    {filterDoType === 'DO' ? 'DO - Delivery Orders' : 
+                     filterDoType === 'SDO' ? 'SDO - Special Delivery Orders' : 
+                     'All Order Types'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showDoTypeDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+                    {[{value: 'DO', label: 'DO - Delivery Orders'}, {value: 'SDO', label: 'SDO - Special Delivery Orders'}, {value: 'ALL', label: 'All Order Types'}].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setFilterDoType(option.value as 'ALL' | 'DO' | 'SDO');
+                          setCurrentPage(1);
+                          setShowDoTypeDropdown(false);
+                        }}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                      >
+                        <span>{option.label}</span>
+                        {filterDoType === option.value && <Check className="w-4 h-4 text-primary-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative" ref={filterTypeDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowFilterTypeDropdown(!showFilterTypeDropdown)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                >
+                  <span>
+                    {filterType === 'ALL' ? 'All Types' : 
+                     filterType === 'IMPORT' ? 'Import' : 
+                     'Export'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showFilterTypeDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+                    {[{value: 'ALL', label: 'All Types'}, {value: 'IMPORT', label: 'Import'}, {value: 'EXPORT', label: 'Export'}].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setFilterType(option.value);
+                          setShowFilterTypeDropdown(false);
+                        }}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                      >
+                        <span>{option.label}</span>
+                        {filterType === option.value && <Check className="w-4 h-4 text-primary-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative" ref={filterStatusDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowFilterStatusDropdown(!showFilterStatusDropdown)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                >
+                  <span>
+                    {filterStatus === 'all' ? 'All Status' : 
+                     filterStatus === 'active' ? 'Active' : 
+                     'Cancelled'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showFilterStatusDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+                    {[{value: 'all', label: 'All Status'}, {value: 'active', label: 'Active'}, {value: 'cancelled', label: 'Cancelled'}].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          handleFilterStatusChange(option.value as 'all' | 'active' | 'cancelled');
+                          setShowFilterStatusDropdown(false);
+                        }}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                      >
+                        <span>{option.label}</span>
+                        {filterStatus === option.value && <Check className="w-4 h-4 text-primary-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <input
                 type="date"
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"

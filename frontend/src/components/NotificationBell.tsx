@@ -217,7 +217,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
             className="fixed inset-0 z-[100] pointer-events-auto"
             onClick={() => setShowDropdown(false)}
           />
-          <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 z-[110] max-h-[600px] overflow-hidden flex flex-col pointer-events-auto">
+          <div className="absolute right-0 mt-2 w-96 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 z-[110] max-h-[80vh] overflow-hidden flex flex-col pointer-events-auto">
             {/* Header */}
             <div className="px-4 py-3 border-b dark:border-gray-700 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">

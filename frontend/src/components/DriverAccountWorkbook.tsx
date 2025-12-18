@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, X, FileSpreadsheet, Trash2, 
   Copy, User, AlertTriangle, FileDown, Search,
-  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download
+  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download, Check
 } from 'lucide-react';
 import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary, FuelStationConfig } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,9 +32,27 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const [entryDropdownPosition, setEntryDropdownPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
   const [availableYears, setAvailableYears] = useState<number[]>([new Date().getFullYear()]);
+  
+  // Dropdown states for main component
+  const [showYearDropdown, setShowYearDropdown] = useState(false);
+  
+  // Dropdown refs for main component
+  const yearDropdownRef = useRef<HTMLDivElement>(null);
 
   // Current year for reference
   const currentYear = new Date().getFullYear();
+
+  // Click outside detection for year dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target as Node)) {
+        setShowYearDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Fetch available years from API
   useEffect(() => {
@@ -398,15 +416,36 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
               Driver's Account
             </h1>
             {/* Year Filter */}
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
-            >
-              {availableYears.map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+            <div className="relative" ref={yearDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowYearDropdown(!showYearDropdown)}
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium flex items-center space-x-2"
+              >
+                <span>{selectedYear}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${showYearDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showYearDropdown && (
+                <div className="absolute z-50 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {availableYears.map(y => (
+                    <button
+                      key={y}
+                      type="button"
+                      onClick={() => {
+                        setSelectedYear(y);
+                        setShowYearDropdown(false);
+                      }}
+                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between whitespace-nowrap ${
+                        selectedYear === y ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>{y}</span>
+                      {selectedYear === y && <Check className="w-4 h-4" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <span className="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm rounded-full">
               {workbook?.entries.length || 0} entries
             </span>
@@ -425,7 +464,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
               </button>
               
               {showCopyDropdown && (
-                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50">
+                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 max-h-[80vh] overflow-y-auto">
                   <button
                     onClick={() => copyToClipboard('text')}
                     className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
@@ -700,8 +739,12 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                         
                         {openEntryDropdown === entry.id && (
                           <div 
-                            className="fixed w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50"
-                            style={{ top: entryDropdownPosition.top, left: entryDropdownPosition.left }}
+                            className="fixed w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 max-h-[60vh] overflow-y-auto"
+                            style={{ 
+                              top: Math.min(entryDropdownPosition.top, window.innerHeight - 300), 
+                              left: Math.min(entryDropdownPosition.left, window.innerWidth - 200),
+                              maxWidth: 'calc(100vw - 20px)'
+                            }}
                           >
                             <button
                               onClick={() => {
@@ -807,6 +850,29 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
   // Dynamic stations
   const [availableStations, setAvailableStations] = useState<FuelStationConfig[]>([]);
   const [loadingStations, setLoadingStations] = useState(true);
+  
+  // Dropdown states for modal
+  const [showStationDropdown, setShowStationDropdown] = useState(false);
+  const [showPaymentDropdown, setShowPaymentDropdown] = useState(false);
+  
+  // Dropdown refs for modal
+  const stationDropdownRef = useRef<HTMLDivElement>(null);
+  const paymentDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Click outside detection for modal dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
+        setShowStationDropdown(false);
+      }
+      if (paymentDropdownRef.current && !paymentDropdownRef.current.contains(event.target as Node)) {
+        setShowPaymentDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Load stations from database
   useEffect(() => {
@@ -1030,20 +1096,39 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
               </div>
             </div>
 
-            <div>
+            <div className="relative" ref={stationDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Station *</label>
-              <select
-                value={formData.station}
-                onChange={(e) => setFormData(prev => ({ ...prev, station: e.target.value }))}
-                required
+              <button
+                type="button"
+                onClick={() => !loadingStations && setShowStationDropdown(!showStationDropdown)}
                 disabled={loadingStations}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between disabled:opacity-50"
               >
-                <option value="">{loadingStations ? 'Loading stations...' : 'Select Station'}</option>
-                {stations.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                <span className={!formData.station ? 'text-gray-400' : ''}>
+                  {formData.station || (loadingStations ? 'Loading stations...' : 'Select Station')}
+                </span>
+                <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showStationDropdown && (
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {stations.map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, station: s }));
+                        setShowStationDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                        formData.station === s ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>{s}</span>
+                      {formData.station === s && <Check className="w-4 h-4" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -1101,20 +1186,38 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
               Payment Details
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="relative" ref={paymentDropdownRef}>
                 <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
                   Payment Mode *
                 </label>
-                <select
-                  value={formData.paymentMode}
-                  onChange={(e) => setFormData(prev => ({ ...prev, paymentMode: e.target.value as PaymentMode, paybillOrMobile: e.target.value === 'CASH' ? '' : prev.paybillOrMobile }))}
-                  required
-                  className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-blue-500"
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentDropdown(!showPaymentDropdown)}
+                  className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-left flex items-center justify-between"
                 >
-                  {paymentModes.map(pm => (
-                    <option key={pm.value} value={pm.value}>{pm.label}</option>
-                  ))}
-                </select>
+                  <span>{paymentModes.find(pm => pm.value === formData.paymentMode)?.label || 'Select Payment Mode'}</span>
+                  <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showPaymentDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showPaymentDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {paymentModes.map(pm => (
+                      <button
+                        key={pm.value}
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, paymentMode: pm.value, paybillOrMobile: pm.value === 'CASH' ? '' : prev.paybillOrMobile }));
+                          setShowPaymentDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          formData.paymentMode === pm.value ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>{pm.label}</span>
+                        {formData.paymentMode === pm.value && <Check className="w-4 h-4" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>

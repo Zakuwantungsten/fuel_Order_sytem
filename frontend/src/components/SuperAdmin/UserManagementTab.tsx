@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Users, 
   UserPlus, 
@@ -67,6 +67,29 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
   const [showForceLogoutModal, setShowForceLogoutModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Filter dropdown states
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+
+  // Refs for click-outside detection
+  const roleDropdownRef = useRef<HTMLDivElement>(null);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(event.target as Node)) {
+        setShowRoleDropdown(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     loadUsers();
@@ -285,31 +308,83 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Filter by Role
               </label>
-              <select
-                value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value)}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
-              >
-                <option value="">All Roles</option>
-                {USER_ROLES.map(role => (
-                  <option key={role.value} value={role.value}>{role.label}</option>
-                ))}
-              </select>
+              <div className="relative" ref={roleDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100 flex items-center justify-between"
+                >
+                  <span>{filterRole ? USER_ROLES.find(r => r.value === filterRole)?.label : 'All Roles'}</span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showRoleDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterRole('');
+                        setShowRoleDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-100 flex items-center justify-between"
+                    >
+                      <span>All Roles</span>
+                      {filterRole === '' && <Check className="w-4 h-4 text-indigo-600" />}
+                    </button>
+                    {USER_ROLES.map(role => (
+                      <button
+                        key={role.value}
+                        type="button"
+                        onClick={() => {
+                          setFilterRole(role.value);
+                          setShowRoleDropdown(false);
+                        }}
+                        className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-100 flex items-center justify-between"
+                      >
+                        <span>{role.label}</span>
+                        {filterRole === role.value && <Check className="w-4 h-4 text-indigo-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Filter by Status
               </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
-              >
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
+              <div className="relative" ref={statusDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100 flex items-center justify-between"
+                >
+                  <span>
+                    {filterStatus === '' ? 'All Status' :
+                     filterStatus === 'active' ? 'Active' :
+                     'Inactive'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showStatusDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg">
+                    {[{value: '', label: 'All Status'}, {value: 'active', label: 'Active'}, {value: 'inactive', label: 'Inactive'}].map(option => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setFilterStatus(option.value);
+                          setShowStatusDropdown(false);
+                        }}
+                        className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-100 flex items-center justify-between"
+                      >
+                        <span>{option.label}</span>
+                        {filterStatus === option.value && <Check className="w-4 h-4 text-indigo-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

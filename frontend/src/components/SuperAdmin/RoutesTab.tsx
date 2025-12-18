@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Route, Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Route, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-react';
 import { configAPI } from '../../services/api';
 import { RouteConfig } from '../../types';
 
@@ -21,9 +21,27 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
     defaultTotalLiters: '',
     description: '',
   });
+  
+  // Dropdown state
+  const [showRouteTypeDropdown, setShowRouteTypeDropdown] = useState(false);
+  
+  // Dropdown ref
+  const routeTypeDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadData();
+  }, []);
+  
+  // Click outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (routeTypeDropdownRef.current && !routeTypeDropdownRef.current.contains(event.target as Node)) {
+        setShowRouteTypeDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const loadData = async () => {
@@ -295,13 +313,46 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                   <p className="mt-1 text-xs text-gray-500">Alternative names for destination (e.g., "DSM, DAR" for Dar es Salaam)</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="relative" ref={routeTypeDropdownRef}>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Route Type *</label>
-                    <select value={routeForm.routeType} onChange={(e) => setRouteForm({ ...routeForm, routeType: e.target.value as 'IMPORT' | 'EXPORT' })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-                      <option value="IMPORT">Import (Going/Outbound)</option>
-                      <option value="EXPORT">Export (Return/Inbound)</option>
-                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowRouteTypeDropdown(!showRouteTypeDropdown)}
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
+                    >
+                      <span>{routeForm.routeType === 'IMPORT' ? 'Import (Going/Outbound)' : 'Export (Return/Inbound)'}</span>
+                      <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRouteTypeDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showRouteTypeDropdown && (
+                      <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRouteForm({ ...routeForm, routeType: 'IMPORT' });
+                            setShowRouteTypeDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                            routeForm.routeType === 'IMPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          }`}
+                        >
+                          <span>Import (Going/Outbound)</span>
+                          {routeForm.routeType === 'IMPORT' && <Check className="w-4 h-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRouteForm({ ...routeForm, routeType: 'EXPORT' });
+                            setShowRouteTypeDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                            routeForm.routeType === 'EXPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          }`}
+                        >
+                          <span>Export (Return/Inbound)</span>
+                          {routeForm.routeType === 'EXPORT' && <Check className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    )}
                     <p className="mt-1 text-xs text-gray-500">Import = outgoing routes, Export = return routes</p>
                   </div>
                   <div>

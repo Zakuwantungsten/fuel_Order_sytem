@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
 import { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
@@ -332,6 +332,43 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
     return '';
   });
+
+  // Dropdown state for custom button-based dropdowns (mobile-friendly)
+  const [showStationDropdown, setShowStationDropdown] = useState(false);
+  const [showGoingCheckpointDropdown, setShowGoingCheckpointDropdown] = useState(false);
+  const [showReturningCheckpointDropdown, setShowReturningCheckpointDropdown] = useState(false);
+  const [showCustomGoingDropdown, setShowCustomGoingDropdown] = useState(false);
+  const [showCustomReturnDropdown, setShowCustomReturnDropdown] = useState(false);
+  
+  // Refs for dropdown positioning
+  const stationDropdownRef = React.useRef<HTMLDivElement>(null);
+  const goingCheckpointRef = React.useRef<HTMLDivElement>(null);
+  const returningCheckpointRef = React.useRef<HTMLDivElement>(null);
+  const customGoingRef = React.useRef<HTMLDivElement>(null);
+  const customReturnRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdowns when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
+        setShowStationDropdown(false);
+      }
+      if (goingCheckpointRef.current && !goingCheckpointRef.current.contains(event.target as Node)) {
+        setShowGoingCheckpointDropdown(false);
+      }
+      if (returningCheckpointRef.current && !returningCheckpointRef.current.contains(event.target as Node)) {
+        setShowReturningCheckpointDropdown(false);
+      }
+      if (customGoingRef.current && !customGoingRef.current.contains(event.target as Node)) {
+        setShowCustomGoingDropdown(false);
+      }
+      if (customReturnRef.current && !customReturnRef.current.contains(event.target as Node)) {
+        setShowCustomReturnDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Handle inspect modal open - view fuel record details
   const handleInspectRecord = (index: number) => {
@@ -1767,27 +1804,86 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Station *
                 </label>
-                <select
-                  name="station"
-                  value={formData.station}
-                  onChange={handleHeaderChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  disabled={loadingStations}
-                >
-                  <option value="">{loadingStations ? 'Loading stations...' : 'Select Station'}</option>
-                  {availableStations.map(station => (
-                    <option key={station._id} value={station.stationName}>{station.stationName}</option>
-                  ))}
-                  <option value="CASH">CASH</option>
-                  <option value="CUSTOM">CUSTOM</option>
-                </select>
+                <div className="relative" ref={stationDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => !loadingStations && setShowStationDropdown(!showStationDropdown)}
+                    disabled={loadingStations}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className={!formData.station ? 'text-gray-400' : ''}>
+                      {loadingStations ? 'Loading stations...' : (formData.station || 'Select Station')}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {showStationDropdown && !loadingStations && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleHeaderChange({ target: { name: 'station', value: '' } } as any);
+                          setShowStationDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          !formData.station ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>Select Station</span>
+                        {!formData.station && <Check className="w-4 h-4" />}
+                      </button>
+                      {availableStations.map(station => (
+                        <button
+                          key={station._id}
+                          type="button"
+                          onClick={() => {
+                            handleHeaderChange({ target: { name: 'station', value: station.stationName } } as any);
+                            setShowStationDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                            formData.station === station.stationName ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          }`}
+                        >
+                          <span>{station.stationName}</span>
+                          {formData.station === station.stationName && <Check className="w-4 h-4" />}
+                        </button>
+                      ))}
+                      <div className="border-t border-gray-200 dark:border-gray-600"></div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleHeaderChange({ target: { name: 'station', value: 'CASH' } } as any);
+                          setShowStationDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          formData.station === 'CASH' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>CASH</span>
+                        {formData.station === 'CASH' && <Check className="w-4 h-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleHeaderChange({ target: { name: 'station', value: 'CUSTOM' } } as any);
+                          setShowStationDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          formData.station === 'CUSTOM' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>CUSTOM</span>
+                        {formData.station === 'CUSTOM' && <Check className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {formData.station && (() => {
                   const station = availableStations.find(s => s.stationName === formData.station);
                   if (station) {
                     const currency = station.defaultRate < 10 ? 'USD' : 'TZS';
                     return (
-                      <p className="text-xs text-green-600 mt-1">
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                         Default: Going {station.defaultLitersGoing}L, Returning {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
                       </p>
                     );
@@ -1905,24 +2001,42 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </label>
                     
                     {goingEnabled && (
-                      <div>
+                      <div className="relative" ref={goingCheckpointRef}>
                         <label className="block text-xs font-medium text-orange-800 dark:text-orange-300 mb-1">
                           Going Checkpoint *
                         </label>
-                        <select
-                          value={goingCheckpoint}
-                          onChange={(e) => setGoingCheckpoint(e.target.value as CancellationPoint)}
-                          className={`w-full px-2 py-1.5 text-sm border rounded-md focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                        <button
+                          type="button"
+                          onClick={() => setShowGoingCheckpointDropdown(!showGoingCheckpointDropdown)}
+                          className={`w-full px-2 py-1.5 text-sm border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between ${
                             !goingCheckpoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
                           }`}
                         >
-                          <option value="">Select checkpoint...</option>
-                          {getAvailableCancellationPoints('CASH').going.map((point) => (
-                            <option key={point} value={point}>
-                              {getCancellationPointDisplayName(point)}
-                            </option>
-                          ))}
-                        </select>
+                          <span className={!goingCheckpoint ? 'text-gray-400' : ''}>
+                            {goingCheckpoint ? getCancellationPointDisplayName(goingCheckpoint) : 'Select checkpoint...'}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showGoingCheckpointDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showGoingCheckpointDropdown && (
+                          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {getAvailableCancellationPoints('CASH').going.map((point) => (
+                              <button
+                                key={point}
+                                type="button"
+                                onClick={() => {
+                                  setGoingCheckpoint(point as CancellationPoint);
+                                  setShowGoingCheckpointDropdown(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                                  goingCheckpoint === point ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-gray-100'
+                                }`}
+                              >
+                                <span>{getCancellationPointDisplayName(point)}</span>
+                                {goingCheckpoint === point && <Check className="w-4 h-4" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {!goingCheckpoint && (
                           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                             ⚠ Select checkpoint
@@ -1948,24 +2062,42 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </label>
                     
                     {returningEnabled && (
-                      <div>
+                      <div className="relative" ref={returningCheckpointRef}>
                         <label className="block text-xs font-medium text-orange-800 dark:text-orange-300 mb-1">
                           Returning Checkpoint *
                         </label>
-                        <select
-                          value={returningCheckpoint}
-                          onChange={(e) => setReturningCheckpoint(e.target.value as CancellationPoint)}
-                          className={`w-full px-2 py-1.5 text-sm border rounded-md focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                        <button
+                          type="button"
+                          onClick={() => setShowReturningCheckpointDropdown(!showReturningCheckpointDropdown)}
+                          className={`w-full px-2 py-1.5 text-sm border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between ${
                             !returningCheckpoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
                           }`}
                         >
-                          <option value="">Select checkpoint...</option>
-                          {getAvailableCancellationPoints('CASH').returning.map((point) => (
-                            <option key={point} value={point}>
-                              {getCancellationPointDisplayName(point)}
-                            </option>
-                          ))}
-                        </select>
+                          <span className={!returningCheckpoint ? 'text-gray-400' : ''}>
+                            {returningCheckpoint ? getCancellationPointDisplayName(returningCheckpoint) : 'Select checkpoint...'}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showReturningCheckpointDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showReturningCheckpointDropdown && (
+                          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {getAvailableCancellationPoints('CASH').returning.map((point) => (
+                              <button
+                                key={point}
+                                type="button"
+                                onClick={() => {
+                                  setReturningCheckpoint(point as CancellationPoint);
+                                  setShowReturningCheckpointDropdown(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                                  returningCheckpoint === point ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-gray-100'
+                                }`}
+                              >
+                                <span>{getCancellationPointDisplayName(point)}</span>
+                                {returningCheckpoint === point && <Check className="w-4 h-4" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {!returningCheckpoint && (
                           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                             ⚠ Select checkpoint
@@ -2104,24 +2236,42 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </label>
                     
                     {customGoingEnabled && (
-                      <div className="mt-3 ml-8">
+                      <div className="mt-3 ml-8 relative" ref={customGoingRef}>
                         <label className="block text-sm font-medium text-green-700 dark:text-green-300 mb-1">
                           Select Fuel Record Column for Going *
                         </label>
-                        <select
-                          value={customGoingCheckpoint}
-                          onChange={(e) => setCustomGoingCheckpoint(e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 ${
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomGoingDropdown(!showCustomGoingDropdown)}
+                          className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between ${
                             !customGoingCheckpoint ? 'border-red-300 dark:border-red-600' : 'border-green-300 dark:border-green-600'
                           }`}
                         >
-                          <option value="">Select checkpoint column...</option>
-                          {FUEL_RECORD_COLUMNS.going.map((col) => (
-                            <option key={col.field} value={col.field}>
-                              {col.label}
-                            </option>
-                          ))}
-                        </select>
+                          <span className={!customGoingCheckpoint ? 'text-gray-400' : ''}>
+                            {customGoingCheckpoint ? FUEL_RECORD_COLUMNS.going.find(c => c.field === customGoingCheckpoint)?.label : 'Select checkpoint column...'}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showCustomGoingDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showCustomGoingDropdown && (
+                          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {FUEL_RECORD_COLUMNS.going.map((col) => (
+                              <button
+                                key={col.field}
+                                type="button"
+                                onClick={() => {
+                                  setCustomGoingCheckpoint(col.field);
+                                  setShowCustomGoingDropdown(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                                  customGoingCheckpoint === col.field ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'
+                                }`}
+                              >
+                                <span>{col.label}</span>
+                                {customGoingCheckpoint === col.field && <Check className="w-4 h-4" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {!customGoingCheckpoint && (
                           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                             ⚠ Please select where Going fuel amounts should be recorded
@@ -2154,24 +2304,42 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </label>
                     
                     {customReturnEnabled && (
-                      <div className="mt-3 ml-8">
+                      <div className="mt-3 ml-8 relative" ref={customReturnRef}>
                         <label className="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">
                           Select Fuel Record Column for Return *
                         </label>
-                        <select
-                          value={customReturnCheckpoint}
-                          onChange={(e) => setCustomReturnCheckpoint(e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 ${
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomReturnDropdown(!showCustomReturnDropdown)}
+                          className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between ${
                             !customReturnCheckpoint ? 'border-red-300 dark:border-red-600' : 'border-blue-300 dark:border-blue-600'
                           }`}
                         >
-                          <option value="">Select checkpoint column...</option>
-                          {FUEL_RECORD_COLUMNS.return.map((col) => (
-                            <option key={col.field} value={col.field}>
-                              {col.label}
-                            </option>
-                          ))}
-                        </select>
+                          <span className={!customReturnCheckpoint ? 'text-gray-400' : ''}>
+                            {customReturnCheckpoint ? FUEL_RECORD_COLUMNS.return.find(c => c.field === customReturnCheckpoint)?.label : 'Select checkpoint column...'}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showCustomReturnDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showCustomReturnDropdown && (
+                          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {FUEL_RECORD_COLUMNS.return.map((col) => (
+                              <button
+                                key={col.field}
+                                type="button"
+                                onClick={() => {
+                                  setCustomReturnCheckpoint(col.field);
+                                  setShowCustomReturnDropdown(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                                  customReturnCheckpoint === col.field ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
+                                }`}
+                              >
+                                <span>{col.label}</span>
+                                {customReturnCheckpoint === col.field && <Check className="w-4 h-4" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {!customReturnCheckpoint && (
                           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                             ⚠ Please select where Return fuel amounts should be recorded

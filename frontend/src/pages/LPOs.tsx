@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check } from 'lucide-react';
 import XLSX from 'xlsx-js-style';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
 import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
@@ -53,6 +53,29 @@ const LPOs = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
+
+  // Filter dropdown states
+  const [showWorkbookYearDropdown, setShowWorkbookYearDropdown] = useState(false);
+  const [showStationDropdown, setShowStationDropdown] = useState(false);
+
+  // Refs for click-outside detection
+  const workbookYearDropdownRef = useRef<HTMLDivElement>(null);
+  const stationDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside detection for filter dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (workbookYearDropdownRef.current && !workbookYearDropdownRef.current.contains(event.target as Node)) {
+        setShowWorkbookYearDropdown(false);
+      }
+      if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
+        setShowStationDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     fetchLpos();
@@ -774,15 +797,34 @@ const LPOs = () => {
           <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Export Workbook</h3>
             <div className="flex items-center gap-4">
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              >
-                {availableYears.map((year) => (
-                  <option key={year} value={year}>LPOS {year}</option>
-                ))}
-              </select>
+              <div className="relative" ref={workbookYearDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowWorkbookYearDropdown(!showWorkbookYearDropdown)}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2 min-w-[150px]"
+                >
+                  <span>LPOS {selectedYear}</span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showWorkbookYearDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {availableYears.map((year) => (
+                      <button
+                        key={year}
+                        type="button"
+                        onClick={() => {
+                          setSelectedYear(year);
+                          setShowWorkbookYearDropdown(false);
+                        }}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                      >
+                        <span>LPOS {year}</span>
+                        {selectedYear === year && <Check className="w-4 h-4 text-primary-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => handleExportWorkbook(selectedYear)}
                 disabled={exportingYear !== null}
@@ -902,7 +944,7 @@ const LPOs = () => {
             </button>
             
             {showMonthDropdown && (
-              <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-y-auto">
+              <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-y-auto left-0 right-0">
                 {/* Quick Select Options */}
                 <div className="p-2 border-b border-gray-200 dark:border-gray-600">
                   {availableMonths.includes(new Date().getMonth() + 1) && (
@@ -954,18 +996,45 @@ const LPOs = () => {
             )}
           </div>
           
-          <select
-            value={stationFilter}
-            onChange={(e) => setStationFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-          >
-            <option value="">All Stations</option>
-            {availableStations.map((station) => (
-              <option key={station} value={station}>
-                {station}
-              </option>
-            ))}
-          </select>
+          <div className="relative" ref={stationDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowStationDropdown(!showStationDropdown)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+            >
+              <span>{stationFilter || 'All Stations'}</span>
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </button>
+            {showStationDropdown && (
+              <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStationFilter('');
+                    setShowStationDropdown(false);
+                  }}
+                  className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                >
+                  <span>All Stations</span>
+                  {stationFilter === '' && <Check className="w-4 h-4 text-primary-600" />}
+                </button>
+                {availableStations.map((station) => (
+                  <button
+                    key={station}
+                    type="button"
+                    onClick={() => {
+                      setStationFilter(station);
+                      setShowStationDropdown(false);
+                    }}
+                    className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                  >
+                    <span>{station}</span>
+                    {stationFilter === station && <Check className="w-4 h-4 text-primary-600" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <input
             type="date"
             value={dateFilter}
@@ -1227,10 +1296,11 @@ const LPOs = () => {
                               
                               {openDropdowns[rowKey] && (
                                 <div 
-                                  className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
+                                  className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999] max-h-[80vh] overflow-y-auto"
                                   style={{
-                                    top: `${dropdownPosition.top}px`,
-                                    left: `${dropdownPosition.left}px`
+                                    top: `${Math.min(dropdownPosition.top, window.innerHeight - 400)}px`,
+                                    left: `${Math.min(dropdownPosition.left, window.innerWidth - 240)}px`,
+                                    maxWidth: 'calc(100vw - 20px)'
                                   }}
                                 >
                                   <div className="py-1">

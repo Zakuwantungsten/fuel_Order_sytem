@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { FileSearch, Download } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { FileSearch, Download, ChevronDown, Check } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
 
 interface AuditLogsTabProps {
@@ -38,6 +38,29 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
     startDate: '',
     endDate: '',
   });
+
+  // Dropdown states
+  const [showActionDropdown, setShowActionDropdown] = useState(false);
+  const [showSeverityDropdown, setShowSeverityDropdown] = useState(false);
+
+  // Refs for click-outside detection
+  const actionDropdownRef = useRef<HTMLDivElement>(null);
+  const severityDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionDropdownRef.current && !actionDropdownRef.current.contains(event.target as Node)) {
+        setShowActionDropdown(false);
+      }
+      if (severityDropdownRef.current && !severityDropdownRef.current.contains(event.target as Node)) {
+        setShowSeverityDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 50,
@@ -112,30 +135,68 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Action Type
             </label>
-            <select
-              value={filters.action}
-              onChange={(e) => setFilters({ ...filters, action: e.target.value })}
-              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            >
-              {ACTION_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </select>
+            <div className="relative" ref={actionDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowActionDropdown(!showActionDropdown)}
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+              >
+                <span>{ACTION_TYPES.find(t => t.value === filters.action)?.label}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+              {showActionDropdown && (
+                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+                  {ACTION_TYPES.map(type => (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => {
+                        setFilters({ ...filters, action: type.value });
+                        setShowActionDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                    >
+                      <span>{type.label}</span>
+                      {filters.action === type.value && <Check className="w-4 h-4 text-indigo-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Severity
             </label>
-            <select
-              value={filters.severity}
-              onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
-              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            >
-              {SEVERITY_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </select>
+            <div className="relative" ref={severityDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowSeverityDropdown(!showSeverityDropdown)}
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+              >
+                <span>{SEVERITY_TYPES.find(t => t.value === filters.severity)?.label}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+              {showSeverityDropdown && (
+                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+                  {SEVERITY_TYPES.map(type => (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => {
+                        setFilters({ ...filters, severity: type.value });
+                        setShowSeverityDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                    >
+                      <span>{type.label}</span>
+                      {filters.severity === type.value && <Check className="w-4 h-4 text-indigo-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>

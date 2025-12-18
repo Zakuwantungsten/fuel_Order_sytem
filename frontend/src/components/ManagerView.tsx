@@ -107,7 +107,9 @@ export function ManagerView({ user }: ManagerViewProps) {
   
   // Custom dropdown states
   const [showStationDropdown, setShowStationDropdown] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
   const stationDropdownRef = useRef<HTMLDivElement>(null);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -225,6 +227,18 @@ export function ManagerView({ user }: ManagerViewProps) {
       }
     }
   }, [dateRange, userStation, isSuperManager, parseEntryDate]);
+
+  // Click-outside detection for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target as Node)) {
+        setShowSortDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Online/Offline status monitoring
   useEffect(() => {
@@ -486,7 +500,7 @@ export function ManagerView({ user }: ManagerViewProps) {
                 {showProfileMenu && (
                   <>
                     <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
-                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
+                    <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
                       <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
                         <p className="text-xs text-gray-500 dark:text-gray-400">Signed in as</p>
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.firstName} {user.lastName}</p>
@@ -647,7 +661,7 @@ export function ManagerView({ user }: ManagerViewProps) {
                   
                   {/* Custom Dropdown Menu */}
                   {showStationDropdown && (
-                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto left-0 right-0">
                       <button
                         type="button"
                         onClick={() => {
@@ -743,22 +757,53 @@ export function ManagerView({ user }: ManagerViewProps) {
             )}
           </p>
           {/* Sort options for mobile - always visible */}
-          <select
-            value={`${sortField}-${sortDirection}`}
-            onChange={(e) => {
-              const [field, dir] = e.target.value.split('-');
-              setSortField(field as typeof sortField);
-              setSortDirection(dir as 'asc' | 'desc');
-            }}
-            className="text-xs sm:text-sm px-2 py-1 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg"
-          >
-            <option value="date-desc">Newest</option>
-            <option value="date-asc">Oldest</option>
-            <option value="ltrs-desc">Most L</option>
-            <option value="ltrs-asc">Least L</option>
-            <option value="lpoNo-asc">LPO ↑</option>
-            <option value="lpoNo-desc">LPO ↓</option>
-          </select>
+          <div className="relative" ref={sortDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowSortDropdown(!showSortDropdown)}
+              className="text-xs sm:text-sm px-2 py-1 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg flex items-center gap-1"
+            >
+              <span>
+                {sortField === 'date' && sortDirection === 'desc' ? 'Newest' :
+                 sortField === 'date' && sortDirection === 'asc' ? 'Oldest' :
+                 sortField === 'ltrs' && sortDirection === 'desc' ? 'Most L' :
+                 sortField === 'ltrs' && sortDirection === 'asc' ? 'Least L' :
+                 sortField === 'lpoNo' && sortDirection === 'asc' ? 'LPO ↑' :
+                 'LPO ↓'}
+              </span>
+              <ChevronDown className="w-3 h-3 text-gray-400" />
+            </button>
+            {showSortDropdown && (
+              <div className="absolute z-50 mt-1 right-0 min-w-[120px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg">
+                {[
+                  {value: 'date-desc', label: 'Newest'},
+                  {value: 'date-asc', label: 'Oldest'},
+                  {value: 'ltrs-desc', label: 'Most L'},
+                  {value: 'ltrs-asc', label: 'Least L'},
+                  {value: 'lpoNo-asc', label: 'LPO ↑'},
+                  {value: 'lpoNo-desc', label: 'LPO ↓'}
+                ].map((option) => {
+                  const currentValue = `${sortField}-${sortDirection}`;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        const [field, dir] = option.value.split('-');
+                        setSortField(field as typeof sortField);
+                        setSortDirection(dir as 'asc' | 'desc');
+                        setShowSortDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs sm:text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-between"
+                    >
+                      <span>{option.label}</span>
+                      {currentValue === option.value && <Check className="w-3 h-3 text-primary-600" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Empty State */}

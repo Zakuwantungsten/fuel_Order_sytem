@@ -123,7 +123,7 @@ const Pagination: React.FC<PaginationProps> = ({
               
               {/* Custom Dropdown Menu */}
               {showPerPageDropdown && (
-                <div className={`absolute z-50 ${dropdownAlignment === 'right' ? 'right-0' : 'left-0'} mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg min-w-[70px]`}>
+                <div className={`absolute z-50 ${dropdownAlignment === 'right' ? 'right-0' : 'left-0'} mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg min-w-[70px] max-w-[calc(100vw-20px)] max-h-[60vh] overflow-y-auto`}>
                   {itemsPerPageOptions.map((option) => (
                     <button
                       key={option}

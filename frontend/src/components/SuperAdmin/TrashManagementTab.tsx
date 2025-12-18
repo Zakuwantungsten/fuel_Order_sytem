@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Trash2, 
   RefreshCw, 
@@ -6,7 +6,9 @@ import {
   Trash,
   AlertTriangle,
   Calendar,
-  Filter
+  Filter,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 import { trashAPI } from '../../services/api';
 
@@ -32,6 +34,29 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [retentionSettings, setRetentionSettings] = useState<any>(null);
   const [dateFilter, setDateFilter] = useState('30'); // Last 30 days
+
+  // Dropdown states
+  const [showResourceTypeDropdown, setShowResourceTypeDropdown] = useState(false);
+  const [showDateFilterDropdown, setShowDateFilterDropdown] = useState(false);
+
+  // Refs for click-outside detection
+  const resourceTypeDropdownRef = useRef<HTMLDivElement>(null);
+  const dateFilterDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (resourceTypeDropdownRef.current && !resourceTypeDropdownRef.current.contains(event.target as Node)) {
+        setShowResourceTypeDropdown(false);
+      }
+      if (dateFilterDropdownRef.current && !dateFilterDropdownRef.current.contains(event.target as Node)) {
+        setShowDateFilterDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     loadTrashStats();
@@ -237,17 +262,34 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
               <Filter className="w-4 h-4 inline mr-1" />
               Resource Type
             </label>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            >
-              {RESOURCE_TYPES.map(type => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+            <div className="relative" ref={resourceTypeDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowResourceTypeDropdown(!showResourceTypeDropdown)}
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+              >
+                <span>{RESOURCE_TYPES.find(t => t.value === selectedType)?.label}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+              {showResourceTypeDropdown && (
+                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+                  {RESOURCE_TYPES.map(type => (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => {
+                        setSelectedType(type.value);
+                        setShowResourceTypeDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                    >
+                      <span>{type.label}</span>
+                      {selectedType === type.value && <Check className="w-4 h-4 text-indigo-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex-1 min-w-[200px]">
@@ -255,16 +297,39 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
               <Calendar className="w-4 h-4 inline mr-1" />
               Time Period
             </label>
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            >
-              <option value="7">Last 7 Days</option>
-              <option value="30">Last 30 Days</option>
-              <option value="90">Last 90 Days</option>
-              <option value="365">Last Year</option>
-            </select>
+            <div className="relative" ref={dateFilterDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowDateFilterDropdown(!showDateFilterDropdown)}
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+              >
+                <span>
+                  {dateFilter === '7' ? 'Last 7 Days' :
+                   dateFilter === '30' ? 'Last 30 Days' :
+                   dateFilter === '90' ? 'Last 90 Days' :
+                   'Last Year'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+              {showDateFilterDropdown && (
+                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg">
+                  {[{value: '7', label: 'Last 7 Days'}, {value: '30', label: 'Last 30 Days'}, {value: '90', label: 'Last 90 Days'}, {value: '365', label: 'Last Year'}].map(option => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setDateFilter(option.value);
+                        setShowDateFilterDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                    >
+                      <span>{option.label}</span>
+                      {dateFilter === option.value && <Check className="w-4 h-4 text-indigo-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

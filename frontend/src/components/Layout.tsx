@@ -256,7 +256,7 @@ const Layout = ({ children }: LayoutProps) => {
               {showUserMenu && (
                 <>
                   <div className="fixed inset-0 z-[100]" onClick={() => setShowUserMenu(false)} />
-                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
+                  <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
                     <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
@@ -381,7 +381,7 @@ const Layout = ({ children }: LayoutProps) => {
                     className="fixed inset-0 z-[100]"
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
+                  <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
                   <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">

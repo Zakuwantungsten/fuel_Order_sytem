@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { X, Download } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { X, Download, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import jsPDF from 'jspdf';
@@ -59,6 +59,24 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const [createdOrder, setCreatedOrder] = useState<DeliveryOrder | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const isEditMode = !!order;
+  
+  // Dropdown states
+  const [showRateTypeDropdown, setShowRateTypeDropdown] = useState(false);
+  
+  // Dropdown refs
+  const rateTypeDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (rateTypeDropdownRef.current && !rateTypeDropdownRef.current.contains(event.target as Node)) {
+        setShowRateTypeDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Update form data when order prop changes (for edit mode)
   useEffect(() => {
@@ -606,19 +624,50 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                 </h4>
               </div>
 
-              <div>
+              <div className="relative" ref={rateTypeDropdownRef}>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Rate Structure *
                 </label>
-                <select
-                  name="rateType"
-                  value={formData.rateType || 'per_ton'}
-                  onChange={(e) => setFormData(prev => ({ ...prev, rateType: e.target.value as 'per_ton' | 'fixed_total' }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                <button
+                  type="button"
+                  onClick={() => setShowRateTypeDropdown(!showRateTypeDropdown)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
                 >
-                  <option value="per_ton">Per Ton Rate (Tonnage × Rate)</option>
-                  <option value="fixed_total">Fixed Total Amount</option>
-                </select>
+                  <span>
+                    {formData.rateType === 'per_ton' ? 'Per Ton Rate (Tonnage × Rate)' : 'Fixed Total Amount'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRateTypeDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showRateTypeDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, rateType: 'per_ton' }));
+                        setShowRateTypeDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                        formData.rateType === 'per_ton' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>Per Ton Rate (Tonnage × Rate)</span>
+                      {formData.rateType === 'per_ton' && <Check className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, rateType: 'fixed_total' }));
+                        setShowRateTypeDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                        formData.rateType === 'fixed_total' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>Fixed Total Amount</span>
+                      {formData.rateType === 'fixed_total' && <Check className="w-4 h-4" />}
+                    </button>
+                  </div>
+                )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {formData.rateType === 'per_ton' 
                     ? 'Calculate: Tonnage × Rate Per Ton'

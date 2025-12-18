@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Fuel, Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-react';
 import { configAPI } from '../../services/api';
 import { FuelStationConfig, FuelRecordFieldOption } from '../../types';
 
@@ -24,9 +24,32 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
     formulaGoing: '',
     formulaReturning: '',
   });
+  
+  // Dropdown states
+  const [showGoingFieldDropdown, setShowGoingFieldDropdown] = useState(false);
+  const [showReturningFieldDropdown, setShowReturningFieldDropdown] = useState(false);
+  
+  // Dropdown refs
+  const goingFieldDropdownRef = useRef<HTMLDivElement>(null);
+  const returningFieldDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadData();
+  }, []);
+  
+  // Click outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (goingFieldDropdownRef.current && !goingFieldDropdownRef.current.contains(event.target as Node)) {
+        setShowGoingFieldDropdown(false);
+      }
+      if (returningFieldDropdownRef.current && !returningFieldDropdownRef.current.contains(event.target as Node)) {
+        setShowReturningFieldDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const loadData = async () => {
@@ -292,28 +315,100 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fills Going Column</label>
-                    <select value={stationForm.fuelRecordFieldGoing} onChange={(e) => setStationForm({ ...stationForm, fuelRecordFieldGoing: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-                      <option value="">— None —</option>
+                <div className="relative" ref={goingFieldDropdownRef}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fills Going Column</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowGoingFieldDropdown(!showGoingFieldDropdown)}
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
+                  >
+                    <span className={!stationForm.fuelRecordFieldGoing ? 'text-gray-400' : ''}>
+                      {stationForm.fuelRecordFieldGoing ? fuelRecordFieldsGoing.find(f => f.value === stationForm.fuelRecordFieldGoing)?.label : '— None —'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showGoingFieldDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showGoingFieldDropdown && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStationForm({ ...stationForm, fuelRecordFieldGoing: '' });
+                          setShowGoingFieldDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          !stationForm.fuelRecordFieldGoing ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>— None —</span>
+                        {!stationForm.fuelRecordFieldGoing && <Check className="w-4 h-4" />}
+                      </button>
                       {fuelRecordFieldsGoing.map(field => (
-                        <option key={field.value} value={field.value}>{field.label}</option>
+                        <button
+                          key={field.value}
+                          type="button"
+                          onClick={() => {
+                            setStationForm({ ...stationForm, fuelRecordFieldGoing: field.value });
+                            setShowGoingFieldDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                            stationForm.fuelRecordFieldGoing === field.value ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          }`}
+                        >
+                          <span>{field.label}</span>
+                          {stationForm.fuelRecordFieldGoing === field.value && <Check className="w-4 h-4" />}
+                        </button>
                       ))}
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">Which fuel record column for going direction</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fills Returning Column</label>
-                    <select value={stationForm.fuelRecordFieldReturning} onChange={(e) => setStationForm({ ...stationForm, fuelRecordFieldReturning: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-                      <option value="">— None —</option>
+                    </div>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500">Which fuel record column for going direction</p>
+                </div>
+                <div className="relative" ref={returningFieldDropdownRef}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fills Returning Column</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowReturningFieldDropdown(!showReturningFieldDropdown)}
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
+                  >
+                    <span className={!stationForm.fuelRecordFieldReturning ? 'text-gray-400' : ''}>
+                      {stationForm.fuelRecordFieldReturning ? fuelRecordFieldsReturning.find(f => f.value === stationForm.fuelRecordFieldReturning)?.label : '— None —'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showReturningFieldDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showReturningFieldDropdown && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStationForm({ ...stationForm, fuelRecordFieldReturning: '' });
+                          setShowReturningFieldDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          !stationForm.fuelRecordFieldReturning ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>— None —</span>
+                        {!stationForm.fuelRecordFieldReturning && <Check className="w-4 h-4" />}
+                      </button>
                       {fuelRecordFieldsReturning.map(field => (
-                        <option key={field.value} value={field.value}>{field.label}</option>
+                        <button
+                          key={field.value}
+                          type="button"
+                          onClick={() => {
+                            setStationForm({ ...stationForm, fuelRecordFieldReturning: field.value });
+                            setShowReturningFieldDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                            stationForm.fuelRecordFieldReturning === field.value ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          }`}
+                        >
+                          <span>{field.label}</span>
+                          {stationForm.fuelRecordFieldReturning === field.value && <Check className="w-4 h-4" />}
+                        </button>
                       ))}
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">Which fuel record column for return direction</p>
-                  </div>
+                    </div>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500">Which fuel record column for return direction</p>
+                </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Going Formula (Optional)</label>

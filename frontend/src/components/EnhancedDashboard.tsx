@@ -495,7 +495,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               {showProfileMenu && (
                 <>
                   <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
-                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
+                  <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
                     <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
                       <p className="text-xs text-gray-500 dark:text-gray-400">Signed in as</p>
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.firstName} {user.lastName}</p>
@@ -591,7 +591,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                 {showProfileMenu && (
                   <>
                     <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
-                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
+                    <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
                       <button
                         onClick={() => {
                           setShowProfileMenu(false);

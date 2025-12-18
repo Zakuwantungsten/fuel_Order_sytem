@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, FileDown, Plus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, FileDown, Plus, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -71,6 +71,34 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   // Progress tracking state
   const [isCreating, setIsCreating] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
+  
+  // Dropdown states
+  const [showCargoTypeDropdown, setShowCargoTypeDropdown] = useState(false);
+  const [showRateTypeDropdown, setShowRateTypeDropdown] = useState(false);
+  const [showImportExportDropdown, setShowImportExportDropdown] = useState(false);
+  
+  // Dropdown refs
+  const cargoTypeDropdownRef = useRef<HTMLDivElement>(null);
+  const rateTypeDropdownRef = useRef<HTMLDivElement>(null);
+  const importExportDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Click outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (cargoTypeDropdownRef.current && !cargoTypeDropdownRef.current.contains(event.target as Node)) {
+        setShowCargoTypeDropdown(false);
+      }
+      if (rateTypeDropdownRef.current && !rateTypeDropdownRef.current.contains(event.target as Node)) {
+        setShowRateTypeDropdown(false);
+      }
+      if (importExportDropdownRef.current && !importExportDropdownRef.current.contains(event.target as Node)) {
+        setShowImportExportDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleCommonChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -487,49 +515,112 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
               
               {/* Cargo Type and Rate Type Selectors */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
+                <div className="relative" ref={cargoTypeDropdownRef}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Cargo Type *
                   </label>
-                  <select
-                    name="cargoType"
-                    value={commonData.cargoType}
-                    onChange={(e) => {
-                      const cargoType = e.target.value as 'loosecargo' | 'container';
-                      setCommonData(prev => ({ 
-                        ...prev, 
-                        cargoType,
-                        containerNo: cargoType === 'container' ? 'CONTAINER' : 'LOOSE CARGO'
-                      }));
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  <button
+                    type="button"
+                    onClick={() => setShowCargoTypeDropdown(!showCargoTypeDropdown)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
                   >
-                    <option value="loosecargo">Loose Cargo</option>
-                    <option value="container">Container</option>
-                  </select>
+                    <span>{commonData.cargoType === 'loosecargo' ? 'Loose Cargo' : 'Container'}</span>
+                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showCargoTypeDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showCargoTypeDropdown && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cargoType = 'loosecargo';
+                          setCommonData(prev => ({ 
+                            ...prev, 
+                            cargoType,
+                            containerNo: 'LOOSE CARGO'
+                          }));
+                          setShowCargoTypeDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          commonData.cargoType === 'loosecargo' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>Loose Cargo</span>
+                        {commonData.cargoType === 'loosecargo' && <Check className="w-4 h-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cargoType = 'container';
+                          setCommonData(prev => ({ 
+                            ...prev, 
+                            cargoType,
+                            containerNo: 'CONTAINER'
+                          }));
+                          setShowCargoTypeDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          commonData.cargoType === 'container' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>Container</span>
+                        {commonData.cargoType === 'container' && <Check className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div>
+                <div className="relative" ref={rateTypeDropdownRef}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Rate Structure *
                   </label>
-                  <select
-                    name="rateType"
-                    value={commonData.rateType}
-                    onChange={(e) => {
-                      setCommonData(prev => ({ 
-                        ...prev, 
-                        rateType: e.target.value as 'per_ton' | 'fixed_total'
-                      }));
-                      // Clear parsed rows when changing rate type
-                      setParsedRows([]);
-                      setBulkInput('');
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  <button
+                    type="button"
+                    onClick={() => setShowRateTypeDropdown(!showRateTypeDropdown)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
                   >
-                    <option value="per_ton">Per Ton Rate (Tonnage × Rate)</option>
-                    <option value="fixed_total">Fixed Total Amount</option>
-                  </select>
+                    <span>{commonData.rateType === 'per_ton' ? 'Per Ton Rate (Tonnage × Rate)' : 'Fixed Total Amount'}</span>
+                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRateTypeDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showRateTypeDropdown && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCommonData(prev => ({ 
+                            ...prev, 
+                            rateType: 'per_ton'
+                          }));
+                          setParsedRows([]);
+                          setBulkInput('');
+                          setShowRateTypeDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          commonData.rateType === 'per_ton' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>Per Ton Rate (Tonnage × Rate)</span>
+                        {commonData.rateType === 'per_ton' && <Check className="w-4 h-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCommonData(prev => ({ 
+                            ...prev, 
+                            rateType: 'fixed_total'
+                          }));
+                          setParsedRows([]);
+                          setBulkInput('');
+                          setShowRateTypeDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                          commonData.rateType === 'fixed_total' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        }`}
+                      >
+                        <span>Fixed Total Amount</span>
+                        {commonData.rateType === 'fixed_total' && <Check className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  )}
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     {commonData.rateType === 'per_ton' 
                       ? 'Calculate: Tonnage × Rate Per Ton'
@@ -601,15 +692,46 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                       </p>
                     </>
                   ) : (
-                    <select
-                      name="importOrExport"
-                      value={commonData.importOrExport}
-                      onChange={handleCommonChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    >
-                      <option value="IMPORT">IMPORT</option>
-                      <option value="EXPORT">EXPORT</option>
-                    </select>
+                    <div className="relative" ref={importExportDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowImportExportDropdown(!showImportExportDropdown)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
+                      >
+                        <span>{commonData.importOrExport}</span>
+                        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showImportExportDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showImportExportDropdown && (
+                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCommonData(prev => ({ ...prev, importOrExport: 'IMPORT' }));
+                              setShowImportExportDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                              commonData.importOrExport === 'IMPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                            }`}
+                          >
+                            <span>IMPORT</span>
+                            {commonData.importOrExport === 'IMPORT' && <Check className="w-4 h-4" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCommonData(prev => ({ ...prev, importOrExport: 'EXPORT' }));
+                              setShowImportExportDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                              commonData.importOrExport === 'EXPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                            }`}
+                          >
+                            <span>EXPORT</span>
+                            {commonData.importOrExport === 'EXPORT' && <Check className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 

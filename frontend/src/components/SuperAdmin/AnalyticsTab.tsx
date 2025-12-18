@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { TrendingUp, BarChart, Download, TrendingDown, DollarSign, Fuel, Truck, Activity, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { TrendingUp, BarChart, Download, TrendingDown, DollarSign, Fuel, Truck, Activity, RefreshCw, ChevronDown, Check } from 'lucide-react';
 import { analyticsAPI } from '../../services/api';
 import { DashboardAnalytics } from '../../types';
 
@@ -12,6 +12,22 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
   const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState('30');
   const [exporting, setExporting] = useState(false);
+
+  // Dropdown state
+  const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
+  const periodDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (periodDropdownRef.current && !periodDropdownRef.current.contains(event.target as Node)) {
+        setShowPeriodDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     loadAnalytics();
@@ -80,16 +96,39 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
         </div>
         <div className="flex items-center gap-3">
           {/* Period Selector */}
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-          >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-            <option value="365">Last year</option>
-          </select>
+          <div className="relative" ref={periodDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowPeriodDropdown(!showPeriodDropdown)}
+              className="px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 flex items-center gap-2"
+            >
+              <span>
+                {period === '7' ? 'Last 7 days' :
+                 period === '30' ? 'Last 30 days' :
+                 period === '90' ? 'Last 90 days' :
+                 'Last year'}
+              </span>
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </button>
+            {showPeriodDropdown && (
+              <div className="absolute z-50 mt-1 right-0 w-40 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-lg shadow-lg">
+                {[{value: '7', label: 'Last 7 days'}, {value: '30', label: 'Last 30 days'}, {value: '90', label: 'Last 90 days'}, {value: '365', label: 'Last year'}].map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setPeriod(option.value);
+                      setShowPeriodDropdown(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                  >
+                    <span>{option.label}</span>
+                    {period === option.value && <Check className="w-4 h-4 text-indigo-600" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           
           <button
             onClick={loadAnalytics}

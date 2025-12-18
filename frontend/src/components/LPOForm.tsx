@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, MapPin, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, MapPin, FileText, ChevronDown, Check } from 'lucide-react';
 import { LPOEntry, CancellationPoint, LPOSummary, FuelStationConfig } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
 import { lpoDocumentsAPI, configAPI } from '../services/api';
@@ -68,6 +68,12 @@ const LPOForm: React.FC<LPOFormProps> = ({
   // Auto-cancellation state: LPOs at checkpoint that have this truck
   const [existingLPOsAtCheckpoint, setExistingLPOsAtCheckpoint] = useState<LPOSummary[]>([]);
   const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
+  
+  // Dropdown states
+  const [showDestinationDropdown, setShowDestinationDropdown] = useState(false);
+  
+  // Dropdown refs
+  const destinationDropdownRef = useRef<HTMLDivElement>(null);
 
   // Configured stations from backend
   const [configuredStations, setConfiguredStations] = useState<FuelStationConfig[]>([]);
@@ -83,6 +89,18 @@ const LPOForm: React.FC<LPOFormProps> = ({
     reason: string;
   } | null>(null);
   const [useCustom, setUseCustom] = useState(false);
+
+  // Click outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (destinationDropdownRef.current && !destinationDropdownRef.current.contains(event.target as Node)) {
+        setShowDestinationDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (initialData) {
@@ -858,24 +876,40 @@ const LPOForm: React.FC<LPOFormProps> = ({
               />
             </div>
 
-            <div>
+            <div className="relative" ref={destinationDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Destinations *
               </label>
-              <select
-                name="destinations"
-                value={formData.destinations}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+              <button
+                type="button"
+                onClick={() => setShowDestinationDropdown(!showDestinationDropdown)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-left flex items-center justify-between"
               >
-                <option value="">Select Destination</option>
-                {destinations.map((dest) => (
-                  <option key={dest} value={dest}>
-                    {dest}
-                  </option>
-                ))}
-              </select>
+                <span className={!formData.destinations ? 'text-gray-400' : ''}>
+                  {formData.destinations || 'Select Destination'}
+                </span>
+                <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showDestinationDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showDestinationDropdown && (
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {destinations.map((dest) => (
+                    <button
+                      key={dest}
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, destinations: dest });
+                        setShowDestinationDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                        formData.destinations === dest ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>{dest}</span>
+                      {formData.destinations === dest && <Check className="w-4 h-4" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
 import { fuelRecordsAPI, lposAPI } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
@@ -82,11 +82,44 @@ const FuelRecords = () => {
   // Available months and years for filters (fetched separately)
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+  
+  // Dropdown states
+  const [showExportYearDropdown, setShowExportYearDropdown] = useState(false);
+  const [showRouteTypeDropdown, setShowRouteTypeDropdown] = useState(false);
+  const [showRouteDropdown, setShowRouteDropdown] = useState(false);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  
+  // Dropdown refs
+  const exportYearDropdownRef = useRef<HTMLDivElement>(null);
+  const routeTypeDropdownRef = useRef<HTMLDivElement>(null);
+  const routeDropdownRef = useRef<HTMLDivElement>(null);
+  const monthDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchLpos();
     fetchRoutes();
     fetchAvailableMonthsAndYears();
+  }, []);
+  
+  // Click outside detection
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportYearDropdownRef.current && !exportYearDropdownRef.current.contains(event.target as Node)) {
+        setShowExportYearDropdown(false);
+      }
+      if (routeTypeDropdownRef.current && !routeTypeDropdownRef.current.contains(event.target as Node)) {
+        setShowRouteTypeDropdown(false);
+      }
+      if (routeDropdownRef.current && !routeDropdownRef.current.contains(event.target as Node)) {
+        setShowRouteDropdown(false);
+      }
+      if (monthDropdownRef.current && !monthDropdownRef.current.contains(event.target as Node)) {
+        setShowMonthDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Fetch records when pagination or filters change
@@ -536,16 +569,37 @@ const FuelRecords = () => {
             </button>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
-            <select
-              value={exportYear}
-              onChange={(e) => setExportYear(Number(e.target.value))}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
-              title="Select year to export"
-            >
-              {getAvailableYears().map((year) => (
-                <option key={`export-year-${year}`} value={year}>{year}</option>
-              ))}
-            </select>
+            <div className="relative" ref={exportYearDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowExportYearDropdown(!showExportYearDropdown)}
+                className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs sm:text-sm flex items-center gap-2"
+                title="Select year to export"
+              >
+                <span>{exportYear}</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${showExportYearDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showExportYearDropdown && (
+                <div className="absolute z-50 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto min-w-[100px]">
+                  {getAvailableYears().map((year) => (
+                    <button
+                      key={`export-year-${year}`}
+                      type="button"
+                      onClick={() => {
+                        setExportYear(year);
+                        setShowExportYearDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                        exportYear === year ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>{year}</span>
+                      {exportYear === year && <Check className="w-4 h-4" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={handleExport}
               className="inline-flex items-center px-2 sm:px-4 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
@@ -584,29 +638,93 @@ const FuelRecords = () => {
               className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
-          <select
-            value={routeTypeFilter}
-            onChange={(e) => {
-              setRouteTypeFilter(e.target.value as 'IMPORT' | 'EXPORT');
-              setRouteFilter(''); // Reset route filter when changing type
-            }}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-          >
-            <option key="IMPORT" value="IMPORT">Import (Going)</option>
-            <option key="EXPORT" value="EXPORT">Export (Return)</option>
-          </select>
-          <select
-            value={routeFilter}
-            onChange={(e) => setRouteFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-          >
-            <option key="all-routes" value="">All Routes</option>
-            {availableRoutes.map((route) => (
-              <option key={`route-${route.destination}`} value={route.destination}>
-                {route.destination}
-              </option>
-            ))}
-          </select>
+          <div className="relative" ref={routeTypeDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowRouteTypeDropdown(!showRouteTypeDropdown)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
+            >
+              <span>{routeTypeFilter === 'IMPORT' ? 'Import (Going)' : 'Export (Return)'}</span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRouteTypeDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showRouteTypeDropdown && (
+              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRouteTypeFilter('IMPORT');
+                    setRouteFilter('');
+                    setShowRouteTypeDropdown(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                    routeTypeFilter === 'IMPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                  }`}
+                >
+                  <span>Import (Going)</span>
+                  {routeTypeFilter === 'IMPORT' && <Check className="w-4 h-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRouteTypeFilter('EXPORT');
+                    setRouteFilter('');
+                    setShowRouteTypeDropdown(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                    routeTypeFilter === 'EXPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                  }`}
+                >
+                  <span>Export (Return)</span>
+                  {routeTypeFilter === 'EXPORT' && <Check className="w-4 h-4" />}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="relative" ref={routeDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowRouteDropdown(!showRouteDropdown)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
+            >
+              <span className={!routeFilter ? 'text-gray-400' : ''}>
+                {routeFilter || 'All Routes'}
+              </span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRouteDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showRouteDropdown && (
+              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRouteFilter('');
+                    setShowRouteDropdown(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                    !routeFilter ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                  }`}
+                >
+                  <span>All Routes</span>
+                  {!routeFilter && <Check className="w-4 h-4" />}
+                </button>
+                {availableRoutes.map((route) => (
+                  <button
+                    key={`route-${route.destination}`}
+                    type="button"
+                    onClick={() => {
+                      setRouteFilter(route.destination);
+                      setShowRouteDropdown(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                      routeFilter === route.destination ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                    }`}
+                  >
+                    <span>{route.destination}</span>
+                    {routeFilter === route.destination && <Check className="w-4 h-4" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={goToPreviousMonth}
@@ -620,17 +738,36 @@ const FuelRecords = () => {
             >
               <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </button>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-            >
-              {getAvailableMonths().map(month => (
-                <option key={month} value={month}>
-                  {getMonthName(month)}
-                </option>
-              ))}
-            </select>
+            <div className="relative" ref={monthDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center gap-2 min-w-[140px]"
+              >
+                <span>{getMonthName(selectedMonth)}</span>
+                <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showMonthDropdown && (
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {getAvailableMonths().map(month => (
+                    <button
+                      key={month}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMonth(month);
+                        setShowMonthDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                        selectedMonth === month ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>{getMonthName(month)}</span>
+                      {selectedMonth === month && <Check className="w-4 h-4" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={goToNextMonth}
               disabled={!canGoToNextMonth()}
