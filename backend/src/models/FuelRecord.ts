@@ -188,5 +188,7 @@ fuelRecordSchema.index({ month: 1 });
 // Compound indexes for common queries
 fuelRecordSchema.index({ truckNo: 1, date: -1 });
 fuelRecordSchema.index({ date: -1, isDeleted: 1 });
+// Index for yard fuel auto-linking queries (optimized for finding active records)
+fuelRecordSchema.index({ truckNo: 1, date: -1, isDeleted: 1, isCancelled: 1 });
 
 export const FuelRecord = mongoose.model<IFuelRecordDocument>('FuelRecord', fuelRecordSchema);

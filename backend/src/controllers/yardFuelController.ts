@@ -109,6 +109,7 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
       yard,
       enteredBy: req.user?.username || 'system',
       timestamp: new Date(),
+      status: 'pending', // Will be updated to 'linked' if auto-linking succeeds
       history: [{
         action: 'created',
         performedBy: req.user?.username || 'system',
@@ -139,21 +140,12 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
     let linkedInfo = null;
     try {
       const truckNo = yardFuelDispense.truckNo;
-      const dispenseDate = yardFuelDispense.date;
       
-      // Find matching fuel record (within +/- 2 days)
-      const searchDateStart = new Date(dispenseDate);
-      searchDateStart.setDate(searchDateStart.getDate() - 2);
-      const searchDateEnd = new Date(dispenseDate);
-      searchDateEnd.setDate(searchDateEnd.getDate() + 2);
-      
+      // Find matching fuel record (most recent active record for truck)
       const fuelRecord = await FuelRecord.findOne({
         truckNo: { $regex: new RegExp(`^${truckNo}$`, 'i') },
-        date: {
-          $gte: searchDateStart.toISOString().split('T')[0],
-          $lte: searchDateEnd.toISOString().split('T')[0],
-        },
         isDeleted: false,
+        isCancelled: false,
       }).sort({ date: -1 });
 
       if (fuelRecord) {
@@ -192,9 +184,22 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
           );
         }
       } else {
-        logger.info(
-          `No matching fuel record found for ${truckNo}. Dispense saved as pending.`
-        );
+        // Check if cancelled records exist to provide better diagnostics
+        const cancelledRecordCount = await FuelRecord.countDocuments({
+          truckNo: { $regex: new RegExp(`^${truckNo}$`, 'i') },
+          isDeleted: false,
+          isCancelled: true,
+        });
+
+        if (cancelledRecordCount > 0) {
+          logger.info(
+            `No active fuel record found for ${truckNo}, but ${cancelledRecordCount} cancelled record(s) exist. Dispense saved as pending.`
+          );
+        } else {
+          logger.info(
+            `No matching fuel record found for ${truckNo}. Dispense saved as pending.`
+          );
+        }
       }
     } catch (linkError: any) {
       logger.warn('Failed to auto-link fuel record:', linkError);
@@ -243,11 +248,14 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
       // Continue even if notification fails
     }
 
+    // Fetch the updated dispense record to return the latest status
+    const updatedDispense = await YardFuelDispense.findById(yardFuelDispense._id).lean();
+
     res.status(201).json({
       success: true,
       message: responseMessage,
       data: {
-        ...yardFuelDispense.toObject(),
+        ...(updatedDispense || yardFuelDispense.toObject()),
         linkedInfo,
       },
     });
@@ -595,20 +603,26 @@ export const linkPendingYardFuelToFuelRecord = async (
       throw new ApiError(400, 'Missing required fields: fuelRecordId, truckNo, doNumber');
     }
 
-    // Find pending yard fuel entries for this truck (within +/- 2 days)
-    const searchDateStart = new Date(date);
-    searchDateStart.setDate(searchDateStart.getDate() - 2);
-    const searchDateEnd = new Date(date);
-    searchDateEnd.setDate(searchDateEnd.getDate() + 2);
+    // Verify fuel record exists and is active
+    const fuelRecord = await FuelRecord.findOne({
+      _id: fuelRecordId,
+      isDeleted: false,
+      isCancelled: false,
+    });
 
+    if (!fuelRecord) {
+      throw new ApiError(400, 'Fuel record not found or is cancelled. Cannot link yard fuel to inactive records.');
+    }
+
+    logger.info(
+      `Linking pending yard fuel entries for truck ${truckNo} to active DO ${doNumber} (Fuel Record: ${fuelRecordId})`
+    );
+
+    // Find all pending yard fuel entries for this truck (no date restriction)
     const pendingEntries = await YardFuelDispense.find({
       truckNo: { $regex: new RegExp(`^${truckNo}$`, 'i') },
       status: 'pending',
       isDeleted: false,
-      date: {
-        $gte: searchDateStart.toISOString().split('T')[0],
-        $lte: searchDateEnd.toISOString().split('T')[0],
-      },
     });
 
     let linkedCount = 0;

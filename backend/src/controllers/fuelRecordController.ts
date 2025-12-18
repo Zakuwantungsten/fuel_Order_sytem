@@ -12,10 +12,15 @@ import { createMissingConfigNotification, autoResolveNotifications } from './not
 export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, truckNo, from, to, month, search } = req.query;
+    const { dateFrom, dateTo, truckNo, from, to, month, search, includeCancelled } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
+    
+    // By default, exclude cancelled records unless explicitly requested
+    if (includeCancelled !== 'true') {
+      filter.isCancelled = false;
+    }
 
     if (dateFrom || dateTo) {
       filter.date = {};

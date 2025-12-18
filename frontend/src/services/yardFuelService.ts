@@ -12,24 +12,17 @@ export const yardFuelService = {
    * Search for active fuel records by truck number
    * Returns fuel records that might need yard fuel
    * Excludes cancelled fuel records
+   * No date restriction - searches all records
    */
   searchActiveFuelRecords: async (truckNo: string): Promise<FuelRecord[]> => {
     try {
-      // Calculate date range (last 7 days)
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const dateFrom = sevenDaysAgo.toISOString().split('T')[0];
-      const dateTo = new Date().toISOString().split('T')[0];
-      
       const response = await fuelRecordsAPI.getAll({ 
         truckNo,
-        dateFrom,
-        dateTo,
         limit: 10000
       });
       const fuelRecords = response.data;
       
-      // Filter out cancelled fuel records
+      // Filter out cancelled fuel records (backend now does this by default)
       return fuelRecords.filter((r: FuelRecord) => !r.isCancelled);
     } catch (error) {
       console.error('Error searching active fuel records:', error);
