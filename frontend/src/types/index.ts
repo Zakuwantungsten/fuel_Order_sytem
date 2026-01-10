@@ -154,6 +154,10 @@ export interface ForwardLPORequest {
   date?: string;
   orderOf?: string;
   includeOnlyActive?: boolean;
+  // Custom station fields (when targetStation is 'CUSTOM')
+  customStationName?: string;
+  customGoingCheckpoint?: string;
+  customReturnCheckpoint?: string;
 }
 
 export interface ForwardLPOResponse {

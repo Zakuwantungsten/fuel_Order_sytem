@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowRight, Loader2, CheckCircle, AlertTriangle, Truck, Fuel } from 'lucide-react';
-import { LPOSummary } from '../types';
+import { LPOSummary, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI } from '../services/api';
+import { configService } from '../services/configService';
 import {
   getAvailableForwardingRoutes,
   getRecommendedRoute,
   getStationDisplayInfo,
-  FORWARD_TARGET_STATIONS,
 } from '../services/lpoForwardingService';
 
 interface ForwardLPOModalProps {
@@ -30,14 +30,47 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{
+    sourceLpo?: LPOSummary;  // Only present when creating source first
     forwardedLpo: LPOSummary;
     entriesForwarded: number;
   } | null>(null);
+  const [creatingSource, setCreatingSource] = useState(false);  // Track source LPO creation
+
+  // Station management
+  const [availableStations, setAvailableStations] = useState<FuelStationConfig[]>([]);
+  const [loadingStations, setLoadingStations] = useState(false);
+  
+  // Custom station state
+  const [customStationName, setCustomStationName] = useState<string>('');
+  const [customGoingCheckpoint, setCustomGoingCheckpoint] = useState<string>('Custom1');
+  const [customReturnCheckpoint, setCustomReturnCheckpoint] = useState<string>('Custom2');
 
   // Get available routes and recommended route
   const availableRoutes = getAvailableForwardingRoutes(sourceLpo.station);
   const recommendedRoute = getRecommendedRoute(sourceLpo);
   const activeEntries = sourceLpo.entries.filter(entry => !entry.isCancelled);
+  
+  // Check if source LPO is unsaved (no database ID)
+  const isSourceUnsaved = !sourceLpo.id || sourceLpo.id === 'temp';
+
+  // Load fuel stations on mount
+  useEffect(() => {
+    const loadStations = async () => {
+      setLoadingStations(true);
+      try {
+        const stations = await configService.getFuelStations();
+        setAvailableStations(stations);
+      } catch (error) {
+        console.error('Error loading fuel stations:', error);
+      } finally {
+        setLoadingStations(false);
+      }
+    };
+    
+    if (isOpen) {
+      loadStations();
+    }
+  }, [isOpen]);
 
   // Initialize with recommended route or source LPO values
   useEffect(() => {
@@ -45,6 +78,9 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
       setError(null);
       setSuccess(null);
       setOrderOf(sourceLpo.orderOf);
+      setCustomStationName('');
+      setCustomGoingCheckpoint('Custom1');
+      setCustomReturnCheckpoint('Custom2');
       
       if (recommendedRoute) {
         setTargetStation(recommendedRoute.toStation);
@@ -79,22 +115,63 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
       setError('Please fill in all required fields');
       return;
     }
+    
+    if (targetStation === 'CUSTOM' && !customStationName.trim()) {
+      setError('Please enter a custom station name');
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
 
     try {
+      let sourceLpoId = sourceLpo.id;
+      let createdSourceLpo: LPOSummary | null = null;
+      
+      // Step 1: If source LPO is unsaved, create it first
+      if (isSourceUnsaved) {
+        setCreatingSource(true);
+        
+        // Prepare source LPO data for creation
+        const sourceLpoData: Partial<LPOSummary> = {
+          lpoNo: sourceLpo.lpoNo,
+          date: sourceLpo.date,
+          station: sourceLpo.station,
+          orderOf: sourceLpo.orderOf,
+          entries: sourceLpo.entries,
+          total: sourceLpo.total,
+          isCustomStation: sourceLpo.isCustomStation,
+          customStationName: sourceLpo.customStationName,
+          customGoingCheckpoint: sourceLpo.customGoingCheckpoint,
+          customReturnCheckpoint: sourceLpo.customReturnCheckpoint,
+        };
+        
+        // Create source LPO via API
+        createdSourceLpo = await lpoDocumentsAPI.create(sourceLpoData);
+        sourceLpoId = createdSourceLpo.id;
+        
+        setCreatingSource(false);
+      }
+      
+      // Step 2: Forward the LPO (now with valid ID)
       const result = await lpoDocumentsAPI.forward({
-        sourceLpoId: sourceLpo.id!,
+        sourceLpoId: sourceLpoId!,
         targetStation,
         defaultLiters,
         rate,
         date,
         orderOf: orderOf || sourceLpo.orderOf,
         includeOnlyActive: true,
+        // Include custom station info if CUSTOM is selected
+        ...(targetStation === 'CUSTOM' && {
+          customStationName,
+          customGoingCheckpoint,
+          customReturnCheckpoint,
+        }),
       });
 
       setSuccess({
+        sourceLpo: createdSourceLpo || undefined,  // Include created source if applicable
         forwardedLpo: result.forwardedLpo,
         entriesForwarded: result.entriesForwarded,
       });
@@ -102,9 +179,10 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
       // Notify parent after a short delay
       setTimeout(() => {
         onForwardComplete(result.forwardedLpo);
-      }, 2000);
+      }, 2500);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to forward LPO. Please try again.');
+      setCreatingSource(false);
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +204,10 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
         />
 
         {/* Modal */}
-        <div className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl transform transition-all">
+        <div 
+          className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl transform transition-all"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-xl">
             <div className="flex items-center space-x-3">
@@ -156,10 +237,16 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
                   <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  LPO Forwarded Successfully!
+                  {success.sourceLpo ? 'LPOs Created Successfully!' : 'LPO Forwarded Successfully!'}
                 </h3>
+                {success.sourceLpo && (
+                  <p className="text-gray-600 dark:text-gray-400 mb-2">
+                    Created source LPO <span className="font-bold text-green-600">#{success.sourceLpo.lpoNo}</span> at{' '}
+                    <span className="font-bold">{success.sourceLpo.station}</span>
+                  </p>
+                )}
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Created LPO <span className="font-bold text-blue-600">{success.forwardedLpo.lpoNo}</span> at{' '}
+                  {success.sourceLpo ? 'Forwarded to' : 'Created'} LPO <span className="font-bold text-blue-600">#{success.forwardedLpo.lpoNo}</span> at{' '}
                   <span className="font-bold">{success.forwardedLpo.station}</span>
                 </p>
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-left mb-4">
@@ -188,6 +275,23 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
           {/* Form */}
           {!success && (
             <div className="p-6">
+              {/* Unsaved LPO Notice */}
+              {isSourceUnsaved && (
+                <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                  <div className="flex items-start space-x-3">
+                    <AlertTriangle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200">
+                        Create & Forward Mode
+                      </h4>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                        This will create <strong>two LPOs</strong>: First at <strong>{sourceLpo.station}</strong>, then forward trucks to your selected target station.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Source LPO Info */}
               <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6">
                 <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
@@ -276,20 +380,55 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
                     value={targetStation}
                     onChange={(e) => setTargetStation(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    disabled={loadingStations}
                   >
-                    <option value="">Select target station...</option>
-                    {FORWARD_TARGET_STATIONS.filter(s => s !== sourceLpo.station).map((station) => (
-                      <option key={station} value={station}>
-                        {station}
-                      </option>
-                    ))}
+                    <option value="">{loadingStations ? 'Loading stations...' : 'Select target station...'}</option>
+                    {availableStations
+                      .filter(s => s.stationName !== sourceLpo.station)
+                      .map((station) => (
+                        <option key={station._id} value={station.stationName}>
+                          {station.stationName}
+                        </option>
+                      ))}
+                    {/* Add CASH as an option */}
+                    {sourceLpo.station !== 'CASH' && (
+                      <option value="CASH">CASH</option>
+                    )}
+                    {/* Add CUSTOM as an option */}
+                    {sourceLpo.station !== 'CUSTOM' && (
+                      <option value="CUSTOM">CUSTOM (Unlisted Station)</option>
+                    )}
                   </select>
-                  {stationInfo && (
+                  {stationInfo && targetStation !== 'CUSTOM' && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Rate: {stationInfo.rate} {stationInfo.currency}/L
                     </p>
                   )}
+                  {targetStation === 'CUSTOM' && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      Enter custom station name and checkpoints below
+                    </p>
+                  )}
                 </div>
+
+                {/* Custom Station Name - Show when CUSTOM is selected */}
+                {targetStation === 'CUSTOM' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Custom Station Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={customStationName}
+                      onChange={(e) => setCustomStationName(e.target.value.toUpperCase())}
+                      placeholder="e.g., LAKE MWERU"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 uppercase"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Name of unlisted fuel station
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -353,6 +492,31 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Custom Station Info Box */}
+              {targetStation === 'CUSTOM' && (
+                <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                  <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-2">
+                    📍 Custom Checkpoint Configuration
+                  </h4>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                    Fuel records will be updated using the following checkpoints:
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-white dark:bg-gray-800 rounded p-2">
+                      <span className="font-semibold text-gray-700 dark:text-gray-300">Going Direction:</span>
+                      <span className="ml-2 text-blue-600 dark:text-blue-400 font-mono">{customGoingCheckpoint}</span>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 rounded p-2">
+                      <span className="font-semibold text-gray-700 dark:text-gray-300">Return Direction:</span>
+                      <span className="ml-2 text-blue-600 dark:text-blue-400 font-mono">{customReturnCheckpoint}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                    💡 These checkpoints map to Custom1 and Custom2 fields in fuel records
+                  </p>
+                </div>
+              )}
 
               {/* Trucks Preview */}
               <div className="mb-6">
@@ -420,12 +584,12 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Forwarding...</span>
+                      <span>{creatingSource ? 'Creating Source LPO...' : 'Forwarding...'}</span>
                     </>
                   ) : (
                     <>
                       <ArrowRight className="w-4 h-4" />
-                      <span>Forward LPO</span>
+                      <span>{isSourceUnsaved ? 'Create & Forward' : 'Forward LPO'}</span>
                     </>
                   )}
                 </button>

@@ -2049,7 +2049,10 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
       rate, 
       date, 
       orderOf,
-      includeOnlyActive = true 
+      includeOnlyActive = true,
+      customStationName,
+      customGoingCheckpoint,
+      customReturnCheckpoint
     } = req.body;
 
     if (!sourceLpoId || !targetStation || !defaultLiters || !rate) {
@@ -2089,12 +2092,12 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
       isDriverAccount: false,
       originalLiters: null,
       amendedAt: null,
-      // Preserve custom station info if present
+      // Preserve or set custom station info
       cancellationPoint: entry.cancellationPoint,
-      isCustomStation: entry.isCustomStation,
-      customStationName: entry.customStationName,
-      customGoingCheckpoint: entry.customGoingCheckpoint,
-      customReturnCheckpoint: entry.customReturnCheckpoint,
+      isCustomStation: targetStation.toUpperCase() === 'CUSTOM',
+      customStationName: targetStation.toUpperCase() === 'CUSTOM' ? customStationName : entry.customStationName,
+      customGoingCheckpoint: targetStation.toUpperCase() === 'CUSTOM' ? customGoingCheckpoint : entry.customGoingCheckpoint,
+      customReturnCheckpoint: targetStation.toUpperCase() === 'CUSTOM' ? customReturnCheckpoint : entry.customReturnCheckpoint,
     }));
 
     // Get next LPO number
@@ -2144,6 +2147,11 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
         lpoNo: sourceLpo.lpoNo,
         station: sourceLpo.station,
       },
+      // Include custom station metadata if target is CUSTOM
+      isCustomStation: targetStation.toUpperCase() === 'CUSTOM',
+      customStationName: targetStation.toUpperCase() === 'CUSTOM' ? customStationName : undefined,
+      customGoingCheckpoint: targetStation.toUpperCase() === 'CUSTOM' ? customGoingCheckpoint : undefined,
+      customReturnCheckpoint: targetStation.toUpperCase() === 'CUSTOM' ? customReturnCheckpoint : undefined,
     });
 
     // Update fuel records for each entry (regular LPO entries)
