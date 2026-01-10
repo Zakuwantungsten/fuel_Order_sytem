@@ -33,26 +33,6 @@ const STATION_DEFAULTS: Record<string, { going?: number; returning?: number; rat
   'CASH': { going: 0, returning: 0, rate: 0, currency: 'TZS' }, // Rate entered manually
 };
 
-// Standard fuel allocations by checkpoint - exported for use in fuel record display
-export const STANDARD_ALLOCATIONS = {
-  darYard: { standard: 550, kisarawe: 580 },
-  mbeyaGoing: 450,
-  zambiaReturn: { ndola: 50, kapiri: 350, total: 400 },
-  tundumaReturn: 100,
-  mbeyaReturn: 400,
-  moroReturn: 100,
-  tangaReturn: 70,
-};
-
-// Zambia Going calculation helper - exported for use in fuel record forms
-export const calculateZambiaGoing = (totalLts: number, extra: number, destination: string): number => {
-  // Special destinations
-  if (destination.toLowerCase().includes('lusaka')) return 60;
-  if (destination.toLowerCase().includes('lubumbashi')) return 260;
-  // Standard calculation: (total + extra) - 900 (Dar 550 + Mbeya 450 - buffer)
-  return Math.max(0, (totalLts + extra) - 900);
-};
-
 // STATIONS array removed - now using dynamic stations from database
 // CASH and CUSTOM are always available in the dropdown
 
@@ -352,6 +332,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const returningCheckpointRef = React.useRef<HTMLDivElement>(null);
   const customGoingRef = React.useRef<HTMLDivElement>(null);
   const customReturnRef = React.useRef<HTMLDivElement>(null);
+  
+  // Ref to prevent double-paste operations
+  const isPastingRef = React.useRef(false);
 
   // Close dropdowns when clicking outside
   React.useEffect(() => {
@@ -611,7 +594,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     };
 
     fetchExistingLPOs();
-  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => e.truckNo).join(',')]);
+  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => e?.truckNo || '').join(',')]);
 
   // Check for duplicate allocations when station or entries change (for non-CASH stations)
   useEffect(() => {
@@ -659,7 +642,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     // Debounce the check to avoid too many API calls
     const timeoutId = setTimeout(checkDuplicates, 500);
     return () => clearTimeout(timeoutId);
-  }, [formData.station, formData.entries?.map(e => `${e.truckNo}:${e.liters}`).join(','), initialData?.id]);
+  }, [formData.station, formData.entries?.map(e => e ? `${e.truckNo}:${e.liters}` : '').join(','), initialData?.id]);
 
   // Load initial data when editing an existing LPO
   useEffect(() => {
@@ -1024,6 +1007,159 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }));
   };
 
+  // Handle multi-line paste (Excel-style) - paste multiple trucks at once
+  const handleTruckPaste = async (index: number, event: React.ClipboardEvent<HTMLInputElement>) => {
+    // Prevent double-paste
+    if (isPastingRef.current) {
+      console.log('Paste already in progress, ignoring');
+      return;
+    }
+    
+    // Get pasted text from clipboard
+    const pastedText = event.clipboardData.getData('text');
+    
+    // Check if it contains multiple lines or tabs (Excel columns)
+    const hasMultipleLines = pastedText.includes('\n') || pastedText.includes('\t');
+    
+    if (!hasMultipleLines) {
+      // Single line paste - let default behavior handle it
+      return;
+    }
+    
+    // Prevent default paste behavior for multi-line
+    event.preventDefault();
+    event.stopPropagation(); // IMPORTANT: Stop event from bubbling
+    
+    // Set pasting flag
+    isPastingRef.current = true;
+    
+    // Split by newlines and tabs (Excel can have both)
+    const lines = pastedText
+      .split(/[\n\r\t]+/)  // Split by newlines or tabs
+      .map(line => line.trim())  // Trim whitespace
+      .filter(line => line.length > 0);  // Remove empty lines
+    
+    if (lines.length === 0) {
+      isPastingRef.current = false;
+      return;
+    }
+    
+    // Format all truck numbers first
+    const formattedTrucks = lines.map(line => formatTruckNumber(line).toUpperCase());
+    
+    console.log('Pasting trucks:', formattedTrucks); // Debug log
+    console.log('At index:', index); // Debug log
+    
+    // Update form data in a single batch - use callback to ensure we have latest state
+    setFormData(prev => {
+      const currentEntries = [...(prev.entries || [])];
+      
+      console.log('Current entries before paste:', currentEntries.length); // Debug log
+      
+      // Ensure the index exists
+      if (index > currentEntries.length) {
+        console.error('Invalid paste index:', index);
+        return prev; // Don't update if index is invalid
+      }
+      
+      // Build the new entries array
+      const newEntriesArray: LPODetail[] = [];
+      
+      // Keep all entries before the paste index unchanged
+      for (let i = 0; i < index; i++) {
+        if (currentEntries[i]) {
+          newEntriesArray.push(currentEntries[i]);
+        }
+      }
+      
+      // Add all pasted trucks starting at the paste index
+      formattedTrucks.forEach((truckNo) => {
+        const newEntry: LPODetail = {
+          doNo: 'NIL',
+          truckNo: truckNo,
+          liters: 0,
+          rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+          amount: 0,
+          dest: 'NIL',
+        };
+        newEntriesArray.push(newEntry);
+      });
+      
+      // Add remaining entries after the paste position (skip the original entry at paste index)
+      for (let i = index + 1; i < currentEntries.length; i++) {
+        if (currentEntries[i]) {
+          newEntriesArray.push(currentEntries[i]);
+        }
+      }
+      
+      console.log('New entries after paste:', newEntriesArray.length); // Debug log
+      console.log('New entries truck numbers:', newEntriesArray.filter(e => e).map(e => e.truckNo)); // Debug log with filter
+      
+      return { ...prev, entries: newEntriesArray };
+    });
+    
+    // Update auto-fill data for all entries - use callback to ensure we have latest state
+    setEntryAutoFillData(prev => {
+      const newAutoFillData: Record<number, EntryAutoFillData> = {};
+      
+      // Keep auto-fill data for entries before paste index
+      Object.keys(prev).forEach(key => {
+        const idx = parseInt(key);
+        if (idx < index) {
+          newAutoFillData[idx] = prev[idx];
+        }
+      });
+      
+      // Initialize auto-fill data for all pasted entries
+      for (let i = 0; i < formattedTrucks.length; i++) {
+        newAutoFillData[index + i] = {
+          direction: 'going',
+          loading: false,
+          fetched: false,
+          fuelRecord: null
+        };
+      }
+      
+      // Shift auto-fill data for entries after the paste position
+      Object.keys(prev).forEach(key => {
+        const idx = parseInt(key);
+        if (idx > index) {
+          // Shift by (number of pasted trucks - 1) because we're replacing the entry at paste index
+          newAutoFillData[idx + formattedTrucks.length - 1] = prev[idx];
+        }
+      });
+      
+      console.log('Auto-fill data indices:', Object.keys(newAutoFillData)); // Debug log
+      
+      return newAutoFillData;
+    });
+    
+    // Trigger auto-fetch for all pasted trucks after state has settled
+    setTimeout(() => {
+      console.log('Starting auto-fetch for', formattedTrucks.length, 'trucks'); // Debug log
+      
+      formattedTrucks.forEach((formattedTruckNo, i) => {
+        const targetIndex = index + i;
+        
+        console.log(`Scheduling fetch for truck ${formattedTruckNo} at index ${targetIndex}`); // Debug log
+        
+        // Stagger each fetch to avoid overwhelming the server
+        setTimeout(() => {
+          console.log(`Fetching truck ${formattedTruckNo} at index ${targetIndex}`); // Debug log
+          handleTruckNoChange(targetIndex, formattedTruckNo);
+          
+          // Reset flag after last fetch is scheduled
+          if (i === formattedTrucks.length - 1) {
+            setTimeout(() => {
+              isPastingRef.current = false;
+              console.log('Paste operation complete');
+            }, 300);
+          }
+        }, i * 250); // Increased stagger time to 250ms for more reliable fetching
+      });
+    }, 200); // Increased initial delay to 200ms
+  };
+
   // Handle truck number change with auto-fetch
   const handleTruckNoChange = async (index: number, truckNo: string) => {
     // Format the truck number to standard format: T(number)(space)(letters) and uppercase
@@ -1033,14 +1169,28 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const currentEntries = formData.entries || [];
     const duplicateIndex = currentEntries.findIndex((entry, idx) => 
       idx !== index && 
+      entry?.truckNo && 
       entry.truckNo.toUpperCase() === formattedTruckNo.toUpperCase() && 
       formattedTruckNo.length >= 5
     );
     
-    // Update the truck number immediately
-    const updatedEntries = [...currentEntries];
-    updatedEntries[index] = { ...updatedEntries[index], truckNo: formattedTruckNo };
-    setFormData(prev => ({ ...prev, entries: updatedEntries }));
+    // Update the truck number immediately - USE CALLBACK FORM to avoid race conditions
+    setFormData(prev => {
+      const updatedEntries = [...(prev.entries || [])];
+      // Ensure the entry exists before updating
+      if (!updatedEntries[index]) {
+        updatedEntries[index] = {
+          doNo: 'NIL',
+          truckNo: '',
+          liters: 0,
+          rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+          amount: 0,
+          dest: 'NIL',
+        };
+      }
+      updatedEntries[index] = { ...updatedEntries[index], truckNo: formattedTruckNo };
+      return { ...prev, entries: updatedEntries };
+    });
     
     // If duplicate found within form, show warning and don't fetch data
     if (duplicateIndex !== -1) {
@@ -1083,32 +1233,48 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         ? getStationDefaults(formData.station, direction, destinationForAllocation) 
         : { liters: 350, rate: 1.2 };
 
-      // Auto-fill the entry
-      const newEntries = [...(formData.entries || [])];
-      newEntries[index] = {
-        ...newEntries[index],
-        truckNo,
-        doNo: doNumber,
-        dest: destinationForAllocation,  // Use correct destination based on direction
-        liters: defaults.liters,
-        rate: defaults.rate,
-        amount: defaults.liters * defaults.rate
-      };
-
-      const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
-      
       // Calculate balance info for Mbeya returning (INFINITY station)
       let balanceInfo = undefined;
       if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
         balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
-        // If suggested liters differs from standard, update the entry
-        if (balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
+      }
+
+      // Auto-fill the entry - USE CALLBACK FORM to avoid race conditions
+      setFormData(prev => {
+        const newEntries = [...(prev.entries || [])];
+        
+        // Ensure entry exists
+        if (!newEntries[index]) {
+          newEntries[index] = {
+            doNo: 'NIL',
+            truckNo: '',
+            liters: 0,
+            rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+            amount: 0,
+            dest: 'NIL',
+          };
+        }
+        
+        newEntries[index] = {
+          ...newEntries[index],
+          truckNo,
+          doNo: doNumber,
+          dest: destinationForAllocation,  // Use correct destination based on direction
+          liters: defaults.liters,
+          rate: defaults.rate,
+          amount: defaults.liters * defaults.rate
+        };
+        
+        // If Mbeya balance info suggests different liters, update
+        if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
           newEntries[index].liters = balanceInfo.suggestedLiters;
           newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
         }
-      }
-      
-      setFormData(prev => ({ ...prev, entries: newEntries, total }));
+
+        const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
+        
+        return { ...prev, entries: newEntries, total };
+      });
       setEntryAutoFillData(prev => ({
         ...prev,
         [index]: { 
@@ -1161,17 +1327,33 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         }
       }
 
-      const newEntries = [...(formData.entries || [])];
-      newEntries[index] = {
-        ...newEntries[index],
-        doNo: doNumber,
-        dest: destinationForAllocation,  // Update destination based on direction
-        liters: litersToSet,
-        amount: litersToSet * defaults.rate
-      };
+      // USE CALLBACK FORM to avoid race conditions
+      setFormData(prev => {
+        const newEntries = [...(prev.entries || [])];
+        
+        // Ensure entry exists
+        if (!newEntries[index]) {
+          newEntries[index] = {
+            doNo: 'NIL',
+            truckNo: '',
+            liters: 0,
+            rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+            amount: 0,
+            dest: 'NIL',
+          };
+        }
+        
+        newEntries[index] = {
+          ...newEntries[index],
+          doNo: doNumber,
+          dest: destinationForAllocation,  // Update destination based on direction
+          liters: litersToSet,
+          amount: litersToSet * defaults.rate
+        };
 
-      const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
-      setFormData(prev => ({ ...prev, entries: newEntries, total }));
+        const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+        return { ...prev, entries: newEntries, total };
+      });
       
       // Update autofill data with new direction and balance info
       setEntryAutoFillData(prev => ({
@@ -1193,6 +1375,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   const handleEntryChange = (index: number, field: keyof LPODetail, value: string | number) => {
     const updatedEntries = [...(formData.entries || [])];
+    // Ensure the entry exists before updating
+    if (!updatedEntries[index]) {
+      updatedEntries[index] = {
+        doNo: 'NIL',
+        truckNo: '',
+        liters: 0,
+        rate: formData.station ? getStationDefaults(formData.station, 'going').rate : 1.2,
+        amount: 0,
+        dest: 'NIL',
+      };
+    }
     // Auto-uppercase text fields for consistency
     const uppercaseFields = ['doNo', 'dest'];
     const finalValue = (typeof value === 'string' && uppercaseFields.includes(field)) ? value.toUpperCase() : value;
@@ -1210,7 +1403,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
 
     // Calculate total
-    const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    const total = updatedEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
 
     setFormData((prev) => ({
       ...prev,
@@ -1322,7 +1515,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
 
     // Validate each entry has required fields
-    const invalidEntries = formData.entries.filter(
+    const invalidEntries = formData.entries.filter(e => e != null).filter(
       (entry) => !entry.truckNo || !entry.truckNo.trim()
     );
     if (invalidEntries.length > 0) {
@@ -1331,7 +1524,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
     
     // Check for duplicate truck numbers within the form
-    const truckNumbers = formData.entries.map(e => e.truckNo.toUpperCase());
+    const truckNumbers = formData.entries.filter(e => e != null).map(e => e.truckNo.toUpperCase());
     const duplicateTrucks = truckNumbers.filter((truck, index) => 
       truckNumbers.indexOf(truck) !== index
     );
@@ -1344,7 +1537,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     // Ensure all entries have required fields with proper defaults
     // For CASH mode, include both direction checkpoints (can have one or both)
     // For CUSTOM mode, include the custom station checkpoint mappings
-    const validEntries = formData.entries.map(entry => ({
+    const validEntries = formData.entries.filter(e => e != null).map(entry => ({
       ...entry,
       doNo: (entry.doNo && entry.doNo.trim()) || 'NIL',
       truckNo: entry.truckNo.trim(),
@@ -1430,7 +1623,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
     try {
       // Validate each entry has truck number (same as normal submit validation)
-      const invalidEntries = formData.entries.filter(
+      const invalidEntries = formData.entries.filter(e => e != null).filter(
         (entry) => !entry.truckNo || !entry.truckNo.trim()
       );
       if (invalidEntries.length > 0) {
@@ -1439,7 +1632,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }
 
       // Submit the current LPO using the same format as handleSubmit
-      const validEntries = formData.entries.map(entry => ({
+      const validEntries = formData.entries.filter(e => e != null).map(entry => ({
         ...entry,
         doNo: (entry.doNo && entry.doNo.trim()) || 'NIL',
         truckNo: entry.truckNo.trim(),
@@ -2282,23 +2475,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             )}
           </div>
 
-          {/* Approved By (Optional) */}
-          <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-            <label className="block text-sm font-medium text-green-800 dark:text-green-300 mb-2">
-              Approved By <span className="text-xs font-normal text-green-600 dark:text-green-400">(Optional)</span>
-            </label>
-            <input
-              type="text"
-              value={formData.approvedBy || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, approvedBy: e.target.value }))}
-              placeholder="Enter approver's name if approval is required"
-              className="w-full px-3 py-2 border border-green-300 dark:border-green-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent placeholder-gray-400 dark:placeholder-gray-500"
-            />
-            <p className="mt-1 text-xs text-green-700 dark:text-green-400">
-              If this LPO requires approval, enter the approver's name. It will appear in the signature section of all exports and prints.
-            </p>
-          </div>
-
           {/* LPO Entries */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -2351,22 +2527,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {formData.entries && formData.entries.length > 0 ? (
-                    formData.entries.map((entry, index) => {
+                    formData.entries.filter(entry => entry != null).map((entry, index) => {
                       const autoFill = entryAutoFillData[index] || { direction: 'going', loading: false, fetched: false };
-                      const duplicateInfo = duplicateWarnings.get(entry.truckNo);
+                      const duplicateInfo = duplicateWarnings.get(entry?.truckNo || '');
                       const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
                       const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
                       const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
-                      const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && entry.truckNo.length >= 5;
+                      const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5;
                       return (
                         <tr key={index} className={`${autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : ''} ${hasNoRecordWarning ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${!autoFill.fetched && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'dark:bg-gray-800' : ''}`}>
                           <td className="px-3 py-3">
                             <div className="relative">
                               <input
                                 type="text"
-                                value={entry.truckNo}
+                                value={entry?.truckNo || ''}
                                 onChange={(e) => handleTruckNoChange(index, e.target.value)}
+                                onPaste={(e) => handleTruckPaste(index, e)}
                                 placeholder="T762 DWK"
+                                title="Paste multiple trucks (one per line) to auto-fill multiple rows"
                                 className={`w-28 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isExactDuplicate ? 'border-red-500 dark:border-red-400' : ''} ${isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : ''} ${hasNoRecordWarning ? 'border-amber-500 dark:border-amber-400' : ''} ${!hasDuplicate && !hasNoRecordWarning ? 'border-gray-300 dark:border-gray-600' : ''}`}
                               />
                               {autoFill.loading && (
@@ -2443,7 +2621,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           <td className="px-3 py-3">
                             <input
                               type="text"
-                              value={entry.doNo}
+                              value={entry?.doNo || 'NIL'}
                               onChange={(e) => handleEntryChange(index, 'doNo', e.target.value)}
                               placeholder="NIL"
                               className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
@@ -2452,7 +2630,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           <td className="px-3 py-3">
                             <input
                               type="number"
-                              value={entry.liters}
+                              value={entry?.liters || 0}
                               onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
                               className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
@@ -2460,7 +2638,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           <td className="px-3 py-3">
                             <input
                               type="number"
-                              value={entry.rate}
+                              value={entry?.rate || 0}
                               onChange={(e) => handleEntryChange(index, 'rate', parseFloat(e.target.value) || 0)}
                               step="0.01"
                               className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
@@ -2469,7 +2647,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           <td className="px-3 py-3">
                             <input
                               type="number"
-                              value={entry.amount.toFixed(2)}
+                              value={(entry?.amount || 0).toFixed(2)}
                               readOnly
                               className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-gray-100"
                             />
@@ -2477,7 +2655,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           <td className="px-3 py-3">
                             <input
                               type="text"
-                              value={entry.dest}
+                              value={entry?.dest || 'NIL'}
                               onChange={(e) => handleEntryChange(index, 'dest', e.target.value)}
                               placeholder="NIL"
                               className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
@@ -2546,7 +2724,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             </div>
             {formData.entries && formData.entries.length > 0 && (
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Total Liters: {formData.entries.reduce((sum, e) => sum + e.liters, 0)}L
+                Total Liters: {formData.entries.filter(e => e != null).reduce((sum, e) => sum + e.liters, 0)}L
               </p>
             )}
           </div>
