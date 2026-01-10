@@ -363,10 +363,28 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
         req.body.isLocked = false;
         req.body.pendingConfigReason = null;
         
-        // Recalculate balance if both values are now set
-        req.body.balance = willHaveTotalLts + willHaveExtra;
+        // Recalculate balance using formula: Balance = (Total + Extra) - (All Checkpoints)
+        const totalFuel = willHaveTotalLts + willHaveExtra;
+        const totalCheckpoints = (
+          Math.abs(existingRecord.mmsaYard || 0) +
+          Math.abs(existingRecord.tangaYard || 0) +
+          Math.abs(existingRecord.darYard || 0) +
+          Math.abs(existingRecord.darGoing || 0) +
+          Math.abs(existingRecord.moroGoing || 0) +
+          Math.abs(existingRecord.mbeyaGoing || 0) +
+          Math.abs(existingRecord.tdmGoing || 0) +
+          Math.abs(existingRecord.zambiaGoing || 0) +
+          Math.abs(existingRecord.congoFuel || 0) +
+          Math.abs(existingRecord.zambiaReturn || 0) +
+          Math.abs(existingRecord.tundumaReturn || 0) +
+          Math.abs(existingRecord.mbeyaReturn || 0) +
+          Math.abs(existingRecord.moroReturn || 0) +
+          Math.abs(existingRecord.darReturn || 0) +
+          Math.abs(existingRecord.tangaReturn || 0)
+        );
+        req.body.balance = totalFuel - totalCheckpoints;
         
-        logger.info(`Unlocking fuel record ${id} - all required fields now provided`);
+        logger.info(`Unlocking fuel record ${id} - all required fields now provided, balance: ${req.body.balance}`);
       }
     }
 

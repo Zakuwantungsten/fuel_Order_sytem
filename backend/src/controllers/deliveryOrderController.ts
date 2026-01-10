@@ -2666,8 +2666,8 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
       originalGoingFrom: originalGoingFrom,
       originalGoingTo: originalGoingTo,
       // Update from/to for return journey
-      from: deliveryOrder.destination, // Return journey: load from EXPORT destination
-      to: matchingFuelRecord.start || 'DAR', // Back to start location
+      from: deliveryOrder.loadingPoint, // Return journey: load from EXPORT loadingPoint (POL)
+      to: deliveryOrder.destination, // Return journey: going to EXPORT destination
     };
 
     await FuelRecord.findByIdAndUpdate(matchingFuelRecord._id, updateData);

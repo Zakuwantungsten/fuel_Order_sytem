@@ -722,25 +722,32 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       console.log('  - Updated to:', updatedRecord.to);
       console.log('  - Return DO:', updatedRecord.returnDo);
       
-      // Display additional fuel information if any was added
-      if (additionalFuelInfo && additionalFuelInfo.totalAdditionalFuel > 0) {
-        const details = [];
-        if (additionalFuelInfo.fuelDifference > 0) {
-          details.push(`Base difference: ${additionalFuelInfo.fuelDifference}L (${additionalFuelInfo.requiredTotalLiters}L needed - ${additionalFuelInfo.originalTotalLiters}L original)`);
+      // Display fuel information and warnings
+      if (additionalFuelInfo) {
+        const messages = [];
+        
+        // Check for fuel shortfall warning
+        if (additionalFuelInfo.hasFuelShortfall) {
+          messages.push(`⚠️ FUEL SHORTFALL ALERT:\n` +
+            `Return route ${additionalFuelInfo.returnLoadingPoint}→${additionalFuelInfo.finalDestination} requires ${additionalFuelInfo.requiredTotalLiters}L\n` +
+            `Truck currently has ${additionalFuelInfo.originalTotalLiters}L allocated\n` +
+            `Shortage: ${additionalFuelInfo.fuelDifference}L\n\n` +
+            `⚠️ Please review and manually add extra fuel if needed!`);
         }
-        if (additionalFuelInfo.loadingPointExtra > 0) {
-          details.push(`Loading point extra (${additionalFuelInfo.returnLoadingPoint}): +${additionalFuelInfo.loadingPointExtra}L`);
-        }
+        
+        // Show if destination extra was added
         if (additionalFuelInfo.destinationExtra > 0) {
-          details.push(`Destination extra (${additionalFuelInfo.finalDestination}): +${additionalFuelInfo.destinationExtra}L`);
+          messages.push(`✓ Auto-added destination extra: +${additionalFuelInfo.destinationExtra}L (${additionalFuelInfo.finalDestination})\n` +
+            `New Total: ${additionalFuelInfo.newTotalLiters}L (was ${additionalFuelInfo.originalTotalLiters}L)`);
         }
         
-        const message = `Fuel record updated with return DO-${deliveryOrder.doNumber}\n\n` +
-          `📊 Additional Fuel Allocated: ${additionalFuelInfo.totalAdditionalFuel}L\n` +
-          `New Total: ${additionalFuelInfo.newTotalLiters}L (was ${additionalFuelInfo.originalTotalLiters}L)\n\n` +
-          `Breakdown:\n${details.join('\n')}`;
-        
-        alert(message);
+        // Show success message
+        if (messages.length > 0) {
+          const fullMessage = `Fuel record updated with return DO-${deliveryOrder.doNumber}\n\n` + messages.join('\n\n');
+          alert(fullMessage);
+        } else {
+          alert(`Fuel record updated with return DO-${deliveryOrder.doNumber}`);
+        }
       } else {
         alert(`Fuel record updated with return DO-${deliveryOrder.doNumber}`);
       }

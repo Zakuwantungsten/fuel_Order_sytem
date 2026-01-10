@@ -19,7 +19,8 @@
     "archival:test": "ts-node src/scripts/testArchival.js",
     "archival:run": "ts-node src/scripts/testArchival.js --execute",
     "archival:stats": "ts-node src/scripts/testArchival.js --stats-only",
-    "relink-yard-fuel": "ts-node src/scripts/relink-pending-yard-fuel.ts"
+    "relink-yard-fuel": "ts-node src/scripts/relink-pending-yard-fuel.ts",
+    "migrate:fuel-logic": "ts-node src/scripts/migrateFuelCalculationLogic.ts"
   },
   "keywords": [
     "fuel",

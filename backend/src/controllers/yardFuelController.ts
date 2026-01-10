@@ -160,9 +160,16 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
         }
 
         if (updateField) {
-          const currentValue = (fuelRecord as any)[updateField] || 0;
+          // Store yard fuel as positive value and subtract from total to get balance
+          const currentValue = Math.abs((fuelRecord as any)[updateField] || 0);
+          const newCheckpointValue = currentValue + yardFuelDispense.liters;
+          
+          // Recalculate balance: Balance = (Total + Extra) - (All Checkpoints)
+          const newBalance = fuelRecord.balance - yardFuelDispense.liters;
+          
           await FuelRecord.findByIdAndUpdate(fuelRecord._id, {
-            [updateField]: currentValue - yardFuelDispense.liters,
+            [updateField]: newCheckpointValue,
+            balance: newBalance,
           });
 
           // Update yard fuel dispense status
@@ -180,7 +187,7 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
           };
 
           logger.info(
-            `Fuel record auto-updated: ${fuelRecord.goingDo} ${updateField} += ${yardFuelDispense.liters}L`
+            `Fuel record auto-updated: ${fuelRecord.goingDo} ${updateField} = ${newCheckpointValue}L (balance: ${newBalance}L)`
           );
         }
       } else {

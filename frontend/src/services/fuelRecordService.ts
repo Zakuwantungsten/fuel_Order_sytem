@@ -405,12 +405,15 @@ export function createFuelRecordFromDO(
  * NOTE: Return checkpoint fields (zambiaReturn, tundumaReturn, mbeyaReturn, etc.) 
  *       remain at 0 until LPOs are actually created - same as going journey logic
  * 
- * FUEL DIFFERENCE CALCULATION LOGIC:
- * - Calculates if additional fuel is needed for return journey based on loading point
- * - Example: Original allocation 2300L, but return from point that requires 2400L total
- * - Difference: 2400 - 2300 = 100L additional fuel needed
- * - Adds extra fuel based on special loading points (Kamoa +40L, NMI +20L, Kalongwe +60L)
- * - Adds extra fuel if final destination is Moshi/Msa (+170L)
+ * FUEL ALLOCATION LOGIC (Updated):
+ * - Base route difference: CALCULATED but NOT automatically added → Creates warning/notification
+ * - Loading point extras: REMOVED (Kamoa, NMI, Kalongwe extras no longer auto-added)
+ * - Destination extras: MAINTAINED (+170L for Moshi/MSA destinations)
+ * 
+ * Example: Return route requires 2400L but truck has 2300L
+ * - System alerts user about 100L shortfall
+ * - User must manually decide if extra fuel is needed
+ * - Only destination extras are automatically added
  */
 export async function updateFuelRecordWithReturnDO(
   existingRecord: FuelRecord,
@@ -423,12 +426,12 @@ export async function updateFuelRecordWithReturnDO(
   const originalGoingTo = existingRecord.originalGoingTo || existingRecord.to;
   
   // Get the return journey loading point (where truck will load cargo)
-  // This is the destination from the EXPORT DO
-  const returnLoadingPoint = returnDeliveryOrder.destination || '';
+  // This is the loadingPoint (POL) from the EXPORT DO
+  const returnLoadingPoint = returnDeliveryOrder.loadingPoint || '';
   
   // Get the final destination (where truck returns to offload)
-  // This is typically the start location
-  const finalDestination = existingRecord.start || 'DAR';
+  // This is the destination from the EXPORT DO
+  const finalDestination = returnDeliveryOrder.destination || '';
   
   // Calculate required total liters for return journey with match information
   // Based on the loading point (from) to the final destination using database routes
@@ -448,29 +451,27 @@ export async function updateFuelRecordWithReturnDO(
   // Get original total liters allocated for going journey
   const originalTotalLiters = existingRecord.totalLts || 0;
   
-  // Calculate fuel difference
-  let fuelDifference = requiredTotalLiters - originalTotalLiters;
+  // Calculate fuel difference for notification purposes (NOT added automatically)
+  const fuelDifference = requiredTotalLiters - originalTotalLiters;
+  const hasFuelShortfall = fuelDifference > 0;
   
-  // Only add difference if positive (need more fuel)
-  let additionalFuelNeeded = fuelDifference > 0 ? fuelDifference : 0;
-  
-  // Add extra fuel based on special loading points (with fuzzy matching)
-  const loadingPointExtra = FuelConfigService.getLoadingPointExtraFuel(returnLoadingPoint);
-  additionalFuelNeeded += loadingPointExtra;
+  // Only add destination extra fuel automatically
+  // Loading point extras have been REMOVED - user must manually adjust if needed
+  let additionalFuelNeeded = 0;
   
   // Add extra fuel if final destination is Moshi/Msa (with fuzzy matching)
   const destinationExtra = FuelConfigService.getDestinationExtraFuel(finalDestination);
   additionalFuelNeeded += destinationExtra;
   
-  // Calculate new total liters and extra fuel
+  // Calculate new total liters (only includes destination extra, NOT route difference)
   const newTotalLiters = originalTotalLiters + additionalFuelNeeded;
   
   // Log the calculation for tracking
   const additionalFuelInfo = {
     originalTotalLiters,
     requiredTotalLiters,
-    fuelDifference: fuelDifference > 0 ? fuelDifference : 0,
-    loadingPointExtra,
+    fuelDifference, // Can be positive or negative
+    hasFuelShortfall, // Whether return route needs more fuel
     destinationExtra,
     totalAdditionalFuel: additionalFuelNeeded,
     newTotalLiters,
@@ -479,6 +480,11 @@ export async function updateFuelRecordWithReturnDO(
   };
   
   console.log('🔄 Return Journey Fuel Calculation:', additionalFuelInfo);
+  
+  // Alert if fuel shortfall detected
+  if (hasFuelShortfall) {
+    console.warn(`⚠️ FUEL SHORTFALL DETECTED: Return route requires ${requiredTotalLiters}L but truck only has ${originalTotalLiters}L allocated (${fuelDifference}L short)`);
+  }
   
   // Update the from and to fields based on return journey
   // NOTE: Return checkpoint fields remain at their current values (0 or whatever was set by LPOs)
@@ -490,8 +496,8 @@ export async function updateFuelRecordWithReturnDO(
     originalGoingFrom: originalGoingFrom,
     originalGoingTo: originalGoingTo,
     // Now update from/to for the current journey state (returning)
-    from: returnLoadingPoint, // Return journey: load from this point (EXPORT destination)
-    to: finalDestination, // Back to start location (final offloading point)
+    from: returnLoadingPoint, // Return journey: load from this point (EXPORT loadingPoint/POL)
+    to: finalDestination, // Return journey: going to this point (EXPORT destination)
     // Update total liters if additional fuel is needed
     totalLts: newTotalLiters,
     // DO NOT pre-fill return checkpoint fields - they get filled when LPOs are created

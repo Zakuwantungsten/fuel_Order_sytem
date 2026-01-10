@@ -72,26 +72,32 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
   }, [initialData, autoCalculated]);
 
   // Auto-calculate balance whenever allocation fields change
+  // Formula: Balance = (Total Liters + Extra) - (Sum of ALL Checkpoints)
+  // All checkpoint values are stored as POSITIVE numbers
   useEffect(() => {
     const totalFuel = (formData.totalLts || 0) + (formData.extra || 0);
-    const allocations = (
-      (formData.mmsaYard || 0) +
-      (formData.tangaYard || 0) +
-      (formData.darYard || 0) +
-      (formData.darGoing || 0) +
-      (formData.moroGoing || 0) +
-      (formData.mbeyaGoing || 0) +
-      (formData.tdmGoing || 0) +
-      (formData.zambiaGoing || 0) +
-      (formData.congoFuel || 0) +
-      (formData.zambiaReturn || 0) +
-      (formData.tundumaReturn || 0) +
-      (formData.mbeyaReturn || 0) +
-      (formData.moroReturn || 0) +
-      (formData.darReturn || 0) +
-      (formData.tangaReturn || 0)
+    
+    // Sum all checkpoints as positive values
+    const totalCheckpoints = (
+      Math.abs(formData.mmsaYard || 0) +
+      Math.abs(formData.tangaYard || 0) +
+      Math.abs(formData.darYard || 0) +
+      Math.abs(formData.darGoing || 0) +
+      Math.abs(formData.moroGoing || 0) +
+      Math.abs(formData.mbeyaGoing || 0) +
+      Math.abs(formData.tdmGoing || 0) +
+      Math.abs(formData.zambiaGoing || 0) +
+      Math.abs(formData.congoFuel || 0) +
+      Math.abs(formData.zambiaReturn || 0) +
+      Math.abs(formData.tundumaReturn || 0) +
+      Math.abs(formData.mbeyaReturn || 0) +
+      Math.abs(formData.moroReturn || 0) +
+      Math.abs(formData.darReturn || 0) +
+      Math.abs(formData.tangaReturn || 0)
     );
-    const calculatedBalance = totalFuel + allocations; // allocations are negative in CSV
+    
+    // Subtract total checkpoints from total fuel
+    const calculatedBalance = totalFuel - totalCheckpoints;
     
     setFormData(prev => ({
       ...prev,

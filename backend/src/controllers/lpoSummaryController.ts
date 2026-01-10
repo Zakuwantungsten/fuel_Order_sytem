@@ -348,13 +348,19 @@ async function updateFuelRecordForLPOEntry(
       return;
     }
 
-    const currentValue = (fuelRecord as any)[fieldToUpdate] || 0;
-    const newValue = currentValue - litersChange;
+    // Store checkpoint values as POSITIVE numbers
+    // Add liters to checkpoint (accumulate fuel dispensed)
+    const currentValue = Math.abs((fuelRecord as any)[fieldToUpdate] || 0);
+    const newValue = currentValue + Math.abs(litersChange);
+    
+    // Subtract from balance (reduce remaining fuel)
+    const newBalance = fuelRecord.balance - Math.abs(litersChange);
+    
     const updateData: any = {};
     updateData[fieldToUpdate] = newValue;
-    updateData.balance = fuelRecord.balance - litersChange;
+    updateData.balance = newBalance;
 
-    logger.info(`Updating field ${fieldToUpdate}: ${currentValue} -> ${newValue} (change: ${litersChange})`);
+    logger.info(`Updating field ${fieldToUpdate}: ${currentValue}L -> ${newValue}L (added: ${Math.abs(litersChange)}L, balance: ${newBalance}L)`);
 
     await FuelRecord.findByIdAndUpdate(
       fuelRecord._id,
