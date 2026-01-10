@@ -10,6 +10,7 @@ import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
+import { formatDONumber, parseDONumber, getNextDONumber as getNextFormattedDONumber } from '../utils/doNumberFormatter';
 
 // Month names for sheet naming
 const MONTH_NAMES = [
@@ -820,28 +821,86 @@ export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response):
 
 /**
  * Get next DO number based on type (DO or SDO)
- * Returns the next sequential number after the highest existing one
+ * Returns the next DO number in XXXX/YY format (e.g., 0001/26, 0002/26)
+ * Handles year rollover - resets to 0001 when year changes
  */
 export const getNextDONumber = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const doType = (req.query.doType as string) || 'DO';
+    const currentYear = new Date().getFullYear();
     
-    // Find the last DO/SDO by doNumber (which is stored as padded string like "0001")
-    // Filter by doType to get separate sequences for DO and SDO
+    // Find the last DO/SDO by sorting by sn (serial number) field - numeric sort, not alphabetical
     const lastDO = await DeliveryOrder.findOne({ 
       doType,
       isDeleted: false 
     })
       .sort({ sn: -1 })
-      .limit(1)
+      .select('doNumber sn')
       .lean();
 
-    const nextSN = lastDO ? lastDO.sn + 1 : 1;
+    let nextDONumber: string;
+    let nextSN: number;
+
+    if (!lastDO || !lastDO.doNumber) {
+      // No previous DO, start from 1
+      nextSN = 1;
+      nextDONumber = formatDONumber(1, currentYear);
+    } else {
+      // Parse the last DO number
+      const parsed = parseDONumber(lastDO.doNumber);
+      
+      if (parsed && parsed.year === currentYear) {
+        // Same year, increment the sequential number
+        nextSN = lastDO.sn + 1;
+        nextDONumber = formatDONumber(parsed.sequentialNumber + 1, currentYear);
+      } else if (parsed && parsed.year !== currentYear) {
+        // Year changed, reset to 1
+        nextSN = lastDO.sn + 1;
+        nextDONumber = formatDONumber(1, currentYear);
+      } else {
+        // Legacy format (old number without year) - convert to new format
+        // Try to parse as integer
+        const legacyNumber = parseInt(lastDO.doNumber, 10);
+        if (!isNaN(legacyNumber)) {
+          nextSN = lastDO.sn + 1;
+          nextDONumber = formatDONumber(legacyNumber + 1, currentYear);
+        } else {
+          // Can't parse, start fresh
+          nextSN = lastDO.sn + 1;
+          nextDONumber = formatDONumber(1, currentYear);
+        }
+      }
+    }
+
+    // Check if this DO number already exists (safety check like LPO does)
+    let exists = await DeliveryOrder.exists({ doNumber: nextDONumber, doType, isDeleted: false });
+    if (exists) {
+      // If exists, find all DOs for current year and get the max
+      const allCurrentYearDOs = await DeliveryOrder.find({
+        doType,
+        isDeleted: false
+      })
+        .select('doNumber')
+        .lean();
+      
+      let maxSeq = 0;
+      for (const order of allCurrentYearDOs) {
+        const parsed = parseDONumber(order.doNumber);
+        if (parsed && parsed.year === currentYear && parsed.sequentialNumber > maxSeq) {
+          maxSeq = parsed.sequentialNumber;
+        }
+      }
+      nextDONumber = formatDONumber(maxSeq + 1, currentYear);
+    }
 
     res.status(200).json({
       success: true,
       message: `Next ${doType} number retrieved successfully`,
-      data: { nextSN, doType },
+      data: { 
+        nextSN, 
+        nextDONumber,
+        doType 
+      },
     });
   } catch (error: any) {
     throw error;

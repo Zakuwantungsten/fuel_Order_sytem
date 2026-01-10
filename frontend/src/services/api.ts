@@ -208,11 +208,12 @@ export const deliveryOrdersAPI = {
     await apiClient.delete(`/delivery-orders/${id}`);
   },
   
-  getNextNumber: async (doType: 'DO' | 'SDO' = 'DO'): Promise<number> => {
+  getNextNumber: async (doType: 'DO' | 'SDO' = 'DO'): Promise<string> => {
     const response = await apiClient.get('/delivery-orders/next-do-number', { 
       params: { doType } 
     });
-    return response.data.data?.nextSN || 1;
+    // Return the formatted DO number (e.g., "0001/26")
+    return response.data.data?.nextDONumber || '0001/26';
   },
 
   // Re-link an EXPORT DO to a fuel record after truck number correction

@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import DeliveryNotePrint from './DeliveryNotePrint';
 import { deliveryOrdersAPI } from '../services/api';
+import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
 
 interface BulkDOFormProps {
   isOpen: boolean;
@@ -57,12 +58,26 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         const nextNumber = await deliveryOrdersAPI.getNextNumber(commonData.doType);
         setCommonData(prev => ({
           ...prev,
-          startingNumber: nextNumber.toString(),
+          startingNumber: nextNumber, // Already in XXXX/YY format from backend
         }));
       };
       fetchNextNumber();
     }
-  }, [isOpen, commonData.doType]);
+  }, [isOpen]); // Remove commonData.doType to avoid interference
+
+  // Separate effect for when DO type changes within the open modal
+  useEffect(() => {
+    if (isOpen && commonData.doType) {
+      const fetchNextNumber = async () => {
+        const nextNumber = await deliveryOrdersAPI.getNextNumber(commonData.doType);
+        setCommonData(prev => ({
+          ...prev,
+          startingNumber: nextNumber,
+        }));
+      };
+      fetchNextNumber();
+    }
+  }, [commonData.doType]);
 
   const [bulkInput, setBulkInput] = useState('');
   const [parsedRows, setParsedRows] = useState<BulkDORow[]>([]);
@@ -76,6 +91,38 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   const [showCargoTypeDropdown, setShowCargoTypeDropdown] = useState(false);
   const [showRateTypeDropdown, setShowRateTypeDropdown] = useState(false);
   const [showImportExportDropdown, setShowImportExportDropdown] = useState(false);
+
+  // Reset form when closing
+  useEffect(() => {
+    if (!isOpen) {
+      // Reset all form data when the modal closes
+      setBulkInput('');
+      setParsedRows([]);
+      setCreatedOrders([]);
+      setProgress({ current: 0, total: 0, status: '' });
+      setIsCreating(false);
+      
+      // Reset commonData to defaults
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      
+      setCommonData(prev => ({
+        date: `${year}-${month}-${day}`,
+        importOrExport: getDefaultImportExport(),
+        doType: 'DO' as 'DO' | 'SDO',
+        clientName: '',
+        loadingPoint: '',
+        destination: '',
+        haulier: '',
+        containerNo: 'LOOSE CARGO',
+        cargoType: 'loosecargo' as 'loosecargo' | 'container',
+        rateType: 'per_ton' as 'per_ton' | 'fixed_total',
+        startingNumber: prev.startingNumber, // Keep the starting number, will be refreshed when opening
+      }));
+    }
+  }, [isOpen]);
   
   // Dropdown refs
   const cargoTypeDropdownRef = useRef<HTMLDivElement>(null);
@@ -120,7 +167,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     setCommonData(prev => ({ 
       ...prev, 
       doType: newType,
-      startingNumber: nextNumber.toString()
+      startingNumber: nextNumber // Already in XXXX/YY format
     }));
   };
 
@@ -215,14 +262,21 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         return;
       }
       
-      const startNum = parseInt(commonData.startingNumber) || 0;
+      // Parse the starting DO number (format: XXXX/YY)
+      const parsed = parseDONumber(commonData.startingNumber);
+      if (!parsed) {
+        alert('Invalid DO number format. Expected format: XXXX/YY (e.g., 0001/26)');
+        return;
+      }
+
+      const { sequentialNumber: startNum, year } = parsed;
       
       const orders: Partial<DeliveryOrder>[] = parsedRows.map((row, index) => ({
         sn: index + 1,
         date: commonData.date,
         importOrExport: commonData.importOrExport,
         doType: commonData.doType,
-        doNumber: (startNum + index).toString(),
+        doNumber: formatDONumber(startNum + index, year), // Use new format: XXXX/YY
         clientName: commonData.clientName,
         truckNo: row.truckNo,
         trailerNo: row.trailerNo,
@@ -241,11 +295,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       console.log(`Generated ${orders.length} orders to save`);
       console.log('Sample order:', orders[0]);
       
-      // Pad DO numbers with leading zeros
-      const paddedOrders = orders.map(order => ({
-        ...order,
-        doNumber: order.doNumber?.toString().padStart(4, '0') || '0001'
-      }));
+      // Orders are already in the correct format, no need for padding
+      const paddedOrders = orders;
       
       // Initialize progress tracking
       setIsCreating(true);
@@ -406,11 +457,10 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         }
       }
 
-      const startNum = parseInt(commonData.startingNumber);
-      const endNum = startNum + orders.length - 1;
-      const paddedStart = startNum.toString().padStart(4, '0');
-      const paddedEnd = endNum.toString().padStart(4, '0');
-      const fileName = `${commonData.doType}-${paddedStart}-${paddedEnd}.pdf`;
+      // Generate filename using the first and last DO numbers from created orders
+      const firstDO = orders[0]?.doNumber || commonData.startingNumber;
+      const lastDO = orders[orders.length - 1]?.doNumber || commonData.startingNumber;
+      const fileName = `${commonData.doType}-${firstDO}-to-${lastDO}.pdf`;
       pdf.save(fileName);
       
       console.log(`✓ Successfully generated PDF with ${successCount} delivery orders`);
@@ -638,13 +688,13 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                     type="text"
                     name="startingNumber"
                     value={commonData.startingNumber}
-                    onChange={handleCommonChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    placeholder={`e.g., 6433`}
+                    readOnly
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 cursor-not-allowed"
+                    placeholder={`e.g., 0001/26`}
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Numbers will increment from this value
+                    Auto-generated from last DO. Format: XXXX/YY
                   </p>
                 </div>
                 
@@ -833,7 +883,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                   <div className="mb-3">
                     <p className="text-sm text-gray-700 dark:text-gray-300 mb-1 font-medium">What was created:</p>
                     <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
-                      <li><strong>{createdOrders.length}</strong> Delivery Orders ({commonData.doType}-{commonData.startingNumber} to {commonData.doType}-{parseInt(commonData.startingNumber) + createdOrders.length - 1})</li>
+                      <li><strong>{createdOrders.length}</strong> Delivery Orders ({createdOrders[0]?.doNumber} to {createdOrders[createdOrders.length - 1]?.doNumber})</li>
                       <li><strong>{createdOrders.length}</strong> Fuel Records with automatic fuel allocations</li>
                       <li>LPO entries for station fuel purchases (if applicable)</li>
                       <li>PDF file downloaded with all DOs</li>

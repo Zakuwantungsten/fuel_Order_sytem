@@ -103,12 +103,10 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   useEffect(() => {
     if (isOpen && !order) {
       const fetchNextNumber = async () => {
-        const nextNumber = await deliveryOrdersAPI.getNextNumber(formData.doType || 'DO');
-        const paddedNumber = nextNumber.toString().padStart(4, '0');
+        const nextDONumber = await deliveryOrdersAPI.getNextNumber(formData.doType || 'DO');
         setFormData(prev => ({
           ...prev,
-          sn: nextNumber,
-          doNumber: paddedNumber,
+          doNumber: nextDONumber, // Already in XXXX/YY format
         }));
       };
       fetchNextNumber();
@@ -151,9 +149,8 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     
     // Fetch next number for the selected type
     if (!order) {
-      const nextNumber = await deliveryOrdersAPI.getNextNumber(newType);
-      const paddedNumber = nextNumber.toString().padStart(4, '0');
-      setFormData(prev => ({ ...prev, sn: nextNumber, doNumber: paddedNumber }));
+      const nextDONumber = await deliveryOrdersAPI.getNextNumber(newType);
+      setFormData(prev => ({ ...prev, doNumber: nextDONumber })); // Already in XXXX/YY format
     }
   };
 
@@ -375,7 +372,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                     isEditMode ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''
                   }`}
-                  placeholder="e.g., 0001 or 1"
+                  placeholder="e.g., 0001/26"
                 />
                 {isEditMode && (
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
