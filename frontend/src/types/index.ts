@@ -1,5 +1,6 @@
 // Delivery Order (DO) Types
 export type DOStatus = 'active' | 'cancelled';
+export type JourneyStatus = 'queued' | 'active' | 'completed' | 'cancelled';
 
 export interface DeliveryOrderEditHistory {
   editedAt: string;
@@ -238,6 +239,13 @@ export interface FuelRecord {
   to: string;
   totalLts: number | null;
   extra?: number | null;
+  // Journey status and queue management
+  journeyStatus?: JourneyStatus;
+  queueOrder?: number;
+  activatedAt?: string;
+  completedAt?: string;
+  estimatedStartDate?: string;
+  previousJourneyId?: string;
   // Lock status for pending configurations
   isLocked?: boolean;
   pendingConfigReason?: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | null;

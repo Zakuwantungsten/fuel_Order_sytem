@@ -568,14 +568,25 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       // This validation only applies to IMPORT DOs (going journey)
       const response = await fuelRecordsAPI.getAll({ limit: 10000 });
       const allRecords = response.data;
-      const existingOpenRecord = allRecords.find(
-        (record: any) => record.truckNo === deliveryOrder.truckNo && !record.returnDo
+      const activeRecord = allRecords.find(
+        (record: any) => record.truckNo === deliveryOrder.truckNo && record.journeyStatus === 'active'
       );
       
-      if (existingOpenRecord) {
-        const message = `Truck ${deliveryOrder.truckNo} already has an open fuel record (Going DO: ${existingOpenRecord.goingDo}). Please complete the return journey (Export DO) first before creating a new IMPORT fuel record.`;
-        console.warn('  ✗', message);
-        throw new Error(message);
+      if (activeRecord && !activeRecord.returnDo) {
+        // Show info message instead of blocking - journey will be queued
+        const queuedCount = allRecords.filter(
+          (record: any) => record.truckNo === deliveryOrder.truckNo && record.journeyStatus === 'queued'
+        ).length;
+        
+        const position = queuedCount + 1;
+        const message = `ℹ️ Truck ${deliveryOrder.truckNo} has an active journey (DO: ${activeRecord.goingDo}). This new journey will be queued (position #${position}) and will automatically activate when the current journey completes.`;
+        console.log(message);
+        // Show alert but don't block
+        if (confirm(message + '\n\nDo you want to proceed with creating this queued journey?')) {
+          // Continue with fuel record creation - backend will handle queuing
+        } else {
+          throw new Error('Journey creation cancelled by user');
+        }
       }
       
       // Get total liters from API data (NOT localStorage)

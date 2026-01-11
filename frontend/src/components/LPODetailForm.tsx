@@ -46,6 +46,11 @@ interface TruckFetchResult {
   message: string;
   success: boolean;
   warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | null;
+  queueInfo?: {
+    hasQueue: boolean;
+    queuedCount: number;
+    nextJourney: FuelRecord;
+  };
 }
 
 interface EntryAutoFillData {
@@ -765,15 +770,25 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       );
 
       // Search for active fuel record: current month → previous month → two months ago → three months ago
-      // Active record = balance !== 0 (negative is acceptable) AND journey not complete
+      // Priority: active status first, then queued, then check balance/completion
       let activeRecord: FuelRecord | null = null;
       let searchMonth = 'current';
 
       // Helper to check if a record is active (balance != 0 OR journey not complete based on return checkpoints)
       const isActiveRecord = (r: FuelRecord): boolean => {
-        // If balance is not 0 (including negative), it's active
+        // Prioritize by journey status first
+        if (r.journeyStatus === 'active') {
+          return true; // Always include active status
+        }
+        if (r.journeyStatus === 'queued') {
+          return true; // Include queued journeys
+        }
+        if (r.journeyStatus === 'completed') {
+          return false; // Skip completed journeys
+        }
+        // Fallback for records without journeyStatus (backwards compatibility)
         if (r.balance !== 0) {
-          return true;
+          return true; // Non-zero balance (including negative) = active
         }
         // If balance is 0, check if journey is truly complete based on return checkpoints
         return !isJourneyComplete(r);
@@ -852,6 +867,25 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const goingDestination = activeRecord.originalGoingTo || activeRecord.to || 'NIL';
       const currentDestination = activeRecord.to || 'NIL';
       
+      // Check for queued journeys for this truck
+      const queuedJourneys = activeFuelRecords.filter((r: FuelRecord) => 
+        r.journeyStatus === 'queued' && r.truckNo === activeRecord.truckNo
+      ).sort((a: any, b: any) => (a.queueOrder || 0) - (b.queueOrder || 0));
+      
+      // Build message with journey status
+      let statusMessage = `Found (${searchMonth} month): Going DO ${activeRecord.goingDo}, Balance: ${activeRecord.balance}L`;
+      
+      if (activeRecord.journeyStatus === 'queued') {
+        statusMessage = `⏳ QUEUED Journey (Position #${activeRecord.queueOrder || '?'}): ${activeRecord.goingDo} - Waiting to activate`;
+      } else if (activeRecord.journeyStatus === 'active') {
+        statusMessage = `🚛 ACTIVE Journey: DO ${activeRecord.goingDo}, Balance: ${activeRecord.balance}L`;
+        if (queuedJourneys.length > 0) {
+          statusMessage += ` | ${queuedJourneys.length} queued`;
+        }
+      } else if (activeRecord.journeyStatus === 'completed') {
+        statusMessage = `✓ COMPLETED Journey: DO ${activeRecord.goingDo}`;
+      }
+      
       return {
         fuelRecord: activeRecord,
         goingDo: activeRecord.goingDo || 'NIL',
@@ -859,8 +893,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         destination: currentDestination,  // Current destination (might have changed for return)
         goingDestination: goingDestination,  // Original going destination for fuel allocation
         balance: activeRecord.balance || 0,
-        message: `Found (${searchMonth} month): Going DO ${activeRecord.goingDo}, Balance: ${activeRecord.balance}L`,
-        success: true
+        message: statusMessage,
+        success: true,
+        queueInfo: queuedJourneys.length > 0 ? {
+          hasQueue: true,
+          queuedCount: queuedJourneys.length,
+          nextJourney: queuedJourneys[0],
+        } : undefined,
       };
     } catch (error) {
       console.error('Error fetching truck data:', error);

@@ -735,7 +735,7 @@ export const getDeliveryOrdersByTruck = async (req: AuthRequest, res: Response):
 
 /**
  * Get current journey for a truck
- * Returns the most recent journey (going DO + returning DO if available)
+ * Returns the active journey + queued journeys for queue management
  */
 export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -744,18 +744,37 @@ export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response):
     // Normalize truck number - remove spaces and hyphens for flexible matching
     const normalizedInput = truckNo.replace(/[\s-]/g, '').toUpperCase();
     
-    // Get all DOs and filter in code for flexible matching
+    // Get all fuel records for this truck (active + queued)
+    const { FuelRecord } = require('../models');
+    const fuelRecords = await FuelRecord.find({
+      isDeleted: false,
+    }).sort({ date: -1 }).lean();
+    
+    // Filter to match truck number flexibly
+    const truckRecords = fuelRecords.filter((record: any) => {
+      const normalizedRecordTruck = record.truckNo.replace(/[\s-]/g, '').toUpperCase();
+      return normalizedRecordTruck === normalizedInput;
+    });
+
+    // Find active journey
+    const activeJourney = truckRecords.find((r: any) => r.journeyStatus === 'active');
+    
+    // Find queued journeys
+    const queuedJourneys = truckRecords
+      .filter((r: any) => r.journeyStatus === 'queued')
+      .sort((a: any, b: any) => (a.queueOrder || 0) - (b.queueOrder || 0));
+
+    // Get all DOs for this truck for backwards compatibility
     const allOrders = await DeliveryOrder.find({
       isDeleted: false,
     }).sort({ date: -1 }).lean();
     
-    // Filter to match truck number flexibly (ignoring spaces/hyphens)
     const deliveryOrders = allOrders.filter((order: any) => {
       const normalizedOrderTruck = order.truckNo.replace(/[\s-]/g, '').toUpperCase();
       return normalizedOrderTruck === normalizedInput;
     });
 
-    if (deliveryOrders.length === 0) {
+    if (deliveryOrders.length === 0 && !activeJourney) {
       res.status(200).json({
         success: true,
         message: 'No journey found for this truck',
@@ -764,41 +783,41 @@ export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response):
           journeyPhase: 'none',
           goingDO: null,
           returningDO: null,
+          activeFuelRecord: null,
+          queuedJourneys: [],
+          hasQueue: false,
         },
       });
       return;
     }
 
-    // Determine current journey based on most recent DO
+    // Determine current journey based on most recent DO (for backwards compatibility)
     const mostRecentDO = deliveryOrders[0];
     let goingDO: any = null;
     let returningDO: any = null;
     let journeyPhase: 'going' | 'returning' | 'none' = 'none';
 
-    if (mostRecentDO.importOrExport === 'IMPORT') {
-      // Most recent is IMPORT - driver is on the going leg
-      goingDO = mostRecentDO;
-      journeyPhase = 'going';
-    } else if (mostRecentDO.importOrExport === 'EXPORT') {
-      // Most recent is EXPORT - driver is on the returning leg
-      returningDO = mostRecentDO;
-      journeyPhase = 'returning';
-      
-      // Find the associated IMPORT (the most recent IMPORT before or on the same date as this EXPORT)
-      const mostRecentExportDate = new Date(mostRecentDO.date);
-      const associatedImport = deliveryOrders.find((d: any) => {
-        if (d.importOrExport !== 'IMPORT') return false;
-        const importDate = new Date(d.date);
-        // IMPORT should be on or before the EXPORT date
-        return importDate <= mostRecentExportDate;
-      });
-      
-      if (associatedImport) {
-        goingDO = associatedImport;
+    if (mostRecentDO) {
+      if (mostRecentDO.importOrExport === 'IMPORT') {
+        goingDO = mostRecentDO;
+        journeyPhase = 'going';
+      } else if (mostRecentDO.importOrExport === 'EXPORT') {
+        returningDO = mostRecentDO;
+        journeyPhase = 'returning';
+        
+        const mostRecentExportDate = new Date(mostRecentDO.date);
+        const associatedImport = deliveryOrders.find((d: any) => {
+          if (d.importOrExport !== 'IMPORT') return false;
+          const importDate = new Date(d.date);
+          return importDate <= mostRecentExportDate;
+        });
+        
+        if (associatedImport) {
+          goingDO = associatedImport;
+        }
       }
     }
 
-    // Get the DO numbers for the current journey
     const journeyDONumbers: string[] = [];
     if (goingDO?.doNumber) journeyDONumbers.push(goingDO.doNumber);
     if (returningDO?.doNumber) journeyDONumbers.push(returningDO.doNumber);
@@ -811,7 +830,15 @@ export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response):
         goingDO,
         returningDO,
         journeyDONumbers,
-        allDeliveryOrders: deliveryOrders, // Include all for reference
+        allDeliveryOrders: deliveryOrders,
+        // New queue management fields
+        activeFuelRecord: activeJourney,
+        queuedJourneys: queuedJourneys,
+        hasQueue: queuedJourneys.length > 0,
+        queueInfo: queuedJourneys.length > 0 ? {
+          count: queuedJourneys.length,
+          nextUp: queuedJourneys[0],
+        } : null,
       },
     });
   } catch (error: any) {

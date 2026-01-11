@@ -53,6 +53,33 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       required: false, // Changed to allow null for pending admin configuration
       default: null,
     },
+    // Journey status and queue management
+    journeyStatus: {
+      type: String,
+      enum: ['queued', 'active', 'completed', 'cancelled'],
+      default: 'active',
+      required: true,
+    },
+    queueOrder: {
+      type: Number,
+      required: false,
+    },
+    activatedAt: {
+      type: Date,
+      required: false,
+    },
+    completedAt: {
+      type: Date,
+      required: false,
+    },
+    estimatedStartDate: {
+      type: String,
+      required: false,
+    },
+    previousJourneyId: {
+      type: String,
+      required: false,
+    },
     // Lock status for pending configurations
     isLocked: {
       type: Boolean,
@@ -184,10 +211,13 @@ fuelRecordSchema.index({ goingDo: 1 });
 fuelRecordSchema.index({ returnDo: 1 });
 fuelRecordSchema.index({ isDeleted: 1 });
 fuelRecordSchema.index({ month: 1 });
+fuelRecordSchema.index({ journeyStatus: 1 });
 
 // Compound indexes for common queries
 fuelRecordSchema.index({ truckNo: 1, date: -1 });
 fuelRecordSchema.index({ date: -1, isDeleted: 1 });
+fuelRecordSchema.index({ truckNo: 1, journeyStatus: 1, queueOrder: 1 }); // For queue management
+fuelRecordSchema.index({ truckNo: 1, journeyStatus: 1, isDeleted: 1 }); // For finding active/queued journeys
 // Index for yard fuel auto-linking queries (optimized for finding active records)
 fuelRecordSchema.index({ truckNo: 1, date: -1, isDeleted: 1, isCancelled: 1 });
 

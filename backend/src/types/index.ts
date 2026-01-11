@@ -364,6 +364,8 @@ export interface ILPOWorkbook {
 }
 
 // Fuel Record Types
+export type JourneyStatus = 'queued' | 'active' | 'completed' | 'cancelled';
+
 export interface IFuelRecord {
   date: string;
   month?: string;
@@ -374,7 +376,14 @@ export interface IFuelRecord {
   from: string;
   to: string;
   totalLts: number | null;
-  extra?: number | null;
+  extra: number | null;
+  // Journey status and queue management
+  journeyStatus: JourneyStatus;
+  queueOrder?: number;
+  activatedAt?: Date;
+  completedAt?: Date;
+  estimatedStartDate?: string;
+  previousJourneyId?: string;
   // Lock status for pending configurations
   isLocked?: boolean;
   pendingConfigReason?: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | null;

@@ -5,6 +5,7 @@ import { fuelRecordsAPI, lposAPI } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
+import JourneyStatusBadge from '../components/JourneyStatusBadge';
 import Pagination from '../components/Pagination';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 
@@ -823,7 +824,7 @@ const FuelRecords = () => {
                     {/* Header */}
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="text-xs text-gray-500 dark:text-gray-400">#{actualIndex + 1}</span>
                           <h3 className={`text-base font-bold ${
                             isCancelled
@@ -836,6 +837,13 @@ const FuelRecords = () => {
                             <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
                               Cancelled
                             </span>
+                          )}
+                          {!isCancelled && record.journeyStatus && (
+                            <JourneyStatusBadge 
+                              status={record.journeyStatus} 
+                              queueOrder={record.queueOrder}
+                              size="sm"
+                            />
                           )}
                         </div>
                         <p className={`text-xs ${isCancelled ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
