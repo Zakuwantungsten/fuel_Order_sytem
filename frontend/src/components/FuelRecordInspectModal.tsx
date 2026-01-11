@@ -92,8 +92,22 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset state when modal closes or fuelRecordId changes
+  useEffect(() => {
+    if (!isOpen) {
+      // Clear state when modal closes to prevent showing stale data on next open
+      setFuelRecord(null);
+      setLoading(true);
+      setError(null);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen && fuelRecordId) {
+      // Clear previous data before fetching new record
+      setFuelRecord(null);
+      setLoading(true);
+      setError(null);
       fetchFuelRecord();
     }
   }, [isOpen, fuelRecordId]);

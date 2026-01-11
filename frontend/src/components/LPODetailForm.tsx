@@ -1521,7 +1521,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           loading: false, 
           fetched: result.success, 
           fuelRecord: result.fuelRecord,
-          fuelRecordId: result.fuelRecord?.id,
+          fuelRecordId: result.fuelRecord?.id || result.fuelRecord?._id,  // Handle both id and _id
           goingDestination: result.goingDestination,
           returnDoMissing,
           warningType: result.warningType || null,
