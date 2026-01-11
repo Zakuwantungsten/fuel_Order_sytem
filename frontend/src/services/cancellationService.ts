@@ -65,7 +65,7 @@ export const GOING_CHECKPOINTS: CancellationPoint[] = [
 
 // Returning direction checkpoints
 export const RETURNING_CHECKPOINTS: CancellationPoint[] = [
-  'ZAMBIA_RETURNING', // Zambia returning (combined)
+  'ZAMBIA_RETURNING', // Zambia Return (Lake Ndola + Lake Kapiri = 400L total)
   'TDM_RETURN',       // TDM/Tunduma (Returning)
   'MBEYA_RETURN',     // Mbeya (Returning)
   'MORO_RETURN',      // Morogoro (Returning)
@@ -161,6 +161,7 @@ export const getCancellationPointDisplayName = (point: CancellationPoint): strin
     'DAR_GOING': 'Dar Going',
     'MORO_GOING': 'Moro Going',
     'MBEYA_GOING': 'Mbeya Going',
+    'INFINITY_GOING': 'Infinity Going',
     'TDM_GOING': 'TDM/Tunduma Going',
     'ZAMBIA_GOING': 'Zambia Going',
     'CONGO_GOING': 'Congo',
@@ -240,6 +241,7 @@ export const getStationsForCancellationPoint = (cancellationPoint: CancellationP
     'DAR_GOING': ['DAR GOING'],
     'MORO_GOING': ['MORO GOING', 'GBP MOROGORO'],
     'MBEYA_GOING': ['MBEYA GOING', 'INFINITY'],
+    'INFINITY_GOING': ['INFINITY'],
     'TDM_GOING': ['TDM GOING', 'LAKE TUNDUMA'],
     'ZAMBIA_GOING': ['ZAMBIA GOING', 'LAKE CHILABOMBWE'],
     'CONGO_GOING': ['CONGO'],
