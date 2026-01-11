@@ -770,21 +770,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       );
 
       // Search for active fuel record: current month → previous month → two months ago → three months ago
-      // Priority: active status first, then queued, then check balance/completion
+      // Priority: ACTIVE status first (never return queued if active exists)
       let activeRecord: FuelRecord | null = null;
       let searchMonth = 'current';
 
-      // Helper to check if a record is active (balance != 0 OR journey not complete based on return checkpoints)
+      // Helper to check if a record is ACTIVE (not queued, not completed)
       const isActiveRecord = (r: FuelRecord): boolean => {
-        // Prioritize by journey status first
+        // If has journeyStatus, use it (prioritize active over queued)
         if (r.journeyStatus === 'active') {
-          return true; // Always include active status
+          return true; // Active journey
         }
-        if (r.journeyStatus === 'queued') {
-          return true; // Include queued journeys
-        }
-        if (r.journeyStatus === 'completed') {
-          return false; // Skip completed journeys
+        if (r.journeyStatus === 'queued' || r.journeyStatus === 'completed') {
+          return false; // Skip queued and completed
         }
         // Fallback for records without journeyStatus (backwards compatibility)
         if (r.balance !== 0) {
@@ -794,7 +791,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         return !isJourneyComplete(r);
       };
 
-      // First, try to find a record in current month that is active
+      // First, try to find an ACTIVE record in current month
       activeRecord = sortedRecords.find((r: FuelRecord) => 
         isInMonth(r.date, currentMonth) && isActiveRecord(r)
       ) || null;
