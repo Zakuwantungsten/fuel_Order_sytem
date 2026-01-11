@@ -23,6 +23,22 @@ export const RETURNING_STATIONS = [
   'LAKE KAPIRI',  // Returning - second part (350L)
 ];
 
+// Zambia Returning Split Configuration
+// Lake Ndola (50L) + Lake Kapiri (350L) = 400L total for Zambia Return
+export const ZAMBIA_RETURNING_PARTS = {
+  ndola: {
+    station: 'LAKE NDOLA',
+    liters: 50,
+    order: 1, // First station in the sequence
+  },
+  kapiri: {
+    station: 'LAKE KAPIRI',
+    liters: 350,
+    order: 2, // Second station in the sequence
+  },
+  total: 400,
+};
+
 // Destinations (where trucks are going) - NOT cancellation points
 export const DESTINATIONS = [
   'TCC',       // Destination in Zambia
@@ -42,7 +58,6 @@ export const GOING_CHECKPOINTS: CancellationPoint[] = [
   'DAR_GOING',      // Dar es Salaam checkpoint (Going)
   'MORO_GOING',     // Morogoro checkpoint (Going)
   'MBEYA_GOING',    // Mbeya checkpoint (Going)
-  'INFINITY_GOING', // Infinity/Mbeya area (Going)
   'TDM_GOING',      // TDM/Tunduma checkpoint (Going)
   'ZAMBIA_GOING',   // Zambia entry (Going) - Lake Chilabombwe
   'CONGO_GOING',    // Congo (Going)
@@ -50,21 +65,14 @@ export const GOING_CHECKPOINTS: CancellationPoint[] = [
 
 // Returning direction checkpoints
 export const RETURNING_CHECKPOINTS: CancellationPoint[] = [
-  'ZAMBIA_NDOLA',   // Zambia - Ndola part (50L)
-  'ZAMBIA_KAPIRI',  // Zambia - Kapiri part (350L)
-  'TDM_RETURN',     // TDM/Tunduma (Returning)
-  'MBEYA_RETURN',   // Mbeya (Returning)
-  'MORO_RETURN',    // Morogoro (Returning)
-  'DAR_RETURN',     // Dar es Salaam (Returning)
-  'TANGA_RETURN',   // Tanga (Returning - alternative route)
-  'CONGO_RETURNING', // Congo (Returning)
+  'ZAMBIA_RETURNING', // Zambia returning (combined)
+  'TDM_RETURN',       // TDM/Tunduma (Returning)
+  'MBEYA_RETURN',     // Mbeya (Returning)
+  'MORO_RETURN',      // Morogoro (Returning)
+  'DAR_RETURN',       // Dar es Salaam (Returning)
+  'TANGA_RETURN',     // Tanga (Returning - alternative route)
+  'CONGO_RETURNING',  // Congo (Returning)
 ];
-
-// Zambia returning has two parts
-export const ZAMBIA_RETURNING_PARTS = {
-  ndola: { name: 'LAKE NDOLA', liters: 50, point: 'ZAMBIA_NDOLA' as CancellationPoint },
-  kapiri: { name: 'LAKE KAPIRI', liters: 350, point: 'ZAMBIA_KAPIRI' as CancellationPoint }
-};
 
 // Map station names to cancellation points
 // Used when a station is selected to determine which checkpoint the cancellation applies to
@@ -78,8 +86,8 @@ export const STATION_TO_CANCELLATION_POINT: Record<string, CancellationPoint> = 
   'ZAMBIA GOING': 'ZAMBIA_GOING',
   'LAKE CHILABOMBWE': 'ZAMBIA_GOING',
   // Returning stations/checkpoints
-  'LAKE NDOLA': 'ZAMBIA_NDOLA',
-  'LAKE KAPIRI': 'ZAMBIA_KAPIRI',
+  'LAKE NDOLA': 'ZAMBIA_RETURNING',
+  'LAKE KAPIRI': 'ZAMBIA_RETURNING',
   'TDM RETURN': 'TDM_RETURN',
   'MBEYA RETURN': 'MBEYA_RETURN',
   'MORO RETURN': 'MORO_RETURN',
@@ -98,13 +106,11 @@ export const CANCELLATION_POINT_TO_FUEL_FIELD: Record<CancellationPoint, string>
   'DAR_GOING': 'darGoing',
   'MORO_GOING': 'moroGoing',
   'MBEYA_GOING': 'mbeyaGoing',
-  'INFINITY_GOING': 'mbeyaGoing',    // Infinity is in Mbeya area
   'TDM_GOING': 'tdmGoing',
   'ZAMBIA_GOING': 'zambiaGoing',
   'CONGO_GOING': 'congoFuel',        // Congo (Going) maps to congoFuel column
   // Returning direction checkpoints
-  'ZAMBIA_NDOLA': 'zambiaReturn',    // Part of Zambia Return (50L)
-  'ZAMBIA_KAPIRI': 'zambiaReturn',   // Part of Zambia Return (350L)
+  'ZAMBIA_RETURNING': 'zambiaReturn', // Zambia returning (combined)
   'TDM_RETURN': 'tundumaReturn',
   'MBEYA_RETURN': 'mbeyaReturn',
   'MORO_RETURN': 'moroReturn',
@@ -155,12 +161,10 @@ export const getCancellationPointDisplayName = (point: CancellationPoint): strin
     'DAR_GOING': 'Dar Going',
     'MORO_GOING': 'Moro Going',
     'MBEYA_GOING': 'Mbeya Going',
-    'INFINITY_GOING': 'Infinity (Mbeya)',
     'TDM_GOING': 'TDM/Tunduma Going',
     'ZAMBIA_GOING': 'Zambia Going',
     'CONGO_GOING': 'Congo',
-    'ZAMBIA_NDOLA': 'Zambia Returning (Ndola - 50L)',
-    'ZAMBIA_KAPIRI': 'Zambia Returning (Kapiri - 350L)',
+    'ZAMBIA_RETURNING': 'Zambia Returning',
     'TDM_RETURN': 'TDM/Tunduma Return',
     'MBEYA_RETURN': 'Mbeya Return',
     'MORO_RETURN': 'Moro Return',
@@ -192,17 +196,17 @@ export const getAutoCancellationPoint = (station: string, direction: 'going' | '
   // For CASH station, determine based on direction
   if (stationUpper === 'CASH') {
     // Default cancellation points for CASH based on direction
-    return direction === 'going' ? 'ZAMBIA_GOING' : 'ZAMBIA_KAPIRI';
+    return direction === 'going' ? 'ZAMBIA_GOING' : 'ZAMBIA_RETURNING';
   }
   
   // For stations containing "LAKE" (Zambian stations)
   if (stationUpper.includes('LAKE')) {
     if (stationUpper.includes('CHILABOMBWE')) return 'ZAMBIA_GOING';
-    if (stationUpper.includes('NDOLA')) return 'ZAMBIA_NDOLA';
-    if (stationUpper.includes('KAPIRI')) return 'ZAMBIA_KAPIRI';
+    if (stationUpper.includes('NDOLA')) return 'ZAMBIA_RETURNING';
+    if (stationUpper.includes('KAPIRI')) return 'ZAMBIA_RETURNING';
     if (stationUpper.includes('TUNDUMA')) return direction === 'going' ? 'TDM_GOING' : 'TDM_RETURN';
     // Default for other LAKE stations based on direction
-    return direction === 'going' ? 'ZAMBIA_GOING' : 'ZAMBIA_KAPIRI';
+    return direction === 'going' ? 'ZAMBIA_GOING' : 'ZAMBIA_RETURNING';
   }
   
   // For INFINITY (Mbeya area)
@@ -222,6 +226,35 @@ export const getAutoCancellationPoint = (station: string, direction: 'going' | '
   
   // Default fallback based on direction
   return direction === 'going' ? 'DAR_GOING' : 'DAR_RETURN';
+};
+
+/**
+ * Get stations that correspond to a specific cancellation point
+ * Used to filter LPOs when showing which ones to cancel
+ * @param cancellationPoint - The checkpoint (e.g., 'ZAMBIA_GOING')
+ * @returns Array of station names that map to this checkpoint
+ */
+export const getStationsForCancellationPoint = (cancellationPoint: CancellationPoint): string[] => {
+  // Reverse mapping: checkpoint -> stations
+  const checkpointToStations: Record<CancellationPoint, string[]> = {
+    'DAR_GOING': ['DAR GOING'],
+    'MORO_GOING': ['MORO GOING', 'GBP MOROGORO'],
+    'MBEYA_GOING': ['MBEYA GOING', 'INFINITY'],
+    'TDM_GOING': ['TDM GOING', 'LAKE TUNDUMA'],
+    'ZAMBIA_GOING': ['ZAMBIA GOING', 'LAKE CHILABOMBWE'],
+    'CONGO_GOING': ['CONGO'],
+    'ZAMBIA_RETURNING': ['ZAMBIA RETURN', 'LAKE NDOLA', 'LAKE KAPIRI'],
+    'TDM_RETURN': ['TDM RETURN', 'LAKE TUNDUMA'],
+    'MBEYA_RETURN': ['MBEYA RETURN', 'INFINITY'],
+    'MORO_RETURN': ['MORO RETURN', 'GBP MOROGORO'],
+    'DAR_RETURN': ['DAR RETURN'],
+    'TANGA_RETURN': ['TANGA RETURN', 'GBP KANGE'],
+    'CONGO_RETURNING': ['CONGO'],
+    'CUSTOM_GOING': [],  // Custom stations don't have predefined names
+    'CUSTOM_RETURN': [],
+  };
+  
+  return checkpointToStations[cancellationPoint] || [];
 };
 
 // Get available cancellation points (checkpoints) based on journey direction
@@ -450,6 +483,7 @@ export default {
   getAvailableCancellationPoints,
   getFuelRecordFieldFromCancellationPoint,
   getAutoCancellationPoint,
+  getStationsForCancellationPoint,
   createCancellationInfo,
   generateCancellationReport,
   generateCancellationStatement,

@@ -1892,10 +1892,11 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
 /**
  * Find LPOs at a specific checkpoint/station that have a particular truck
  * Used for auto-cancellation when creating CASH LPOs
+ * Now filters by DO number to only match current journey
  */
 export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { truckNo, station, cancellationPoint } = req.query;
+    const { truckNo, station, cancellationPoint, doNo } = req.query;
 
     if (!truckNo) {
       throw new ApiError(400, 'Truck number is required');
@@ -1909,15 +1910,21 @@ export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Pro
     dateLimitForLPO.setDate(dateLimitForLPO.getDate() - 40);
     const dateLimitString = dateLimitForLPO.toISOString().split('T')[0]; // YYYY-MM-DD format
     
-    // Find LPOs where this truck has an active (non-cancelled) entry at the given station
+    // Find LPOs where this truck has an active (non-cancelled) entry
     // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
     // Only search LPOs from the last 40 days to improve performance
     const query: any = {
       isDeleted: false,
       'entries.truckNo': { $regex: new RegExp(`^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'), 'i') },
       'entries.isCancelled': { $ne: true },
-      date: { $gte: dateLimitString } // Only search last 40 days
+      date: { $gte: dateLimitString }, // Only search last 40 days
+      station: { $ne: 'CASH' } // Exclude CASH LPOs from cancellation
     };
+
+    // CRITICAL: Filter by DO number if provided - ensures we only match current journey
+    if (doNo) {
+      query['entries.doNo'] = doNo as string;
+    }
 
     // If station is provided, filter by station
     if (station) {
@@ -1927,17 +1934,25 @@ export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Pro
     const lpos = await LPOSummary.find(query).lean();
 
     // Filter entries to only include matching truck entries that are not cancelled (case-insensitive)
+    // Also filter by DO number if provided
     const matchingLpos = lpos.map(lpo => ({
       ...lpo,
       entries: lpo.entries.filter((e: any) => {
         const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
-        return entryTruckNormalized === truckNoNormalized && !e.isCancelled;
+        const truckMatches = entryTruckNormalized === truckNoNormalized && !e.isCancelled;
+        
+        // If DO number is provided, also check if entry matches the DO
+        if (doNo && truckMatches) {
+          return e.doNo === doNo;
+        }
+        
+        return truckMatches;
       })
     })).filter(lpo => lpo.entries.length > 0);
 
     res.status(200).json({
       success: true,
-      message: `Found ${matchingLpos.length} LPOs with truck ${truckNo}`,
+      message: `Found ${matchingLpos.length} LPOs with truck ${truckNo}${doNo ? ` for DO ${doNo}` : ''}`,
       data: matchingLpos,
     });
   } catch (error: any) {

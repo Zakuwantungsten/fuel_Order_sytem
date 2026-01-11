@@ -7,7 +7,7 @@ import { configService } from '../services/configService';
 import { 
   getAvailableCancellationPoints, 
   getCancellationPointDisplayName,
-  ZAMBIA_RETURNING_PARTS,
+  getStationsForCancellationPoint,
   FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
 import FuelRecordInspectModal, { calculateMbeyaReturnBalance } from './FuelRecordInspectModal';
@@ -78,14 +78,6 @@ interface InspectModalState {
   entryIndex: number;
 }
 
-// Cash currency conversion state
-interface CashConversion {
-  localRate: number;       // Rate per liter in local currency (e.g., ZMW)
-  conversionRate: number;  // Conversion rate to TZS (e.g., 1 USD = X TZS or 1 ZMW = Y TZS)
-  currency: string;        // Local currency code (e.g., 'ZMW', 'USD')
-  calculatedRate: number;  // Final rate in TZS for LPO
-}
-
 interface LPODetailFormProps {
   isOpen: boolean;
   onClose: () => void;
@@ -104,7 +96,6 @@ interface StoredFormData {
   returningEnabled: boolean;
   goingCheckpoint: CancellationPoint | '';
   returningCheckpoint: CancellationPoint | '';
-  cashConversion: CashConversion;
   customStationName: string;
   customGoingEnabled: boolean;
   customReturnEnabled: boolean;
@@ -224,11 +215,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
     return '';
   });
-  const [existingLPOsForTrucks, setExistingLPOsForTrucks] = useState<Map<string, { lpos: LPOSummary[], direction: string }[]>>(new Map());
+  const [existingLPOsForTrucks, setExistingLPOsForTrucks] = useState<Map<string, { lpos: LPOSummary[], direction: string, doNo: string }[]>>(new Map());
+  const [selectedLPOsToCancel, setSelectedLPOsToCancel] = useState<Map<string, Set<string>>>(new Map()); // truckNo -> Set of LPO IDs
   const [trucksWithoutLPOs, setTrucksWithoutLPOs] = useState<Set<string>>(new Set());
   const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
   
   // Track which entries have been created (to prevent auto-update of their rates)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [lockedEntryRates, setLockedEntryRates] = useState<Map<number, number>>(new Map());
 
   // Duplicate allocation warning state
@@ -249,25 +242,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     fuelRecordId: undefined,
     direction: 'going',
     entryIndex: -1,
-  });
-
-  // Cash currency conversion state
-  const [cashConversion, setCashConversion] = useState<CashConversion>(() => {
-    if (!initialData) {
-      const stored = loadFormFromStorage();
-      return stored?.cashConversion ?? {
-        localRate: 0,
-        conversionRate: 1,
-        currency: 'ZMW',
-        calculatedRate: 0,
-      };
-    }
-    return {
-      localRate: 0,
-      conversionRate: 1,
-      currency: 'ZMW',
-      calculatedRate: 0,
-    };
   });
 
   // Forwarding mode state - tracks inline forwarding workflow
@@ -402,15 +376,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setGoingCheckpoint('');
     setReturningCheckpoint('');
     setExistingLPOsForTrucks(new Map());
+    setSelectedLPOsToCancel(new Map());
     setTrucksWithoutLPOs(new Set());
     setDuplicateWarnings(new Map());
     setLockedEntryRates(new Map());
-    setCashConversion({
-      localRate: 0,
-      conversionRate: 1,
-      currency: 'ZMW',
-      calculatedRate: 0,
-    });
     setCustomStationName('');
     setCustomGoingEnabled(false);
     setCustomReturnEnabled(false);
@@ -470,7 +439,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         returningEnabled,
         goingCheckpoint,
         returningCheckpoint,
-        cashConversion,
         customStationName,
         customGoingEnabled,
         customReturnEnabled,
@@ -489,7 +457,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     returningEnabled, 
     goingCheckpoint, 
     returningCheckpoint,
-    cashConversion,
     customStationName,
     customGoingEnabled,
     customReturnEnabled,
@@ -510,35 +477,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     fetchNextLpoNumber();
   };
 
-  // Calculate TZS rate when cash conversion values change
-  // Only update entries that haven't been locked (new entries only)
-  useEffect(() => {
-    if (formData.station === 'CASH' && cashConversion.localRate > 0 && cashConversion.conversionRate > 0) {
-      // If currency is ZMW, convert to TZS: localRate * conversionRate
-      // Example: 26 ZMW/liter * 116 (TZS per ZMW) = 3016 TZS/liter
-      const calculatedRate = cashConversion.localRate * cashConversion.conversionRate;
-      setCashConversion(prev => ({ ...prev, calculatedRate }));
-      
-      // Only update entries that are NOT locked (entries added after rate was set keep their original rate)
-      const updatedEntries = formData.entries?.map((entry, index) => {
-        const lockedRate = lockedEntryRates.get(index);
-        if (lockedRate !== undefined) {
-          // Entry is locked, keep its original rate
-          return entry;
-        }
-        // Entry is not locked, update with new calculated rate
-        return {
-          ...entry,
-          rate: calculatedRate,
-          amount: entry.liters * calculatedRate
-        };
-      }) || [];
-      
-      const total = updatedEntries.reduce((sum, entry) => sum + entry.amount, 0);
-      setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
-    }
-  }, [cashConversion.localRate, cashConversion.conversionRate, formData.station, lockedEntryRates]);
-
   // Fetch existing LPOs for trucks when CASH is selected and checkpoint(s) are chosen
   useEffect(() => {
     const fetchExistingLPOs = async () => {
@@ -548,34 +486,93 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       
       if (formData.station === 'CASH' && (hasGoingCheckpoint || hasReturningCheckpoint) && formData.entries && formData.entries.length > 0) {
         setIsFetchingLPOs(true);
-        const newMap = new Map<string, { lpos: LPOSummary[], direction: string }[]>();
+        const newMap = new Map<string, { lpos: LPOSummary[], direction: string, doNo: string }[]>();
         const trucksWithoutLPOsSet = new Set<string>();
+        const newSelectedLPOs = new Map<string, Set<string>>();
         
         try {
           for (const entry of formData.entries) {
-            if (entry.truckNo && entry.truckNo.length >= 4) {
-              const truckLPOs: { lpos: LPOSummary[], direction: string }[] = [];
+            if (entry.truckNo && entry.truckNo.length >= 4 && entry.doNo && entry.doNo !== 'NIL') {
+              const truckLPOs: { lpos: LPOSummary[], direction: string, doNo: string }[] = [];
               
               // Check going direction if enabled
               if (hasGoingCheckpoint) {
-                const goingLpos = await lpoDocumentsAPI.findAtCheckpoint(entry.truckNo);
-                if (goingLpos.length > 0) {
-                  truckLPOs.push({ lpos: goingLpos, direction: 'Going' });
+                // Get stations that correspond to this checkpoint
+                const goingStations = getStationsForCancellationPoint(goingCheckpoint);
+                
+                const goingLpos = await lpoDocumentsAPI.findAtCheckpoint(
+                  entry.truckNo,
+                  entry.doNo, // Filter by DO number - current journey only
+                  undefined,
+                  goingCheckpoint
+                );
+                
+                // Filter LPOs to only include those at stations matching this checkpoint
+                const filteredGoingLpos = goingLpos.filter(lpo => {
+                  const lpoStationUpper = lpo.station.toUpperCase().trim();
+                  return goingStations.some(station => {
+                    const checkpointStation = station.toUpperCase().trim();
+                    // Check exact match or partial match (for variations like GBP/GPB)
+                    return lpoStationUpper === checkpointStation || 
+                           lpoStationUpper.includes(checkpointStation) ||
+                           checkpointStation.includes(lpoStationUpper);
+                  });
+                });
+                
+                if (filteredGoingLpos.length > 0) {
+                  truckLPOs.push({ lpos: filteredGoingLpos, direction: 'Going', doNo: entry.doNo });
+                  
+                  // Auto-select all if only one LPO, otherwise none selected by default
+                  if (!newSelectedLPOs.has(entry.truckNo)) {
+                    newSelectedLPOs.set(entry.truckNo, new Set());
+                  }
+                  if (filteredGoingLpos.length === 1) {
+                    newSelectedLPOs.get(entry.truckNo)!.add(filteredGoingLpos[0].id as string);
+                  }
                 }
               }
               
               // Check returning direction if enabled
               if (hasReturningCheckpoint) {
-                const returningLpos = await lpoDocumentsAPI.findAtCheckpoint(entry.truckNo);
-                if (returningLpos.length > 0) {
-                  truckLPOs.push({ lpos: returningLpos, direction: 'Returning' });
+                // Get stations that correspond to this checkpoint
+                const returningStations = getStationsForCancellationPoint(returningCheckpoint);
+                
+                const returningLpos = await lpoDocumentsAPI.findAtCheckpoint(
+                  entry.truckNo,
+                  entry.doNo, // Filter by DO number - current journey only
+                  undefined,
+                  returningCheckpoint
+                );
+                
+                // Filter LPOs to only include those at stations matching this checkpoint
+                const filteredReturningLpos = returningLpos.filter(lpo => {
+                  const lpoStationUpper = lpo.station.toUpperCase().trim();
+                  return returningStations.some(station => {
+                    const checkpointStation = station.toUpperCase().trim();
+                    // Check exact match or partial match
+                    return lpoStationUpper === checkpointStation || 
+                           lpoStationUpper.includes(checkpointStation) ||
+                           checkpointStation.includes(lpoStationUpper);
+                  });
+                });
+                
+                if (filteredReturningLpos.length > 0) {
+                  truckLPOs.push({ lpos: filteredReturningLpos, direction: 'Returning', doNo: entry.doNo });
+                  
+                  // Auto-select all if only one LPO, otherwise none selected by default
+                  if (!newSelectedLPOs.has(entry.truckNo)) {
+                    newSelectedLPOs.set(entry.truckNo, new Set());
+                  }
+                  if (filteredReturningLpos.length === 1) {
+                    newSelectedLPOs.get(entry.truckNo)!.add(filteredReturningLpos[0].id as string);
+                  }
                 }
               }
               
               if (truckLPOs.length > 0) {
                 newMap.set(entry.truckNo, truckLPOs);
               } else {
-                // Truck has no LPOs at selected checkpoints
+                // Truck has no LPOs at selected checkpoints for this journey
                 trucksWithoutLPOsSet.add(entry.truckNo);
               }
             }
@@ -585,16 +582,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         } finally {
           setExistingLPOsForTrucks(newMap);
           setTrucksWithoutLPOs(trucksWithoutLPOsSet);
+          setSelectedLPOsToCancel(newSelectedLPOs);
           setIsFetchingLPOs(false);
         }
       } else {
         setExistingLPOsForTrucks(new Map());
         setTrucksWithoutLPOs(new Set());
+        setSelectedLPOsToCancel(new Map());
       }
     };
 
     fetchExistingLPOs();
-  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => e?.truckNo || '').join(',')]);
+  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => `${e?.truckNo || ''}-${e?.doNo || ''}`).join(',')]);
 
   // Check for duplicate allocations when station or entries change (for non-CASH stations)
   useEffect(() => {
@@ -1558,23 +1557,29 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const total = validEntries.reduce((sum, entry) => sum + entry.amount, 0);
 
     // Perform auto-cancellation for CASH mode if checkpoint(s) are selected
-    if (formData.station === 'CASH' && existingLPOsForTrucks.size > 0) {
+    if (formData.station === 'CASH' && selectedLPOsToCancel.size > 0) {
       try {
-        // Cancel trucks in existing LPOs for all directions
-        for (const [truckNo, directionLPOs] of existingLPOsForTrucks) {
-          for (const { lpos, direction } of directionLPOs) {
+        // Cancel only selected LPOs
+        for (const [truckNo, selectedLPOIds] of selectedLPOsToCancel) {
+          const truckDirections = existingLPOsForTrucks.get(truckNo);
+          if (!truckDirections) continue;
+          
+          for (const { lpos, direction, doNo } of truckDirections) {
             const checkpoint = direction === 'Going' ? goingCheckpoint : returningCheckpoint;
             for (const lpo of lpos) {
-              await lpoDocumentsAPI.cancelTruck(
-                lpo.id as string,
-                truckNo,
-                checkpoint as CancellationPoint,
-                `Cash mode payment - station was out of fuel (${direction})`
-              );
+              // Only cancel if this LPO is selected
+              if (selectedLPOIds.has(lpo.id as string)) {
+                await lpoDocumentsAPI.cancelTruck(
+                  lpo.id as string,
+                  truckNo,
+                  checkpoint as CancellationPoint,
+                  `Cash mode payment - station was out of fuel (${direction}, DO: ${doNo})`
+                );
+              }
             }
           }
         }
-        console.log('Auto-cancellation completed for both directions');
+        console.log('Auto-cancellation completed for selected LPOs');
       } catch (error) {
         console.error('Error during auto-cancellation:', error);
         // Continue with LPO creation even if cancellation fails
@@ -1969,19 +1974,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       </button>
                     </div>
                   )}
+                  {formData.station && (() => {
+                    const station = availableStations.find(s => s.stationName === formData.station);
+                    if (station) {
+                      const currency = station.defaultRate < 10 ? 'USD' : 'TZS';
+                      return (
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                          Default: Going {station.defaultLitersGoing}L, Returning {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
-                {formData.station && (() => {
-                  const station = availableStations.find(s => s.stationName === formData.station);
-                  if (station) {
-                    const currency = station.defaultRate < 10 ? 'USD' : 'TZS';
-                    return (
-                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                        Default: Going {station.defaultLitersGoing}L, Returning {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
               </div>
 
               <div>
@@ -1998,76 +2003,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 />
               </div>
             </div>
+          </div>
 
-            {/* Cash Currency Converter - Only shown when CASH is selected */}
-            {formData.station === 'CASH' && (
-              <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-                <h4 className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 mb-3">💱 Cash Currency Converter</h4>
-                <p className="text-xs text-yellow-700 dark:text-yellow-300 mb-3">
-                  Enter the local rate and conversion rate to calculate the final TZS rate for the LPO.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-200 mb-1">
-                      Currency
-                    </label>
-                    <select
-                      value={cashConversion.currency}
-                      onChange={(e) => setCashConversion(prev => ({ ...prev, currency: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 dark:border-yellow-600 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="ZMW">ZMW (Zambian Kwacha)</option>
-                      <option value="USD">USD (US Dollar)</option>
-                      <option value="CDF">CDF (Congolese Franc)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-200 mb-1">
-                      Local Rate ({cashConversion.currency}/Liter)
-                    </label>
-                    <input
-                      type="number"
-                      value={cashConversion.localRate || ''}
-                      onChange={(e) => setCashConversion(prev => ({ ...prev, localRate: parseFloat(e.target.value) || 0 }))}
-                      placeholder="e.g., 26"
-                      step="0.01"
-                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 dark:border-yellow-600 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-200 mb-1">
-                      Conversion Rate (TZS per {cashConversion.currency})
-                    </label>
-                    <input
-                      type="number"
-                      value={cashConversion.conversionRate || ''}
-                      onChange={(e) => setCashConversion(prev => ({ ...prev, conversionRate: parseFloat(e.target.value) || 0 }))}
-                      placeholder="e.g., 116"
-                      step="0.01"
-                      className="w-full px-2 py-1.5 text-sm border border-yellow-300 dark:border-yellow-600 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-200 mb-1">
-                      Calculated Rate (TZS/Liter)
-                    </label>
-                    <div className="w-full px-2 py-1.5 text-sm bg-yellow-100 dark:bg-yellow-800/30 border border-yellow-300 dark:border-yellow-600 rounded-md font-semibold text-yellow-900 dark:text-yellow-200">
-                      {cashConversion.calculatedRate.toFixed(2)} TZS
-                    </div>
-                  </div>
-                </div>
-                {cashConversion.calculatedRate > 0 && (
-                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-2">
-                    Formula: {cashConversion.localRate} {cashConversion.currency}/L × {cashConversion.conversionRate} TZS/{cashConversion.currency} = {cashConversion.calculatedRate.toFixed(2)} TZS/L
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Cash Cancellation Point - Only shown when CASH is selected */}
-            {formData.station === 'CASH' && (
-              <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-300 dark:border-orange-600 rounded-lg">
-                <div className="flex items-center space-x-2 mb-3">
+          {/* Cash Cancellation Point - Only shown when CASH is selected */}
+          {formData.station === 'CASH' && (
+            <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-300 dark:border-orange-600 rounded-lg">
+              <div className="flex items-center space-x-2 mb-3">
                   <Ban className="w-5 h-5 text-orange-600" />
                   <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-200">Cash Purchase Checkpoint (Required)</h4>
                 </div>
@@ -2195,11 +2136,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             ⚠ Select checkpoint
                           </p>
                         )}
-                        {returningCheckpoint && returningCheckpoint.includes('ZAMBIA') && (
-                          <p className="mt-1 text-xs text-orange-600 dark:text-orange-400">
-                            Note: Zambia returning has two parts - Ndola ({ZAMBIA_RETURNING_PARTS.ndola.liters}L) and Kapiri ({ZAMBIA_RETURNING_PARTS.kapiri.liters}L).
-                          </p>
-                        )}
                       </div>
                     )}
                   </div>
@@ -2217,25 +2153,81 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
                     <div className="flex items-start space-x-2">
                       <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                      <div>
+                      <div className="flex-1">
                         <p className="text-sm font-medium text-red-800 dark:text-red-300">
-                          Auto-Cancellation: {existingLPOsForTrucks.size} truck(s) have existing LPOs
+                          Auto-Cancellation: {existingLPOsForTrucks.size} truck(s) have existing LPOs for this journey
                         </p>
                         <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                          The following will be automatically cancelled when you create this CASH LPO:
+                          Select which LPOs to cancel when creating this CASH LPO:
                         </p>
-                        <ul className="mt-2 space-y-1">
-                          {Array.from(existingLPOsForTrucks.entries()).map(([truckNo, directionLPOs]) => (
-                            <li key={truckNo} className="text-xs text-red-700 dark:text-red-300">
-                              <span className="font-medium">{truckNo}</span>:
-                              {directionLPOs.map(({ lpos, direction }) => (
-                                <span key={direction} className="ml-1">
-                                  [{direction}] {lpos.map(l => `LPO #${l.lpoNo}`).join(', ')}
-                                </span>
-                              ))}
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="mt-2 space-y-3">
+                          {Array.from(existingLPOsForTrucks.entries()).map(([truckNo, directionLPOs]) => {
+                            const totalLPOs = directionLPOs.reduce((sum, { lpos }) => sum + lpos.length, 0);
+                            const selectedForTruck = selectedLPOsToCancel.get(truckNo) || new Set();
+                            
+                            return (
+                              <div key={truckNo} className="border-l-2 border-red-300 dark:border-red-700 pl-3">
+                                <div className="font-medium text-red-800 dark:text-red-300 text-sm mb-2">
+                                  {truckNo} (DO: {directionLPOs[0]?.doNo})
+                                  {totalLPOs === 1 && <span className="ml-2 text-xs text-red-600">(Auto-selected)</span>}
+                                </div>
+                                
+                                {directionLPOs.map(({ lpos, direction, doNo }) => (
+                                  <div key={direction} className="ml-2">
+                                    <div className="text-xs text-red-700 dark:text-red-400 mb-1">
+                                      [{direction}] - {lpos.length} LPO{lpos.length > 1 ? 's' : ''} found:
+                                    </div>
+                                    
+                                    {lpos.length === 1 ? (
+                                      // Single LPO - show as selected by default
+                                      <div className="flex items-center space-x-2 text-xs text-red-600 dark:text-red-400 ml-4">
+                                        <CheckCircle className="w-3 h-3" />
+                                        <span>LPO #{lpos[0].lpoNo} ({lpos[0].station}) - Will be cancelled</span>
+                                      </div>
+                                    ) : (
+                                      // Multiple LPOs - show checkboxes
+                                      <div className="space-y-1 ml-4">
+                                        {lpos.map((lpo) => (
+                                          <label key={lpo.id} className="flex items-center space-x-2 text-xs cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/30 p-1 rounded">
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedForTruck.has(lpo.id as string)}
+                                              onChange={(e) => {
+                                                const newSelected = new Map(selectedLPOsToCancel);
+                                                // CRITICAL: Create a NEW Set instance, don't modify the existing one
+                                                const currentTruckSet = newSelected.get(truckNo) || new Set();
+                                                const newTruckSet = new Set(currentTruckSet); // Clone the Set
+                                                
+                                                if (e.target.checked) {
+                                                  newTruckSet.add(lpo.id as string);
+                                                } else {
+                                                  newTruckSet.delete(lpo.id as string);
+                                                }
+                                                
+                                                newSelected.set(truckNo, newTruckSet);
+                                                setSelectedLPOsToCancel(newSelected);
+                                              }}
+                                              className="rounded border-red-300 text-red-600 focus:ring-red-500"
+                                            />
+                                            <span className="text-red-700 dark:text-red-300">
+                                              LPO #{lpo.lpoNo} ({lpo.station}, {lpo.date})
+                                              {lpo.entries?.find((e: any) => e.truckNo === truckNo && !e.isCancelled) && 
+                                                ` - ${lpo.entries.find((e: any) => e.truckNo === truckNo)?.liters || 0}L`
+                                              }
+                                            </span>
+                                          </label>
+                                        ))}
+                                        <div className="text-xs text-red-600 dark:text-red-400 mt-1 italic">
+                                          ℹ️ Select the LPO(s) that should be cancelled (station ran out of fuel)
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2271,13 +2263,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     <span>Add truck entries to check for existing LPOs</span>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
+          )}
 
-            {/* Custom Station Section - Only shown when CUSTOM is selected */}
-            {formData.station === 'CUSTOM' && (
-              <div className="mt-4 p-4 border-2 border-purple-300 dark:border-purple-700 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                <div className="flex items-center space-x-2 mb-4">
+          {/* Custom Station Section - Only shown when CUSTOM is selected */}
+          {formData.station === 'CUSTOM' && (
+            <div className="mt-4 p-4 border-2 border-purple-300 dark:border-purple-700 rounded-lg bg-purple-50 dark:bg-purple-900/20">
+              <div className="flex items-center space-x-2 mb-4">
                   <MapPin className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                   <span className="font-medium text-purple-800 dark:text-purple-300">
                     Custom Station (Unlisted Station)
@@ -2473,7 +2465,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 )}
               </div>
             )}
-          </div>
 
           {/* LPO Entries */}
           <div className="mb-6">

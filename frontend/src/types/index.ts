@@ -553,13 +553,11 @@ export type CancellationPoint =
   | 'DAR_GOING' 
   | 'MORO_GOING' 
   | 'MBEYA_GOING' 
-  | 'INFINITY_GOING'  // Mbeya area (going)
   | 'TDM_GOING'       // TDM/Tunduma (going)
   | 'ZAMBIA_GOING'    // Lake Chilabombwe
   | 'CONGO_GOING'     // Congo (going direction)
   // Returning direction checkpoints
-  | 'ZAMBIA_NDOLA'    // Returning - first part (50 liters)
-  | 'ZAMBIA_KAPIRI'   // Returning - second part (350 liters)
+  | 'ZAMBIA_RETURNING' // Zambia returning (combined)
   | 'TDM_RETURN'      // TDM/Tunduma (returning)
   | 'MBEYA_RETURN'
   | 'MORO_RETURN'

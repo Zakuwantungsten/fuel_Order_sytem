@@ -655,9 +655,12 @@ export const lpoDocumentsAPI = {
   },
 
   // Find LPOs at a checkpoint for a specific truck (for auto-cancellation)
-  findAtCheckpoint: async (truckNo: string, station?: string): Promise<LPOSummary[]> => {
+  // Now includes doNo parameter to filter by current journey only
+  findAtCheckpoint: async (truckNo: string, doNo?: string, station?: string, cancellationPoint?: string): Promise<LPOSummary[]> => {
     const params: any = { truckNo };
+    if (doNo) params.doNo = doNo;
     if (station) params.station = station;
+    if (cancellationPoint) params.cancellationPoint = cancellationPoint;
     const response = await apiClient.get('/lpo-documents/find-at-checkpoint', { params });
     return response.data.data || [];
   },
