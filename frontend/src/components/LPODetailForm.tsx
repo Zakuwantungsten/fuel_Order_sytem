@@ -613,7 +613,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               entry.truckNo, 
               formData.station,
               initialData?.id?.toString(),
-              entry.liters // Pass the new liters amount to check
+              entry.liters, // Pass the new liters amount to check
+              entry.doNo // Pass the DO number to check for same journey
             );
             
             if (result.hasDuplicate && result.existingLpos.length > 0) {

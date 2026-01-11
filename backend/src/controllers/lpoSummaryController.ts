@@ -1792,7 +1792,7 @@ export const getAvailableYears = async (req: AuthRequest, res: Response): Promis
  */
 export const checkDuplicateAllocation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { truckNo, station, excludeLpoId, liters } = req.query;
+    const { truckNo, station, excludeLpoId, liters, doNo } = req.query;
 
     if (!truckNo || !station) {
       throw new ApiError(400, 'Truck number and station are required');
@@ -1800,6 +1800,7 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
 
     const stationUpper = (station as string).toUpperCase().trim();
     const newLiters = liters ? Number(liters) : null;
+    const checkDoNo = (doNo as string)?.toUpperCase().trim(); // DO number to check for same journey
     
     // CASH is always allowed - no duplicate check needed
     if (stationUpper === 'CASH') {
@@ -1843,6 +1844,7 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
     const lpos = await LPOSummary.find(query).lean();
 
     // Filter to get only the matching active entries for this truck (case-insensitive)
+    // AND with the same DO number if provided (same journey check)
     const matchingLpos = lpos.map(lpo => ({
       id: lpo._id,
       lpoNo: lpo.lpoNo,
@@ -1850,7 +1852,16 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
       station: lpo.station,
       entries: lpo.entries.filter((e: any) => {
         const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
-        return entryTruckNormalized === truckNoNormalized && !e.isCancelled;
+        const isSameTruck = entryTruckNormalized === truckNoNormalized && !e.isCancelled;
+        
+        // If DO number is provided, only flag as duplicate if it's the SAME journey (same DO)
+        if (checkDoNo && checkDoNo !== 'NIL') {
+          const entryDoNormalized = (e.doNo || 'NIL').replace(/\s+/g, '').toUpperCase();
+          return isSameTruck && entryDoNormalized === checkDoNo;
+        }
+        
+        // If no DO provided or DO is NIL, check truck only (legacy behavior)
+        return isSameTruck;
       })
     })).filter(lpo => lpo.entries.length > 0);
 
