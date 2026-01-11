@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
 import { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
-import { lpoDocumentsAPI, fuelRecordsAPI } from '../services/api';
+import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { configService } from '../services/configService';
 import { 
@@ -914,6 +914,105 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
   }, []);
 
+  /**
+   * Fetch journey data by DO number (for DO-first search)
+   * Returns same TruckFetchResult structure for consistency
+   */
+  const fetchJourneyByDO = useCallback(async (doNumber: string): Promise<TruckFetchResult & { truckNo?: string }> => {
+    if (!doNumber || doNumber.length < 3) {
+      return {
+        fuelRecord: null,
+        goingDo: 'NIL',
+        returnDo: 'NIL',
+        destination: 'NIL',
+        goingDestination: 'NIL',
+        balance: 0,
+        message: 'Enter a valid DO number',
+        success: false
+      };
+    }
+
+    try {
+      const journeyData = await deliveryOrdersAPI.getJourneyByDO(doNumber.trim().toUpperCase());
+
+      if (!journeyData.found) {
+        return {
+          fuelRecord: null,
+          goingDo: 'NIL',
+          returnDo: 'NIL',
+          destination: 'NIL',
+          goingDestination: 'NIL',
+          balance: 0,
+          message: `⚠️ DO ${doNumber} not found`,
+          success: false,
+          warningType: 'not_found' as const
+        };
+      }
+
+      if (!journeyData.fuelRecord) {
+        return {
+          fuelRecord: null,
+          truckNo: journeyData.truckNo,
+          goingDo: journeyData.goingDO?.doNumber || 'NIL',
+          returnDo: journeyData.returningDO?.doNumber || 'NIL',
+          destination: journeyData.destination || 'NIL',
+          goingDestination: journeyData.goingDestination || 'NIL',
+          balance: 0,
+          message: `⚠️ No fuel record found for DO ${doNumber} (Truck: ${journeyData.truckNo})`,
+          success: false,
+          warningType: 'not_found' as const
+        };
+      }
+
+      // Build status message based on journey status
+      let statusMessage = '';
+      if (journeyData.journeyStatus === 'queued') {
+        statusMessage = `⏳ QUEUED Journey (Position #${journeyData.queuePosition || '?'}): ${doNumber}`;
+        if (journeyData.hasActiveJourney) {
+          statusMessage += ` | Active: ${journeyData.activeJourneyDO}`;
+        }
+      } else if (journeyData.journeyStatus === 'active') {
+        statusMessage = `🚛 ACTIVE Journey: DO ${doNumber}, Balance: ${journeyData.balance}L`;
+        if (journeyData.queuedJourneys && journeyData.queuedJourneys.length > 0) {
+          statusMessage += ` | ${journeyData.queuedJourneys.length} queued`;
+        }
+      } else if (journeyData.journeyStatus === 'completed') {
+        statusMessage = `✓ COMPLETED Journey: DO ${doNumber}`;
+      } else {
+        statusMessage = `Found: DO ${doNumber}, Balance: ${journeyData.balance}L`;
+      }
+
+      return {
+        fuelRecord: journeyData.fuelRecord,
+        truckNo: journeyData.truckNo,
+        goingDo: journeyData.goingDO?.doNumber || 'NIL',
+        returnDo: journeyData.returningDO?.doNumber || 'NIL',
+        destination: journeyData.destination || 'NIL',
+        goingDestination: journeyData.goingDestination || 'NIL',
+        balance: journeyData.balance || 0,
+        message: statusMessage,
+        success: true,
+        queueInfo: journeyData.queuedJourneys && journeyData.queuedJourneys.length > 0 ? {
+          hasQueue: true,
+          queuedCount: journeyData.queuedJourneys.length,
+          nextJourney: journeyData.fuelRecord,
+        } : undefined,
+      };
+    } catch (error) {
+      console.error('Error fetching journey by DO:', error);
+      return {
+        fuelRecord: null,
+        goingDo: 'NIL',
+        returnDo: 'NIL',
+        destination: 'NIL',
+        goingDestination: 'NIL',
+        balance: 0,
+        message: `Error fetching DO ${doNumber}`,
+        success: false
+      };
+    }
+  }, []);
+
   // Get default fuel amount based on station, direction, and destination
   // Special rules:
   // - Lusaka destination: 60L at Zambia Going
@@ -1318,6 +1417,116 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           warningType: result.warningType || null,
           warningMessage: result.message,
           balanceInfo,  // Store balance info for display
+        }
+      }));
+    }
+  };
+
+  /**
+   * Handle DO number change (for DO-first search)
+   * Fetches journey by DO and auto-fills truck number
+   */
+  const handleDONoChange = async (index: number, doNo: string) => {
+    const doNoUpper = doNo.trim().toUpperCase();
+    
+    // Update DO number immediately (keep empty if user clears it, only default to NIL on blur if still empty)
+    setFormData(prev => {
+      const updatedEntries = [...(prev.entries || [])];
+      if (!updatedEntries[index]) {
+        updatedEntries[index] = {
+          doNo: 'NIL',
+          truckNo: '',
+          liters: 0,
+          rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+          amount: 0,
+          dest: 'NIL',
+        };
+      }
+      updatedEntries[index] = { ...updatedEntries[index], doNo: doNoUpper || '' };
+      return { ...prev, entries: updatedEntries };
+    });
+
+    // If DO number is valid, fetch journey data
+    if (doNoUpper && doNoUpper !== 'NIL' && doNoUpper.length >= 3) {
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { ...prev[index], loading: true, fetched: false }
+      }));
+
+      const result = await fetchJourneyByDO(doNoUpper);
+      
+      // Detect direction from DO type (IMPORT = going, EXPORT = returning)
+      const direction = result.fuelRecord 
+        ? (result.fuelRecord.returnDo === doNoUpper ? 'returning' : 'going')
+        : 'going';
+      
+      // Check if return DO is missing
+      const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
+      
+      // Use correct destination based on direction
+      const destinationForAllocation = direction === 'going'
+        ? result.goingDestination 
+        : result.destination;
+      
+      const defaults = formData.station 
+        ? getStationDefaults(formData.station, direction, destinationForAllocation) 
+        : { liters: 350, rate: 1.2 };
+
+      // Calculate balance info for Mbeya returning
+      let balanceInfo = undefined;
+      if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
+        balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
+      }
+
+      // Auto-fill the entry with truck number and details
+      setFormData(prev => {
+        const newEntries = [...(prev.entries || [])];
+        
+        if (!newEntries[index]) {
+          newEntries[index] = {
+            doNo: 'NIL',
+            truckNo: '',
+            liters: 0,
+            rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+            amount: 0,
+            dest: 'NIL',
+          };
+        }
+        
+        newEntries[index] = {
+          ...newEntries[index],
+          truckNo: result.truckNo || '',  // Auto-fill truck number from journey
+          doNo: doNoUpper,
+          dest: destinationForAllocation,
+          liters: defaults.liters,
+          rate: defaults.rate,
+          amount: defaults.liters * defaults.rate
+        };
+        
+        // If Mbeya balance info suggests different liters, update
+        if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
+          newEntries[index].liters = balanceInfo.suggestedLiters;
+          newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
+        }
+
+        const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
+        
+        return { ...prev, entries: newEntries, total };
+      });
+      
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { 
+          direction, 
+          loading: false, 
+          fetched: result.success, 
+          fuelRecord: result.fuelRecord,
+          fuelRecordId: result.fuelRecord?.id,
+          goingDestination: result.goingDestination,
+          returnDoMissing,
+          warningType: result.warningType || null,
+          warningMessage: result.message,
+          balanceInfo,
         }
       }));
     }
@@ -2527,10 +2736,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       Truck No.
                     </th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      Direction
+                      DO No.
                     </th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      DO No.
+                      Direction
                     </th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
                       Liters
@@ -2616,6 +2825,30 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               </div>
                             )}
                           </td>
+                          
+                          {/* DO Number Input Cell - for DO-first search */}
+                          <td className="px-3 py-3">
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={entry?.doNo || ''}
+                                onChange={(e) => handleDONoChange(index, e.target.value)}
+                                onBlur={(e) => {
+                                  // Set to NIL only on blur if field is still empty
+                                  if (!e.target.value.trim()) {
+                                    handleEntryChange(index, 'doNo', 'NIL');
+                                  }
+                                }}
+                                placeholder="0001/26"
+                                title="Enter DO number to auto-fill truck and details"
+                                className="w-24 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                              />
+                              {autoFill.loading && (
+                                <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
+                              )}
+                            </div>
+                          </td>
+                          
                           <td className="px-3 py-3">
                             <div className="flex flex-col">
                               <button
@@ -2641,15 +2874,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 </span>
                               )}
                             </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <input
-                              type="text"
-                              value={entry?.doNo || 'NIL'}
-                              onChange={(e) => handleEntryChange(index, 'doNo', e.target.value)}
-                              placeholder="NIL"
-                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                            />
                           </td>
                           <td className="px-3 py-3">
                             <input

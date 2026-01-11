@@ -216,6 +216,31 @@ export const deliveryOrdersAPI = {
     return response.data.data?.nextDONumber || '0001/26';
   },
 
+  // Get journey information by DO number (for LPO form DO-first search)
+  getJourneyByDO: async (doNumber: string): Promise<{
+    found: boolean;
+    doNumber: string;
+    truckNo?: string;
+    deliveryOrder?: DeliveryOrder;
+    fuelRecord?: FuelRecord;
+    direction?: 'going' | 'returning';
+    journeyStatus?: 'active' | 'queued' | 'completed' | 'cancelled' | 'not_found';
+    queuePosition?: number;
+    goingDO?: DeliveryOrder;
+    returningDO?: DeliveryOrder;
+    destination?: string;
+    goingDestination?: string;
+    balance?: number;
+    hasActiveJourney?: boolean;
+    activeJourneyDO?: string;
+    queuedJourneys?: Array<{ goingDo: string; queueOrder: number; estimatedStartDate?: string }>;
+  }> => {
+    // URL-encode the DO number to handle slashes (e.g., "0036/26" -> "0036%2F26")
+    const encodedDoNumber = encodeURIComponent(doNumber);
+    const response = await apiClient.get(`/delivery-orders/journey/${encodedDoNumber}`);
+    return response.data.data;
+  },
+
   // Re-link an EXPORT DO to a fuel record after truck number correction
   relinkToFuelRecord: async (id: string | number): Promise<{
     success: boolean;

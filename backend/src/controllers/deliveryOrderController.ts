@@ -847,6 +847,144 @@ export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response):
 };
 
 /**
+ * Get journey information by DO number
+ * Used for LPO form when user enters DO number first
+ * Returns complete journey info: truck, DOs, balance, fuel record, queue status
+ */
+export const getJourneyByDO = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { doNumber } = req.params;
+    
+    const doNoUpper = doNumber.trim().toUpperCase();
+
+    // Find the delivery order
+    const deliveryOrder = await DeliveryOrder.findOne({
+      doNumber: doNoUpper,
+      isDeleted: false,
+    }).lean();
+
+    if (!deliveryOrder) {
+      res.status(200).json({
+        success: true,
+        message: 'Delivery order not found',
+        data: {
+          found: false,
+          doNumber: doNoUpper,
+        },
+      });
+      return;
+    }
+
+    // Get truck number and normalize it
+    const truckNo = deliveryOrder.truckNo;
+    const normalizedTruck = truckNo.replace(/[\s-]/g, '').toUpperCase();
+
+    // Find fuel record for this DO
+    const { FuelRecord } = require('../models');
+    let fuelRecord = null;
+    let direction: 'going' | 'returning' = 'going';
+
+    if (deliveryOrder.importOrExport === 'IMPORT') {
+      // Find fuel record where this DO is the goingDo
+      fuelRecord = await FuelRecord.findOne({
+        goingDo: doNoUpper,
+        isDeleted: false,
+      }).lean();
+      direction = 'going';
+    } else if (deliveryOrder.importOrExport === 'EXPORT') {
+      // Find fuel record where this DO is the returnDo
+      fuelRecord = await FuelRecord.findOne({
+        returnDo: doNoUpper,
+        isDeleted: false,
+      }).lean();
+      direction = 'returning';
+    }
+
+    // Get all fuel records for this truck to check for queue status
+    const allFuelRecords = await FuelRecord.find({
+      isDeleted: false,
+    }).sort({ date: -1 }).lean();
+
+    const truckRecords = allFuelRecords.filter((record: any) => {
+      const normalizedRecordTruck = record.truckNo.replace(/[\s-]/g, '').toUpperCase();
+      return normalizedRecordTruck === normalizedTruck;
+    });
+
+    // Find active and queued journeys
+    const activeJourney = truckRecords.find((r: any) => r.journeyStatus === 'active');
+    const queuedJourneys = truckRecords
+      .filter((r: any) => r.journeyStatus === 'queued')
+      .sort((a: any, b: any) => (a.queueOrder || 0) - (b.queueOrder || 0));
+
+    // Determine journey status
+    let journeyStatus: 'active' | 'queued' | 'completed' | 'cancelled' | 'not_found' = 'not_found';
+    let queuePosition = 0;
+
+    if (fuelRecord) {
+      journeyStatus = fuelRecord.journeyStatus || 'active';
+      if (journeyStatus === 'queued') {
+        queuePosition = fuelRecord.queueOrder || 0;
+      }
+    }
+
+    // Get associated DOs for complete journey info
+    let goingDO: any = null;
+    let returningDO: any = null;
+
+    if (deliveryOrder.importOrExport === 'IMPORT') {
+      goingDO = deliveryOrder;
+      // Check if there's a return DO for this journey
+      if (fuelRecord?.returnDo) {
+        returningDO = await DeliveryOrder.findOne({
+          doNumber: fuelRecord.returnDo,
+          isDeleted: false,
+        }).lean();
+      }
+    } else if (deliveryOrder.importOrExport === 'EXPORT') {
+      returningDO = deliveryOrder;
+      // Find the associated going DO
+      if (fuelRecord?.goingDo) {
+        goingDO = await DeliveryOrder.findOne({
+          doNumber: fuelRecord.goingDo,
+          isDeleted: false,
+        }).lean();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Journey retrieved successfully',
+      data: {
+        found: true,
+        doNumber: doNoUpper,
+        truckNo: truckNo,
+        deliveryOrder: deliveryOrder,
+        fuelRecord: fuelRecord,
+        direction: direction,
+        journeyStatus: journeyStatus,
+        queuePosition: queuePosition,
+        // Complete journey info
+        goingDO: goingDO,
+        returningDO: returningDO,
+        destination: fuelRecord?.to || deliveryOrder.destination,
+        goingDestination: fuelRecord?.originalGoingTo || fuelRecord?.to || deliveryOrder.destination,
+        balance: fuelRecord?.balance || 0,
+        // Queue context
+        hasActiveJourney: !!activeJourney,
+        activeJourneyDO: activeJourney?.goingDo || null,
+        queuedJourneys: queuedJourneys.map((j: any) => ({
+          goingDo: j.goingDo,
+          queueOrder: j.queueOrder,
+          estimatedStartDate: j.estimatedStartDate,
+        })),
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Get next DO number based on type (DO or SDO)
  * Returns the next DO number in XXXX/YY format (e.g., 0001/26, 0002/26)
  * Handles year rollover - resets to 0001 when year changes
