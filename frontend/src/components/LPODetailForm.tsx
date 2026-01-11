@@ -1386,7 +1386,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         
         newEntries[index] = {
           ...newEntries[index],
-          truckNo,
+          truckNo: formattedTruckNo,  // Use formatted truck number to maintain consistent format
           doNo: doNumber,
           dest: destinationForAllocation,  // Use correct destination based on direction
           liters: defaults.liters,

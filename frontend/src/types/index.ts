@@ -229,6 +229,7 @@ export interface LPODetail {
 // Fuel Record Types
 export interface FuelRecord {
   id?: string | number;
+  _id?: string | number;  // MongoDB document ID (backend returns this)
   date: string;
   month?: string; // e.g., "October", "November"
   truckNo: string;
