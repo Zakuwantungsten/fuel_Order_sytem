@@ -1115,7 +1115,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   const handleAddEntry = () => {
     const newEntry: LPODetail = {
-      doNo: 'NIL',
+      doNo: '',  // Start empty so user can type immediately
       truckNo: '',
       liters: 0,
       rate: formData.station ? getStationDefaults(formData.station, 'going').rate : 1.2,
@@ -1204,7 +1204,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // Add all pasted trucks starting at the paste index
       formattedTrucks.forEach((truckNo) => {
         const newEntry: LPODetail = {
-          doNo: 'NIL',
+          doNo: '',  // Start empty
           truckNo: truckNo,
           liters: 0,
           rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
@@ -1309,7 +1309,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // Ensure the entry exists before updating
       if (!updatedEntries[index]) {
         updatedEntries[index] = {
-          doNo: 'NIL',
+          doNo: '',  // Start empty
           truckNo: '',
           liters: 0,
           rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
@@ -1375,7 +1375,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         // Ensure entry exists
         if (!newEntries[index]) {
           newEntries[index] = {
-            doNo: 'NIL',
+            doNo: '',  // Start empty
             truckNo: '',
             liters: 0,
             rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
@@ -1434,7 +1434,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const updatedEntries = [...(prev.entries || [])];
       if (!updatedEntries[index]) {
         updatedEntries[index] = {
-          doNo: 'NIL',
+          doNo: '',  // Start empty
           truckNo: '',
           liters: 0,
           rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
@@ -1484,7 +1484,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         
         if (!newEntries[index]) {
           newEntries[index] = {
-            doNo: 'NIL',
+            doNo: '',  // Start empty
             truckNo: '',
             liters: 0,
             rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
@@ -1573,7 +1573,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         // Ensure entry exists
         if (!newEntries[index]) {
           newEntries[index] = {
-            doNo: 'NIL',
+            doNo: '',  // Start empty
             truckNo: '',
             liters: 0,
             rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
@@ -1617,7 +1617,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     // Ensure the entry exists before updating
     if (!updatedEntries[index]) {
       updatedEntries[index] = {
-        doNo: 'NIL',
+        doNo: '',  // Start empty
         truckNo: '',
         liters: 0,
         rate: formData.station ? getStationDefaults(formData.station, 'going').rate : 1.2,
