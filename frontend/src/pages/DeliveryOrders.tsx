@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check } from 'lucide-react';
+import { Search, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
 import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
@@ -18,6 +18,12 @@ import Pagination from '../components/Pagination';
 import { useTruckBatches, getExtraFuelFromBatches } from '../hooks/useTruckBatches';
 import { useRoutes, getTotalLitersFromRoutes } from '../hooks/useRoutes';
 
+// Month names for display
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
 interface DeliveryOrdersProps {
   user?: any;
 }
@@ -30,6 +36,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [filterType, setFilterType] = useState('ALL');
   const [filterDoType, setFilterDoType] = useState<'ALL' | 'DO' | 'SDO'>('DO'); // Filter by DO or SDO type
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'cancelled'>('all');
+  // Month filter - default to current month (1-indexed)
+  const [selectedMonths, setSelectedMonths] = useState<number[]>([new Date().getMonth() + 1]);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -73,6 +82,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const doTypeDropdownRef = useRef<HTMLDivElement>(null);
   const filterTypeDropdownRef = useRef<HTMLDivElement>(null);
   const filterStatusDropdownRef = useRef<HTMLDivElement>(null);
+  const monthDropdownRef = useRef<HTMLDivElement>(null);
 
   // Click-outside detection for filter dropdowns
   useEffect(() => {
@@ -88,6 +98,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       }
       if (filterStatusDropdownRef.current && !filterStatusDropdownRef.current.contains(event.target as Node)) {
         setShowFilterStatusDropdown(false);
+      }
+      if (monthDropdownRef.current && !monthDropdownRef.current.contains(event.target as Node)) {
+        setShowMonthDropdown(false);
       }
     };
 
@@ -338,7 +351,58 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     fetchWorkbooks(); // Refresh workbooks list
   };
 
-  // Filter orders by search term and status
+  // Helper to get month from date string (YYYY-MM-DD format)
+  const getMonthFromDate = (dateStr: string): number | null => {
+    if (!dateStr) return null;
+    
+    try {
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return date.getMonth() + 1; // 1-indexed
+      }
+    } catch (error) {
+      console.error('Error parsing date:', error);
+    }
+    
+    return null;
+  };
+
+  // Get months that have data
+  const availableMonths = useMemo(() => {
+    const months = new Set<number>();
+    orders.forEach(order => {
+      if (order.date) {
+        const month = getMonthFromDate(order.date);
+        if (month !== null) {
+          months.add(month);
+        }
+      }
+    });
+    return Array.from(months).sort((a, b) => a - b);
+  }, [orders]);
+
+  // Toggle month selection
+  const toggleMonth = (month: number) => {
+    setSelectedMonths(prev => {
+      if (prev.includes(month)) {
+        // Don't allow deselecting all months
+        if (prev.length === 1) return prev;
+        return prev.filter(m => m !== month);
+      } else {
+        return [...prev, month].sort((a, b) => a - b);
+      }
+    });
+  };
+
+  // Get display text for selected months
+  const getMonthsDisplayText = (): string => {
+    if (selectedMonths.length === 0) return 'Select Month';
+    if (selectedMonths.length === 1) return MONTH_NAMES[selectedMonths[0] - 1];
+    if (selectedMonths.length === availableMonths.length && availableMonths.length > 0) return 'All Months';
+    return `${selectedMonths.length} months`;
+  };
+
+  // Filter orders by search term, status, and months
   const filteredOrders = Array.isArray(orders) ? orders.filter(order => {
     // Search filter
     const matchesSearch = order.doNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -350,7 +414,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       (filterStatus === 'active' && !order.isCancelled) ||
       (filterStatus === 'cancelled' && order.isCancelled);
     
-    return matchesSearch && matchesStatus;
+    // Month filter
+    let matchesMonth = true;
+    if (selectedMonths.length > 0 && selectedMonths.length < 12) {
+      const orderMonth = getMonthFromDate(order.date);
+      matchesMonth = orderMonth !== null && selectedMonths.includes(orderMonth);
+    }
+    
+    return matchesSearch && matchesStatus && matchesMonth;
   }) : [];
 
   // Pagination calculations
@@ -1359,7 +1430,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         <>
           {/* Filters */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-4 mb-6 transition-colors">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
                 <input
@@ -1370,6 +1441,78 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
+              
+              {/* Month Multi-Select Dropdown */}
+              <div className="relative" ref={monthDropdownRef}>
+                <button
+                  onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+                  className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
+                >
+                  <span className="flex items-center">
+                    <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                    {getMonthsDisplayText()}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {showMonthDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-y-auto left-0 right-0">
+                    {/* Quick Select Options */}
+                    <div className="p-2 border-b border-gray-200 dark:border-gray-600">
+                      {availableMonths.includes(new Date().getMonth() + 1) && (
+                        <button
+                          onClick={() => {
+                            setSelectedMonths([new Date().getMonth() + 1]);
+                            setCurrentPage(1);
+                            setShowMonthDropdown(false);
+                          }}
+                          className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                        >
+                          Current Month ({MONTH_NAMES[new Date().getMonth()]})
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setSelectedMonths(availableMonths.length > 0 ? [...availableMonths] : [new Date().getMonth() + 1]);
+                          setCurrentPage(1);
+                          setShowMonthDropdown(false);
+                        }}
+                        className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                      >
+                        All Months ({availableMonths.length})
+                      </button>
+                    </div>
+                    
+                    {/* Month Checkboxes - Only show months that have data */}
+                    <div className="p-2">
+                      {availableMonths.length > 0 ? (
+                        availableMonths.map((monthNum) => (
+                          <label
+                            key={monthNum}
+                            className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedMonths.includes(monthNum)}
+                              onChange={() => {
+                                toggleMonth(monthNum);
+                                setCurrentPage(1);
+                              }}
+                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{MONTH_NAMES[monthNum - 1]}</span>
+                          </label>
+                        ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-sm text-gray-500 dark:text-gray-400">
+                          No data available
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <div className="relative" ref={doTypeDropdownRef}>
                 <button
                   type="button"
@@ -1467,10 +1610,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   </div>
                 )}
               </div>
-              <input
-                type="date"
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilterType('ALL');
+                  setFilterStatus('all');
+                  setSelectedMonths([new Date().getMonth() + 1]); // Reset to current month
+                  setCurrentPage(1);
+                }}
+                className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Clear Filters
+              </button>
             </div>
           </div>
 
