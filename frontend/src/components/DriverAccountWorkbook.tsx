@@ -535,7 +535,6 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
           </div>
           
           <div className="flex items-center space-x-2">
-            <Calendar className="w-4 h-4 text-gray-400" />
             <input
               type="date"
               value={dateFilter.from}
