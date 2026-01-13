@@ -24,7 +24,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
   const headerFontSize = '14px';
   
   // Calculate pagination - approximately 15 rows per page (accounting for header, footer, signatures)
-  const ROWS_PER_PAGE = 15;
+  const ROWS_PER_PAGE = 20;
   
   const pages = useMemo(() => {
     const allPages: LPOEntry[][] = [];
