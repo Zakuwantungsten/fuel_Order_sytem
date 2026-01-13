@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check } from 'lucide-react';
+import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2 } from 'lucide-react';
 import XLSX from 'xlsx-js-style';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
 import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
@@ -49,6 +49,8 @@ const LPOs = () => {
   const [dropdownPosition, setDropdownPosition] = useState<{top: number, left: number}>({top: 0, left: 0});
   const [exportingYear, setExportingYear] = useState<number | null>(null);
   const [selectedLpoNo, setSelectedLpoNo] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState<string | number | null>(null);
+  const [downloadingImage, setDownloadingImage] = useState<string | number | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -271,6 +273,8 @@ const LPOs = () => {
   // Handle download LPO as PDF
   const handleDownloadPDF = async (lpo: LPOEntry) => {
     closeAllDropdowns();
+    const lpoKey = lpo.id || lpo.lpoNo;
+    setDownloadingPdf(lpoKey);
     try {
       const lpoSummary = convertToLPOSummary(lpo);
       await downloadLPOPDF(lpoSummary, undefined, user?.username);
@@ -278,12 +282,16 @@ const LPOs = () => {
     } catch (error) {
       console.error('Error downloading PDF:', error);
       alert('Failed to download LPO as PDF. Please try again.');
+    } finally {
+      setDownloadingPdf(null);
     }
   };
 
   // Handle download LPO as Image
   const handleDownloadImage = async (lpo: LPOEntry) => {
     closeAllDropdowns();
+    const lpoKey = lpo.id || lpo.lpoNo;
+    setDownloadingImage(lpoKey);
     try {
       const lpoSummary = convertToLPOSummary(lpo);
       await downloadLPOImage(lpoSummary, undefined, user?.username);
@@ -291,6 +299,8 @@ const LPOs = () => {
     } catch (error) {
       console.error('Error downloading image:', error);
       alert('Failed to download LPO as image. Please try again.');
+    } finally {
+      setDownloadingImage(null);
     }
   };
 
@@ -1175,17 +1185,27 @@ const LPOs = () => {
                               </div>
                               <button
                                 onClick={() => handleDownloadPDF(lpo)}
-                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                disabled={downloadingPdf === (lpo.id || lpo.lpoNo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <FileDown className="w-4 h-4 mr-2 text-red-600" />
-                                Download as PDF
+                                {downloadingPdf === (lpo.id || lpo.lpoNo) ? (
+                                  <Loader2 className="w-4 h-4 mr-2 text-red-600 animate-spin" />
+                                ) : (
+                                  <FileDown className="w-4 h-4 mr-2 text-red-600" />
+                                )}
+                                {downloadingPdf === (lpo.id || lpo.lpoNo) ? 'Downloading...' : 'Download as PDF'}
                               </button>
                               <button
                                 onClick={() => handleDownloadImage(lpo)}
-                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                disabled={downloadingImage === (lpo.id || lpo.lpoNo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Download className="w-4 h-4 mr-2 text-green-600" />
-                                Download as Image
+                                {downloadingImage === (lpo.id || lpo.lpoNo) ? (
+                                  <Loader2 className="w-4 h-4 mr-2 text-green-600 animate-spin" />
+                                ) : (
+                                  <Download className="w-4 h-4 mr-2 text-green-600" />
+                                )}
+                                {downloadingImage === (lpo.id || lpo.lpoNo) ? 'Downloading...' : 'Download as Image'}
                               </button>
                             </div>
                           </div>

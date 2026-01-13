@@ -141,6 +141,14 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string, prepar
       logging: false,
       width: elementWidth,
       height: elementHeight,
+      windowHeight: elementHeight,
+      onclone: (clonedDoc) => {
+        // Ensure proper rendering of the cloned document
+        const clonedElement = clonedDoc.body.querySelector('[data-html2canvas]');
+        if (clonedElement) {
+          (clonedElement as HTMLElement).style.display = 'block';
+        }
+      }
     });
 
     // Create PDF with A4 dimensions
@@ -148,6 +156,7 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string, prepar
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
+      compress: true
     });
 
     const imgWidth = 210; // A4 width in mm
@@ -161,18 +170,18 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string, prepar
       // Single page - add directly
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
     } else {
-      // Multi-page - split content across pages
+      // Multi-page - split content across pages with proper margins
       let heightLeft = imgHeight;
       let position = 0;
-      let page = 0;
       
       // Add first page
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
       
       // Add subsequent pages
+      let page = 1;
       while (heightLeft > 0) {
-        position = -(pageHeight * (page + 1));
+        position = -(pageHeight * page);
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;

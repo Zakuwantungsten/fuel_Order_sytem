@@ -29,6 +29,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [isSaving, setIsSaving] = useState(false); // Prevent double submissions
   const [cancellationReport, setCancellationReport] = useState<CancellationReport | null>(null);
   const [showCancellationReport, setShowCancellationReport] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingImage, setDownloadingImage] = useState(false);
   
   // Cancellation modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -391,6 +393,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   // Handle download LPO as PDF
   const handleDownloadPDF = async () => {
+    setDownloadingPdf(true);
     try {
       const lpoSummary = convertToLPOSummary();
       await downloadLPOPDF(lpoSummary, undefined, user?.username, sheet.approvedBy);
@@ -398,12 +401,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     } catch (error) {
       console.error('Error downloading PDF:', error);
       alert('Failed to download LPO as PDF. Please try again.');
+    } finally {
+      setDownloadingPdf(false);
     }
     setShowCopyDropdown(false);
   };
 
   // Handle download LPO as Image
   const handleDownloadImage = async () => {
+    setDownloadingImage(true);
     try {
       const lpoSummary = convertToLPOSummary();
       await downloadLPOImage(lpoSummary, undefined, user?.username, sheet.approvedBy);
@@ -411,6 +417,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     } catch (error) {
       console.error('Error downloading image:', error);
       alert('Failed to download LPO as image. Please try again.');
+    } finally {
+      setDownloadingImage(false);
     }
     setShowCopyDropdown(false);
   };
@@ -447,12 +455,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors">
       {/* Sheet Header - LPO Header Info */}
-      <div className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-6">
+      <div className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3">
         <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-2 gap-8 mb-4">
+          <div className="grid grid-cols-2 gap-4 mb-2">
             {/* Left Column */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-4">
+            <div className="space-y-2">
+              <div className="flex items-center space-x-3">
                 <span className="font-medium text-gray-700 dark:text-gray-300 w-20">LPO No.:</span>
                 {isEditing ? (
                   <input
@@ -466,7 +474,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 )}
               </div>
               
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
                 <span className="font-medium text-gray-700 dark:text-gray-300 w-20">Station:</span>
                 {isEditing ? (
                   <input
@@ -482,8 +490,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
 
             {/* Right Column */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-4">
+            <div className="space-y-2">
+              <div className="flex items-center space-x-3">
                 <span className="font-medium text-gray-700 dark:text-gray-300 w-20">Date:</span>
                 {isEditing ? (
                   <input
@@ -497,7 +505,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 )}
               </div>
               
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
                 <span className="font-medium text-gray-700 dark:text-gray-300 w-20">Order of:</span>
                 {isEditing ? (
                   <input
@@ -513,26 +521,26 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
           </div>
 
-          <div className="mb-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">KINDLY SUPPLY THE FOLLOWING LITERS</p>
+          <div className="mb-2">
+            <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">KINDLY SUPPLY THE FOLLOWING LITERS</p>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5">
             {isEditing ? (
               <>
                 <button
                   onClick={handleSave}
-                  className="flex items-center px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                  className="flex items-center px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                 >
-                  <Save className="w-4 h-4 mr-1" />
+                  <Save className="w-3.5 h-3.5 mr-1" />
                   Save Changes
                 </button>
                 <button
                   onClick={handleCancel}
-                  className="flex items-center px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                  className="flex items-center px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
                 >
-                  <X className="w-4 h-4 mr-1" />
+                  <X className="w-3.5 h-3.5 mr-1" />
                   Cancel
                 </button>
               </>
@@ -542,9 +550,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 <div className="relative">
                   <button
                     onClick={() => setShowCopyDropdown(!showCopyDropdown)}
-                    className="flex items-center px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                    className="flex items-center px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                   >
-                    <Copy className="w-4 h-4 mr-1" />
+                    <Copy className="w-3.5 h-3.5 mr-1" />
                     Copy / Download
                     <ChevronDown className="w-3 h-3 ml-1" />
                   </button>
@@ -584,17 +592,27 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         </div>
                         <button
                           onClick={handleDownloadPDF}
-                          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          disabled={downloadingPdf}
+                          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <FileDown className="w-4 h-4 mr-2 text-red-600" />
-                          Download as PDF
+                          {downloadingPdf ? (
+                            <Loader2 className="w-4 h-4 mr-2 text-red-600 animate-spin" />
+                          ) : (
+                            <FileDown className="w-4 h-4 mr-2 text-red-600" />
+                          )}
+                          {downloadingPdf ? 'Downloading...' : 'Download as PDF'}
                         </button>
                         <button
                           onClick={handleDownloadImage}
-                          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          disabled={downloadingImage}
+                          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Download className="w-4 h-4 mr-2 text-green-600" />
-                          Download as Image
+                          {downloadingImage ? (
+                            <Loader2 className="w-4 h-4 mr-2 text-green-600 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4 mr-2 text-green-600" />
+                          )}
+                          {downloadingImage ? 'Downloading...' : 'Download as Image'}
                         </button>
                       </div>
                     </div>
@@ -603,9 +621,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  className="flex items-center px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
                 >
-                  <Edit2 className="w-4 h-4 mr-1" />
+                  <Edit2 className="w-3.5 h-3.5 mr-1" />
                   Edit LPO
                 </button>
               </>
@@ -616,33 +634,33 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
       {/* Cancellation Report Banner */}
       {cancellationReport && cancellationReport.cancelledTrucks.length > 0 && (
-        <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-6 py-4">
+        <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-3 py-2">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-start justify-between">
-              <div className="flex items-start space-x-3">
-                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5" />
                 <div>
-                  <h4 className="font-medium text-red-800 dark:text-red-300">
+                  <h4 className="font-medium text-red-800 dark:text-red-300 text-sm">
                     {cancellationReport.isFullyCancelled 
                       ? 'LPO Fully Cancelled' 
                       : 'Partial Cancellation'}
                   </h4>
-                  <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
                     {cancellationReport.reportText}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5">
                 <button
                   onClick={handleCopyCancellationReport}
-                  className="flex items-center px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded hover:bg-red-200 dark:hover:bg-red-800/40 text-sm"
+                  className="flex items-center px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded hover:bg-red-200 dark:hover:bg-red-800/40 text-xs"
                 >
-                  <Clipboard className="w-4 h-4 mr-1" />
+                  <Clipboard className="w-3 h-3 mr-1" />
                   Copy Report
                 </button>
                 <button
                   onClick={() => setShowCancellationReport(!showCancellationReport)}
-                  className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 text-sm underline"
+                  className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 text-xs underline"
                 >
                   {showCancellationReport ? 'Hide' : 'Show'} Details
                 </button>
@@ -650,9 +668,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
             
             {showCancellationReport && (
-              <div className="mt-4 bg-white dark:bg-gray-800 rounded-lg border border-red-200 dark:border-red-800 p-4">
-                <h5 className="font-medium text-red-800 dark:text-red-300 mb-2">Cancelled Trucks:</h5>
-                <ul className="space-y-1 text-sm text-red-700 dark:text-red-400">
+              <div className="mt-2 bg-white dark:bg-gray-800 rounded border border-red-200 dark:border-red-800 p-2">
+                <h5 className="font-medium text-red-800 dark:text-red-300 mb-1 text-xs">Cancelled Trucks:</h5>
+                <ul className="space-y-0.5 text-xs text-red-700 dark:text-red-400">
                   {cancellationReport.cancelledTrucks.map((truck, idx) => (
                     <li key={idx} className="flex items-center space-x-2">
                       <span className="font-medium">{truck.truckNo}</span>
@@ -665,8 +683,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 </ul>
                 {cancellationReport.activeTrucks.length > 0 && (
                   <>
-                    <h5 className="font-medium text-green-800 dark:text-green-300 mt-4 mb-2">Active Trucks:</h5>
-                    <ul className="space-y-1 text-sm text-green-700 dark:text-green-400">
+                    <h5 className="font-medium text-green-800 dark:text-green-300 mt-2 mb-1 text-xs">Active Trucks:</h5>
+                    <ul className="space-y-0.5 text-xs text-green-700 dark:text-green-400">
                       {cancellationReport.activeTrucks.map((truck, idx) => (
                         <li key={idx} className="flex items-center space-x-2">
                           <span className="font-medium">{truck.truckNo}</span>

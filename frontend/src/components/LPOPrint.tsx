@@ -9,14 +9,13 @@ interface LPOPrintProps {
 
 const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, approvedBy }, ref) => {
   // Fixed sizing for consistent, readable PDFs across all LPOs
-  const rowPadding = '8px';
+  const rowPadding = '4px';
   const fontSize = '13px';
   const headerFontSize = '14px';
 
   return (
     <div ref={ref} className="bg-white" style={{ 
       width: '210mm', 
-      minHeight: '297mm',
       padding: '20mm',
       fontFamily: 'Arial, sans-serif',
       position: 'relative',
@@ -119,67 +118,80 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
         borderCollapse: 'collapse',
         border: '2px solid #000',
         marginBottom: '24px',
-        fontSize
+        fontSize,
+        tableLayout: 'fixed'
       }}>
         <thead>
           <tr style={{ backgroundColor: '#f5f5f5' }}>
             <th style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               textAlign: 'center',
               fontWeight: 'bold',
               fontSize: headerFontSize,
-              color: '#000'
+              color: '#000',
+              verticalAlign: 'middle',
+              lineHeight: '1.2'
             }}>
               DO No.
             </th>
             <th style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               textAlign: 'center',
               fontWeight: 'bold',
               fontSize: headerFontSize,
-              color: '#000'
+              color: '#000',
+              verticalAlign: 'middle',
+              lineHeight: '1.2'
             }}>
               Truck No.
             </th>
             <th style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               textAlign: 'center',
               fontWeight: 'bold',
               fontSize: headerFontSize,
-              color: '#000'
+              color: '#000',
+              verticalAlign: 'middle',
+              lineHeight: '1.2'
             }}>
               Liters
             </th>
             <th style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               textAlign: 'center',
               fontWeight: 'bold',
               fontSize: headerFontSize,
-              color: '#000'
+              color: '#000',
+              verticalAlign: 'middle',
+              lineHeight: '1.2'
             }}>
               Rate
             </th>
             <th style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               textAlign: 'center',
               fontWeight: 'bold',
               fontSize: headerFontSize,
-              color: '#000'
+              color: '#000',
+              verticalAlign: 'middle',
+              lineHeight: '1.2'
             }}>
               Amount
             </th>
             <th style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               textAlign: 'center',
               fontWeight: 'bold',
               fontSize: headerFontSize,
-              color: '#000'
+              color: '#000',
+              verticalAlign: 'middle',
+              lineHeight: '1.2'
             }}>
               Dest.
             </th>
@@ -206,43 +218,51 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <tr key={index} style={{ backgroundColor: rowBgColor }}>
               <td style={{ 
                 border: '1px solid #000',
-                padding: `${rowPadding} 6px`,
+                padding: '8px 6px',
                 fontSize,
                 textAlign: 'center',
+                verticalAlign: 'middle',
                 color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#000',
                 fontWeight: '500',
-                textDecoration: isCancelled ? 'line-through' : 'none'
+                textDecoration: isCancelled ? 'line-through' : 'none',
+                lineHeight: '1.4'
               }}>
                 {displayDoNo}
               </td>
               <td style={{ 
                 border: '1px solid #000',
-                padding: `${rowPadding} 6px`,
+                padding: '8px 6px',
                 fontSize,
                 textAlign: 'center',
+                verticalAlign: 'middle',
                 color: textColor,
-                fontWeight: '500'
+                fontWeight: '500',
+                lineHeight: '1.4'
               }}>
                 {entry.truckNo}
               </td>
               <td style={{ 
                 border: '1px solid #000',
-                padding: `${rowPadding} 6px`,
+                padding: '8px 6px',
                 fontSize,
                 textAlign: 'center',
+                verticalAlign: 'middle',
                 color: textColor,
                 fontWeight: '500',
-                textDecoration
+                textDecoration,
+                lineHeight: '1.4'
               }}>
                 {entry.liters.toLocaleString()}
               </td>
               <td style={{ 
                 border: '1px solid #000',
-                padding: `${rowPadding} 6px`,
+                padding: '8px 6px',
                 fontSize,
                 textAlign: 'center',
+                verticalAlign: 'middle',
                 color: isCancelled ? '#cc0000' : '#333',
-                textDecoration
+                textDecoration,
+                lineHeight: '1.4'
               }}>
                 {entry.rate.toLocaleString('en-US', {
                   minimumFractionDigits: 1,
@@ -251,12 +271,14 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
               </td>
               <td style={{ 
                 border: '1px solid #000',
-                padding: `${rowPadding} 6px`,
+                padding: '8px 6px',
                 fontSize,
                 textAlign: 'center',
+                verticalAlign: 'middle',
                 color: textColor,
                 fontWeight: '500',
-                textDecoration
+                textDecoration,
+                lineHeight: '1.4'
               }}>
                 {entry.amount.toLocaleString('en-US', {
                   minimumFractionDigits: 2,
@@ -265,11 +287,13 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
               </td>
               <td style={{ 
                 border: '1px solid #000',
-                padding: `${rowPadding} 6px`,
+                padding: '8px 6px',
                 fontSize,
                 textAlign: 'center',
+                verticalAlign: 'middle',
                 color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#333',
-                textDecoration: isCancelled ? 'line-through' : 'none'
+                textDecoration: isCancelled ? 'line-through' : 'none',
+                lineHeight: '1.4'
               }}>
                 {displayDest}
               </td>
@@ -281,21 +305,25 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           <tr style={{ backgroundColor: '#e8e8e8' }}>
             <td style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               fontWeight: 'bold',
               fontSize: headerFontSize,
               textAlign: 'center',
-              color: '#000'
+              verticalAlign: 'middle',
+              color: '#000',
+              lineHeight: '1.4'
             }} colSpan={2}>
               TOTAL
             </td>
             <td style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               textAlign: 'center',
+              verticalAlign: 'middle',
               fontWeight: 'bold',
               fontSize: headerFontSize,
-              color: '#000'
+              color: '#000',
+              lineHeight: '1.4'
             }}>
               {data.entries
                 .filter(entry => !entry.isCancelled)
@@ -304,15 +332,19 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             </td>
             <td style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`
+              padding: '8px 6px',
+              verticalAlign: 'middle',
+              lineHeight: '1.4'
             }}></td>
             <td style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`,
+              padding: '8px 6px',
               textAlign: 'center',
+              verticalAlign: 'middle',
               fontWeight: 'bold',
               fontSize: headerFontSize,
-              color: '#000'
+              color: '#000',
+              lineHeight: '1.4'
             }}>
               {data.entries
                 .filter(entry => !entry.isCancelled)
@@ -324,14 +356,16 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             </td>
             <td style={{ 
               border: '1px solid #000',
-              padding: `${rowPadding} 6px`
+              padding: '8px 6px',
+              verticalAlign: 'middle',
+              lineHeight: '1.4'
             }}></td>
           </tr>
         </tbody>
       </table>
 
       {/* Signatures Section */}
-      <div style={{ 
+      <div className="signatures-section" style={{ 
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
         gap: '32px',
@@ -447,8 +481,8 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
       <style>{`
         @media print {
           body {
-            print-color-adjust: exact;
-            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
           }
           
           @page {
@@ -459,6 +493,39 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           .no-print {
             display: none !important;
           }
+        }
+        
+        /* Prevent table rows from breaking across pages */
+        table {
+          page-break-inside: auto !important;
+        }
+        
+        tr {
+          page-break-inside: avoid !important;
+          page-break-after: auto !important;
+        }
+        
+        thead {
+          display: table-header-group !important;
+        }
+        
+        tbody tr td {
+          vertical-align: middle !important;
+          line-height: 1.4 !important;
+        }
+        
+        /* Prevent page breaks right after table header */
+        thead tr {
+          page-break-after: avoid !important;
+        }
+        
+        tfoot {
+          display: table-footer-group !important;
+        }
+        
+        /* Prevent signatures section from splitting */
+        .signatures-section {
+          page-break-inside: avoid !important;
         }
       `}</style>
     </div>
