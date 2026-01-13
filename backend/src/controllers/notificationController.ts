@@ -186,7 +186,8 @@ export const createMissingConfigNotification = async (
     truckSuffix?: string;
   },
   createdBy: string,
-  creatorRole?: string
+  creatorRole?: string,
+  creatorUserId?: string
 ): Promise<void> => {
   try {
     const type =
@@ -197,60 +198,172 @@ export const createMissingConfigNotification = async (
         : 'missing_extra_fuel';
 
     const isAdminCreator = creatorRole === 'admin' || creatorRole === 'super_admin';
-    let title = '';
-    let message = '';
-    let recipients: string[] = [];
+    
+    // Create TWO notifications: one for the creator, one for admins
+    // This ensures both parties get appropriate messages
 
     if (isAdminCreator) {
-      // Admin created this - send action-oriented message only to them
-      recipients = [creatorRole];
+      // Admin created this - send action-oriented message to admin
+      const title = type === 'both'
+        ? `Action Required: Add Configuration for ${metadata.doNumber}`
+        : type === 'missing_total_liters'
+        ? `Action Required: Add Route Configuration`
+        : `Action Required: Add Truck Batch`;
       
-      if (type === 'both') {
-        title = `Action Required: Add Configuration for ${metadata.doNumber}`;
-        message = `You need to add route total liters and truck batch configuration for ${metadata.truckNo}. The fuel record has been locked until configuration is complete.`;
-      } else if (type === 'missing_total_liters') {
-        title = `Action Required: Add Route Configuration`;
-        message = `You need to add total liters configuration for route "${metadata.destination}". Please go to System Configuration > Routes to add this route.`;
-      } else {
-        title = `Action Required: Add Truck Batch`;
-        message = `You need to assign truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) to a batch. Please go to System Configuration > Truck Batches.`;
+      const message = type === 'both'
+        ? `You need to add route total liters and truck batch configuration for ${metadata.truckNo}. The fuel record has been locked until configuration is complete.`
+        : type === 'missing_total_liters'
+        ? `You need to add total liters configuration for route "${metadata.destination}". Please go to System Configuration > Routes to add this route.`
+        : `You need to assign truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) to a batch. Please go to System Configuration > Truck Batches.`;
+
+      const adminOwnNotification = await Notification.create({
+        type,
+        title,
+        message,
+        relatedModel: 'FuelRecord',
+        relatedId: fuelRecordId,
+        metadata: {
+          fuelRecordId,
+          doNumber: metadata.doNumber,
+          truckNo: metadata.truckNo,
+          destination: metadata.destination,
+          truckSuffix: metadata.truckSuffix,
+          missingFields,
+          creatorRole: creatorRole || 'unknown',
+        },
+        recipients: [creatorRole], // Send to the admin's role
+        createdBy,
+      });
+
+      // Emit real-time notification to admin
+      try {
+        emitNotification([creatorRole], {
+          id: adminOwnNotification._id,
+          type: adminOwnNotification.type,
+          title: adminOwnNotification.title,
+          message: adminOwnNotification.message,
+          relatedModel: adminOwnNotification.relatedModel,
+          relatedId: adminOwnNotification.relatedId,
+          metadata: adminOwnNotification.metadata,
+          status: adminOwnNotification.status,
+          createdAt: adminOwnNotification.createdAt,
+          isRead: false,
+        });
+        logger.info(`Real-time notification emitted to admin: ${createdBy}`);
+      } catch (wsError) {
+        logger.error('Failed to emit WebSocket notification to admin:', wsError);
       }
     } else {
-      // Non-admin created this - notify all admins
-      recipients = ['fuel_order_maker', 'admin', 'super_admin'];
+      // Non-admin created this - send TWO notifications
       
-      if (type === 'both') {
-        title = `Configuration Required: ${metadata.doNumber}`;
-        message = `Fuel record needs both route total liters and truck batch assignment for ${metadata.truckNo}`;
-      } else if (type === 'missing_total_liters') {
-        title = `Route Configuration Required: ${metadata.doNumber}`;
-        message = `Route "${metadata.destination}" needs total liters assignment. Please contact admin to add this route configuration.`;
-      } else {
-        title = `Truck Batch Required: ${metadata.doNumber}`;
-        message = `Truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) needs batch assignment. Please contact admin to add this configuration.`;
+      // 1. Notification for the creator (fuel order maker)
+      const creatorTitle = type === 'both'
+        ? `Configuration Required: ${metadata.doNumber}`
+        : type === 'missing_total_liters'
+        ? `Route Configuration Required: ${metadata.doNumber}`
+        : `Truck Batch Required: ${metadata.doNumber}`;
+      
+      const creatorMessage = type === 'both'
+        ? `The fuel record for ${metadata.truckNo} needs both route total liters and truck batch configuration. Please contact admin to add these configurations.`
+        : type === 'missing_total_liters'
+        ? `Route "${metadata.destination}" needs total liters configuration. Please contact admin to add this route.`
+        : `Truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) needs batch assignment. Please contact admin to add this configuration.`;
+
+      // Send notification to the creator's userId if available
+      const creatorRecipients = creatorUserId ? [creatorUserId] : ['fuel_order_maker'];
+      
+      const creatorNotification = await Notification.create({
+        type,
+        title: creatorTitle,
+        message: creatorMessage,
+        relatedModel: 'FuelRecord',
+        relatedId: fuelRecordId,
+        metadata: {
+          fuelRecordId,
+          doNumber: metadata.doNumber,
+          truckNo: metadata.truckNo,
+          destination: metadata.destination,
+          truckSuffix: metadata.truckSuffix,
+          missingFields,
+          creatorRole: creatorRole || 'unknown',
+        },
+        recipients: creatorRecipients,
+        createdBy,
+      });
+
+      // Emit real-time notification to creator
+      try {
+        emitNotification(creatorRecipients, {
+          id: creatorNotification._id,
+          type: creatorNotification.type,
+          title: creatorNotification.title,
+          message: creatorNotification.message,
+          relatedModel: creatorNotification.relatedModel,
+          relatedId: creatorNotification.relatedId,
+          metadata: creatorNotification.metadata,
+          status: creatorNotification.status,
+          createdAt: creatorNotification.createdAt,
+          isRead: false,
+        });
+        logger.info(`Real-time notification emitted to creator: ${createdBy}`);
+      } catch (wsError) {
+        logger.error('Failed to emit WebSocket notification to creator:', wsError);
+      }
+
+      // 2. Notification for admins
+      const adminTitle = type === 'both'
+        ? `New Configuration Needed: ${metadata.doNumber}`
+        : type === 'missing_total_liters'
+        ? `Add Route Configuration: ${metadata.doNumber}`
+        : `Add Truck Batch: ${metadata.doNumber}`;
+      
+      const adminMessage = type === 'both'
+        ? `${createdBy} needs route total liters and truck batch for ${metadata.truckNo}. Please add these in System Configuration.`
+        : type === 'missing_total_liters'
+        ? `${createdBy} needs route "${metadata.destination}" configured. Please add it in System Configuration > Routes.`
+        : `${createdBy} needs truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) assigned to a batch. Please configure in System Configuration > Truck Batches.`;
+
+      const adminNotification = await Notification.create({
+        type,
+        title: adminTitle,
+        message: adminMessage,
+        relatedModel: 'FuelRecord',
+        relatedId: fuelRecordId,
+        metadata: {
+          fuelRecordId,
+          doNumber: metadata.doNumber,
+          truckNo: metadata.truckNo,
+          destination: metadata.destination,
+          truckSuffix: metadata.truckSuffix,
+          missingFields,
+          creatorRole: creatorRole || 'unknown',
+          requestedBy: createdBy,
+        },
+        recipients: ['admin', 'super_admin'],
+        createdBy,
+      });
+
+      // Emit real-time notification to admins
+      try {
+        emitNotification(['admin', 'super_admin'], {
+          id: adminNotification._id,
+          type: adminNotification.type,
+          title: adminNotification.title,
+          message: adminNotification.message,
+          relatedModel: adminNotification.relatedModel,
+          relatedId: adminNotification.relatedId,
+          metadata: adminNotification.metadata,
+          status: adminNotification.status,
+          createdAt: adminNotification.createdAt,
+          isRead: false,
+        });
+        logger.info('Real-time notification emitted to admins');
+      } catch (wsError) {
+        logger.error('Failed to emit WebSocket notification to admins:', wsError);
       }
     }
 
-    await Notification.create({
-      type,
-      title,
-      message,
-      relatedModel: 'FuelRecord',
-      relatedId: fuelRecordId,
-      metadata: {
-        fuelRecordId,
-        doNumber: metadata.doNumber,
-        truckNo: metadata.truckNo,
-        destination: metadata.destination,
-        truckSuffix: metadata.truckSuffix,
-        missingFields,
-        creatorRole: creatorRole || 'unknown',
-      },
-      recipients,
-      createdBy,
-    });
-
-    logger.info(`Created notification for fuel record ${fuelRecordId} - missing: ${missingFields.join(', ')}`);
+    logger.info(`Created notifications for fuel record ${fuelRecordId} - missing: ${missingFields.join(', ')}, creator: ${createdBy}, role: ${creatorRole}`);
   } catch (error) {
     logger.error('Failed to create notification:', error);
     // Don't throw - notification failure shouldn't break fuel record creation

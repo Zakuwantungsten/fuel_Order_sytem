@@ -112,13 +112,13 @@ export const emitNotification = (
 
   try {
     recipients.forEach((recipient) => {
-      // Check if recipient is a role (e.g., 'super_manager', 'admin')
+      // Check if recipient is a role (e.g., 'super_manager', 'admin', 'super_admin', 'fuel_order_maker')
       if (recipient.includes('_') || recipient === 'admin') {
         // It's a role
         io!.to(`role:${recipient}`).emit('notification', notificationData);
         logger.info(`Notification emitted to role: ${recipient}`);
       } else {
-        // It's a specific username
+        // It's a specific username or userId
         io!.to(`user:${recipient}`).emit('notification', notificationData);
         logger.info(`Notification emitted to user: ${recipient}`);
       }

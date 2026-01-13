@@ -8,8 +8,8 @@ const MAX_RECONNECT_ATTEMPTS = 5;
  * Initialize WebSocket connection
  */
 export const initializeWebSocket = (token: string): Socket => {
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-  const WS_URL = API_BASE_URL.replace('/api', '').replace('http', 'ws');
+  // Use actual backend URL for WebSocket (not the proxy)
+  const WS_URL = 'http://localhost:5000';
 
   if (socket?.connected) {
     console.log('[WebSocket] Already connected');

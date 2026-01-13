@@ -105,6 +105,7 @@ const cascadeUpdateToFuelRecord = async (
             truckNo: fuelRecord.truckNo,
             fuelRecordId: fuelRecord._id.toString(),
             userRole: (updatedData as any).userRole,
+            userId: (updatedData as any).userId,
           };
         }
       } else {
@@ -143,6 +144,7 @@ const cascadeUpdateToFuelRecord = async (
             truckNo: fuelRecord.truckNo,
             fuelRecordId: fuelRecord._id.toString(),
             userRole: (updatedData as any).userRole,
+            userId: (updatedData as any).userId,
           };
         }
       }
@@ -187,6 +189,7 @@ const cascadeUpdateToFuelRecord = async (
             truckNo: fuelRecord.truckNo,
             fuelRecordId: fuelRecord._id.toString(),
             userRole: (updatedData as any).userRole,
+            userId: (updatedData as any).userId,
           };
         }
       } else {
@@ -217,9 +220,10 @@ const cascadeUpdateToFuelRecord = async (
             destination: needsRouteNotification.destination,
           },
           username,
-          needsRouteNotification.userRole
+          needsRouteNotification.userRole,
+          needsRouteNotification.userId
         );
-        logger.info(`📢 Notification created for missing route: ${needsRouteNotification.destination}`);
+        logger.info(`📢 Notifications created for missing route: ${needsRouteNotification.destination} (creator: ${username}, role: ${needsRouteNotification.userRole})`);
       }
       
       return { updated: true, fuelRecordId: fuelRecord._id.toString(), changes, routeNotificationCreated: !!needsRouteNotification };
@@ -680,8 +684,8 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     // Cascade to fuel records if relevant fields changed
     if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
-      // Pass user role in body for notification logic
-      const bodyWithRole = { ...req.body, userRole };
+      // Pass user role and userId in body for notification logic
+      const bodyWithRole = { ...req.body, userRole, userId: req.user?.userId };
       const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username);
       cascadeResults.fuelRecordUpdated = fuelResult.updated;
       cascadeResults.fuelRecordChanges = fuelResult.changes || [];

@@ -107,8 +107,11 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
             setPendingYardFuelCount((prev) => prev + 1);
           }
           
-          // Optional: Play notification sound or show toast
+          // Play notification sound
           playNotificationSound();
+          
+          // Show browser push notification
+          showBrowserNotification(notification);
         });
       } catch (error) {
         console.error('[NotificationBell] Failed to initialize WebSocket:', error);
@@ -122,17 +125,53 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     };
   }, []);
 
-  // Play notification sound (optional)
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        console.log('[NotificationBell] Browser notification permission:', permission);
+      });
+    }
+  }, []);
+
+  // Play notification sound
   const playNotificationSound = () => {
     try {
       const audio = new Audio('/notification.mp3');
       audio.volume = 0.3;
-      audio.play().catch(() => {
+      audio.play().catch((error) => {
         // Browser might block autoplay
-        console.log('[NotificationBell] Notification sound blocked');
+        console.log('[NotificationBell] Notification sound blocked:', error);
       });
     } catch (error) {
-      // Sound file not found or error playing
+      console.error('[NotificationBell] Error playing sound:', error);
+    }
+  };
+
+  // Show browser push notification
+  const showBrowserNotification = (notification: any) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const browserNotification = new Notification(notification.title || 'New Notification', {
+          body: notification.message,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: notification.id,
+          requireInteraction: false,
+          silent: false,
+        });
+
+        browserNotification.onclick = () => {
+          window.focus();
+          browserNotification.close();
+          // Optionally open notifications page or mark as read
+        };
+
+        // Auto-close after 10 seconds
+        setTimeout(() => browserNotification.close(), 10000);
+      } catch (error) {
+        console.error('[NotificationBell] Error showing browser notification:', error);
+      }
     }
   };
 

@@ -399,10 +399,12 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
           destination: fuelRecord.to,
           truckSuffix,
         },
-        req.user?.username || 'system'
+        req.user?.username || 'system',
+        req.user?.role,
+        req.user?.userId
       );
 
-      logger.info(`Created notification for locked fuel record ${fuelRecord._id} - missing: ${missingFields.join(', ')}`);
+      logger.info(`Created notifications for locked fuel record ${fuelRecord._id} - missing: ${missingFields.join(', ')}`);
     }
 
     // Auto-link any pending yard fuel entries for this truck
