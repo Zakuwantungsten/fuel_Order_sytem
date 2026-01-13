@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck } from 'lucide-react';
+import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, disconnectWebSocket } from '../services/websocket';
 
 interface Notification {
   id?: string;
   _id?: string;
-  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'info' | 'warning' | 'error';
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'lpo_created' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
   relatedModel: string;
@@ -27,6 +28,10 @@ interface Notification {
     enteredBy?: string;
     rejectionReason?: string;
     rejectedBy?: string;
+    lpoNo?: string;
+    station?: string;
+    pricePerLtr?: number;
+    doSdo?: string;
   };
   status: 'pending' | 'resolved' | 'dismissed';
   createdAt: string;
@@ -82,10 +87,54 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
 
   useEffect(() => {
     loadNotifications();
-    // Poll for new notifications every 30 seconds
-    const interval = setInterval(loadNotifications, 30000);
-    return () => clearInterval(interval);
+    
+    // Initialize WebSocket connection
+    const token = localStorage.getItem('fuel_order_token');
+    if (token) {
+      try {
+        initializeWebSocket(token);
+        
+        // Subscribe to real-time notifications
+        subscribeToNotifications((notification) => {
+          console.log('[NotificationBell] Received real-time notification:', notification);
+          
+          // Add new notification to the list
+          setNotifications((prev) => [notification, ...prev]);
+          setUnreadCount((prev) => prev + 1);
+          
+          // Update pending yard fuel count if applicable
+          if (notification.type === 'truck_pending_linking') {
+            setPendingYardFuelCount((prev) => prev + 1);
+          }
+          
+          // Optional: Play notification sound or show toast
+          playNotificationSound();
+        });
+      } catch (error) {
+        console.error('[NotificationBell] Failed to initialize WebSocket:', error);
+      }
+    }
+    
+    // Cleanup
+    return () => {
+      unsubscribeFromNotifications();
+      disconnectWebSocket();
+    };
   }, []);
+
+  // Play notification sound (optional)
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio('/notification.mp3');
+      audio.volume = 0.3;
+      audio.play().catch(() => {
+        // Browser might block autoplay
+        console.log('[NotificationBell] Notification sound blocked');
+      });
+    } catch (error) {
+      // Sound file not found or error playing
+    }
+  };
 
   const loadNotifications = async () => {
     try {
@@ -201,6 +250,8 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
         return 'text-orange-500';
       case 'yard_fuel_recorded':
         return 'text-green-500';
+      case 'lpo_created':
+        return 'text-indigo-500';
       default:
         return 'text-blue-500';
     }
@@ -212,6 +263,9 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     }
     if (type === 'yard_fuel_recorded') {
       return <CheckCircle2 className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
+    }
+    if (type === 'lpo_created') {
+      return <FileText className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
     }
     return <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
   };

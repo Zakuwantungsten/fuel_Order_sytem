@@ -39,6 +39,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/nodemailer": "^7.0.4",
     "@types/pdfkit": "^0.17.4",
+    "@types/socket.io": "^3.0.1",
     "@types/xlsx": "^0.0.36",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
@@ -58,6 +59,7 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^7.0.11",
     "pdfkit": "^0.17.2",
+    "socket.io": "^4.8.3",
     "winston": "^3.11.0",
     "xlsx": "^0.18.5"
   },

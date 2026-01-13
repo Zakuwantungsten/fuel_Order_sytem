@@ -101,6 +101,15 @@ export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<v
       req.ip
     );
 
+    // Create notification for station manager(s)
+    try {
+      const { createLPOCreatedNotification } = await import('./notificationController');
+      await createLPOCreatedNotification(lpoEntry, req.user?.username || 'system');
+    } catch (notifError) {
+      logger.error('Failed to create LPO notification:', notifError);
+      // Don't fail the request if notification creation fails
+    }
+
     res.status(201).json({
       success: true,
       message: 'LPO entry created successfully',

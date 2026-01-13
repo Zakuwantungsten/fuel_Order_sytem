@@ -31,9 +31,9 @@ import { LPOEntry } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from './Pagination';
 import ChangePasswordModal from './ChangePasswordModal';
+import NotificationBell from './NotificationBell';
+import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, disconnectWebSocket } from '../services/websocket';
 
-// Real-time update interval in milliseconds (30 seconds)
-const REALTIME_UPDATE_INTERVAL = 30000;
 import XLSX from 'xlsx-js-style';
 
 // All valid fuel stations (excluding CASH)
@@ -103,7 +103,6 @@ export function ManagerView({ user }: ManagerViewProps) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Custom dropdown states
   const [showStationDropdown, setShowStationDropdown] = useState(false);
@@ -123,9 +122,9 @@ export function ManagerView({ user }: ManagerViewProps) {
   const { toggleTheme, isDark, logout } = useAuth();
 
   // Determine if user is super manager or station manager
-  // super_manager and manager roles can see multiple stations
-  // station_manager role can only see their assigned station
-  const isSuperManager = user.role === 'super_manager' || user.role === 'manager';
+  // super_manager role can see multiple stations (all Zambian LAKE stations)
+  // station_manager and manager roles can only see their assigned station
+  const isSuperManager = user.role === 'super_manager';
   
   // Get the station for station managers
   const userStation = useMemo(() => {
@@ -184,10 +183,10 @@ export function ManagerView({ user }: ManagerViewProps) {
     
     try {
       const currentYear = new Date().getFullYear();
-      // Use dateFrom/dateTo instead of year parameter (which backend doesn't support)
-      const dateFrom = `${currentYear}-01-01`;
-      const dateTo = `${currentYear}-12-31`;
-      const response = await lposAPI.getAll({ dateFrom, dateTo, limit: 10000 });
+      // Fetch all LPOs without date filters - LPO dates are in "dd-mmm" format (e.g., "13-Jan")
+      // which doesn't work with backend's ISO date string comparison.
+      // Frontend filtering handles date ranges properly.
+      const response = await lposAPI.getAll({ limit: 10000 });
       const entries = response.data;
       
       const processedEntries: LPODisplayEntry[] = entries
@@ -254,23 +253,39 @@ export function ManagerView({ user }: ManagerViewProps) {
     };
   }, []);
 
-  // Initial fetch and real-time updates
+  // Initial fetch and WebSocket real-time updates
   useEffect(() => {
+    // Initial data fetch
     fetchLPOEntries();
     
-    // Set up real-time polling for updates
-    updateIntervalRef.current = setInterval(() => {
-      if (isOnline) {
-        fetchLPOEntries(true); // Silent refresh
+    // Initialize WebSocket for real-time updates
+    const token = localStorage.getItem('fuel_order_token');
+    if (token) {
+      try {
+        initializeWebSocket(token);
+        
+        // Subscribe to LPO creation notifications
+        subscribeToNotifications((notification) => {
+          console.log('[ManagerView] Received real-time notification:', notification);
+          
+          // If it's an LPO notification, refresh the list immediately
+          if (notification.type === 'lpo_created') {
+            console.log('[ManagerView] LPO created - refreshing data...');
+            fetchLPOEntries(true); // Silent refresh
+          }
+        });
+        
+        console.log('[ManagerView] WebSocket initialized for real-time updates');
+      } catch (error) {
+        console.error('[ManagerView] Failed to initialize WebSocket:', error);
       }
-    }, REALTIME_UPDATE_INTERVAL);
+    }
     
     return () => {
-      if (updateIntervalRef.current) {
-        clearInterval(updateIntervalRef.current);
-      }
+      unsubscribeFromNotifications();
+      disconnectWebSocket();
     };
-  }, [fetchLPOEntries, isOnline]);
+  }, [fetchLPOEntries]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -433,66 +448,31 @@ export function ManagerView({ user }: ManagerViewProps) {
       {/* Mobile Header */}
       <header className="sticky top-0 z-40 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="px-3 sm:px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex-1 min-w-0 mr-2">
-              <div className="flex items-center">
-                <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
-                  {isSuperManager ? 'All Stations' : userStation || 'Station'}
-                </h1>
-                {/* Real-time status indicator */}
-                <div className="ml-2 flex items-center">
-                  {isOnline ? (
-                    <span className="flex items-center text-green-600 dark:text-green-400" title="Connected - Auto-updating">
-                      <Wifi className="w-3 h-3 sm:w-4 sm:h-4" />
-                      {isRefreshing && <RefreshCw className="w-3 h-3 ml-1 animate-spin" />}
-                    </span>
-                  ) : (
-                    <span className="flex items-center text-red-500 dark:text-red-400" title="Offline">
-                      <WifiOff className="w-3 h-3 sm:w-4 sm:h-4" />
-                    </span>
-                  )}
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center mt-0.5">
-                <Calendar className="w-3 h-3 mr-1 flex-shrink-0" />
-                <span className="truncate">{dateRange.fromFormatted} - {dateRange.toFormatted}</span>
-                {lastUpdated && (
-                  <span className="hidden sm:inline ml-2 text-green-600 dark:text-green-400">
-                    • Updated {lastUpdated.toLocaleTimeString()}
-                  </span>
-                )}
-              </p>
-            </div>
-            <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
-              <button
-                onClick={() => fetchLPOEntries()}
-                className={`p-1.5 sm:p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors ${isRefreshing ? 'animate-pulse' : ''}`}
-                aria-label="Refresh"
-                disabled={isRefreshing}
-              >
-                <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                onClick={handleExport}
-                className="p-1.5 sm:p-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-                aria-label="Export"
-              >
-                <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-              {/* Theme Toggle */}
+          <div className="flex flex-row items-center justify-between">
+            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">
+              {isSuperManager ? 'All Stations' : userStation || 'Station'}
+            </h1>
+            <div className="flex items-center gap-2">
+              <NotificationBell
+                onNotificationClick={(notification) => {
+                  if (notification.type === 'lpo_created' && notification.metadata?.lpoNo) {
+                    const lpoEntry = lpoEntries.find(e => e.lpoNo === notification.metadata?.lpoNo);
+                    if (lpoEntry) {
+                      setSelectedEntry(lpoEntry);
+                    }
+                  }
+                }}
+              />
               <button
                 onClick={toggleTheme}
-                className="p-1.5 sm:p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                aria-label="Toggle theme"
+                className="p-1.5 sm:p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
               >
                 {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
               </button>
-              {/* Profile Menu */}
               <div className="relative">
                 <button
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className="p-1.5 sm:p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  aria-label="Profile Menu"
+                  className="p-1.5 sm:p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                 >
                   <User className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
@@ -500,7 +480,7 @@ export function ManagerView({ user }: ManagerViewProps) {
                 {showProfileMenu && (
                   <>
                     <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
-                    <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
+                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110]">
                       <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
                         <p className="text-xs text-gray-500 dark:text-gray-400">Signed in as</p>
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.firstName} {user.lastName}</p>
@@ -610,92 +590,95 @@ export function ManagerView({ user }: ManagerViewProps) {
         </div>
 
         {/* Search and Filter */}
-        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-2 sm:p-3 transition-colors relative">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 sm:w-5 sm:h-5 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search truck, LPO, DO..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 sm:pl-10 pr-9 py-2 sm:py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors text-sm"
-                />
-                {searchTerm && (
+        <div className="px-3 sm:px-6 pb-3 sm:pb-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-3 sm:p-4 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0 relative">
+                  <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search by truck number, LPO, or DO..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-11 pr-10 py-3 border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {isSuperManager && (
                   <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`flex-shrink-0 p-3 rounded-lg border-2 transition-all ${
+                      showFilters || selectedStation !== 'all'
+                        ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-500 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                        : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
+                    }`}
+                    title="Filter by station"
                   >
-                    <X className="w-4 h-4" />
+                    <Filter className="w-5 h-5" />
                   </button>
                 )}
               </div>
-              {isSuperManager && (
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`flex-shrink-0 p-2 sm:p-2.5 rounded-lg border transition-colors ${
-                    showFilters || selectedStation !== 'all'
-                      ? 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400'
-                      : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              )}
-            </div>
 
-            {/* Station Filter Dropdown */}
-            {isSuperManager && showFilters && (
-              <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-100 dark:border-gray-700">
-                <label htmlFor="station-filter" className="block text-xs text-gray-500 dark:text-gray-400 mb-1 sm:mb-2">Filter by Station</label>
-                <div className="relative" ref={stationDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => setShowStationDropdown(!showStationDropdown)}
-                    className="w-full px-3 py-2 sm:py-2.5 pr-10 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors text-left flex items-center justify-between"
-                  >
-                    <span className="truncate">{selectedStation === 'all' ? 'All Stations' : selectedStation}</span>
-                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  
-                  {/* Custom Dropdown Menu */}
-                  {showStationDropdown && (
-                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto left-0 right-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedStation('all');
-                          setShowStationDropdown(false);
-                        }}
-                        className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                          selectedStation === 'all' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
-                        }`}
-                      >
-                        <span>All Stations</span>
-                        {selectedStation === 'all' && <Check className="w-4 h-4" />}
-                      </button>
-                      {availableStations.map(station => (
+              {/* Station Filter Dropdown */}
+              {isSuperManager && showFilters && (
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                  <label htmlFor="station-filter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Filter by Station</label>
+                  <div className="relative" ref={stationDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setShowStationDropdown(!showStationDropdown)}
+                      className="w-full px-4 py-3 pr-10 border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-left flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-600"
+                    >
+                      <span className="truncate font-medium">{selectedStation === 'all' ? 'All Stations' : selectedStation}</span>
+                      <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {/* Custom Dropdown Menu */}
+                    {showStationDropdown && (
+                      <div className="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto left-0 right-0">
                         <button
-                          key={station}
                           type="button"
                           onClick={() => {
-                            setSelectedStation(station);
+                            setSelectedStation('all');
                             setShowStationDropdown(false);
                           }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                            selectedStation === station ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                            selectedStation === 'all' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-gray-900 dark:text-gray-100'
                           }`}
                         >
-                          <span>{station}</span>
-                          {selectedStation === station && <Check className="w-4 h-4" />}
+                          <span>All Stations</span>
+                          {selectedStation === 'all' && <Check className="w-5 h-5" />}
                         </button>
-                      ))}
-                    </div>
-                  )}
+                        {availableStations.map(station => (
+                          <button
+                            key={station}
+                            type="button"
+                            onClick={() => {
+                              setSelectedStation(station);
+                              setShowStationDropdown(false);
+                            }}
+                            className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                              selectedStation === station ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-gray-900 dark:text-gray-100'
+                            }`}
+                          >
+                            <span>{station}</span>
+                            {selectedStation === station && <Check className="w-5 h-5" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 

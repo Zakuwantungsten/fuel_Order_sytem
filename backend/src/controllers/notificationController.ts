@@ -4,6 +4,7 @@ import { Notification } from '../models/Notification';
 import { FuelRecord } from '../models/FuelRecord';
 import { ApiError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import { emitNotification } from '../services/websocket';
 
 /**
  * Get all notifications for the current user
@@ -677,6 +678,113 @@ export const createBulkDOFailureNotification = async (
   }
 };
 
+/**
+ * Create notification when an LPO is created for a station
+ * Notifies the station manager and super manager (for LAKE stations)
+ */
+export const createLPOCreatedNotification = async (
+  lpoEntry: any,
+  createdBy: string
+): Promise<void> => {
+  try {
+    const station = lpoEntry.dieselAt?.toUpperCase()?.trim();
+    const lpoNo = lpoEntry.lpoNo;
+    const truckNo = lpoEntry.truckNo;
+    const liters = lpoEntry.ltrs;
+    const pricePerLtr = lpoEntry.pricePerLtr;
+    const doSdo = lpoEntry.doSdo;
+
+    if (!station || station === 'CASH') {
+      // Don't create notifications for CASH entries
+      return;
+    }
+
+    // Determine recipients based on station
+    const recipients: string[] = [];
+    
+    // Station name to manager username mapping
+    const stationManagerMap: Record<string, string> = {
+      'LAKE CHILABOMBWE': 'mgr_chilabombwe',
+      'LAKE NDOLA': 'mgr_ndola',
+      'LAKE KAPIRI': 'mgr_kapiri',
+      'LAKE KITWE': 'mgr_kitwe',
+      'LAKE KABANGWA': 'mgr_kabangwa',
+      'LAKE CHINGOLA': 'mgr_chingola',
+      'LAKE TUNDUMA': 'mgr_tunduma',
+      'GBP MOROGORO': 'mgr_morogoro',
+      'GBP KANGE': 'mgr_kange',
+      'GPB KANGE': 'mgr_kange',
+      'INFINITY': 'mgr_infinity',
+    };
+
+    // Add the specific station manager
+    const stationManager = stationManagerMap[station];
+    if (stationManager) {
+      recipients.push(stationManager);
+    }
+
+    // Check if it's a LAKE station (Zambian stations) or custom station
+    const isLakeStation = station.startsWith('LAKE');
+    const isCustomStation = !stationManagerMap[station]; // Station not in predefined list
+    
+    // Add super_manager role for LAKE stations and custom stations
+    if (isLakeStation || isCustomStation) {
+      recipients.push('super_manager');
+    }
+
+    // If no recipients, don't create notification
+    if (recipients.length === 0) {
+      logger.warn(`No recipients found for LPO notification at station: ${station}`);
+      return;
+    }
+
+    const title = `New LPO Created - ${station}`;
+    const message = `LPO ${lpoNo} created for truck ${truckNo} at ${station}. ${liters}L @ $${pricePerLtr}/L${doSdo ? ` (DO: ${doSdo})` : ''}`;
+
+    const notification = await Notification.create({
+      type: 'lpo_created',
+      title,
+      message,
+      relatedModel: 'LPO',
+      relatedId: lpoEntry._id.toString(),
+      metadata: {
+        lpoNo,
+        station,
+        truckNo,
+        liters,
+        pricePerLtr,
+        doSdo,
+      },
+      recipients,
+      createdBy,
+    });
+
+    logger.info(`Created LPO notification for station ${station}, recipients: ${recipients.join(', ')}`);
+
+    // Emit real-time notification via WebSocket
+    try {
+      emitNotification(recipients, {
+        id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        relatedModel: notification.relatedModel,
+        relatedId: notification.relatedId,
+        metadata: notification.metadata,
+        status: notification.status,
+        createdAt: notification.createdAt,
+        isRead: false,
+      });
+      logger.info(`Real-time notification emitted for LPO ${lpoNo}`);
+    } catch (wsError) {
+      logger.error('Failed to emit WebSocket notification:', wsError);
+      // Don't fail the function if WebSocket emission fails
+    }
+  } catch (error) {
+    logger.error('Failed to create LPO notification:', error);
+  }
+};
+
 export default {
   getNotifications,
   getNotificationCount,
@@ -693,4 +801,5 @@ export default {
   createYardFuelLinkedNotification,
   resolvePendingYardFuelNotifications,
   createBulkDOFailureNotification,
+  createLPOCreatedNotification,
 };

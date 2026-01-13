@@ -202,6 +202,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       entry.lpoNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       entry.notes?.toLowerCase().includes(searchTerm.toLowerCase());
 
+    // Normalize dates for comparison (entry.date should be in ISO format from backend)
     const matchesDateFrom = !dateFilter.from || entry.date >= dateFilter.from;
     const matchesDateTo = !dateFilter.to || entry.date <= dateFilter.to;
 

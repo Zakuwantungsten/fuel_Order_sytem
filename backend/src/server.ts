@@ -1,4 +1,5 @@
 import express, { Application } from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -11,12 +12,16 @@ import routes from './routes';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { csrfProtection, provideCsrfToken, csrfErrorHandler } from './middleware/csrf';
 import logger from './utils/logger';
+import { initializeWebSocket } from './services/websocket';
 
 // Validate environment variables
 validateEnv();
 
 // Create Express app
 const app: Application = express();
+
+// Create HTTP server
+const httpServer = createServer(app);
 
 // Security middleware
 app.use(helmet());
@@ -130,14 +135,19 @@ const startServer = async () => {
     // Connect to database
     await connectDatabase();
 
+    // Initialize WebSocket server
+    initializeWebSocket(httpServer);
+    logger.info('WebSocket server initialized');
+
     // Start archival scheduler (runs monthly at 2 AM on 1st day)
     startArchivalScheduler();
 
     // Start listening
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       logger.info(`Server running in ${config.nodeEnv} mode on port ${PORT}`);
       logger.info(`CORS origin: ${config.corsOrigin}`);
       logger.info('Archival scheduler: Active (runs monthly on 1st day at 2:00 AM)');
+      logger.info('WebSocket server: Active');
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

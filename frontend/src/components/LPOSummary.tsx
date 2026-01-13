@@ -200,13 +200,21 @@ const LPOSummary = ({
             const monthIndex = monthOrder.indexOf(monthName);
             
             if (monthIndex !== -1) {
-              // Construct date string for comparison (assuming current year)
+              // Construct date for comparison using selectedYear
               const entryDate = new Date(parseInt(selectedYear), monthIndex, day);
+              entryDate.setHours(0, 0, 0, 0); // Normalize to start of day
+              
               const fromDate = localDateFrom ? new Date(localDateFrom) : null;
               const toDate = localDateTo ? new Date(localDateTo) : null;
               
-              if (fromDate && entryDate < fromDate) return false;
-              if (toDate && entryDate > toDate) return false;
+              if (fromDate) {
+                fromDate.setHours(0, 0, 0, 0);
+                if (entryDate < fromDate) return false;
+              }
+              if (toDate) {
+                toDate.setHours(23, 59, 59, 999); // End of day
+                if (entryDate > toDate) return false;
+              }
             }
           }
           return true;

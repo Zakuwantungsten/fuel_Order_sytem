@@ -50,7 +50,23 @@ const CancellationHistoryModal: React.FC<CancellationHistoryModalProps> = ({ isO
         t.doNo.toLowerCase().includes(searchTerm.toLowerCase())
       );
     
-    const matchesDate = !dateFilter || item.date.includes(dateFilter);
+    // Convert ISO date filter to match savedAt (ISO format) or date (dd-mmm format)
+    const matchesDate = !dateFilter || (() => {
+      // item.date could be in "dd-mmm" format (e.g., "13-Jan")
+      // savedAt is in ISO format
+      // Convert dateFilter (ISO) to "dd-mmm" format for comparison
+      try {
+        const selectedDate = new Date(dateFilter);
+        const day = selectedDate.getDate();
+        const month = selectedDate.toLocaleDateString('en-US', { month: 'short' });
+        const formattedDate = `${day}-${month}`;
+        
+        // Check both date formats
+        return item.date.includes(formattedDate) || (item.savedAt && item.savedAt.includes(dateFilter));
+      } catch {
+        return item.date.includes(dateFilter) || (item.savedAt && item.savedAt.includes(dateFilter));
+      }
+    })();
     
     return matchesSearch && matchesDate;
   });

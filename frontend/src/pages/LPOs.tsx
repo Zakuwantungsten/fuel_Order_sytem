@@ -408,7 +408,17 @@ const LPOs = () => {
     }
 
     if (dateFilter) {
-      filtered = filtered.filter((lpo) => lpo.date === dateFilter);
+      // Convert ISO date (e.g., "2026-01-13") to match LPO date format (e.g., "13-Jan")
+      try {
+        const selectedDate = new Date(dateFilter);
+        const day = selectedDate.getDate();
+        const month = selectedDate.toLocaleDateString('en-US', { month: 'short' });
+        const formattedDate = `${day}-${month}`; // "13-Jan"
+        
+        filtered = filtered.filter((lpo) => lpo.date === formattedDate);
+      } catch (error) {
+        console.error('Error parsing date filter:', error);
+      }
     }
 
     setFilteredLpos(filtered);
