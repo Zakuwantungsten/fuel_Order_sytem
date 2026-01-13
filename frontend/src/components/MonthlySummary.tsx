@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Download, Calendar, Filter, Fuel, DollarSign, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../types';
-import { exportToXLSX } from '../utils/csvParser';
+import { exportToXLSXMultiSheet } from '../utils/csvParser';
 
 interface MonthlySummaryProps {
   orders: DeliveryOrder[];
@@ -33,18 +33,22 @@ interface GroupedOrders {
 }
 
 const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'DO' }: MonthlySummaryProps) => {
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
   const [groupBy, setGroupBy] = useState<'none' | 'client' | 'destination'>('none');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
 
   // Dropdown states
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [showGroupByDropdown, setShowGroupByDropdown] = useState(false);
+  const [showYearDropdown, setShowYearDropdown] = useState(false);
 
   // Refs for click-outside detection
   const monthDropdownRef = useRef<HTMLDivElement>(null);
   const groupByDropdownRef = useRef<HTMLDivElement>(null);
+  const yearDropdownRef = useRef<HTMLDivElement>(null);
 
   // Click-outside detection for dropdowns
   useEffect(() => {
@@ -54,6 +58,9 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
       }
       if (groupByDropdownRef.current && !groupByDropdownRef.current.contains(event.target as Node)) {
         setShowGroupByDropdown(false);
+      }
+      if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target as Node)) {
+        setShowYearDropdown(false);
       }
     };
 
@@ -69,36 +76,109 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
 
   useEffect(() => {
     if (filteredOrders.length > 0) {
-      // Get unique months from orders
-      const months = [...new Set(filteredOrders.map(o => {
-        // Extract month from date (e.g., "3-Oct" -> "Oct")
-        const parts = o.date.split('-');
-        return parts.length > 1 ? parts[1] : o.date;
-      }))];
+      // Extract unique year-month combinations and years
+      const yearMonthSet = new Set<string>();
+      const yearSet = new Set<number>();
       
-      setAvailableMonths(months);
+      filteredOrders.forEach(o => {
+        // Extract from date format like "13-Jan" or "2026-01-13"
+        let month = '';
+        let year = new Date().getFullYear();
+        
+        if (o.date.includes('-')) {
+          const parts = o.date.split('-');
+          if (parts.length === 3) {
+            // Format: YYYY-MM-DD
+            year = parseInt(parts[0], 10);
+            const monthNum = parseInt(parts[1], 10);
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            month = monthNames[monthNum - 1];
+          } else if (parts.length === 2) {
+            // Format: D-Mon (e.g., "13-Jan")
+            month = parts[1];
+            // Try to infer year from order.createdAt or assume current year
+            if (o.createdAt) {
+              year = new Date(o.createdAt).getFullYear();
+            }
+          }
+        }
+        
+        if (month) {
+          yearMonthSet.add(`${month}-${year}`);
+          yearSet.add(year);
+        }
+      });
       
-      if (months.length > 0 && !selectedMonth) {
-        setSelectedMonth(months[0]);
+      const years = Array.from(yearSet).sort((a, b) => b - a); // Descending order
+      const allMonths = Array.from(yearMonthSet).sort((a, b) => {
+        const [monthA, yearA] = a.split('-');
+        const [monthB, yearB] = b.split('-');
+        const yearDiff = parseInt(yearB) - parseInt(yearA);
+        if (yearDiff !== 0) return yearDiff;
+        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return monthOrder.indexOf(monthB) - monthOrder.indexOf(monthA);
+      });
+      
+      setAvailableYears(years);
+      setAvailableMonths(allMonths);
+      
+      // Initialize with current year if available
+      if (years.length > 0 && selectedYears.length === 0) {
+        const currentYear = new Date().getFullYear();
+        const defaultYear = years.includes(currentYear) ? currentYear : years[0];
+        setSelectedYears([defaultYear]);
+      }
+      
+      // Initialize with first month of selected year(s)
+      if (allMonths.length > 0 && selectedMonths.length === 0 && selectedYears.length > 0) {
+        const firstMonthOfSelectedYear = allMonths.find(m => 
+          selectedYears.some(y => m.endsWith(`-${y}`))
+        );
+        if (firstMonthOfSelectedYear) {
+          setSelectedMonths([firstMonthOfSelectedYear]);
+        }
       }
     }
-  }, [filteredOrders, selectedMonth]);
+  }, [filteredOrders, selectedMonths.length, selectedYears.length]);
 
   const summary = useMemo(() => {
-    if (!selectedMonth || filteredOrders.length === 0) return null;
+    if (selectedMonths.length === 0 || filteredOrders.length === 0) return null;
     
-    const monthOrders = filteredOrders.filter(o => o.date.includes(selectedMonth) && !o.isCancelled);
+    // Use first selected month for display
+    const displayMonth = selectedMonths[0];
+    const [month, year] = displayMonth.split('-');
+    
+    // Filter orders that match the display month-year
+    const matchesMonthYear = (orderDate: string) => {
+      if (orderDate.includes('-')) {
+        const parts = orderDate.split('-');
+        if (parts.length === 3) {
+          // YYYY-MM-DD format
+          const orderYear = parseInt(parts[0], 10);
+          const monthNum = parseInt(parts[1], 10);
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const orderMonth = monthNames[monthNum - 1];
+          return orderMonth === month && orderYear === parseInt(year);
+        } else if (parts.length === 2) {
+          // D-Mon format - just match month for now
+          return parts[1] === month;
+        }
+      }
+      return false;
+    };
+    
+    const monthOrders = filteredOrders.filter(o => matchesMonthYear(o.date) && !o.isCancelled);
     
     // Calculate fuel metrics for the month
-    const monthFuelRecords = fuelRecords.filter(r => r.date.includes(selectedMonth));
-    const monthLpoEntries = lpoEntries.filter(l => l.date.includes(selectedMonth));
+    const monthFuelRecords = fuelRecords.filter(r => matchesMonthYear(r.date));
+    const monthLpoEntries = lpoEntries.filter(l => matchesMonthYear(l.date));
     
     const totalFuelConsumed = monthFuelRecords.reduce((sum, r) => sum + (r.totalLts || 0) + (r.extra || 0), 0);
     const totalFuelCost = monthLpoEntries.reduce((sum, l) => sum + (l.ltrs * l.pricePerLtr), 0);
     const avgFuelPerOrder = monthOrders.length > 0 ? totalFuelConsumed / monthOrders.length : 0;
     
     const summaryData: SummaryData = {
-      month: selectedMonth,
+      month: displayMonth,
       totalOrders: monthOrders.length,
       totalImport: monthOrders.filter(o => o.importOrExport === 'IMPORT').length,
       totalExport: monthOrders.filter(o => o.importOrExport === 'EXPORT').length,
@@ -134,45 +214,76 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
     });
 
     return summaryData;
-  }, [selectedMonth, filteredOrders, fuelRecords, lpoEntries]);
+  }, [selectedMonths, filteredOrders, fuelRecords, lpoEntries]);
 
   const handleExportSummary = () => {
-    if (!summary) return;
-
-    const monthOrders = getMonthOrders();
-    
-    // Export in Excel format similar to DAILY_DO CSV
-    const exportData = monthOrders.map((order, index) => ({
-      'S/N': index + 1,
-      'DATE': order.date,
-      'IMPORT OR EXPORT': order.importOrExport,
-      'D.O No.': order.doNumber,
-      'Invoice Nos': order.invoiceNos || '',
-      'CLIENT NAME': order.clientName,
-      'TRUCK No.': order.truckNo,
-      'TRAILER No.': order.trailerNo,
-      'CONTAINER No.': order.containerNo || 'LOOSE CARGO',
-      'BORDER ENTRY DRC': order.borderEntryDRC || '',
-      'LOADING POINT': order.loadingPoint || '',
-      'DESTINATION': order.destination,
-      'HAULIER': order.haulier || '',
-      'TONNAGES': order.tonnages,
-      'RATE PER TON': order.ratePerTon,
-      'RATE': order.tonnages * order.ratePerTon,
-    }));
+    if (!summary || selectedMonths.length === 0) return;
 
     const orderTypeLabel = doType === 'SDO' ? 'SDO' : doType === 'ALL' ? 'All_Orders' : 'DO';
-    const sheetLabel = doType === 'SDO' ? 'SDO Summary' : doType === 'ALL' ? 'All Orders Summary' : 'DO Summary';
+    
+    // Helper function to match orders with month-year
+    const matchesMonthYear = (orderDate: string, targetMonthYear: string) => {
+      const [targetMonth, targetYear] = targetMonthYear.split('-');
+      if (orderDate.includes('-')) {
+        const parts = orderDate.split('-');
+        if (parts.length === 3) {
+          const orderYear = parseInt(parts[0], 10);
+          const monthNum = parseInt(parts[1], 10);
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const orderMonth = monthNames[monthNum - 1];
+          return orderMonth === targetMonth && orderYear === parseInt(targetYear);
+        } else if (parts.length === 2) {
+          return parts[1] === targetMonth;
+        }
+      }
+      return false;
+    };
+    
+    // Generate sheets for each selected month
+    const sheets = selectedMonths.map(monthYear => {
+      const monthOrders = filteredOrders.filter(o => matchesMonthYear(o.date, monthYear) && !o.isCancelled);
+      
+      const exportData = monthOrders.map((order, index) => ({
+        'S/N': index + 1,
+        'DATE': order.date,
+        'IMPORT OR EXPORT': order.importOrExport,
+        'D.O No.': order.doNumber,
+        'Invoice Nos': order.invoiceNos || '',
+        'CLIENT NAME': order.clientName,
+        'TRUCK No.': order.truckNo,
+        'TRAILER No.': order.trailerNo,
+        'CONTAINER No.': order.containerNo || 'LOOSE CARGO',
+        'BORDER ENTRY DRC': order.borderEntryDRC || '',
+        'LOADING POINT': order.loadingPoint || '',
+        'DESTINATION': order.destination,
+        'HAULIER': order.haulier || '',
+        'TONNAGES': order.tonnages,
+        'RATE PER TON': order.ratePerTon,
+        'RATE': order.tonnages * order.ratePerTon,
+      }));
 
-    exportToXLSX(exportData, `${orderTypeLabel}_Summary_${summary.month}_2025.xlsx`, {
-      sheetName: `${sheetLabel} ${summary.month}`,
+      return {
+        sheetName: monthYear,
+        data: exportData,
+      };
+    });
+
+    const monthsLabel = selectedMonths.length === 1 
+      ? selectedMonths[0].replace('-', '_') 
+      : selectedMonths.length === availableMonths.filter(m => selectedYears.some(y => m.endsWith(`-${y}`))).length 
+        ? `All_Months_${selectedYears.join('_')}` 
+        : `${selectedMonths.length}_Months`;
+
+    exportToXLSXMultiSheet(sheets, `${orderTypeLabel}_Summary_${monthsLabel}.xlsx`, {
       headerColor: '4472C4',
       addBorders: true,
+      centerAllCells: true,
     });
   };
 
   const getMonthOrders = (): DeliveryOrder[] => {
-    return filteredOrders.filter(o => o.date.includes(selectedMonth) && !o.isCancelled);
+    if (selectedMonths.length === 0) return [];
+    return filteredOrders.filter(o => o.date.includes(selectedMonths[0]) && !o.isCancelled);
   };
 
   const getGroupedOrders = (): GroupedOrders => {
@@ -225,32 +336,149 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            {/* Month Selector */}
+            {/* Year Multi-Select */}
+            <div className="relative" ref={yearDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowYearDropdown(!showYearDropdown)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors flex items-center gap-2"
+              >
+                <span className="font-medium">
+                  {selectedYears.length === 0 
+                    ? 'Select Year' 
+                    : selectedYears.length === 1 
+                      ? selectedYears[0] 
+                      : selectedYears.length === availableYears.length 
+                        ? 'All Years' 
+                        : `${selectedYears.length} years`}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showYearDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showYearDropdown && (
+                <div className="absolute z-50 mt-1 w-full min-w-[150px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-auto">
+                  <div className="p-2 border-b border-gray-200 dark:border-gray-600">
+                    <button
+                      onClick={() => {
+                        setSelectedYears([...availableYears]);
+                        setShowYearDropdown(false);
+                      }}
+                      className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                    >
+                      All Years ({availableYears.length})
+                    </button>
+                  </div>
+                  <div className="p-2">
+                    {availableYears.map(year => (
+                      <label
+                        key={year}
+                        className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedYears.includes(year)}
+                          onChange={() => {
+                            setSelectedYears(prev => {
+                              if (prev.includes(year)) {
+                                if (prev.length === 1) return prev;
+                                return prev.filter(y => y !== year);
+                              } else {
+                                return [...prev, year].sort((a, b) => b - a);
+                              }
+                            });
+                          }}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">{year}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Month Multi-Select */}
             <div className="relative" ref={monthDropdownRef}>
               <button
                 type="button"
                 onClick={() => setShowMonthDropdown(!showMonthDropdown)}
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors flex items-center gap-2"
               >
-                <span>{selectedMonth}</span>
-                <ChevronDown className="w-4 h-4 text-gray-400" />
+                <Calendar className="w-4 h-4 text-gray-400" />
+                <span>
+                  {selectedMonths.length === 0 
+                    ? 'Select Month' 
+                    : selectedMonths.length === 1 
+                      ? selectedMonths[0] 
+                      : selectedMonths.length === availableMonths.length 
+                        ? 'All Months' 
+                        : `${selectedMonths.length} months`}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
               </button>
               {showMonthDropdown && (
-                <div className="absolute z-50 mt-1 w-full min-w-[120px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
-                  {availableMonths.map(month => (
+                <div className="absolute z-50 mt-1 w-full min-w-[200px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-auto">
+                  {/* Quick Select Options */}
+                  <div className="p-2 border-b border-gray-200 dark:border-gray-600">
                     <button
-                      key={month}
-                      type="button"
                       onClick={() => {
-                        setSelectedMonth(month);
+                        const monthsForSelectedYears = availableMonths.filter(m => 
+                          selectedYears.some(y => m.endsWith(`-${y}`))
+                        );
+                        setSelectedMonths(monthsForSelectedYears);
                         setShowMonthDropdown(false);
                       }}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                      className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
                     >
-                      <span>{month}</span>
-                      {selectedMonth === month && <Check className="w-4 h-4 text-primary-600" />}
+                      All Months ({availableMonths.filter(m => selectedYears.some(y => m.endsWith(`-${y}`))).length})
                     </button>
-                  ))}
+                    <button
+                      onClick={() => {
+                        const firstMonth = availableMonths.find(m => selectedYears.some(y => m.endsWith(`-${y}`)));
+                        if (firstMonth) setSelectedMonths([firstMonth]);
+                        setShowMonthDropdown(false);
+                      }}
+                      className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                    >
+                      Clear Selection
+                    </button>
+                  </div>
+                  
+                  {/* Month Checkboxes - Only show months from selected years */}
+                  <div className="p-2">
+                    {availableMonths
+                      .filter(monthYear => selectedYears.some(y => monthYear.endsWith(`-${y}`)))
+                      .map(monthYear => (
+                        <label
+                          key={monthYear}
+                          className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedMonths.includes(monthYear)}
+                            onChange={() => {
+                              setSelectedMonths(prev => {
+                                if (prev.includes(monthYear)) {
+                                  // Don't allow deselecting all months
+                                  if (prev.length === 1) return prev;
+                                  return prev.filter(m => m !== monthYear);
+                                } else {
+                                  return [...prev, monthYear].sort((a, b) => {
+                                    const [monthA, yearA] = a.split('-');
+                                    const [monthB, yearB] = b.split('-');
+                                    const yearDiff = parseInt(yearB) - parseInt(yearA);
+                                    if (yearDiff !== 0) return yearDiff;
+                                    const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                    return monthOrder.indexOf(monthB) - monthOrder.indexOf(monthA);
+                                  });
+                                }
+                              });
+                            }}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{monthYear}</span>
+                        </label>
+                      ))}
+                  </div>
                 </div>
               )}
             </div>
