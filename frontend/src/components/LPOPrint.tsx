@@ -8,25 +8,10 @@ interface LPOPrintProps {
 }
 
 const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, approvedBy }, ref) => {
-  // Calculate dynamic padding based on number of entries
-  // This helps fit more trucks on the page for large LPOs while maintaining readability for smaller ones
-  const entryCount = data.entries.length;
-  const getRowPadding = (): string => {
-    if (entryCount < 20) return '8px'; // Comfortable padding for few trucks
-    if (entryCount < 35) return '5px'; // Compact padding for moderate number
-    if (entryCount < 50) return '3px'; // Minimal padding for many trucks
-    return '2px'; // Ultra-compact for 50+ trucks
-  };
-  
-  const getFontSize = (): string => {
-    if (entryCount < 20) return '12px'; // Standard font size
-    if (entryCount < 35) return '11px'; // Slightly smaller
-    if (entryCount < 50) return '10px'; // Compact font
-    return '9px'; // Minimal font for 50+ trucks
-  };
-  
-  const rowPadding = getRowPadding();
-  const fontSize = getFontSize();
+  // Fixed sizing for consistent, readable PDFs across all LPOs
+  const rowPadding = '8px';
+  const fontSize = '13px';
+  const headerFontSize = '14px';
 
   return (
     <div ref={ref} className="bg-white" style={{ 
@@ -141,9 +126,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <th style={{ 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
-              textAlign: 'left',
+              textAlign: 'center',
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
               color: '#000'
             }}>
               DO No.
@@ -151,9 +136,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <th style={{ 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
-              textAlign: 'left',
+              textAlign: 'center',
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
               color: '#000'
             }}>
               Truck No.
@@ -161,9 +146,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <th style={{ 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
-              textAlign: 'right',
+              textAlign: 'center',
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
               color: '#000'
             }}>
               Liters
@@ -171,9 +156,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <th style={{ 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
-              textAlign: 'right',
+              textAlign: 'center',
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
               color: '#000'
             }}>
               Rate
@@ -181,9 +166,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <th style={{ 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
-              textAlign: 'right',
+              textAlign: 'center',
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
               color: '#000'
             }}>
               Amount
@@ -191,9 +176,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <th style={{ 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
-              textAlign: 'left',
+              textAlign: 'center',
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
               color: '#000'
             }}>
               Dest.
@@ -223,6 +208,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                 border: '1px solid #000',
                 padding: `${rowPadding} 6px`,
                 fontSize,
+                textAlign: 'center',
                 color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#000',
                 fontWeight: '500',
                 textDecoration: isCancelled ? 'line-through' : 'none'
@@ -233,6 +219,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                 border: '1px solid #000',
                 padding: `${rowPadding} 6px`,
                 fontSize,
+                textAlign: 'center',
                 color: textColor,
                 fontWeight: '500'
               }}>
@@ -242,7 +229,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                 border: '1px solid #000',
                 padding: `${rowPadding} 6px`,
                 fontSize,
-                textAlign: 'right',
+                textAlign: 'center',
                 color: textColor,
                 fontWeight: '500',
                 textDecoration
@@ -253,7 +240,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                 border: '1px solid #000',
                 padding: `${rowPadding} 6px`,
                 fontSize,
-                textAlign: 'right',
+                textAlign: 'center',
                 color: isCancelled ? '#cc0000' : '#333',
                 textDecoration
               }}>
@@ -266,7 +253,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                 border: '1px solid #000',
                 padding: `${rowPadding} 6px`,
                 fontSize,
-                textAlign: 'right',
+                textAlign: 'center',
                 color: textColor,
                 fontWeight: '500',
                 textDecoration
@@ -280,6 +267,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                 border: '1px solid #000',
                 padding: `${rowPadding} 6px`,
                 fontSize,
+                textAlign: 'center',
                 color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#333',
                 textDecoration: isCancelled ? 'line-through' : 'none'
               }}>
@@ -295,7 +283,8 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
+              textAlign: 'center',
               color: '#000'
             }} colSpan={2}>
               TOTAL
@@ -303,9 +292,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <td style={{ 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
-              textAlign: 'right',
+              textAlign: 'center',
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
               color: '#000'
             }}>
               {data.entries
@@ -320,9 +309,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             <td style={{ 
               border: '1px solid #000',
               padding: `${rowPadding} 6px`,
-              textAlign: 'right',
+              textAlign: 'center',
               fontWeight: 'bold',
-              fontSize,
+              fontSize: headerFontSize,
               color: '#000'
             }}>
               {data.entries

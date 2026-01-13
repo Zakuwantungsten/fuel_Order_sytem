@@ -479,20 +479,25 @@ const LPOs = () => {
   };
 
   // Handle row click to open LPO sheet
-  const handleRowClick = (lpo: LPOEntry) => {
-    // Extract year from date (format: "D-MMM" or "YYYY-MM-DD")
-    let year = new Date().getFullYear();
-    if (lpo.date.includes('-')) {
-      const parts = lpo.date.split('-');
-      if (parts.length === 3 && parts[0].length === 4) {
-        // YYYY-MM-DD format
-        year = parseInt(parts[0]);
-      }
+  const handleRowClick = async (lpo: LPOEntry) => {
+    try {
+      // Fetch the LPO document to get its year
+      const lpoDoc = await lpoDocumentsAPI.getByLpoNo(lpo.lpoNo);
+      const year = lpoDoc.year || new Date().getFullYear();
+      
+      setSelectedLpoNo(lpo.lpoNo);
+      setSelectedYear(year);
+      setSelectedWorkbookId(year);
+      setViewMode('workbook');
+    } catch (error) {
+      console.error('Error fetching LPO details:', error);
+      // Fallback to current year if fetch fails
+      const year = new Date().getFullYear();
+      setSelectedLpoNo(lpo.lpoNo);
+      setSelectedYear(year);
+      setSelectedWorkbookId(year);
+      setViewMode('workbook');
     }
-    setSelectedLpoNo(lpo.lpoNo);
-    setSelectedYear(year);
-    setSelectedWorkbookId(year);
-    setViewMode('workbook');
   };
 
   const handleCloseWorkbook = () => {

@@ -124,7 +124,7 @@ export const downloadLPOImage = async (data: LPOSummary, filename?: string, prep
 };
 
 /**
- * Download LPO as PDF
+ * Download LPO as PDF with multi-page support
  */
 export const downloadLPOPDF = async (data: LPOSummary, filename?: string, preparedBy?: string, approvedBy?: string): Promise<void> => {
   const element = await createLPOElement(data, preparedBy, approvedBy);
@@ -151,10 +151,34 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string, prepar
     });
 
     const imgWidth = 210; // A4 width in mm
+    const pageHeight = 297; // A4 height in mm
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
     
     const imgData = canvas.toDataURL('image/png', 1.0);
-    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+    
+    // Check if content fits on one page
+    if (imgHeight <= pageHeight) {
+      // Single page - add directly
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+    } else {
+      // Multi-page - split content across pages
+      let heightLeft = imgHeight;
+      let position = 0;
+      let page = 0;
+      
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      // Add subsequent pages
+      while (heightLeft > 0) {
+        position = -(pageHeight * (page + 1));
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+        page++;
+      }
+    }
     
     pdf.save(filename || `LPO-${data.lpoNo}-${data.date}.pdf`);
   } finally {

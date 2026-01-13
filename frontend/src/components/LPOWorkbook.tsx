@@ -28,7 +28,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
       // Use current year
       fetchWorkbook(new Date().getFullYear());
     }
-  }, [workbookId]);
+  }, [workbookId, initialLpoNo]);
 
   const fetchWorkbook = async (idOrYear: string | number) => {
     try {
