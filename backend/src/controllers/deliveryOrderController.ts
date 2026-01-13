@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../models';
+import { RouteConfig } from '../models/RouteConfig';
 import { ArchivedDeliveryOrder } from '../models/ArchivedData';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
@@ -20,16 +21,20 @@ const MONTH_NAMES = [
 
 /**
  * Helper: Cascade updates to related fuel records when DO is edited
+ * Updates truck number, destination (to/from), loading point, and recalculates totalLts based on new route
+ * If route is not found, sets totalLts to null, locks the record, and creates a notification for admin
  * Note: SDO orders are excluded - they don't interact with fuel records
  */
 const cascadeUpdateToFuelRecord = async (
   originalDO: any,
   updatedData: any,
   username: string
-): Promise<{ updated: boolean; fuelRecordId?: string; changes?: string[] }> => {
+): Promise<{ updated: boolean; fuelRecordId?: string; changes?: string[]; routeNotificationCreated?: boolean }> => {
   const changes: string[] = [];
   
   try {
+    logger.info(`🔍 Cascade function called for DO ${originalDO.doNumber}, type: ${originalDO.doType}, import/export: ${originalDO.importOrExport}`);
+    
     // Skip cascade for SDO - they don't interact with fuel records
     if (originalDO.doType === 'SDO') {
       logger.info(`Skipping fuel record cascade for SDO ${originalDO.doNumber}`);
@@ -67,21 +72,126 @@ const cascadeUpdateToFuelRecord = async (
     }
     
     // Track destination changes (affects 'to' field for IMPORT, 'from' for EXPORT)
+    // AND recalculate totalLts based on new route
     if (updatedData.destination && updatedData.destination !== originalDO.destination) {
+      logger.info(`📍 Destination change detected: ${originalDO.destination} → ${updatedData.destination}`);
       if (originalDO.importOrExport === 'IMPORT') {
         updates.to = updatedData.destination;
         changes.push(`Destination (to): ${originalDO.destination} → ${updatedData.destination}`);
+        
+        // Recalculate totalLts for the new route (from → new destination)
+        const newRoute = await RouteConfig.findOne({
+          destination: { $regex: new RegExp(`^${updatedData.destination}$`, 'i') },
+          isActive: true,
+        });
+        
+        if (newRoute) {
+          const oldTotalLts = fuelRecord.totalLts || 0;
+          updates.totalLts = newRoute.defaultTotalLiters;
+          updates.isLocked = false; // Unlock if route is now found
+          updates.pendingConfigReason = null;
+          changes.push(`Total Liters: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L (route updated)`);
+          logger.info(`Recalculated totalLts for IMPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L`);
+        } else {
+          // Route not found - set totalLts to null and lock the record
+          const oldTotalLts = fuelRecord.totalLts || 0;
+          updates.totalLts = null;
+          updates.isLocked = true;
+          updates.pendingConfigReason = 'missing_total_liters';
+          changes.push(`Total Liters: ${oldTotalLts}L → NULL (route not found in database)`);
+          logger.warn(`⚠️ Route not found for destination "${updatedData.destination}" - fuel record locked, notification will be created`);
+          
+          // Mark that we need to create notification (will be handled in the main update function)
+          (updates as any)._needsRouteNotification = {
+            destination: updatedData.destination,
+            doNumber: originalDO.doNumber,
+            truckNo: fuelRecord.truckNo,
+            fuelRecordId: fuelRecord._id.toString(),
+            userRole: (updatedData as any).userRole,
+          };
+        }
       } else {
         updates.from = updatedData.destination;
         changes.push(`Destination (from): ${originalDO.destination} → ${updatedData.destination}`);
+        
+        // For EXPORT, recalculate return journey totalLts (new destination → to)
+        const returnRoute = await RouteConfig.findOne({
+          $or: [
+            { origin: { $regex: new RegExp(`^${updatedData.destination}$`, 'i') }, destination: { $regex: new RegExp(`^${fuelRecord.to}$`, 'i') } },
+            { destination: { $regex: new RegExp(`^${fuelRecord.to}$`, 'i') } } // Fallback to destination-only match
+          ],
+          isActive: true,
+        });
+        
+        if (returnRoute) {
+          const oldTotalLts = fuelRecord.totalLts || 0;
+          updates.totalLts = returnRoute.defaultTotalLiters;
+          updates.isLocked = false; // Unlock if route is now found
+          updates.pendingConfigReason = null;
+          changes.push(`Total Liters: ${oldTotalLts}L → ${returnRoute.defaultTotalLiters}L (return route updated)`);
+          logger.info(`Recalculated totalLts for EXPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${returnRoute.defaultTotalLiters}L`);
+        } else {
+          // Return route not found - set totalLts to null and lock the record
+          const oldTotalLts = fuelRecord.totalLts || 0;
+          updates.totalLts = null;
+          updates.isLocked = true;
+          updates.pendingConfigReason = 'missing_total_liters';
+          changes.push(`Total Liters: ${oldTotalLts}L → NULL (return route not found in database)`);
+          logger.warn(`⚠️ Return route not found from "${updatedData.destination}" to "${fuelRecord.to}" - fuel record locked, notification will be created`);
+          
+          // Mark that we need to create notification
+          (updates as any)._needsRouteNotification = {
+            destination: `${updatedData.destination} → ${fuelRecord.to}`,
+            doNumber: originalDO.doNumber,
+            truckNo: fuelRecord.truckNo,
+            fuelRecordId: fuelRecord._id.toString(),
+            userRole: (updatedData as any).userRole,
+          };
+        }
       }
     }
     
     // Track loading point changes (affects 'from' field for IMPORT, 'to' for EXPORT)
+    // AND recalculate totalLts based on new route if applicable
     if (updatedData.loadingPoint && updatedData.loadingPoint !== originalDO.loadingPoint) {
       if (originalDO.importOrExport === 'IMPORT') {
         updates.from = updatedData.loadingPoint;
         changes.push(`Loading Point (from): ${originalDO.loadingPoint} → ${updatedData.loadingPoint}`);
+        
+        // Recalculate totalLts for new route (new loading point → destination)
+        const newRoute = await RouteConfig.findOne({
+          $or: [
+            { origin: { $regex: new RegExp(`^${updatedData.loadingPoint}$`, 'i') }, destination: { $regex: new RegExp(`^${fuelRecord.to}$`, 'i') } },
+            { destination: { $regex: new RegExp(`^${fuelRecord.to}$`, 'i') } } // Fallback to destination-only match
+          ],
+          isActive: true,
+        });
+        
+        if (newRoute) {
+          const oldTotalLts = fuelRecord.totalLts || 0;
+          updates.totalLts = newRoute.defaultTotalLiters;
+          updates.isLocked = false; // Unlock if route is now found
+          updates.pendingConfigReason = null;
+          changes.push(`Total Liters: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L (route updated with new origin)`);
+          logger.info(`Recalculated totalLts for IMPORT DO ${originalDO.doNumber} with new loading point: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L`);
+        } else {
+          // Route not found - set totalLts to null and lock the record
+          const oldTotalLts = fuelRecord.totalLts || 0;
+          updates.totalLts = null;
+          updates.isLocked = true;
+          updates.pendingConfigReason = 'missing_total_liters';
+          changes.push(`Total Liters: ${oldTotalLts}L → NULL (route not found in database)`);
+          logger.warn(`⚠️ Route not found from "${updatedData.loadingPoint}" to "${fuelRecord.to}" - fuel record locked, notification will be created`);
+          
+          // Mark that we need to create notification
+          (updates as any)._needsRouteNotification = {
+            destination: `${updatedData.loadingPoint} → ${fuelRecord.to}`,
+            doNumber: originalDO.doNumber,
+            truckNo: fuelRecord.truckNo,
+            fuelRecordId: fuelRecord._id.toString(),
+            userRole: (updatedData as any).userRole,
+          };
+        }
       } else {
         updates.to = updatedData.loadingPoint;
         changes.push(`Loading Point (to): ${originalDO.loadingPoint} → ${updatedData.loadingPoint}`);
@@ -90,9 +200,32 @@ const cascadeUpdateToFuelRecord = async (
     
     // Apply updates if any
     if (Object.keys(updates).length > 0) {
+      // Extract notification metadata before deleting it
+      const needsRouteNotification = (updates as any)._needsRouteNotification;
+      delete (updates as any)._needsRouteNotification;
+      
+      // Update fuel record
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, updates);
       logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
-      return { updated: true, fuelRecordId: fuelRecord._id.toString(), changes };
+      
+      // Create notification if route was not found
+      if (needsRouteNotification) {
+        const { createMissingConfigNotification } = await import('./notificationController');
+        await createMissingConfigNotification(
+          needsRouteNotification.fuelRecordId,
+          ['totalLiters'],
+          {
+            doNumber: needsRouteNotification.doNumber,
+            truckNo: needsRouteNotification.truckNo,
+            destination: needsRouteNotification.destination,
+          },
+          username,
+          needsRouteNotification.userRole
+        );
+        logger.info(`📢 Notification created for missing route: ${needsRouteNotification.destination}`);
+      }
+      
+      return { updated: true, fuelRecordId: fuelRecord._id.toString(), changes, routeNotificationCreated: !!needsRouteNotification };
     }
     
     return { updated: false };
@@ -472,6 +605,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
   try {
     const { id } = req.params;
     const username = req.user?.username || 'system';
+    const userRole = req.user?.role || 'user';
 
     // Get the original DO first to track changes
     const originalDO = await DeliveryOrder.findOne({ _id: id, isDeleted: false }).lean();
@@ -535,17 +669,32 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     }
 
     // Cascade updates to related records
-    const cascadeResults = {
+    const cascadeResults: {
+      fuelRecordUpdated: boolean;
+      fuelRecordChanges: string[];
+      fuelRecordLocked?: boolean;
+      routeNotificationCreated?: boolean;
+      lpoEntriesUpdated: number;
+    } = {
       fuelRecordUpdated: false,
-      fuelRecordChanges: [] as string[],
+      fuelRecordChanges: [],
       lpoEntriesUpdated: 0,
     };
 
     // Cascade to fuel records if relevant fields changed
     if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
-      const fuelResult = await cascadeUpdateToFuelRecord(originalDO, req.body, username);
+      logger.info(`🔄 Cascading updates to fuel record. Changed fields: ${changes.map(c => c.field).join(', ')}`);
+      // Pass user role in body for notification logic
+      const bodyWithRole = { ...req.body, userRole };
+      const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username);
       cascadeResults.fuelRecordUpdated = fuelResult.updated;
       cascadeResults.fuelRecordChanges = fuelResult.changes || [];
+      cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
+      
+      // Check if fuel record was locked due to missing route
+      if (fuelResult.routeNotificationCreated) {
+        cascadeResults.fuelRecordLocked = true;
+      }
     }
 
     // Cascade to LPO entries if truck or destination changed
@@ -572,9 +721,15 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       );
     }
 
+    // Build response message
+    let responseMessage = 'Delivery order updated successfully';
+    if (cascadeResults.routeNotificationCreated) {
+      responseMessage += '. Note: Route configuration not found - fuel record locked and notification created for admin';
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Delivery order updated successfully',
+      message: responseMessage,
       data: deliveryOrder,
       cascadeResults,
     });

@@ -184,7 +184,8 @@ export const createMissingConfigNotification = async (
     destination?: string;
     truckSuffix?: string;
   },
-  createdBy: string
+  createdBy: string,
+  creatorRole?: string
 ): Promise<void> => {
   try {
     const type =
@@ -194,18 +195,39 @@ export const createMissingConfigNotification = async (
         ? 'missing_total_liters'
         : 'missing_extra_fuel';
 
+    const isAdminCreator = creatorRole === 'admin' || creatorRole === 'super_admin';
     let title = '';
     let message = '';
+    let recipients: string[] = [];
 
-    if (type === 'both') {
-      title = `Configuration Required: ${metadata.doNumber}`;
-      message = `Fuel record needs both route total liters and truck batch assignment for ${metadata.truckNo}`;
-    } else if (type === 'missing_total_liters') {
-      title = `Route Configuration Required: ${metadata.doNumber}`;
-      message = `Route "${metadata.destination}" needs total liters assignment`;
+    if (isAdminCreator) {
+      // Admin created this - send action-oriented message only to them
+      recipients = [creatorRole];
+      
+      if (type === 'both') {
+        title = `Action Required: Add Configuration for ${metadata.doNumber}`;
+        message = `You need to add route total liters and truck batch configuration for ${metadata.truckNo}. The fuel record has been locked until configuration is complete.`;
+      } else if (type === 'missing_total_liters') {
+        title = `Action Required: Add Route Configuration`;
+        message = `You need to add total liters configuration for route "${metadata.destination}". Please go to System Configuration > Routes to add this route.`;
+      } else {
+        title = `Action Required: Add Truck Batch`;
+        message = `You need to assign truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) to a batch. Please go to System Configuration > Truck Batches.`;
+      }
     } else {
-      title = `Truck Batch Required: ${metadata.doNumber}`;
-      message = `Truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) needs batch assignment`;
+      // Non-admin created this - notify all admins
+      recipients = ['fuel_order_maker', 'admin', 'super_admin'];
+      
+      if (type === 'both') {
+        title = `Configuration Required: ${metadata.doNumber}`;
+        message = `Fuel record needs both route total liters and truck batch assignment for ${metadata.truckNo}`;
+      } else if (type === 'missing_total_liters') {
+        title = `Route Configuration Required: ${metadata.doNumber}`;
+        message = `Route "${metadata.destination}" needs total liters assignment. Please contact admin to add this route configuration.`;
+      } else {
+        title = `Truck Batch Required: ${metadata.doNumber}`;
+        message = `Truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) needs batch assignment. Please contact admin to add this configuration.`;
+      }
     }
 
     await Notification.create({
@@ -221,8 +243,9 @@ export const createMissingConfigNotification = async (
         destination: metadata.destination,
         truckSuffix: metadata.truckSuffix,
         missingFields,
+        creatorRole: creatorRole || 'unknown',
       },
-      recipients: ['fuel_order_maker', 'admin', 'super_admin'],
+      recipients,
       createdBy,
     });
 
