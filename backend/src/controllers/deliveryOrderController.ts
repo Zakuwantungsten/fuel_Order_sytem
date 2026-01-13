@@ -1861,16 +1861,19 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
 };
 
 /**
- * Get all amended DOs (DOs with edit history)
+ * Get all amended DOs (DOs with edit history OR cancelled status)
  */
 export const getAmendedDOs = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { startDate, endDate, doNumbers } = req.query;
 
-    // Build query for amended DOs
+    // Build query for amended DOs - include both edited DOs and cancelled DOs
     const query: any = {
       isDeleted: false,
-      'editHistory.0': { $exists: true }, // Has at least one edit history entry
+      $or: [
+        { 'editHistory.0': { $exists: true } }, // Has at least one edit history entry
+        { isCancelled: true }, // OR is cancelled
+      ],
     };
 
     // Filter by date range if provided
@@ -1892,7 +1895,7 @@ export const getAmendedDOs = async (req: AuthRequest, res: Response): Promise<vo
 
     res.status(200).json({
       success: true,
-      message: `Found ${amendedDOs.length} amended delivery orders`,
+      message: `Found ${amendedDOs.length} amended/cancelled delivery orders`,
       data: amendedDOs,
       count: amendedDOs.length,
     });

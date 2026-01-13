@@ -2,7 +2,7 @@ import PDFDocument from 'pdfkit';
 import { IDeliveryOrder } from '../types';
 
 /**
- * Generate a PDF document for amended Delivery Orders
+ * Generate a PDF document for amended and cancelled Delivery Orders
  */
 export const generateAmendedDOsPDF = (
   deliveryOrders: IDeliveryOrder[],
@@ -12,9 +12,9 @@ export const generateAmendedDOsPDF = (
     size: 'A4',
     margin: 40,
     info: {
-      Title: `Amended DOs - ${deliveryOrders.map(d => d.doNumber).join(', ')}`,
+      Title: `Amended & Cancelled DOs - ${deliveryOrders.map(d => d.doNumber).join(', ')}`,
       Author: 'Fuel Order Management System',
-      Subject: 'Amended Delivery Orders',
+      Subject: 'Amended and Cancelled Delivery Orders',
     },
   });
 
@@ -63,7 +63,7 @@ export const generateAmendedDOsPDF = (
     doc.moveDown(2);
     
     // Title
-    doc.fontSize(20).fillColor(colors.secondary).text('AMENDED DELIVERY ORDERS', { align: 'center' });
+    doc.fontSize(20).fillColor(colors.secondary).text('AMENDED & CANCELLED DELIVERY ORDERS', { align: 'center' });
     
     doc.moveDown(1);
     
@@ -80,16 +80,21 @@ export const generateAmendedDOsPDF = (
     doc.fontSize(14).fillColor(colors.secondary).text('Summary', 50, boxY + 10);
     drawLine(boxY + 30, 50, 545);
     
+    // Count amended vs cancelled
+    const amendedCount = deliveryOrders.filter(d => d.editHistory && d.editHistory.length > 0 && !d.isCancelled).length;
+    const cancelledCount = deliveryOrders.filter(d => d.isCancelled).length;
+    
     doc.fontSize(11).fillColor(colors.text);
-    doc.text(`Total Amended DOs: ${deliveryOrders.length}`, 50, boxY + 40);
+    doc.text(`Total DOs: ${deliveryOrders.length} (${amendedCount} Amended, ${cancelledCount} Cancelled)`, 50, boxY + 40);
     doc.text(`Generated On: ${formatDateTime(new Date())}`, 50, boxY + 60);
     
-    // List all DOs
+    // List all DOs with status
     doc.text('Delivery Orders:', 50, boxY + 85);
     let doListY = boxY + 100;
     deliveryOrders.forEach((order, idx) => {
       if (doListY < boxY + 110) {
-        doc.fontSize(10).text(`${idx + 1}. ${order.doNumber} - ${order.truckNo} (${order.importOrExport})`, 60, doListY);
+        const status = order.isCancelled ? '[CANCELLED]' : '[AMENDED]';
+        doc.fontSize(10).text(`${idx + 1}. ${order.doNumber} - ${order.truckNo} (${order.importOrExport}) ${status}`, 60, doListY);
         doListY += 12;
       }
     });
@@ -98,7 +103,7 @@ export const generateAmendedDOsPDF = (
     
     // Add info about contents
     doc.fontSize(10).fillColor(colors.muted).text(
-      'This document contains the amended Delivery Order forms with their edit history.',
+      'This document contains amended and cancelled Delivery Order forms with their edit history.',
       40, 350, { align: 'center', width: 515 }
     );
   };
@@ -114,9 +119,14 @@ export const generateAmendedDOsPDF = (
       .text('Email: info@tahmeedcoach.co.ke', 40, 75)
       .text('Tel: +254 700 000 000', 40, 85);
     
-    // AMENDED stamp
-    doc.fontSize(14).fillColor(colors.amended)
-      .text('AMENDED', 450, 50, { align: 'right' });
+    // Status stamp - CANCELLED or AMENDED
+    if (order.isCancelled) {
+      doc.fontSize(14).fillColor('#DC2626') // red color for cancelled
+        .text('CANCELLED', 450, 50, { align: 'right' });
+    } else {
+      doc.fontSize(14).fillColor(colors.amended)
+        .text('AMENDED', 450, 50, { align: 'right' });
+    }
     
     // Title
     doc.rect(40, 105, 515, 30).fillAndStroke(colors.headerBg, colors.border);
@@ -262,10 +272,10 @@ export const generateAmendedDOsPDF = (
 };
 
 /**
- * Generate filename for amended DOs PDF
+ * Generate filename for amended and cancelled DOs PDF
  */
 export const generateAmendedDOsFilename = (doNumbers: string[]): string => {
   const doList = doNumbers.join(',');
   const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  return `Amended_DO(${doList})_${timestamp}.pdf`;
+  return `Amended_Cancelled_DO(${doList})_${timestamp}.pdf`;
 };

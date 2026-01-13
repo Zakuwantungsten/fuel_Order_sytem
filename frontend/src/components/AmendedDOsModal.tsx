@@ -47,7 +47,7 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
       : amendedDOs.map(d => d.id);
 
     if (doIdsToDownload.length === 0) {
-      setError('No amended DOs to download');
+      setError('No amended/cancelled DOs to download');
       return;
     }
 
@@ -75,7 +75,7 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
   };
 
   const handleClearAll = () => {
-    if (window.confirm('Are you sure you want to clear all amended DOs from this session? This action cannot be undone.')) {
+    if (window.confirm('Are you sure you want to clear all amended/cancelled DOs from this session? This action cannot be undone.')) {
       clearAmendedDOs();
       setSelectedDOs(new Set());
     }
@@ -102,12 +102,12 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
                 <FileText className="w-5 h-5 mr-2 text-orange-500" />
-                Amended Delivery Orders
+                Amended & Cancelled Delivery Orders
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {count > 0 
-                  ? `You have ${count} amended DO(s) in this session ready to download`
-                  : 'Edit DOs to add them to this list for batch PDF download'
+                  ? `You have ${count} amended/cancelled DO(s) in this session ready to download`
+                  : 'Edit or cancel DOs to add them to this list for batch PDF download'
                 }
               </p>
             </div>
@@ -133,19 +133,19 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
             <div className="text-center py-12">
               <FileText className="mx-auto h-16 w-16 text-gray-300 dark:text-gray-600" />
               <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-                No Amended DOs Yet
+                No Amended or Cancelled DOs Yet
               </h3>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-                When you edit a Delivery Order, it will appear here. You can then download all 
-                amended DOs as a single PDF document.
+                When you edit or cancel a Delivery Order, it will appear here. You can then download all 
+                amended/cancelled DOs as a single PDF document.
               </p>
               <div className="mt-6 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg max-w-md mx-auto">
                 <h4 className="text-sm font-medium text-orange-800 dark:text-orange-300">How it works:</h4>
                 <ol className="mt-2 text-sm text-orange-700 dark:text-orange-400 text-left list-decimal list-inside space-y-1">
-                  <li>Go to the DO list and click "Edit" on any DO</li>
-                  <li>Make your changes and save</li>
-                  <li>The edited DO will be added to this list</li>
-                  <li>When done editing, come back here to download all as PDF</li>
+                  <li>Go to the DO list and click "Edit" or "Cancel" on any DO</li>
+                  <li>Make your changes/cancellation and save</li>
+                  <li>The edited/cancelled DO will be added to this list</li>
+                  <li>When done, come back here to download all as PDF</li>
                 </ol>
               </div>
             </div>
@@ -204,6 +204,16 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
                             }`}>
                               {amendedDO.importOrExport}
                             </span>
+                            {/* Show CANCELLED or AMENDED badge */}
+                            {amendedDO.order.isCancelled ? (
+                              <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                                CANCELLED
+                              </span>
+                            ) : (
+                              <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                                AMENDED
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                             Truck: {amendedDO.truckNo} | Date: {amendedDO.date}

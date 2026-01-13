@@ -537,6 +537,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       console.log('DO cancelled:', result.order.doNumber);
       console.log('Cascade results:', result.cascadeResults);
       
+      // Add cancelled DO to the amended DOs session list for download
+      addAmendedDO(result.order, ['status']); // Mark 'status' as the changed field
+      console.log(`Cancelled DO ${result.order.doNumber} added to amended/cancelled list for download`);
+      
       // Show success message with cascade info
       let message = `Delivery Order ${result.order.doType}-${result.order.doNumber} has been cancelled.`;
       if (result.cascadeResults) {
@@ -979,10 +983,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           <button 
             onClick={() => setIsAmendedDOsModalOpen(true)}
             className="relative inline-flex items-center px-4 py-2 border border-orange-300 dark:border-orange-600 rounded-md shadow-sm text-sm font-medium text-orange-700 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40"
-            title="Download amended DOs as PDF"
+            title="Download amended/cancelled DOs as PDF"
           >
             <FileEdit className="w-4 h-4 mr-2" />
-            Amended DOs
+            Amended/Cancelled DOs
             {amendedDOsCount > 0 && (
               <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-orange-600 rounded-full">
                 {amendedDOsCount}
