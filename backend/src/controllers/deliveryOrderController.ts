@@ -33,8 +33,6 @@ const cascadeUpdateToFuelRecord = async (
   const changes: string[] = [];
   
   try {
-    logger.info(`🔍 Cascade function called for DO ${originalDO.doNumber}, type: ${originalDO.doType}, import/export: ${originalDO.importOrExport}`);
-    
     // Skip cascade for SDO - they don't interact with fuel records
     if (originalDO.doType === 'SDO') {
       logger.info(`Skipping fuel record cascade for SDO ${originalDO.doNumber}`);
@@ -74,7 +72,6 @@ const cascadeUpdateToFuelRecord = async (
     // Track destination changes (affects 'to' field for IMPORT, 'from' for EXPORT)
     // AND recalculate totalLts based on new route
     if (updatedData.destination && updatedData.destination !== originalDO.destination) {
-      logger.info(`📍 Destination change detected: ${originalDO.destination} → ${updatedData.destination}`);
       if (originalDO.importOrExport === 'IMPORT') {
         updates.to = updatedData.destination;
         changes.push(`Destination (to): ${originalDO.destination} → ${updatedData.destination}`);
@@ -683,7 +680,6 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     // Cascade to fuel records if relevant fields changed
     if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
-      logger.info(`🔄 Cascading updates to fuel record. Changed fields: ${changes.map(c => c.field).join(', ')}`);
       // Pass user role in body for notification logic
       const bodyWithRole = { ...req.body, userRole };
       const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username);

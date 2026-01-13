@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, Clock, Bell, Trash2, Eye } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Notification {
   _id: string;
@@ -18,9 +19,35 @@ interface NotificationsPageProps {
 }
 
 const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose }) => {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'resolved'>('all');
+
+  // Helper function to tailor notification message based on viewer's role
+  const getTailoredMessage = (notification: Notification): string => {
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+    
+    // Only tailor messages for missing configuration notifications
+    if (notification.type === 'missing_total_liters' || notification.type === 'missing_extra_fuel' || notification.type === 'both') {
+      if (isAdmin) {
+        // Admin sees action-oriented message
+        const destination = notification.metadata?.destination;
+        const truckSuffix = notification.metadata?.truckSuffix;
+        
+        if (notification.type === 'missing_total_liters') {
+          return `Route "${destination}" needs total liters configuration. Please add this route in System Configuration > Routes.`;
+        } else if (notification.type === 'missing_extra_fuel') {
+          return `Truck suffix "${truckSuffix}" needs batch assignment. Please assign it in System Configuration > Truck Batches.`;
+        } else if (notification.type === 'both') {
+          return `This fuel record needs both route total liters and truck batch configuration. Please add them in System Configuration.`;
+        }
+      }
+    }
+    
+    // Return original message for non-admins or other notification types
+    return notification.message;
+  };
 
   useEffect(() => {
     fetchNotifications();
@@ -248,7 +275,7 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose }) => {
                             {notification.title}
                           </h4>
                           <p className="text-sm text-gray-700 mb-2">
-                            {notification.message}
+                            {getTailoredMessage(notification)}
                           </p>
 
                           <div className="flex items-center space-x-4 text-xs text-gray-500">

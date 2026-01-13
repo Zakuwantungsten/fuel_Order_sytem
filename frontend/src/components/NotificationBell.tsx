@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Notification {
   id?: string;
@@ -46,12 +47,38 @@ const getNotificationId = (notification: Notification): string => {
 };
 
 export default function NotificationBell({ onNotificationClick, onEditDO, onRelinkDO, onViewPendingYardFuel, onViewAllNotifications }: NotificationBellProps) {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
   const [relinkingId, setRelinkingId] = useState<string | null>(null);
   const [pendingYardFuelCount, setPendingYardFuelCount] = useState(0);
+
+  // Helper function to tailor notification message based on viewer's role
+  const getTailoredMessage = (notification: Notification): string => {
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+    
+    // Only tailor messages for missing configuration notifications
+    if (notification.type === 'missing_total_liters' || notification.type === 'missing_extra_fuel' || notification.type === 'both') {
+      if (isAdmin) {
+        // Admin sees action-oriented message
+        const destination = notification.metadata?.destination;
+        const truckSuffix = notification.metadata?.truckSuffix;
+        
+        if (notification.type === 'missing_total_liters') {
+          return `Route "${destination}" needs configuration. Add it in System Config > Routes.`;
+        } else if (notification.type === 'missing_extra_fuel') {
+          return `Truck suffix "${truckSuffix}" needs batch assignment. Go to System Config > Truck Batches.`;
+        } else if (notification.type === 'both') {
+          return `Add route total liters and truck batch in System Configuration.`;
+        }
+      }
+    }
+    
+    // Return original message for non-admins or other notification types
+    return notification.message;
+  };
 
   useEffect(() => {
     loadNotifications();
@@ -282,7 +309,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                             {notification.title}
                           </p>
                           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            {notification.message}
+                            {getTailoredMessage(notification)}
                           </p>
                           {notification.metadata && (
                             <div className="mt-2 text-xs text-gray-500 dark:text-gray-500 space-y-0.5">
