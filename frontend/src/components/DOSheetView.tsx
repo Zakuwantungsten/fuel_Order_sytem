@@ -73,7 +73,7 @@ const DOSheetView = ({ order, preparedBy }: DOSheetViewProps) => {
           <div className="grid grid-cols-2 gap-0">
             <div className="border-r border-gray-800 p-3">
               <div className="flex mb-3">
-                <span className="font-bold w-20 text-gray-800">TO:</span>
+                <span className="font-bold w-20 text-gray-800">Client:</span>
                 <span className="font-bold text-gray-800">{order.clientName}</span>
               </div>
               <div className="text-xs mb-3 text-gray-600">

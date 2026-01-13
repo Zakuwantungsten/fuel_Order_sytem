@@ -133,7 +133,7 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
             <div className="grid grid-cols-2 gap-0">
               <div className="border-r border-black p-3">
                 <div className="flex mb-3">
-                  <span className="font-bold w-20" style={{ color: 'black' }}>TO:</span>
+                  <span className="font-bold w-20" style={{ color: 'black' }}>Client:</span>
                   <span className="font-bold" style={{ color: 'black' }}>{order.clientName}</span>
                 </div>
                 <div className="text-xs mb-3" style={{ color: 'black' }}>

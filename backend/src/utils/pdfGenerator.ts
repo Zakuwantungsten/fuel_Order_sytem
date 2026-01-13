@@ -148,7 +148,7 @@ export const generateAmendedDOsPDF = (
     doc.rect(40, currentY, 515, 70).stroke(colors.border);
     
     doc.fontSize(10).fillColor(colors.text);
-    doc.text('TO:', 50, currentY + 10);
+    doc.text('Client:', 50, currentY + 10);
     doc.font('Helvetica-Bold').text(order.clientName, 80, currentY + 10);
     doc.font('Helvetica');
     
