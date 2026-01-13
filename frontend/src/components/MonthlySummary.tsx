@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Download, Calendar, Filter, Fuel, DollarSign, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../types';
 import { exportToXLSX } from '../utils/csvParser';
@@ -353,7 +353,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
           <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">${summary.totalRevenue.toFixed(2)}</p>
         </div>
         {doType !== 'SDO' && (
-          <>
+          <React.Fragment key="fuel-metrics">
             <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-sm text-orange-600 dark:text-orange-400">Fuel Consumed</p>
@@ -372,7 +372,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
                 {summary.totalFuelConsumed > 0 && `${(summary.totalFuelCost / summary.totalFuelConsumed).toFixed(2)} per L`}
               </p>
             </div>
-          </>
+          </React.Fragment>
         )}
       </div>
 

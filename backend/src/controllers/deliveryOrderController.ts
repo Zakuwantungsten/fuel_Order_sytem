@@ -1479,9 +1479,11 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     // Create individual sheets for each DO FIRST (like LPO workbook)
     for (const order of deliveryOrders) {
       // Sheet name: DO number (max 31 chars for Excel) - add CANCELLED prefix if cancelled
+      // Sanitize sheet name by replacing invalid characters: * ? : \ / [ ]
+      const sanitizedDoNumber = (order.doNumber || 'DO').replace(/[\/\\*?:\[\]]/g, '-');
       const sheetName = order.isCancelled 
-        ? `X-${(order.doNumber || 'DO').substring(0, 28)}` 
-        : (order.doNumber || 'DO').substring(0, 31);
+        ? `X-${sanitizedDoNumber.substring(0, 28)}` 
+        : sanitizedDoNumber.substring(0, 31);
       const sheet = excelWorkbook.addWorksheet(sheetName);
 
       // Format date
@@ -2376,9 +2378,11 @@ export const exportSDOWorkbook = async (req: AuthRequest, res: Response): Promis
     // Create individual sheets for each SDO FIRST
     for (const order of sdoOrders) {
       // Sheet name: SDO number (max 31 chars for Excel) - add CANCELLED prefix if cancelled
+      // Sanitize sheet name by replacing invalid characters: * ? : \ / [ ]
+      const sanitizedDoNumber = (order.doNumber || 'SDO').replace(/[\/\\*?:\[\]]/g, '-');
       const sheetName = order.isCancelled 
-        ? `X-${(order.doNumber || 'SDO').substring(0, 28)}` 
-        : (order.doNumber || 'SDO').substring(0, 31);
+        ? `X-${sanitizedDoNumber.substring(0, 28)}` 
+        : sanitizedDoNumber.substring(0, 31);
       const sheet = excelWorkbook.addWorksheet(sheetName);
 
       // Format date
