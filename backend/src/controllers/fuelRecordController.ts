@@ -116,13 +116,14 @@ async function activateNextQueuedJourney(truckNo: string, username: string): Pro
 export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, truckNo, from, to, month, search, includeCancelled } = req.query;
+    const { dateFrom, dateTo, truckNo, from, to, month, search, excludeCancelled } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
     
-    // By default, exclude cancelled records unless explicitly requested
-    if (includeCancelled !== 'true') {
+    // Include cancelled records by default (frontend has display logic)
+    // Only exclude if explicitly requested
+    if (excludeCancelled === 'true') {
       filter.isCancelled = false;
     }
 
