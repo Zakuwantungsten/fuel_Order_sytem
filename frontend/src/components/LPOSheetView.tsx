@@ -455,78 +455,72 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors">
       {/* Sheet Header - LPO Header Info */}
-      <div className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-2 gap-4 mb-2">
-            {/* Left Column */}
-            <div className="space-y-2">
-              <div className="flex items-center space-x-3">
-                <span className="font-medium text-gray-700 dark:text-gray-300 w-20">LPO No.:</span>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editedSheet.lpoNo}
-                    onChange={(e) => handleHeaderEdit('lpoNo', e.target.value)}
-                    className="px-2 py-1 border dark:border-gray-600 rounded font-bold text-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  />
-                ) : (
-                  <span className="font-bold text-lg text-blue-600 dark:text-blue-400">{editedSheet.lpoNo}</span>
-                )}
-              </div>
-              
-              <div className="flex items-center space-x-3">
-                <span className="font-medium text-gray-700 dark:text-gray-300 w-20">Station:</span>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editedSheet.station}
-                    onChange={(e) => handleHeaderEdit('station', e.target.value)}
-                    className="px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  />
-                ) : (
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{editedSheet.station}</span>
-                )}
-              </div>
+      <div className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2">
+        {/* Single Row: LPO details on left, buttons on right */}
+        <div className="flex items-center justify-between gap-x-4">
+          {/* Left side: LPO details */}
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-1">
+            <div className="flex items-center space-x-2">
+              <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">LPO No.:</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editedSheet.lpoNo}
+                  onChange={(e) => handleHeaderEdit('lpoNo', e.target.value)}
+                  className="px-2 py-0.5 border dark:border-gray-600 rounded font-bold text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-20"
+                />
+              ) : (
+                <span className="font-bold text-sm text-blue-600 dark:text-blue-400">{editedSheet.lpoNo}</span>
+              )}
             </div>
-
-            {/* Right Column */}
-            <div className="space-y-2">
-              <div className="flex items-center space-x-3">
-                <span className="font-medium text-gray-700 dark:text-gray-300 w-20">Date:</span>
-                {isEditing ? (
-                  <input
-                    type="date"
-                    value={editedSheet.date}
-                    onChange={(e) => handleHeaderEdit('date', e.target.value)}
-                    className="px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  />
-                ) : (
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{new Date(editedSheet.date).toLocaleDateString()}</span>
-                )}
-              </div>
-              
-              <div className="flex items-center space-x-3">
-                <span className="font-medium text-gray-700 dark:text-gray-300 w-20">Order of:</span>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editedSheet.orderOf}
-                    onChange={(e) => handleHeaderEdit('orderOf', e.target.value)}
-                    className="px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  />
-                ) : (
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{editedSheet.orderOf}</span>
-                )}
-              </div>
+            
+            <div className="flex items-center space-x-2">
+              <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">Station:</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editedSheet.station}
+                  onChange={(e) => handleHeaderEdit('station', e.target.value)}
+                  className="px-2 py-0.5 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                />
+              ) : (
+                <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{editedSheet.station}</span>
+              )}
             </div>
+            
+            <div className="flex items-center space-x-2">
+              <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">Date:</span>
+              {isEditing ? (
+                <input
+                  type="date"
+                  value={editedSheet.date}
+                  onChange={(e) => handleHeaderEdit('date', e.target.value)}
+                  className="px-2 py-0.5 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                />
+              ) : (
+                <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{new Date(editedSheet.date).toLocaleDateString()}</span>
+              )}
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">Order of:</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editedSheet.orderOf}
+                  onChange={(e) => handleHeaderEdit('orderOf', e.target.value)}
+                  className="px-2 py-0.5 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                />
+              ) : (
+                <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{editedSheet.orderOf}</span>
+              )}
+            </div>
+            
+            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium border-l border-gray-300 dark:border-gray-600 pl-4">KINDLY SUPPLY THE FOLLOWING LITERS</span>
           </div>
 
-          <div className="mb-2">
-            <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">KINDLY SUPPLY THE FOLLOWING LITERS</p>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center space-x-1.5">
+          {/* Right side: Action Buttons */}
+          <div className="flex items-center space-x-1.5 flex-shrink-0">
             {isEditing ? (
               <>
                 <button
@@ -635,7 +629,6 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       {/* Cancellation Report Banner */}
       {cancellationReport && cancellationReport.cancelledTrucks.length > 0 && (
         <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-3 py-2">
-          <div className="max-w-4xl mx-auto">
             <div className="flex items-start justify-between">
               <div className="flex items-start space-x-2">
                 <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5" />
@@ -699,7 +692,6 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 )}
               </div>
             )}
-          </div>
         </div>
       )}
 
