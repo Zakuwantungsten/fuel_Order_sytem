@@ -99,8 +99,9 @@ const FuelRecords = () => {
   const routeDropdownRef = useRef<HTMLDivElement>(null);
   const monthDropdownRef = useRef<HTMLDivElement>(null);
   
-  // Ref to track if we've processed a highlight
+  // Ref and state to track highlight
   const highlightProcessedRef = useRef<string | null>(null);
+  const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLpos();
@@ -113,10 +114,24 @@ const FuelRecords = () => {
     const handleUrlChange = () => {
       const url = new URL(window.location.href);
       const highlightId = url.searchParams.get('highlight');
+      const yearParam = url.searchParams.get('year');
+      const monthParam = url.searchParams.get('month');
       
       if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
-        console.log('Processing highlight for Fuel Record (Truck):', highlightId);
+        console.log('Processing highlight for Fuel Record (Truck):', highlightId, 'Year:', yearParam, 'Month:', monthParam);
+        
+        // If year and month are provided, construct the YYYY-MM format
+        if (yearParam && monthParam) {
+          const targetMonth = `${yearParam}-${String(monthParam).padStart(2, '0')}`;
+          if (targetMonth !== selectedMonth) {
+            console.log('Setting month filter to:', targetMonth);
+            setSelectedMonth(targetMonth);
+          }
+        }
+        
+        // Trigger the highlight process
+        setPendingHighlight(highlightId);
       }
     };
     
@@ -124,47 +139,112 @@ const FuelRecords = () => {
     handleUrlChange(); // Check on mount
     
     return () => window.removeEventListener('urlchange', handleUrlChange);
-  }, []);
+  }, [selectedMonth]);
 
-  // Separate effect to handle highlight after records are loaded
+  // Separate effect to handle highlight - fetch ALL records to find position
   useEffect(() => {
-    const highlightId = highlightProcessedRef.current;
-    if (highlightId && records.length > 0) {
-      console.log('Attempting to find and highlight Fuel Record:', highlightId, 'in', records.length, 'records');
-      // Find the record by truck number (first match)
-      const recordIndex = records.findIndex(r => r.truckNo === highlightId);
+    if (pendingHighlight && selectedMonth) {
+      console.log('Processing highlight for:', pendingHighlight, 'in month:', selectedMonth);
       
-      if (recordIndex >= 0) {
-        console.log('Found record at index:', recordIndex);
-        const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
-        console.log('Target page:', targetPage, 'Current page:', currentPage);
-        
-        if (targetPage !== currentPage) {
-          setCurrentPage(targetPage);
-        }
-        
-        // Scroll to and highlight the record
-        setTimeout(() => {
-          const element = document.querySelector(`[data-truck-number="${highlightId}"]`);
-          console.log('Looking for element with data-truck-number:', highlightId, 'Found:', !!element);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.classList.add('ring-4', 'ring-green-500', 'ring-opacity-50');
-            setTimeout(() => {
-              element.classList.remove('ring-4', 'ring-green-500', 'ring-opacity-50');
-              highlightProcessedRef.current = null;
-              const url = new URL(window.location.href);
-              url.searchParams.delete('highlight');
-              window.history.replaceState({}, '', url.toString());
-            }, 3000);
+      // Fetch ALL records for the selected month to find the record's position
+      const findRecordPosition = async () => {
+        try {
+          const [year, monthNum] = selectedMonth.split('-');
+          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                             'July', 'August', 'September', 'October', 'November', 'December'];
+          const monthName = monthNames[parseInt(monthNum) - 1];
+          
+          // Fetch ALL records for this month
+          const response = await fuelRecordsAPI.getAll({
+            limit: 10000, // High limit to get all records
+            sort: 'date',
+            order: 'desc',
+            month: `${monthName} ${year}`
+          });
+          
+          const allMonthRecords = response.data;
+          console.log('Fetched all records for month:', allMonthRecords.length, 'records');
+          
+          // Find the record by truck number
+          const recordIndex = allMonthRecords.findIndex(r => r.truckNo === pendingHighlight);
+          
+          if (recordIndex >= 0) {
+            console.log('Found record at absolute index:', recordIndex);
+            
+            // Calculate which page this record is on
+            const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
+            console.log('Target page:', targetPage, 'Current page:', currentPage);
+            
+            // Navigate to the correct page if needed
+            if (targetPage !== currentPage) {
+              console.log('Navigating to page:', targetPage);
+              setCurrentPage(targetPage);
+              // Wait for page to load, then highlight
+              setTimeout(() => scrollToAndHighlight(pendingHighlight), 800);
+            } else {
+              // Already on correct page, just highlight
+              setTimeout(() => scrollToAndHighlight(pendingHighlight), 300);
+            }
+          } else {
+            console.warn('Record not found with truck number:', pendingHighlight, 'in month:', selectedMonth);
+            clearHighlight();
           }
-        }, 500);
-      } else {
-        console.log('Record not found with truck number:', highlightId);
-        highlightProcessedRef.current = null;
-      }
+        } catch (error) {
+          console.error('Error finding record position:', error);
+          clearHighlight();
+        }
+      };
+      
+      findRecordPosition();
     }
-  }, [records, itemsPerPage, currentPage]);
+  }, [pendingHighlight, selectedMonth, itemsPerPage, currentPage]);
+  
+  // Helper function to scroll to and highlight a record
+  const scrollToAndHighlight = (truckNo: string) => {
+    console.log('Attempting to scroll and highlight:', truckNo);
+    console.log('All elements with data-truck-number:', document.querySelectorAll('[data-truck-number]').length);
+    
+    const element = document.querySelector(`[data-truck-number="${truckNo}"]`) as HTMLElement;
+    console.log('Found element with data-truck-number:', truckNo, ':', !!element);
+    
+    if (element) {
+      // Scroll to element
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // Apply highlight with inline styles for stronger visibility
+      const originalBoxShadow = element.style.boxShadow;
+      const originalTransition = element.style.transition;
+      
+      element.style.transition = 'all 0.3s ease';
+      element.style.boxShadow = '0 0 0 4px rgba(34, 197, 94, 0.5), 0 0 20px rgba(34, 197, 94, 0.3)';
+      element.style.transform = 'scale(1.02)';
+      
+      console.log('Applied highlight styles to:', truckNo);
+      
+      setTimeout(() => {
+        element.style.boxShadow = originalBoxShadow;
+        element.style.transform = '';
+        element.style.transition = originalTransition;
+        console.log('Removed highlight from:', truckNo);
+        clearHighlight();
+      }, 3000);
+    } else {
+      console.warn('Element not found for highlighting:', truckNo);
+      console.log('Available truck numbers:', Array.from(document.querySelectorAll('[data-truck-number]')).map(el => el.getAttribute('data-truck-number')));
+      clearHighlight();
+    }
+  };
+  
+  // Helper function to clear highlight
+  const clearHighlight = () => {
+    highlightProcessedRef.current = null;
+    setPendingHighlight(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('highlight');
+    url.searchParams.delete('month');
+    url.searchParams.delete('year');
+    window.history.replaceState({}, '', url.toString());
+  };
   
   // Click outside detection
   useEffect(() => {

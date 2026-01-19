@@ -147,7 +147,24 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       setHighlightParam(highlight);
       // Update URL with highlight parameter
       const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('highlight', highlight);
+      
+      // Parse compound parameters (e.g., "DO123&year=2025&month=12")
+      if (highlight.includes('&')) {
+        const parts = highlight.split('&');
+        const mainParam = parts[0]; // DO number, LPO number, or truck number
+        currentUrl.searchParams.set('highlight', mainParam);
+        
+        // Set additional parameters
+        parts.slice(1).forEach(part => {
+          const [key, value] = part.split('=');
+          if (key && value) {
+            currentUrl.searchParams.set(key, value);
+          }
+        });
+      } else {
+        currentUrl.searchParams.set('highlight', highlight);
+      }
+      
       window.history.replaceState({}, '', currentUrl.toString());
       // Dispatch event to notify child components
       window.dispatchEvent(new CustomEvent('urlchange'));
@@ -159,6 +176,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     setHighlightParam(null);
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('highlight');
+    currentUrl.searchParams.delete('month');
+    currentUrl.searchParams.delete('year');
     window.history.replaceState({}, '', currentUrl.toString());
   }, [activeTab]);
 

@@ -69,6 +69,7 @@ const LPOs = () => {
   
   // Ref to track if we've processed a highlight
   const highlightProcessedRef = useRef<string | null>(null);
+  const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
 
   // Click-outside detection for filter dropdowns
   useEffect(() => {
@@ -96,10 +97,33 @@ const LPOs = () => {
     const handleUrlChange = () => {
       const url = new URL(window.location.href);
       const highlightId = url.searchParams.get('highlight');
+      const yearParam = url.searchParams.get('year');
+      const monthParam = url.searchParams.get('month');
       
       if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
-        console.log('Processing highlight for LPO:', highlightId);
+        console.log('Processing highlight for LPO:', highlightId, 'Year:', yearParam, 'Month:', monthParam);
+        
+        // Set year if provided
+        if (yearParam) {
+          const year = parseInt(yearParam);
+          if (!isNaN(year) && year !== selectedYear) {
+            console.log('Setting year to:', year);
+            setSelectedYear(year);
+          }
+        }
+        
+        // Set month if provided
+        if (monthParam) {
+          const month = parseInt(monthParam);
+          if (!isNaN(month) && month >= 1 && month <= 12) {
+            console.log('Setting month filter to:', month);
+            setSelectedMonths([month]);
+          }
+        }
+        
+        // Trigger highlight
+        setPendingHighlight(highlightId);
       }
     };
     
@@ -107,30 +131,15 @@ const LPOs = () => {
     handleUrlChange(); // Check on mount
     
     return () => window.removeEventListener('urlchange', handleUrlChange);
-  }, []);
+  }, [selectedYear]);
 
   // Separate effect to handle highlight after LPOs are loaded and filtered
   useEffect(() => {
-    const highlightId = highlightProcessedRef.current;
-    if (highlightId && lpos.length > 0 && filteredLpos.length > 0) {
-      console.log('Attempting to find and highlight LPO:', highlightId);
+    if (pendingHighlight && filteredLpos.length > 0) {
+      console.log('Attempting to find and highlight LPO:', pendingHighlight, 'in', filteredLpos.length, 'filtered LPOs');
       
-      // Find the LPO in original data
-      const lpoInOriginal = lpos.find(l => l.lpoNo === highlightId);
-      if (lpoInOriginal) {
-        const lpoMonth = getMonthFromDate(lpoInOriginal.date);
-        console.log('Found LPO with month:', lpoMonth);
-        
-        // Set the month filter if needed
-        if (lpoMonth && !selectedMonths.includes(lpoMonth)) {
-          console.log('Switching to month:', lpoMonth);
-          setSelectedMonths([lpoMonth]);
-          return; // Let the filter update trigger the next step
-        }
-      }
-      
-      // Find in filtered list
-      const recordIndex = filteredLpos.findIndex(l => l.lpoNo === highlightId);
+      // Find in filtered list (after year/month filters applied)
+      const recordIndex = filteredLpos.findIndex(l => l.lpoNo === pendingHighlight);
       
       if (recordIndex >= 0) {
         console.log('Found LPO at filtered index:', recordIndex);
@@ -139,29 +148,57 @@ const LPOs = () => {
         
         if (targetPage !== currentPage) {
           setCurrentPage(targetPage);
+          // Wait for page change
+          setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 800);
+        } else {
+          // Already on correct page
+          setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 300);
         }
-        
-        // Scroll to and highlight the record
-        setTimeout(() => {
-          const element = document.querySelector(`[data-lpo-number="${highlightId}"]`);
-          console.log('Looking for element with data-lpo-number:', highlightId, 'Found:', !!element);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.classList.add('ring-4', 'ring-purple-500', 'ring-opacity-50');
-            setTimeout(() => {
-              element.classList.remove('ring-4', 'ring-purple-500', 'ring-opacity-50');
-              highlightProcessedRef.current = null;
-              const url = new URL(window.location.href);
-              url.searchParams.delete('highlight');
-              window.history.replaceState({}, '', url.toString());
-            }, 3000);
-          }
-        }, 500);
       } else {
         console.log('LPO not found in filtered results');
+        clearLPOHighlight();
       }
     }
-  }, [lpos, filteredLpos, selectedMonths, itemsPerPage, currentPage]);
+  }, [pendingHighlight, filteredLpos, itemsPerPage, currentPage]);
+  
+  // Helper function to scroll and highlight
+  const scrollToAndHighlightLPO = (lpoNo: string) => {
+    console.log('Scrolling to LPO:', lpoNo);
+    const element = document.querySelector(`[data-lpo-number="${lpoNo}"]`) as HTMLElement;
+    
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // Apply highlight with inline styles
+      const originalBoxShadow = element.style.boxShadow;
+      const originalTransition = element.style.transition;
+      
+      element.style.transition = 'all 0.3s ease';
+      element.style.boxShadow = '0 0 0 4px rgba(168, 85, 247, 0.5), 0 0 20px rgba(168, 85, 247, 0.3)';
+      element.style.transform = 'scale(1.02)';
+      
+      setTimeout(() => {
+        element.style.boxShadow = originalBoxShadow;
+        element.style.transform = '';
+        element.style.transition = originalTransition;
+        clearLPOHighlight();
+      }, 3000);
+    } else {
+      console.warn('Element not found:', lpoNo);
+      clearLPOHighlight();
+    }
+  };
+  
+  // Helper to clear highlight
+  const clearLPOHighlight = () => {
+    highlightProcessedRef.current = null;
+    setPendingHighlight(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('highlight');
+    url.searchParams.delete('year');
+    url.searchParams.delete('month');
+    window.history.replaceState({}, '', url.toString());
+  };
 
   useEffect(() => {
     filterLpos();

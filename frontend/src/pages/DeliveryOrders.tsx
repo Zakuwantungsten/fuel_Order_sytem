@@ -86,6 +86,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
   // Ref to track if we've processed a highlight to avoid re-processing
   const highlightProcessedRef = useRef<string | null>(null);
+  const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
 
   // Click-outside detection for filter dropdowns
   useEffect(() => {
@@ -122,6 +123,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       const url = new URL(window.location.href);
       const editId = url.searchParams.get('edit');
       const highlightId = url.searchParams.get('highlight');
+      const yearParam = url.searchParams.get('year');
+      const monthParam = url.searchParams.get('month');
       
       if (editId) {
         // Manually trigger the edit flow
@@ -140,7 +143,28 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         // Mark as processed to avoid re-processing
         highlightProcessedRef.current = highlightId;
-        console.log('Processing highlight for DO:', highlightId);
+        console.log('Processing highlight for DO:', highlightId, 'Year:', yearParam, 'Month:', monthParam);
+        
+        // Set year if provided
+        if (yearParam) {
+          const year = parseInt(yearParam);
+          if (!isNaN(year) && year !== selectedYear) {
+            console.log('Setting year to:', year);
+            setSelectedYear(year);
+          }
+        }
+        
+        // Set month if provided
+        if (monthParam) {
+          const month = parseInt(monthParam);
+          if (!isNaN(month) && month >= 1 && month <= 12) {
+            console.log('Setting month filter to:', month);
+            setSelectedMonths([month]);
+          }
+        }
+        
+        // Trigger highlight
+        setPendingHighlight(highlightId);
       }
     };
     
@@ -156,45 +180,85 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
   // Separate effect to handle highlight after orders are loaded
   useEffect(() => {
-    const highlightId = highlightProcessedRef.current;
-    if (highlightId && orders.length > 0) {
-      console.log('Attempting to find and highlight DO:', highlightId, 'in', orders.length, 'orders');
-      const recordIndex = orders.findIndex(o => o.doNumber === highlightId);
+    if (pendingHighlight && orders.length > 0) {
+      console.log('Attempting to find and highlight DO:', pendingHighlight, 'in', orders.length, 'orders');
+      
+      // Find in filtered orders (after month/year filter applied)
+      const filteredList = orders.filter(order => {
+        // Apply year filter
+        const orderDate = new Date(order.date);
+        const orderYear = orderDate.getFullYear();
+        if (orderYear !== selectedYear) return false;
+        
+        // Apply month filter
+        const orderMonth = orderDate.getMonth() + 1;
+        if (selectedMonths.length > 0 && selectedMonths.length < 12) {
+          if (!selectedMonths.includes(orderMonth)) return false;
+        }
+        
+        return true;
+      });
+      
+      const recordIndex = filteredList.findIndex(o => o.doNumber === pendingHighlight);
       
       if (recordIndex >= 0) {
-        console.log('Found DO at index:', recordIndex);
+        console.log('Found DO at index:', recordIndex, 'in filtered list');
         const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
         console.log('Target page:', targetPage, 'Current page:', currentPage);
         
         if (targetPage !== currentPage) {
           setCurrentPage(targetPage);
+          // Wait for page change
+          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 800);
+        } else {
+          // Already on correct page
+          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 300);
         }
-        
-        // Scroll to and highlight the record after a delay
-        setTimeout(() => {
-          const element = document.querySelector(`[data-do-number="${highlightId}"]`);
-          console.log('Looking for element with data-do-number:', highlightId, 'Found:', !!element);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.classList.add('ring-4', 'ring-blue-500', 'ring-opacity-50');
-            setTimeout(() => {
-              element.classList.remove('ring-4', 'ring-blue-500', 'ring-opacity-50');
-              // Clear the processed highlight after animation
-              highlightProcessedRef.current = null;
-              // Clear URL param
-              const url = new URL(window.location.href);
-              url.searchParams.delete('highlight');
-              window.history.replaceState({}, '', url.toString());
-            }, 3000);
-          }
-        }, 500);
       } else {
-        console.log('DO not found in current orders:', highlightId);
-        // Clear if not found
-        highlightProcessedRef.current = null;
+        console.log('DO not found in filtered orders:', pendingHighlight);
+        clearDOHighlight();
       }
     }
-  }, [orders, itemsPerPage, currentPage]);
+  }, [pendingHighlight, orders, selectedYear, selectedMonths, itemsPerPage, currentPage]);
+  
+  // Helper function to scroll and highlight
+  const scrollToAndHighlightDO = (doNumber: string) => {
+    console.log('Scrolling to DO:', doNumber);
+    const element = document.querySelector(`[data-do-number="${doNumber}"]`) as HTMLElement;
+    
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // Apply highlight with inline styles
+      const originalBoxShadow = element.style.boxShadow;
+      const originalTransition = element.style.transition;
+      
+      element.style.transition = 'all 0.3s ease';
+      element.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3)';
+      element.style.transform = 'scale(1.02)';
+      
+      setTimeout(() => {
+        element.style.boxShadow = originalBoxShadow;
+        element.style.transform = '';
+        element.style.transition = originalTransition;
+        clearDOHighlight();
+      }, 3000);
+    } else {
+      console.warn('Element not found:', doNumber);
+      clearDOHighlight();
+    }
+  };
+  
+  // Helper to clear highlight
+  const clearDOHighlight = () => {
+    highlightProcessedRef.current = null;
+    setPendingHighlight(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('highlight');
+    url.searchParams.delete('year');
+    url.searchParams.delete('month');
+    window.history.replaceState({}, '', url.toString());
+  };
 
   // Handle edit query parameter (e.g., from notification click)
   useEffect(() => {
