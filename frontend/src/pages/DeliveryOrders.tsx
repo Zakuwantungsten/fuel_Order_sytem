@@ -223,28 +223,45 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   
   // Helper function to scroll and highlight
   const scrollToAndHighlightDO = (doNumber: string) => {
-    console.log('Scrolling to DO:', doNumber);
+    console.log('=== DO HIGHLIGHT ATTEMPT ===');
+    console.log('DO Number:', doNumber);
     const element = document.querySelector(`[data-do-number="${doNumber}"]`) as HTMLElement;
+    console.log('Element found:', !!element);
     
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
-      // Apply highlight with inline styles
-      const originalBoxShadow = element.style.boxShadow;
-      const originalTransition = element.style.transition;
+      // Store original styles
+      const originalStyles = {
+        boxShadow: element.style.boxShadow,
+        border: element.style.border,
+        backgroundColor: element.style.backgroundColor,
+        transform: element.style.transform,
+        transition: element.style.transition
+      };
       
-      element.style.transition = 'all 0.3s ease';
-      element.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3)';
-      element.style.transform = 'scale(1.02)';
+      // Apply subtle highlight with faint blue
+      element.style.transition = 'all 0.3s ease-in-out';
+      element.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3), 0 0 15px rgba(59, 130, 246, 0.2)';
+      element.style.border = '2px solid rgba(59, 130, 246, 0.4)';
+      element.style.backgroundColor = 'rgba(59, 130, 246, 0.08)';
+      element.style.transform = 'scale(1.01)';
+      element.style.zIndex = '1000';
+      
+      console.log('✅ Applied DO highlight');
       
       setTimeout(() => {
-        element.style.boxShadow = originalBoxShadow;
-        element.style.transform = '';
-        element.style.transition = originalTransition;
+        element.style.boxShadow = originalStyles.boxShadow;
+        element.style.border = originalStyles.border;
+        element.style.backgroundColor = originalStyles.backgroundColor;
+        element.style.transform = originalStyles.transform;
+        element.style.transition = originalStyles.transition;
+        element.style.zIndex = '';
+        console.log('❌ Removed DO highlight');
         clearDOHighlight();
       }, 3000);
     } else {
-      console.warn('Element not found:', doNumber);
+      console.error('❌ DO Element not found:', doNumber);
       clearDOHighlight();
     }
   };
@@ -1913,6 +1930,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                       {paginatedOrders.map((order) => (
                         <tr
                           key={order.id || `order-${order.doNumber}`}
+                          data-do-number={order.doNumber}
                           className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                             order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
                           }`}

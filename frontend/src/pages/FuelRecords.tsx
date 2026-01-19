@@ -144,7 +144,9 @@ const FuelRecords = () => {
   // Separate effect to handle highlight - fetch ALL records to find position
   useEffect(() => {
     if (pendingHighlight && selectedMonth) {
-      console.log('Processing highlight for:', pendingHighlight, 'in month:', selectedMonth);
+      console.log('%c=== FUEL RECORD HIGHLIGHT FLOW START ===', 'background: #22c55e; color: white; padding: 4px;');
+      console.log('pendingHighlight:', pendingHighlight);
+      console.log('selectedMonth:', selectedMonth);
       
       // Fetch ALL records for the selected month to find the record's position
       const findRecordPosition = async () => {
@@ -153,6 +155,8 @@ const FuelRecords = () => {
           const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
                              'July', 'August', 'September', 'October', 'November', 'December'];
           const monthName = monthNames[parseInt(monthNum) - 1];
+          
+          console.log('Fetching all records for:', `${monthName} ${year}`);
           
           // Fetch ALL records for this month
           const response = await fuelRecordsAPI.getAll({
@@ -163,34 +167,43 @@ const FuelRecords = () => {
           });
           
           const allMonthRecords = response.data;
-          console.log('Fetched all records for month:', allMonthRecords.length, 'records');
+          console.log('Fetched records count:', allMonthRecords.length);
+          console.log('All truck numbers:', allMonthRecords.map(r => r.truckNo));
           
           // Find the record by truck number
           const recordIndex = allMonthRecords.findIndex(r => r.truckNo === pendingHighlight);
           
           if (recordIndex >= 0) {
-            console.log('Found record at absolute index:', recordIndex);
+            console.log('✅ Found record at absolute index:', recordIndex);
+            console.log('Record details:', allMonthRecords[recordIndex]);
             
             // Calculate which page this record is on
             const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
-            console.log('Target page:', targetPage, 'Current page:', currentPage);
+            console.log('Target page:', targetPage, '| Current page:', currentPage, '| Items per page:', itemsPerPage);
             
             // Navigate to the correct page if needed
             if (targetPage !== currentPage) {
               console.log('Navigating to page:', targetPage);
               setCurrentPage(targetPage);
-              // Wait for page to load, then highlight
-              setTimeout(() => scrollToAndHighlight(pendingHighlight), 800);
+              // Wait for page change to complete and DOM to update
+              setTimeout(() => {
+                console.log('Calling scrollToAndHighlight after page change...');
+                scrollToAndHighlight(pendingHighlight);
+              }, 1200); // Increased delay
             } else {
-              // Already on correct page, just highlight
-              setTimeout(() => scrollToAndHighlight(pendingHighlight), 300);
+              // Already on correct page
+              console.log('Already on correct page, highlighting now...');
+              setTimeout(() => {
+                console.log('Calling scrollToAndHighlight...');
+                scrollToAndHighlight(pendingHighlight);
+              }, 600); // Increased delay
             }
           } else {
-            console.warn('Record not found with truck number:', pendingHighlight, 'in month:', selectedMonth);
+            console.warn('❌ Record not found with truck number:', pendingHighlight, 'in month:', selectedMonth);
             clearHighlight();
           }
         } catch (error) {
-          console.error('Error finding record position:', error);
+          console.error('❌ Error finding record position:', error);
           clearHighlight();
         }
       };
@@ -201,36 +214,111 @@ const FuelRecords = () => {
   
   // Helper function to scroll to and highlight a record
   const scrollToAndHighlight = (truckNo: string) => {
-    console.log('Attempting to scroll and highlight:', truckNo);
-    console.log('All elements with data-truck-number:', document.querySelectorAll('[data-truck-number]').length);
+    console.log('%c=== HIGHLIGHT ATTEMPT ===' , 'background: #ef4444; color: white; font-size: 16px; padding: 8px;');
+    console.log('Truck Number:', truckNo);
     
-    const element = document.querySelector(`[data-truck-number="${truckNo}"]`) as HTMLElement;
-    console.log('Found element with data-truck-number:', truckNo, ':', !!element);
+    // Count all elements
+    const allElements = document.querySelectorAll('[data-truck-number]');
+    console.log('Total elements with data-truck-number:', allElements.length);
+    
+    // Check which one is visible (desktop or mobile)
+    const visibleElements = Array.from(allElements).filter(el => {
+      const htmlEl = el as HTMLElement;
+      return htmlEl.offsetParent !== null; // offsetParent is null for hidden elements
+    });
+    console.log('Visible elements:', visibleElements.length);
+    console.log('All elements:', Array.from(allElements).map(el => ({
+      truck: el.getAttribute('data-truck-number'),
+      tag: el.tagName,
+      visible: (el as HTMLElement).offsetParent !== null,
+      display: window.getComputedStyle(el as HTMLElement).display
+    })));
+    
+    // Try to find visible element first, then fall back to any element
+    let element = visibleElements.find(el => el.getAttribute('data-truck-number') === truckNo) as HTMLElement;
+    if (!element) {
+      element = document.querySelector(`[data-truck-number="${truckNo}"]`) as HTMLElement;
+    }
+    
+    console.log('Element found:', !!element);
+    console.log('Element is visible:', element?.offsetParent !== null);
     
     if (element) {
+      console.log('%c✅ ELEMENT FOUND!', 'background: #22c55e; color: white; font-size: 14px; padding: 4px;');
+      console.log('Element details:', {
+        tagName: element.tagName,
+        className: element.className,
+        id: element.id,
+        visible: element.offsetParent !== null,
+        display: window.getComputedStyle(element).display,
+        position: window.getComputedStyle(element).position,
+        zIndex: window.getComputedStyle(element).zIndex
+      });
+      
+      // Show alert to confirm function is running
+      console.log('🎯 Scrolling to element and applying highlight...');
+      
       // Scroll to element
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
-      // Apply highlight with inline styles for stronger visibility
-      const originalBoxShadow = element.style.boxShadow;
-      const originalTransition = element.style.transition;
+      // Store original styles
+      const originalStyles = {
+        boxShadow: element.style.boxShadow,
+        border: element.style.border,
+        backgroundColor: element.style.backgroundColor,
+        transform: element.style.transform,
+        transition: element.style.transition,
+        outline: element.style.outline
+      };
       
-      element.style.transition = 'all 0.3s ease';
-      element.style.boxShadow = '0 0 0 4px rgba(34, 197, 94, 0.5), 0 0 20px rgba(34, 197, 94, 0.3)';
-      element.style.transform = 'scale(1.02)';
+      console.log('Original styles:', originalStyles);
+      console.log('Computed styles before:', {
+        boxShadow: window.getComputedStyle(element).boxShadow,
+        border: window.getComputedStyle(element).border,
+        backgroundColor: window.getComputedStyle(element).backgroundColor
+      });
       
-      console.log('Applied highlight styles to:', truckNo);
+      // Apply subtle highlight with faint green
+      element.style.setProperty('transition', 'all 0.3s ease-in-out', 'important');
+      element.style.setProperty('box-shadow', '0 0 0 3px rgba(34, 197, 94, 0.3), 0 0 15px rgba(34, 197, 94, 0.2)', 'important');
+      element.style.setProperty('border', '2px solid rgba(34, 197, 94, 0.4)', 'important');
+      element.style.setProperty('background-color', 'rgba(34, 197, 94, 0.08)', 'important');
+      element.style.setProperty('transform', 'scale(1.01)', 'important');
+      element.style.setProperty('z-index', '9999', 'important');
+      element.style.setProperty('position', 'relative', 'important');
+      
+      console.log('%c✅ Applied highlight styles successfully', 'background: #22c55e; color: white; padding: 4px;');
+      console.log('Inline styles after:', {
+        boxShadow: element.style.boxShadow,
+        border: element.style.border,
+        backgroundColor: element.style.backgroundColor,
+        transform: element.style.transform
+      });
+      console.log('Computed styles after:', {
+        boxShadow: window.getComputedStyle(element).boxShadow,
+        border: window.getComputedStyle(element).border,
+        backgroundColor: window.getComputedStyle(element).backgroundColor,
+        transform: window.getComputedStyle(element).transform
+      });
       
       setTimeout(() => {
-        element.style.boxShadow = originalBoxShadow;
-        element.style.transform = '';
-        element.style.transition = originalTransition;
-        console.log('Removed highlight from:', truckNo);
+        console.log('%c❌ Removing highlight', 'background: #ef4444; color: white; padding: 4px;');
+        element.style.boxShadow = originalStyles.boxShadow;
+        element.style.border = originalStyles.border;
+        element.style.backgroundColor = originalStyles.backgroundColor;
+        element.style.transform = originalStyles.transform;
+        element.style.transition = originalStyles.transition;
+        element.style.outline = originalStyles.outline;
+        element.style.position = '';
+        element.style.zIndex = '';
         clearHighlight();
       }, 3000);
     } else {
-      console.warn('Element not found for highlighting:', truckNo);
-      console.log('Available truck numbers:', Array.from(document.querySelectorAll('[data-truck-number]')).map(el => el.getAttribute('data-truck-number')));
+      console.error('%c❌ ELEMENT NOT FOUND!', 'background: #ef4444; color: white; font-size: 14px; padding: 4px;');
+      const allTruckNos = Array.from(document.querySelectorAll('[data-truck-number]')).map(el => el.getAttribute('data-truck-number'));
+      console.log('Available truck numbers in DOM:', allTruckNos);
+      console.log('Looking for:', truckNo);
+      console.log('Exact match exists:', allTruckNos.includes(truckNo));
       clearHighlight();
     }
   };
@@ -1190,7 +1278,8 @@ const FuelRecords = () => {
 
                   return (
                     <tr 
-                      key={recordId || `record-${index}`} 
+                      key={recordId || `record-${index}`}
+                      data-truck-number={record.truckNo}
                       className={`cursor-pointer transition-colors ${
                         isCancelled 
                           ? 'hover:bg-red-100 dark:hover:bg-red-900/30' 
