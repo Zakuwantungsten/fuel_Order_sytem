@@ -8,6 +8,7 @@ import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary
 import { useAuth } from '../contexts/AuthContext';
 import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
 import { configService } from '../services/configService';
+import { useActiveFuelStations, getActiveStations } from '../hooks/useFuelStations';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import XLSX from 'xlsx-js-style';
 
@@ -847,10 +848,6 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
   const [isFetchingLPO, setIsFetchingLPO] = useState(false);
   const [isFetchingDO, setIsFetchingDO] = useState<number | null>(null);
   
-  // Dynamic stations
-  const [availableStations, setAvailableStations] = useState<FuelStationConfig[]>([]);
-  const [loadingStations, setLoadingStations] = useState(true);
-  
   // Dropdown states for modal
   const [showStationDropdown, setShowStationDropdown] = useState(false);
   const [showPaymentDropdown, setShowPaymentDropdown] = useState(false);
@@ -874,21 +871,9 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load stations from database
-  useEffect(() => {
-    const loadStations = async () => {
-      try {
-        setLoadingStations(true);
-        const stations = await configService.getActiveStations();
-        setAvailableStations(stations);
-      } catch (error) {
-        console.error('Failed to load stations:', error);
-      } finally {
-        setLoadingStations(false);
-      }
-    };
-    loadStations();
-  }, []);
+  // Load stations from database using React Query
+  const { data: fuelStations, isLoading: loadingStations } = useActiveFuelStations();
+  const availableStations = fuelStations || [];
 
   // Fetch next LPO number on mount
   useEffect(() => {

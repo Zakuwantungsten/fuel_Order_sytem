@@ -7,6 +7,19 @@ import { databaseMonitor } from '../utils/databaseMonitor';
 import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
 
+/**
+ * Add cache-busting headers to force immediate frontend refresh
+ * Call this after configuration updates to ensure all clients get fresh data
+ */
+function setCacheBustingHeaders(res: Response): void {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'X-Config-Updated': new Date().toISOString(),
+  });
+}
+
 // Default configurations
 const DEFAULT_FUEL_STATIONS = [
   { id: 'lake_ndola', name: 'LAKE NDOLA', location: 'Zambia', pricePerLiter: 1450, isActive: true },
@@ -574,6 +587,9 @@ export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<
 
     logger.info(`Truck ${truckSuffix} added to batch ${extraLiters}L by ${req.user?.username}`);
 
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
+
     res.status(201).json({
       success: true,
       message: `Truck added to ${extraLiters}L batch successfully`,
@@ -623,6 +639,9 @@ export const removeTruckFromBatch = async (req: AuthRequest, res: Response): Pro
     await config.save();
 
     logger.info(`Truck ${truckSuffix} removed from batches by ${req.user?.username}`);
+
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
 
     res.status(200).json({
       success: true,
@@ -679,6 +698,9 @@ export const addDestinationRule = async (req: AuthRequest, res: Response): Promi
 
     logger.info(`Destination rule added for truck ${truckSuffix}: ${destination} -> ${extraLiters}L by ${req.user?.username}`);
 
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
+
     res.status(200).json({
       success: true,
       message: 'Destination rule added successfully',
@@ -732,6 +754,9 @@ export const updateDestinationRule = async (req: AuthRequest, res: Response): Pr
     await config.save();
 
     logger.info(`Destination rule updated for truck ${truckSuffix}: ${oldDestination} -> ${extraLiters}L by ${req.user?.username}`);
+
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
 
     res.status(200).json({
       success: true,
@@ -787,6 +812,9 @@ export const deleteDestinationRule = async (req: AuthRequest, res: Response): Pr
 
     logger.info(`Destination rule deleted for truck ${truckSuffix}: ${destination} by ${req.user?.username}`);
 
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
+
     res.status(200).json({
       success: true,
       message: 'Destination rule deleted successfully',
@@ -837,6 +865,9 @@ export const createBatch = async (req: AuthRequest, res: Response): Promise<void
     await config.save();
 
     logger.info(`New batch created: ${extraLiters}L by ${req.user?.username}`);
+
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
 
     res.status(201).json({
       success: true,
@@ -897,6 +928,9 @@ export const updateBatch = async (req: AuthRequest, res: Response): Promise<void
 
     logger.info(`Batch updated: ${oldExtraLiters}L → ${newExtraLiters}L by ${req.user?.username}`);
 
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
+
     res.status(200).json({
       success: true,
       message: `Batch updated from ${oldExtraLiters}L to ${newExtraLiters}L successfully`,
@@ -943,6 +977,9 @@ export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void
     await config.save();
 
     logger.info(`Batch deleted: ${extraLiters}L by ${req.user?.username}`);
+
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
 
     res.status(200).json({
       success: true,

@@ -5,6 +5,19 @@ import { RouteConfig } from '../models/RouteConfig';
 import { SystemConfig } from '../models/SystemConfig';
 import { AuditLog } from '../models/AuditLog';
 
+/**
+ * Add cache-busting headers to force immediate frontend refresh
+ * Call this after configuration updates to ensure all clients get fresh data
+ */
+function setCacheBustingHeaders(res: Response): void {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'X-Config-Updated': new Date().toISOString(),
+  });
+}
+
 // Formula validation helper
 function validateFormula(formula: string): { valid: boolean; error?: string } {
   // Allow: numbers, operators (+, -, *, /, parentheses), and variable names
@@ -132,6 +145,9 @@ export const createFuelStation = async (req: AuthRequest, res: Response): Promis
       severity: 'low',
     });
 
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
+
     res.status(201).json({
       success: true,
       data: station,
@@ -240,6 +256,9 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
       severity: 'low',
     });
 
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
+
     res.json({
       success: true,
       data: station,
@@ -280,6 +299,9 @@ export const deleteFuelStation = async (req: AuthRequest, res: Response): Promis
         details: JSON.stringify({ stationName: station.stationName }),
         severity: 'medium',
       });
+
+      // Add cache-busting headers to force client refresh
+      setCacheBustingHeaders(res);
 
       res.json({
         success: true,
@@ -414,6 +436,9 @@ export const createRoute = async (req: AuthRequest, res: Response): Promise<void
       severity: 'low',
     });
 
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
+
     res.status(201).json({
       success: true,
       data: route,
@@ -461,6 +486,9 @@ export const updateRoute = async (req: AuthRequest, res: Response): Promise<void
       severity: 'low',
     });
 
+    // Add cache-busting headers to force client refresh
+    setCacheBustingHeaders(res);
+
     res.json({
       success: true,
       data: route,
@@ -499,6 +527,9 @@ export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void
         details: JSON.stringify({ routeName: route.routeName }),
         severity: 'medium',
       });
+
+      // Add cache-busting headers to force client refresh
+      setCacheBustingHeaders(res);
 
       res.json({
         success: true,

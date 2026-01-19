@@ -3,8 +3,9 @@
  * Replaces localStorage with API-based state management
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { configService } from '../services/configService';
+import { configAPI } from '../services/api';
 
 // Query keys for cache management
 export const routeKeys = {
@@ -24,6 +25,93 @@ export function useRoutes() {
       return routes;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+/**
+ * Create new route
+ * Automatically invalidates cache to trigger refetch across all components
+ */
+export function useCreateRoute() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      routeName: string;
+      origin?: string;
+      destination: string;
+      destinationAliases?: string[];
+      routeType?: 'IMPORT' | 'EXPORT';
+      defaultTotalLiters: number;
+      formula?: string;
+      description?: string;
+    }) => {
+      console.log('→ Creating route:', data.routeName);
+      const result = await configAPI.createRoute(data);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      console.log(`✓ Route ${variables.routeName} created`);
+      // Invalidate ALL route queries to trigger refetch
+      queryClient.invalidateQueries({ queryKey: routeKeys.all });
+      // Clear configService cache for backward compatibility
+      configService.clearCache();
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to create route:', error);
+    },
+  });
+}
+
+/**
+ * Update route
+ * Automatically invalidates cache to trigger refetch
+ */
+export function useUpdateRoute() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { id: string; updates: any }) => {
+      console.log('→ Updating route:', data.id);
+      const result = await configAPI.updateRoute(data.id, data.updates);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      console.log(`✓ Route ${variables.id} updated`);
+      // Invalidate ALL route queries to trigger refetch
+      queryClient.invalidateQueries({ queryKey: routeKeys.all });
+      // Clear configService cache for backward compatibility
+      configService.clearCache();
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to update route:', error);
+    },
+  });
+}
+
+/**
+ * Delete route
+ * Automatically invalidates cache to trigger refetch
+ */
+export function useDeleteRoute() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      console.log('→ Deleting route:', id);
+      const result = await configAPI.deleteRoute(id);
+      return result;
+    },
+    onSuccess: (_, id) => {
+      console.log(`✓ Route ${id} deleted`);
+      // Invalidate ALL route queries to trigger refetch
+      queryClient.invalidateQueries({ queryKey: routeKeys.all });
+      // Clear configService cache for backward compatibility
+      configService.clearCache();
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to delete route:', error);
+    },
   });
 }
 

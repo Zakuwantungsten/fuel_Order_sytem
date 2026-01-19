@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
-import { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
+import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
-import { configService } from '../services/configService';
+import { useActiveFuelStations } from '../hooks/useFuelStations';
 import { 
   getAvailableCancellationPoints, 
   getCancellationPointDisplayName,
@@ -173,10 +173,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       total: 0,
     };
   });
-
-  // Dynamic stations from database
-  const [availableStations, setAvailableStations] = useState<FuelStationConfig[]>([]);
-  const [loadingStations, setLoadingStations] = useState(true);
 
   // Track auto-fill data for each entry
   const [entryAutoFillData, setEntryAutoFillData] = useState<Record<number, EntryAutoFillData>>(() => {
@@ -397,22 +393,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
   };
 
-  // Load stations from database
-  useEffect(() => {
-    const loadStations = async () => {
-      try {
-        setLoadingStations(true);
-        const stations = await configService.getActiveStations();
-        setAvailableStations(stations);
-      } catch (error) {
-        console.error('Failed to load stations:', error);
-        // Don't set fallback here, just leave empty - CASH and CUSTOM will always be available
-      } finally {
-        setLoadingStations(false);
-      }
-    };
-    loadStations();
-  }, []);
+  // Load stations from database using React Query
+  const { data: fuelStations, isLoading: loadingStations } = useActiveFuelStations();
+  const availableStations: FuelStationConfig[] = fuelStations || [];
 
   // Check for existing draft on mount and when modal opens
   useEffect(() => {
