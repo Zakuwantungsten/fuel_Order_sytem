@@ -187,14 +187,17 @@ const Dashboard = () => {
 
       // Process DO results - backend already filtered, no client-side filtering needed
       const dosResults: SearchResult[] = dosData
-        .map((DO: any, index: number) => ({
-          id: `do-${DO._id || DO.id || index}`,
-          type: 'do' as const,
-          month: new Date(DO.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          primaryText: `${DO.doNumber} - ${DO.to || DO.destination || 'N/A'}`,
-          secondaryText: `${DO.truckNo} | ${DO.tonnages} tons | ${DO.haulier}`,
-          metadata: DO
-        }));
+        .map((DO: any, index: number) => {
+          const importExportLabel = DO.importOrExport === 'IMPORT' ? '📥 Import' : '📤 Export';
+          return {
+            id: `do-${DO._id || DO.id || index}`,
+            type: 'do' as const,
+            month: new Date(DO.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+            primaryText: `${DO.doNumber} - ${DO.to || DO.destination || 'N/A'}`,
+            secondaryText: `${importExportLabel} | ${DO.truckNo} | ${DO.tonnages} tons | ${DO.haulier}`,
+            metadata: DO
+          };
+        });
 
       // Process LPO results - NO FILTERING, backend already filtered
       const lposResults: SearchResult[] = lposData
