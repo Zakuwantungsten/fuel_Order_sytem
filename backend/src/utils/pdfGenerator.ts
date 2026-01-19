@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { IDeliveryOrder } from '../types';
+import path from 'path';
 
 /**
  * Generate a PDF document for amended and cancelled Delivery Orders
@@ -284,7 +285,8 @@ export const generateAmendedDOsFilename = (doNumbers: string[]): string => {
  * Generate a PDF document for bulk Delivery Orders (clean design)
  */
 export const generateBulkDOsPDF = (
-  deliveryOrders: IDeliveryOrder[]
+  deliveryOrders: IDeliveryOrder[],
+  username?: string
 ): PDFKit.PDFDocument => {
   const doc = new PDFDocument({
     size: 'A4',
@@ -307,6 +309,16 @@ export const generateBulkDOsPDF = (
     red: '#dc3545',
   };
 
+  // Logo path
+  const logoPath = path.join(__dirname, '../../assets/logo.png');
+  let hasLogo = false;
+  try {
+    require('fs').accessSync(logoPath);
+    hasLogo = true;
+  } catch (error) {
+    console.warn('Logo file not found at:', logoPath);
+  }
+
   // Helper functions
   const drawLine = (y: number, startX = 40, endX = 555, lineWidth = 0.5) => {
     doc.lineWidth(lineWidth);
@@ -327,12 +339,43 @@ export const generateBulkDOsPDF = (
     
     let currentY = 40;
 
-    // Header Section
+    // Add watermark (centered, behind all content)
+    if (hasLogo) {
+      try {
+        const pageWidth = 595; // A4 width in points
+        const pageHeight = 842; // A4 height in points
+        const watermarkSize = 200; // Logo size for watermark
+        const watermarkX = (pageWidth - watermarkSize) / 2;
+        const watermarkY = (pageHeight - watermarkSize) / 2;
+        
+        doc.save();
+        doc.opacity(0.3);
+        doc.image(logoPath, watermarkX, watermarkY, { width: watermarkSize });
+        doc.opacity(1);
+        doc.restore();
+      } catch (error) {
+        console.warn('Failed to add watermark:', error);
+      }
+    }
+
+    // Header Section - Company details on left
     doc.fontSize(28).fillColor(colors.primary).text('TAHMEED', 40, currentY);
     doc.fontSize(8).fillColor(colors.muted)
       .text('www.tahmeedcoach.co.ke', 40, currentY + 25)
       .text('Email: info@tahmeedcoach.co.ke', 40, currentY + 35)
       .text('Tel: +254 700 000 000', 40, currentY + 45);
+    
+    // Logo on the right side (opposite to company details)
+    if (hasLogo) {
+      try {
+        const logoWidth = 80;
+        const logoHeight = 60;
+        const logoX = 555 - logoWidth; // Right aligned
+        doc.image(logoPath, logoX, currentY, { width: logoWidth, height: logoHeight, fit: [logoWidth, logoHeight] });
+      } catch (error) {
+        console.warn('Failed to add header logo:', error);
+      }
+    }
     
     currentY += 65;
     
@@ -439,10 +482,15 @@ export const generateBulkDOsPDF = (
     drawLine(currentY, 40, 555);
     currentY += 15;
     
-    // Prepared By Section
+    // Prepared By Section (with username if provided)
     doc.fontSize(10);
     doc.text('Prepared By:', 40, currentY);
-    drawLine(currentY + 15, 120, 400);
+    if (username) {
+      doc.font('Helvetica-Bold').text(username, 120, currentY);
+      doc.font('Helvetica');
+    } else {
+      drawLine(currentY + 15, 120, 400);
+    }
     
     currentY += 35;
     drawLine(currentY, 40, 555);
@@ -460,10 +508,10 @@ export const generateBulkDOsPDF = (
     drawLine(currentY, 40, 555);
     currentY += 15;
     
-    // Remarks and Rate Section
+    // Remarks and Rate Section (REMARKS section left empty as requested)
     doc.fontSize(10).fillColor(colors.text);
     doc.text('REMARKS:', 40, currentY);
-    doc.text(order.cargoType || '', 110, currentY);
+    // Removed cargo type display - leaving remarks empty
     
     currentY += 25;
     

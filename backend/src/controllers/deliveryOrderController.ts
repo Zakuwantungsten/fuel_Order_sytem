@@ -2148,8 +2148,9 @@ export const downloadBulkDOsPDF = async (req: AuthRequest, res: Response): Promi
     // Import PDF generator
     const { generateBulkDOsPDF, generateBulkDOsFilename } = await import('../utils/pdfGenerator');
 
-    // Generate PDF
-    const doc = generateBulkDOsPDF(deliveryOrders as any);
+    // Generate PDF with username
+    const username = req.user?.username || 'system';
+    const doc = generateBulkDOsPDF(deliveryOrders as any, username);
 
     // Generate filename
     const firstDO = deliveryOrders[0].doNumber;
