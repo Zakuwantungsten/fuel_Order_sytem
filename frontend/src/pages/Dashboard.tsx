@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -47,6 +47,7 @@ const Dashboard = () => {
     fuels: SearchResult[];
   }>({ dos: [], lpos: [], fuels: [] });
   const [searching, setSearching] = useState(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Chart data
   const [chartData, setChartData] = useState<any>({
@@ -111,9 +112,6 @@ const Dashboard = () => {
     const query = searchQuery.trim();
     
     try {
-      const fourMonthsAgo = new Date();
-      fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
-      
       const oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       
@@ -122,16 +120,17 @@ const Dashboard = () => {
       console.log('Search params:', {
         query,
         today: today.toISOString().split('T')[0],
-        fourMonthsAgoDate: fourMonthsAgo.toISOString().split('T')[0],
         oneMonthAgoDate: oneMonthAgo.toISOString().split('T')[0]
       });
 
       // Search all three types in parallel
+      // DOs: No date limit, get 6 most recent | Fuel Records: No date limit, get 3 most recent | LPOs: Last 1 month, get up to 50
       const [dosResponse, lposResponse, fuelsResponse] = await Promise.all([
         deliveryOrdersAPI.getAll({ 
           search: query,
-          dateFrom: fourMonthsAgo.toISOString().split('T')[0],
-          limit: 50
+          limit: 6,
+          sortBy: 'date',
+          sortOrder: 'desc'
         }).catch((err) => {
           console.error('DO search error:', err);
           return { data: [] };
@@ -149,8 +148,9 @@ const Dashboard = () => {
         
         fuelRecordsAPI.getAll({ 
           search: query,
-          dateFrom: fourMonthsAgo.toISOString().split('T')[0],
-          limit: 50
+          limit: 3,
+          sortBy: 'date',
+          sortOrder: 'desc'
         }).catch((err) => {
           console.error('Fuel search error:', err);
           return { data: [] };
@@ -236,6 +236,36 @@ const Dashboard = () => {
       setSearching(false);
     }
   };
+
+  // Handle search input with debouncing for real-time search
+  const handleSearchInput = (value: string) => {
+    setSearchQuery(value);
+    
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    // Clear results if search is empty
+    if (!value.trim()) {
+      setSearchResults({ dos: [], lpos: [], fuels: [] });
+      return;
+    }
+    
+    // Set new timer for auto-search (300ms delay)
+    debounceTimerRef.current = setTimeout(() => {
+      performUnifiedSearch();
+    }, 300);
+  };
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   // Handle search result click
   const handleResultClick = (result: SearchResult) => {
@@ -335,15 +365,15 @@ const Dashboard = () => {
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center gap-3 max-w-xl">
+      {/* Search Bar with Real-time Auto-suggestions */}
+      <div className="flex items-center gap-3 max-w-2xl">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search DO, LPO, or Truck..."
+            placeholder="Search DO, LPO, or Truck... (auto-suggestions as you type)"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && performUnifiedSearch()}
             className="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
@@ -351,31 +381,22 @@ const Dashboard = () => {
             <button
               onClick={() => { 
                 setSearchQuery(''); 
-                setSearchResults({ dos: [], lpos: [], fuels: [] }); 
+                setSearchResults({ dos: [], lpos: [], fuels: [] });
+                if (debounceTimerRef.current) {
+                  clearTimeout(debounceTimerRef.current);
+                }
               }}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             >
               <X className="w-4 h-4" />
             </button>
           )}
-        </div>
-        <button
-          onClick={performUnifiedSearch}
-          disabled={searching || !searchQuery.trim()}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium transition-colors whitespace-nowrap"
-        >
-          {searching ? (
-            <>
-              <Loader className="w-4 h-4 animate-spin" />
-              Searching...
-            </>
-          ) : (
-            <>
-              <Search className="w-4 h-4" />
-              Search
-            </>
+          {searching && (
+            <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
+              <Loader className="w-4 h-4 animate-spin text-indigo-600" />
+            </div>
           )}
-        </button>
+        </div>
       </div>
 
       {/* Search Results */}
@@ -393,23 +414,23 @@ const Dashboard = () => {
                   </span>
                 </h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
                 {searchResults.dos.map((result) => (
                   <div
                     key={result.id}
                     onClick={() => handleResultClick(result)}
-                    className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all hover:shadow-md"
+                    className="p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all hover:shadow-sm"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Calendar className="w-3 h-3 text-blue-600 dark:text-blue-400" />
-                          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">{result.month}</p>
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Calendar className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                          <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 truncate">{result.month}</p>
                         </div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{result.primaryText}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{result.secondaryText}</p>
+                        <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{result.primaryText}</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5 truncate">{result.secondaryText}</p>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-1" />
+                      <ArrowRight className="w-3 h-3 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                     </div>
                   </div>
                 ))}
@@ -429,23 +450,23 @@ const Dashboard = () => {
                   </span>
                 </h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
                 {searchResults.lpos.map((result) => (
                   <div
                     key={result.id}
                     onClick={() => handleResultClick(result)}
-                    className="p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all hover:shadow-md"
+                    className="p-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all hover:shadow-sm"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Calendar className="w-3 h-3 text-purple-600 dark:text-purple-400" />
-                          <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">{result.month}</p>
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Calendar className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                          <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 truncate">{result.month}</p>
                         </div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{result.primaryText}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{result.secondaryText}</p>
+                        <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{result.primaryText}</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5 truncate">{result.secondaryText}</p>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-1" />
+                      <ArrowRight className="w-3 h-3 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
                     </div>
                   </div>
                 ))}
@@ -465,23 +486,23 @@ const Dashboard = () => {
                   </span>
                 </h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 max-h-32 overflow-y-auto">
                 {searchResults.fuels.map((result) => (
                   <div
                     key={result.id}
                     onClick={() => handleResultClick(result)}
-                    className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/30 transition-all hover:shadow-md"
+                    className="p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/30 transition-all hover:shadow-sm"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Calendar className="w-3 h-3 text-green-600 dark:text-green-400" />
-                          <p className="text-xs font-semibold text-green-600 dark:text-green-400">{result.month}</p>
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Calendar className="w-2.5 h-2.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                          <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 truncate">{result.month}</p>
                         </div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{result.primaryText}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{result.secondaryText}</p>
+                        <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{result.primaryText}</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5 truncate">{result.secondaryText}</p>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-1" />
+                      <ArrowRight className="w-3 h-3 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
                     </div>
                   </div>
                 ))}
