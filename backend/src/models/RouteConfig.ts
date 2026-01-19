@@ -5,6 +5,7 @@ export interface IRouteConfig extends Document {
   origin: string; // Starting point (e.g., "Dar", "Tanga") - REQUIRED as it determines fuel allocation
   destination: string;
   destinationAliases?: string[]; // Alternative names (e.g., ["DSM", "DAR"] for Dar es Salaam)
+  routeType: 'IMPORT' | 'EXPORT'; // IMPORT = outbound/going routes, EXPORT = return/inbound routes
   defaultTotalLiters: number;
   description?: string;
   isActive: boolean;
@@ -38,6 +39,11 @@ const RouteConfigSchema = new Schema<IRouteConfig>(
       type: [String],
       default: [],
     },
+    routeType: {
+      type: String,
+      enum: ['IMPORT', 'EXPORT'],
+      default: 'IMPORT',
+    },
     defaultTotalLiters: {
       type: Number,
       required: true,
@@ -70,6 +76,7 @@ RouteConfigSchema.index({ destination: 1 });
 RouteConfigSchema.index({ origin: 1 });
 RouteConfigSchema.index({ destinationAliases: 1 });
 RouteConfigSchema.index({ isActive: 1 });
+RouteConfigSchema.index({ routeType: 1 });
 
 export const RouteConfig = mongoose.model<IRouteConfig>(
   'RouteConfig',

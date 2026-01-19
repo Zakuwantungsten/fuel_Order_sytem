@@ -405,15 +405,15 @@ export function createFuelRecordFromDO(
  * NOTE: Return checkpoint fields (zambiaReturn, tundumaReturn, mbeyaReturn, etc.) 
  *       remain at 0 until LPOs are actually created - same as going journey logic
  * 
- * FUEL ALLOCATION LOGIC (Updated):
- * - Base route difference: CALCULATED but NOT automatically added → Creates warning/notification
- * - Loading point extras: REMOVED (Kamoa, NMI, Kalongwe extras no longer auto-added)
- * - Destination extras: MAINTAINED (+170L for Moshi/MSA destinations)
+ * FUEL ALLOCATION LOGIC:
+ * - Export route liters: ADDED to totalLts (represents fuel loaded at export location)
+ * - Destination extras: ADDED if destination is Moshi/MSA (+170L)
+ * - Balance: Updated by adding export route liters + destination extras
  * 
- * Example: Return route requires 2400L but truck has 2300L
- * - System alerts user about 100L shortfall
- * - User must manually decide if extra fuel is needed
- * - Only destination extras are automatically added
+ * Example: Going route DAR→KAMOA (2300L), Return route KAMOA→DAR (2200L)
+ * - Original totalLts: 2300L
+ * - Export route adds: +2200L
+ * - New totalLts: 4500L (total for complete round trip)
  */
 export async function updateFuelRecordWithReturnDO(
   existingRecord: FuelRecord,
@@ -435,43 +435,40 @@ export async function updateFuelRecordWithReturnDO(
   
   // Calculate required total liters for return journey with match information
   // Based on the loading point (from) to the final destination using database routes
-  const destinationMatch = await FuelConfigService.getTotalLitersByRoute(returnLoadingPoint, finalDestination);
-  const requiredTotalLiters = destinationMatch.liters;
+  // Filter by EXPORT routes only to get the correct return journey fuel allocation
+  const destinationMatch = await FuelConfigService.getTotalLitersByRoute(returnLoadingPoint, finalDestination, 'EXPORT');
+  const exportRouteLiters = destinationMatch.liters;
   
   // Log if destination was not found or fuzzy matched
   if (!destinationMatch.matched) {
-    console.warn(`⚠️ Return loading point "${returnLoadingPoint}" not in configured routes. Using default ${requiredTotalLiters}L`);
+    console.warn(`⚠️ EXPORT route "${returnLoadingPoint} → ${finalDestination}" not in configured routes. Using default ${exportRouteLiters}L`);
     if (destinationMatch.suggestions && destinationMatch.suggestions.length > 0) {
       console.log('  Suggestions:', destinationMatch.suggestions.map(s => `${s.route} (${s.liters}L)`).join(', '));
     }
   } else if (destinationMatch.matchType === 'fuzzy') {
-    console.log(`🔍 Fuzzy matched "${returnLoadingPoint}" → "${destinationMatch.matchedRoute}" (${requiredTotalLiters}L)`);
+    console.log(`🔍 Fuzzy matched EXPORT route "${returnLoadingPoint} → ${finalDestination}" → "${destinationMatch.matchedRoute}" (${exportRouteLiters}L)`);
+  } else {
+    console.log(`✓ Found EXPORT route "${returnLoadingPoint} → ${finalDestination}": ${exportRouteLiters}L`);
   }
   
   // Get original total liters allocated for going journey
   const originalTotalLiters = existingRecord.totalLts || 0;
   
-  // Calculate fuel difference for notification purposes (NOT added automatically)
-  const fuelDifference = requiredTotalLiters - originalTotalLiters;
-  const hasFuelShortfall = fuelDifference > 0;
+  // Add export route liters to the existing totalLts
+  // This represents the fuel loaded at the export location for the return journey
+  let additionalFuelNeeded = exportRouteLiters;
   
-  // Only add destination extra fuel automatically
-  // Loading point extras have been REMOVED - user must manually adjust if needed
-  let additionalFuelNeeded = 0;
-  
-  // Add extra fuel if final destination is Moshi/Msa (with fuzzy matching)
+  // Also add extra fuel if final destination is Moshi/Msa (with fuzzy matching)
   const destinationExtra = FuelConfigService.getDestinationExtraFuel(finalDestination);
   additionalFuelNeeded += destinationExtra;
   
-  // Calculate new total liters (only includes destination extra, NOT route difference)
+  // Calculate new total liters by ADDING export route liters to existing allocation
   const newTotalLiters = originalTotalLiters + additionalFuelNeeded;
   
   // Log the calculation for tracking
   const additionalFuelInfo = {
     originalTotalLiters,
-    requiredTotalLiters,
-    fuelDifference, // Can be positive or negative
-    hasFuelShortfall, // Whether return route needs more fuel
+    exportRouteLiters,
     destinationExtra,
     totalAdditionalFuel: additionalFuelNeeded,
     newTotalLiters,
@@ -480,11 +477,12 @@ export async function updateFuelRecordWithReturnDO(
   };
   
   console.log('🔄 Return Journey Fuel Calculation:', additionalFuelInfo);
-  
-  // Alert if fuel shortfall detected
-  if (hasFuelShortfall) {
-    console.warn(`⚠️ FUEL SHORTFALL DETECTED: Return route requires ${requiredTotalLiters}L but truck only has ${originalTotalLiters}L allocated (${fuelDifference}L short)`);
+  console.log(`  Original totalLts: ${originalTotalLiters}L`);
+  console.log(`  + Export route: ${exportRouteLiters}L`);
+  if (destinationExtra > 0) {
+    console.log(`  + Destination extra: ${destinationExtra}L`);
   }
+  console.log(`  = New totalLts: ${newTotalLiters}L`);
   
   // Update the from and to fields based on return journey
   // NOTE: Return checkpoint fields remain at their current values (0 or whatever was set by LPOs)
@@ -504,9 +502,10 @@ export async function updateFuelRecordWithReturnDO(
     // zambiaReturn, tundumaReturn, mbeyaReturn, etc. remain unchanged (0 or existing value)
   };
   
-  // Update balance if additional fuel was added
+  // Update balance by adding the additional fuel (export route liters + destination extra)
   if (additionalFuelNeeded > 0) {
     updatedRecord.balance = (existingRecord.balance || 0) + additionalFuelNeeded;
+    console.log(`  Balance updated: ${existingRecord.balance}L + ${additionalFuelNeeded}L = ${updatedRecord.balance}L`);
   }
   
   // Don't generate any LPOs automatically - they will be created manually as needed

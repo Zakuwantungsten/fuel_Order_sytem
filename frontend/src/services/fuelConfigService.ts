@@ -583,10 +583,12 @@ export class FuelConfigService {
 
   /**
    * Get total liters for a route (origin + destination) with smart matching from database
+   * @param routeType - Optional filter by 'IMPORT' or 'EXPORT' route type
    */
   static async getTotalLitersByRoute(
     origin: string,
-    destination: string
+    destination: string,
+    routeType?: 'IMPORT' | 'EXPORT'
   ): Promise<{ 
     liters: number; 
     matched: boolean; 
@@ -595,8 +597,8 @@ export class FuelConfigService {
     suggestions?: Array<{ route: string; liters: number; similarity: number }>;
   }> {
     try {
-      // Fetch routes from database
-      const dbRoutes = await configService.getRoutes();
+      // Fetch routes from database (optionally filtered by routeType)
+      const dbRoutes = await configService.getRoutes(routeType);
       const orig = origin?.toUpperCase().trim() || '';
       const dest = destination?.toUpperCase().trim() || '';
       

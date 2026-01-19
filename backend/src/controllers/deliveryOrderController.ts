@@ -3111,6 +3111,37 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
     const originalGoingFrom = matchingFuelRecord.originalGoingFrom || matchingFuelRecord.from;
     const originalGoingTo = matchingFuelRecord.originalGoingTo || matchingFuelRecord.to;
 
+    // Find the EXPORT route to get the fuel liters for the return journey
+    // Try to match route with origin (loading point) and destination
+    let exportRoute = await RouteConfig.findOne({
+      $or: [
+        {
+          origin: { $regex: new RegExp(`^${deliveryOrder.loadingPoint}$`, 'i') },
+          destination: { $regex: new RegExp(`^${deliveryOrder.destination}$`, 'i') },
+          routeType: 'EXPORT',
+          isActive: true,
+        },
+        {
+          destination: { $regex: new RegExp(`^${deliveryOrder.destination}$`, 'i') },
+          routeType: 'EXPORT',
+          isActive: true,
+        },
+      ],
+    });
+
+    // Calculate new totalLts by ADDING export route liters to existing totalLts
+    const originalTotalLts = matchingFuelRecord.totalLts || 0;
+    let newTotalLts = originalTotalLts;
+    let exportRouteLiters = 0;
+
+    if (exportRoute) {
+      exportRouteLiters = exportRoute.defaultTotalLiters;
+      newTotalLts = originalTotalLts + exportRouteLiters;
+      logger.info(`Adding EXPORT route fuel: ${originalTotalLts}L + ${exportRouteLiters}L = ${newTotalLts}L`);
+    } else {
+      logger.warn(`⚠️ EXPORT route not found for ${deliveryOrder.loadingPoint} → ${deliveryOrder.destination}. Total liters will not be updated.`);
+    }
+
     // Update the fuel record with return DO info
     const updateData: any = {
       returnDo: deliveryOrder.doNumber,
@@ -3121,20 +3152,26 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
       to: deliveryOrder.destination, // Return journey: going to EXPORT destination
     };
 
+    // Only update totalLts if export route was found
+    if (exportRoute) {
+      updateData.totalLts = newTotalLts;
+      updateData.balance = (matchingFuelRecord.balance || 0) + exportRouteLiters; // Also update balance
+    }
+
     await FuelRecord.findByIdAndUpdate(matchingFuelRecord._id, updateData);
 
     // Resolve any pending unlinked DO notifications
     const { resolveUnlinkedDONotification } = await import('./notificationController');
     await resolveUnlinkedDONotification(id, username);
 
-    logger.info(`Re-linked EXPORT DO ${deliveryOrder.doNumber} to fuel record ${matchingFuelRecord._id} by ${username}`);
+    logger.info(`Re-linked EXPORT DO ${deliveryOrder.doNumber} to fuel record ${matchingFuelRecord._id} by ${username}${exportRoute ? `, added ${exportRouteLiters}L from export route` : ''}`);
 
     // Fetch the updated fuel record
     const updatedFuelRecord = await FuelRecord.findById(matchingFuelRecord._id);
 
     res.status(200).json({
       success: true,
-      message: `Successfully linked DO-${deliveryOrder.doNumber} to fuel record for truck ${deliveryOrder.truckNo}`,
+      message: `Successfully linked DO-${deliveryOrder.doNumber} to fuel record for truck ${deliveryOrder.truckNo}${exportRoute ? `. Added ${exportRouteLiters}L from export route (${originalTotalLts}L → ${newTotalLts}L)` : ''}`,
       data: {
         deliveryOrder,
         fuelRecord: updatedFuelRecord,
@@ -3143,6 +3180,11 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
           from: originalGoingFrom,
           to: originalGoingTo,
         },
+        fuelUpdates: exportRoute ? {
+          originalTotalLts,
+          exportRouteLiters,
+          newTotalLts,
+        } : null,
       },
     });
   } catch (error: any) {

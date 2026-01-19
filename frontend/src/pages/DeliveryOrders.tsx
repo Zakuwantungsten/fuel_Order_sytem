@@ -542,7 +542,19 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
               if (relinkResult.data.wasAlreadyLinked) {
                 console.log('DO was already linked to fuel record');
               } else {
-                alert(`✓ Successfully linked DO-${savedOrder.doNumber} to fuel record for truck ${savedOrder.truckNo}.\n\nNotification resolved.`);
+                // Show detailed message about fuel updates
+                let message = `✓ Successfully linked DO-${savedOrder.doNumber} to fuel record for truck ${savedOrder.truckNo}.`;
+                
+                if (relinkResult.data.fuelUpdates) {
+                  const { originalTotalLts, exportRouteLiters, newTotalLts } = relinkResult.data.fuelUpdates;
+                  message += `\n\nFuel Updated:\n` +
+                    `  Before: ${originalTotalLts}L\n` +
+                    `  Added: +${exportRouteLiters}L (export route)\n` +
+                    `  After: ${newTotalLts}L`;
+                }
+                
+                message += '\n\nNotification resolved.';
+                alert(message);
               }
             } else {
               console.log('Re-link result:', relinkResult.message);
@@ -808,32 +820,30 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       console.log('  - Updated to:', updatedRecord.to);
       console.log('  - Return DO:', updatedRecord.returnDo);
       
-      // Display fuel information and warnings
+      // Display fuel information
       if (additionalFuelInfo) {
         const messages = [];
         
-        // Check for fuel shortfall warning
-        if (additionalFuelInfo.hasFuelShortfall) {
-          messages.push(`⚠️ FUEL SHORTFALL ALERT:\n` +
-            `Return route ${additionalFuelInfo.returnLoadingPoint}→${additionalFuelInfo.finalDestination} requires ${additionalFuelInfo.requiredTotalLiters}L\n` +
-            `Truck currently has ${additionalFuelInfo.originalTotalLiters}L allocated\n` +
-            `Shortage: ${additionalFuelInfo.fuelDifference}L\n\n` +
-            `⚠️ Please review and manually add extra fuel if needed!`);
+        // Show export route liters that were added
+        if (additionalFuelInfo.exportRouteLiters > 0) {
+          messages.push(`✓ Added export route fuel: +${additionalFuelInfo.exportRouteLiters}L\n` +
+            `  Route: ${additionalFuelInfo.returnLoadingPoint} → ${additionalFuelInfo.finalDestination}`);
         }
         
         // Show if destination extra was added
         if (additionalFuelInfo.destinationExtra > 0) {
-          messages.push(`✓ Auto-added destination extra: +${additionalFuelInfo.destinationExtra}L (${additionalFuelInfo.finalDestination})\n` +
-            `New Total: ${additionalFuelInfo.newTotalLiters}L (was ${additionalFuelInfo.originalTotalLiters}L)`);
+          messages.push(`✓ Added destination extra: +${additionalFuelInfo.destinationExtra}L (${additionalFuelInfo.finalDestination})`);
         }
         
+        // Show total update
+        messages.push(`\nTotal Liters Updated:\n` +
+          `  Before: ${additionalFuelInfo.originalTotalLiters}L\n` +
+          `  Added: +${additionalFuelInfo.totalAdditionalFuel}L\n` +
+          `  After: ${additionalFuelInfo.newTotalLiters}L`);
+        
         // Show success message
-        if (messages.length > 0) {
-          const fullMessage = `Fuel record updated with return DO-${deliveryOrder.doNumber}\n\n` + messages.join('\n\n');
-          alert(fullMessage);
-        } else {
-          alert(`Fuel record updated with return DO-${deliveryOrder.doNumber}`);
-        }
+        const fullMessage = `✓ Fuel record updated with return DO-${deliveryOrder.doNumber}\n\n` + messages.join('\n\n');
+        alert(fullMessage);
       } else {
         alert(`Fuel record updated with return DO-${deliveryOrder.doNumber}`);
       }
