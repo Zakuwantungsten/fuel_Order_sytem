@@ -84,6 +84,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const filterStatusDropdownRef = useRef<HTMLDivElement>(null);
   const monthDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Ref to track if we've processed a highlight to avoid re-processing
+  const highlightProcessedRef = useRef<string | null>(null);
+
   // Click-outside detection for filter dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -118,6 +121,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       // Force re-read of search params
       const url = new URL(window.location.href);
       const editId = url.searchParams.get('edit');
+      const highlightId = url.searchParams.get('highlight');
+      
       if (editId) {
         // Manually trigger the edit flow
         deliveryOrdersAPI.getById(editId).then(order => {
@@ -132,17 +137,64 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         }).catch(err => {
           console.error('Failed to fetch DO for edit:', err);
         });
+      } else if (highlightId && highlightId !== highlightProcessedRef.current) {
+        // Mark as processed to avoid re-processing
+        highlightProcessedRef.current = highlightId;
+        console.log('Processing highlight for DO:', highlightId);
       }
     };
     
     window.addEventListener('urlchange', handleUrlChange);
     window.addEventListener('popstate', handleUrlChange);
+    handleUrlChange(); // Check on mount
     
     return () => {
       window.removeEventListener('urlchange', handleUrlChange);
       window.removeEventListener('popstate', handleUrlChange);
     };
   }, [filterType, filterDoType]);
+
+  // Separate effect to handle highlight after orders are loaded
+  useEffect(() => {
+    const highlightId = highlightProcessedRef.current;
+    if (highlightId && orders.length > 0) {
+      console.log('Attempting to find and highlight DO:', highlightId, 'in', orders.length, 'orders');
+      const recordIndex = orders.findIndex(o => o.doNumber === highlightId);
+      
+      if (recordIndex >= 0) {
+        console.log('Found DO at index:', recordIndex);
+        const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
+        console.log('Target page:', targetPage, 'Current page:', currentPage);
+        
+        if (targetPage !== currentPage) {
+          setCurrentPage(targetPage);
+        }
+        
+        // Scroll to and highlight the record after a delay
+        setTimeout(() => {
+          const element = document.querySelector(`[data-do-number="${highlightId}"]`);
+          console.log('Looking for element with data-do-number:', highlightId, 'Found:', !!element);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('ring-4', 'ring-blue-500', 'ring-opacity-50');
+            setTimeout(() => {
+              element.classList.remove('ring-4', 'ring-blue-500', 'ring-opacity-50');
+              // Clear the processed highlight after animation
+              highlightProcessedRef.current = null;
+              // Clear URL param
+              const url = new URL(window.location.href);
+              url.searchParams.delete('highlight');
+              window.history.replaceState({}, '', url.toString());
+            }, 3000);
+          }
+        }, 500);
+      } else {
+        console.log('DO not found in current orders:', highlightId);
+        // Clear if not found
+        highlightProcessedRef.current = null;
+      }
+    }
+  }, [orders, itemsPerPage, currentPage]);
 
   // Handle edit query parameter (e.g., from notification click)
   useEffect(() => {
@@ -1653,6 +1705,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   {paginatedOrders.map((order) => (
                     <div
                       key={order.id || `order-${order.doNumber}`}
+                      data-do-number={order.doNumber}
                       className={`border rounded-xl p-4 transition-all ${
                         order.isCancelled
                           ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'

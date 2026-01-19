@@ -124,6 +124,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [showPendingYardFuel, setShowPendingYardFuel] = useState(false);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [editDoId, setEditDoId] = useState<string | null>(null);
+  const [highlightParam, setHighlightParam] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { logout, toggleTheme, isDark } = useAuth();
 
@@ -138,6 +139,28 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     const defaultTab = getInitialTab(user.role);
     setActiveTab(defaultTab);
   }, [user.role]);
+
+  // Handle navigation from Dashboard search results
+  const handleNavigate = (tab: string, highlight?: string) => {
+    setActiveTab(tab);
+    if (highlight) {
+      setHighlightParam(highlight);
+      // Update URL with highlight parameter
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('highlight', highlight);
+      window.history.replaceState({}, '', currentUrl.toString());
+      // Dispatch event to notify child components
+      window.dispatchEvent(new CustomEvent('urlchange'));
+    }
+  };
+
+  // Clear highlight when tab changes
+  useEffect(() => {
+    setHighlightParam(null);
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete('highlight');
+    window.history.replaceState({}, '', currentUrl.toString());
+  }, [activeTab]);
 
   // Handle edit DO ID by updating URL search params
   useEffect(() => {
@@ -255,7 +278,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const renderActiveComponent = () => {
     switch (activeTab) {
       case 'overview':
-        return <Dashboard />;
+        return <Dashboard onNavigate={handleNavigate} />;
       case 'do':
         return <DeliveryOrders />;
       case 'fuel_records':

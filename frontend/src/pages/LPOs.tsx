@@ -36,6 +36,7 @@ const LPOs = () => {
   // Month filter - default to current month (1-indexed)
   const [selectedMonths, setSelectedMonths] = useState<number[]>([new Date().getMonth() + 1]);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [searchParams] = useSearchParams();
   const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account'] as const;
   type ViewMode = typeof VIEW_MODES[number];
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -63,6 +64,10 @@ const LPOs = () => {
   // Refs for click-outside detection
   const workbookYearDropdownRef = useRef<HTMLDivElement>(null);
   const stationDropdownRef = useRef<HTMLDivElement>(null);
+  const monthDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Ref to track if we've processed a highlight
+  const highlightProcessedRef = useRef<string | null>(null);
 
   // Click-outside detection for filter dropdowns
   useEffect(() => {
@@ -84,6 +89,78 @@ const LPOs = () => {
     fetchWorkbooks();
     fetchAvailableYears();
   }, []);
+
+  // Handle highlight from URL parameter
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const url = new URL(window.location.href);
+      const highlightId = url.searchParams.get('highlight');
+      
+      if (highlightId && highlightId !== highlightProcessedRef.current) {
+        highlightProcessedRef.current = highlightId;
+        console.log('Processing highlight for LPO:', highlightId);
+      }
+    };
+    
+    window.addEventListener('urlchange', handleUrlChange);
+    handleUrlChange(); // Check on mount
+    
+    return () => window.removeEventListener('urlchange', handleUrlChange);
+  }, []);
+
+  // Separate effect to handle highlight after LPOs are loaded and filtered
+  useEffect(() => {
+    const highlightId = highlightProcessedRef.current;
+    if (highlightId && lpos.length > 0 && filteredLpos.length > 0) {
+      console.log('Attempting to find and highlight LPO:', highlightId);
+      
+      // Find the LPO in original data
+      const lpoInOriginal = lpos.find(l => l.lpoNo === highlightId);
+      if (lpoInOriginal) {
+        const lpoMonth = getMonthFromDate(lpoInOriginal.date);
+        console.log('Found LPO with month:', lpoMonth);
+        
+        // Set the month filter if needed
+        if (lpoMonth && !selectedMonths.includes(lpoMonth)) {
+          console.log('Switching to month:', lpoMonth);
+          setSelectedMonths([lpoMonth]);
+          return; // Let the filter update trigger the next step
+        }
+      }
+      
+      // Find in filtered list
+      const recordIndex = filteredLpos.findIndex(l => l.lpoNo === highlightId);
+      
+      if (recordIndex >= 0) {
+        console.log('Found LPO at filtered index:', recordIndex);
+        const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
+        console.log('Target page:', targetPage, 'Current page:', currentPage);
+        
+        if (targetPage !== currentPage) {
+          setCurrentPage(targetPage);
+        }
+        
+        // Scroll to and highlight the record
+        setTimeout(() => {
+          const element = document.querySelector(`[data-lpo-number="${highlightId}"]`);
+          console.log('Looking for element with data-lpo-number:', highlightId, 'Found:', !!element);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('ring-4', 'ring-purple-500', 'ring-opacity-50');
+            setTimeout(() => {
+              element.classList.remove('ring-4', 'ring-purple-500', 'ring-opacity-50');
+              highlightProcessedRef.current = null;
+              const url = new URL(window.location.href);
+              url.searchParams.delete('highlight');
+              window.history.replaceState({}, '', url.toString());
+            }, 3000);
+          }
+        }, 500);
+      } else {
+        console.log('LPO not found in filtered results');
+      }
+    }
+  }, [lpos, filteredLpos, selectedMonths, itemsPerPage, currentPage]);
 
   useEffect(() => {
     filterLpos();
@@ -1100,6 +1177,7 @@ const LPOs = () => {
                 return (
                   <div
                     key={rowKey}
+                    data-lpo-number={lpo.lpoNo}
                     onClick={() => handleRowClick(lpo)}
                     className="border border-gray-200 dark:border-gray-600 rounded-xl p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-all cursor-pointer"
                   >

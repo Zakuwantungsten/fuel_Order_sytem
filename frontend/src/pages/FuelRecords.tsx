@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
 import { fuelRecordsAPI, lposAPI } from '../services/api';
@@ -74,6 +75,8 @@ const FuelRecords = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   
+  const [searchParams] = useSearchParams();
+  
   // Pagination state (server-side)
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -95,12 +98,73 @@ const FuelRecords = () => {
   const routeTypeDropdownRef = useRef<HTMLDivElement>(null);
   const routeDropdownRef = useRef<HTMLDivElement>(null);
   const monthDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Ref to track if we've processed a highlight
+  const highlightProcessedRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetchLpos();
     fetchRoutes();
     fetchAvailableMonthsAndYears();
   }, []);
+  
+  // Handle highlight from URL parameter
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const url = new URL(window.location.href);
+      const highlightId = url.searchParams.get('highlight');
+      
+      if (highlightId && highlightId !== highlightProcessedRef.current) {
+        highlightProcessedRef.current = highlightId;
+        console.log('Processing highlight for Fuel Record (Truck):', highlightId);
+      }
+    };
+    
+    window.addEventListener('urlchange', handleUrlChange);
+    handleUrlChange(); // Check on mount
+    
+    return () => window.removeEventListener('urlchange', handleUrlChange);
+  }, []);
+
+  // Separate effect to handle highlight after records are loaded
+  useEffect(() => {
+    const highlightId = highlightProcessedRef.current;
+    if (highlightId && records.length > 0) {
+      console.log('Attempting to find and highlight Fuel Record:', highlightId, 'in', records.length, 'records');
+      // Find the record by truck number (first match)
+      const recordIndex = records.findIndex(r => r.truckNo === highlightId);
+      
+      if (recordIndex >= 0) {
+        console.log('Found record at index:', recordIndex);
+        const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
+        console.log('Target page:', targetPage, 'Current page:', currentPage);
+        
+        if (targetPage !== currentPage) {
+          setCurrentPage(targetPage);
+        }
+        
+        // Scroll to and highlight the record
+        setTimeout(() => {
+          const element = document.querySelector(`[data-truck-number="${highlightId}"]`);
+          console.log('Looking for element with data-truck-number:', highlightId, 'Found:', !!element);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('ring-4', 'ring-green-500', 'ring-opacity-50');
+            setTimeout(() => {
+              element.classList.remove('ring-4', 'ring-green-500', 'ring-opacity-50');
+              highlightProcessedRef.current = null;
+              const url = new URL(window.location.href);
+              url.searchParams.delete('highlight');
+              window.history.replaceState({}, '', url.toString());
+            }, 3000);
+          }
+        }, 500);
+      } else {
+        console.log('Record not found with truck number:', highlightId);
+        highlightProcessedRef.current = null;
+      }
+    }
+  }, [records, itemsPerPage, currentPage]);
   
   // Click outside detection
   useEffect(() => {
@@ -813,6 +877,7 @@ const FuelRecords = () => {
                 return (
                   <div
                     key={recordId || `record-${index}`}
+                    data-truck-number={record.truckNo}
                     onClick={() => handleRowClick(record)}
                     className={`border rounded-xl p-4 transition-all cursor-pointer ${
                       isCancelled

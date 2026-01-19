@@ -33,7 +33,11 @@ interface SearchResult {
   metadata: any;
 }
 
-const Dashboard = () => {
+interface DashboardProps {
+  onNavigate?: (tab: string, highlight?: string) => void;
+}
+
+const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -272,30 +276,59 @@ const Dashboard = () => {
 
   // Handle search result click
   const handleResultClick = (result: SearchResult) => {
-    if (result.type === 'do') {
-      navigate(`/do?highlight=${result.metadata.doNumber}`);
-    } else if (result.type === 'lpo') {
-      navigate(`/lpo?highlight=${result.metadata.lpoNo}`);
-    } else if (result.type === 'fuel') {
-      navigate(`/fuel-records?highlight=${result.metadata.truckNo}`);
+    if (onNavigate) {
+      // Use tab-based navigation for EnhancedDashboard
+      if (result.type === 'do') {
+        onNavigate('do', result.metadata.doNumber);
+      } else if (result.type === 'lpo') {
+        onNavigate('lpo', result.metadata.lpoNo);
+      } else if (result.type === 'fuel') {
+        onNavigate('fuel_records', result.metadata.truckNo);
+      }
+    } else {
+      // Fallback to route-based navigation
+      if (result.type === 'do') {
+        navigate(`/do?highlight=${result.metadata.doNumber}`);
+      } else if (result.type === 'lpo') {
+        navigate(`/lpo?highlight=${result.metadata.lpoNo}`);
+      } else if (result.type === 'fuel') {
+        navigate(`/fuel-records?highlight=${result.metadata.truckNo}`);
+      }
     }
   };
 
   // Quick actions
   const handleQuickAction = (action: string) => {
-    switch (action) {
-      case 'create-do':
-        navigate('/do?action=create');
-        break;
-      case 'bulk-create':
-        navigate('/do?action=bulk');
-        break;
-      case 'create-lpo':
-        navigate('/lpo?action=create');
-        break;
-      case 'create-fuel':
-        navigate('/fuel-records?action=create');
-        break;
+    if (onNavigate) {
+      // Use tab-based navigation
+      switch (action) {
+        case 'create-do':
+        case 'bulk-create':
+          onNavigate('do');
+          break;
+        case 'create-lpo':
+          onNavigate('lpo');
+          break;
+        case 'create-fuel':
+          onNavigate('fuel_records');
+          break;
+      }
+    } else {
+      // Fallback to route-based navigation
+      switch (action) {
+        case 'create-do':
+          navigate('/do?action=create');
+          break;
+        case 'bulk-create':
+          navigate('/do?action=bulk');
+          break;
+        case 'create-lpo':
+          navigate('/lpo?action=create');
+          break;
+        case 'create-fuel':
+          navigate('/fuel-records?action=create');
+          break;
+      }
     }
   };
 
