@@ -996,21 +996,81 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
   }, []);
 
+  /**
+   * Safely evaluate a mathematical formula with given context variables
+   * @param formula - The formula string (e.g., "balance - 900" or "((totalLiters + extraLiters) - 900)")
+   * @param context - Variables available in the formula (e.g., { totalLiters: 3500, extraLiters: 500, balance: 1560 })
+   * @returns The evaluated number or null if evaluation fails
+   */
+  const evaluateFormula = (formula: string, context: Record<string, number>): number | null => {
+    try {
+      // Create a safe function that evaluates the formula with context
+      const contextKeys = Object.keys(context);
+      const contextValues = Object.values(context);
+      
+      // Build a function that has access to the context variables
+      const evaluator = new Function(...contextKeys, `'use strict'; return (${formula});`);
+      
+      // Execute with context values
+      const result = evaluator(...contextValues);
+      
+      // Validate result is a number
+      if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+        return Math.round(result); // Round to nearest integer for liters
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Formula evaluation error:', error);
+      return null;
+    }
+  };
+
   // Get default fuel amount based on station, direction, and destination
   // Special rules:
   // - Lusaka destination: 60L at Zambia Going
   // - Lubumbashi destination: 260L at Zambia Going  
   // - Mombasa/MSA destination: 70L at GBP KANGE (Tanga Return)
+  // - If totalLiters/extraLiters/balance provided and formula exists, evaluate formula
   const getStationDefaults = (
     station: string, 
     direction: 'going' | 'returning',
-    destination?: string
+    destination?: string,
+    totalLiters?: number,
+    extraLiters?: number,
+    balance?: number
   ): { liters: number; rate: number } => {
     const stationUpper = station.toUpperCase();
     
     // First try to get from dynamic stations
     const dynamicStation = availableStations.find(s => s.stationName.toUpperCase() === stationUpper);
     if (dynamicStation) {
+      const formula = direction === 'going' ? dynamicStation.formulaGoing : dynamicStation.formulaReturning;
+      
+      // If formula exists and we have context, evaluate it
+      if (formula && formula.trim() && (totalLiters !== undefined || extraLiters !== undefined || balance !== undefined)) {
+        const context = {
+          totalLiters: totalLiters || 0,
+          extraLiters: extraLiters || 0,
+          balance: balance || 0
+        };
+        
+        // Only evaluate if we have valid context (not all zeros)
+        if (context.totalLiters > 0 || context.extraLiters > 0 || context.balance > 0) {
+          const evaluatedLiters = evaluateFormula(formula, context);
+          
+          if (evaluatedLiters !== null) {
+            console.log(`✓ Using formula-calculated liters for ${stationUpper} (${direction}): ${evaluatedLiters}L`);
+            return { liters: evaluatedLiters, rate: dynamicStation.defaultRate };
+          } else {
+            console.warn(`⚠️ Formula evaluation failed for ${stationUpper}, falling back to default liters`);
+          }
+        } else {
+          console.log(`ℹ️ Formula exists but context is empty (totalLiters=${totalLiters}, extraLiters=${extraLiters}, balance=${balance}), using default liters`);
+        }
+      }
+      
+      // Fall back to default liters if no formula or evaluation failed
       const liters = direction === 'going' ? dynamicStation.defaultLitersGoing : dynamicStation.defaultLitersReturning;
       return { liters, rate: dynamicStation.defaultRate };
     }
@@ -1342,7 +1402,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         : result.destination;
       
       const defaults = formData.station 
-        ? getStationDefaults(formData.station, direction, destinationForAllocation) 
+        ? getStationDefaults(
+            formData.station, 
+            direction, 
+            destinationForAllocation,
+            result.fuelRecord?.totalLts ?? undefined,
+            result.fuelRecord?.extra ?? undefined,
+            result.fuelRecord?.balance ?? undefined
+          ) 
         : { liters: 350, rate: 1.2 };
 
       // Calculate balance info for Mbeya returning (INFINITY station)
@@ -1452,7 +1519,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         : result.destination;
       
       const defaults = formData.station 
-        ? getStationDefaults(formData.station, direction, destinationForAllocation) 
+        ? getStationDefaults(
+            formData.station, 
+            direction, 
+            destinationForAllocation,
+            result.fuelRecord?.totalLts ?? undefined,
+            result.fuelRecord?.extra ?? undefined,
+            result.fuelRecord?.balance ?? undefined
+          ) 
         : { liters: 350, rate: 1.2 };
 
       // Calculate balance info for Mbeya returning
@@ -1534,7 +1608,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         : fuelRecord.to;
       
       const defaults = formData.station 
-        ? getStationDefaults(formData.station, newDirection, destinationForAllocation) 
+        ? getStationDefaults(
+            formData.station, 
+            newDirection, 
+            destinationForAllocation,
+            fuelRecord.totalLts ?? undefined,
+            fuelRecord.extra ?? undefined,
+            fuelRecord.balance ?? undefined
+          ) 
         : { liters: 350, rate: 1.2 };
 
       let litersToSet = defaults.liters;
