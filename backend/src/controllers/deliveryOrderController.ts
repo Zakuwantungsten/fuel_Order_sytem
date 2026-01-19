@@ -400,7 +400,7 @@ const cascadeToLPOEntries = async (
 export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, clientName, truckNo, importOrExport, destination, doType } = req.query;
+    const { dateFrom, dateTo, clientName, truckNo, importOrExport, destination, doType, search } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -416,29 +416,44 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
       if (dateTo) filter.date.$lte = dateTo;
     }
 
-    if (clientName) {
-      const sanitized = sanitizeRegexInput(clientName as string);
+    // Unified search parameter - searches across multiple fields
+    if (search) {
+      const sanitized = sanitizeRegexInput(search as string);
       if (sanitized) {
-        filter.clientName = { $regex: sanitized, $options: 'i' };
+        filter.$or = [
+          { doNumber: { $regex: sanitized, $options: 'i' } },
+          { truckNo: { $regex: sanitized, $options: 'i' } },
+          { clientName: { $regex: sanitized, $options: 'i' } },
+          { destination: { $regex: sanitized, $options: 'i' } },
+          { haulier: { $regex: sanitized, $options: 'i' } }
+        ];
       }
-    }
+    } else {
+      // Individual field filters (backward compatibility)
+      if (clientName) {
+        const sanitized = sanitizeRegexInput(clientName as string);
+        if (sanitized) {
+          filter.clientName = { $regex: sanitized, $options: 'i' };
+        }
+      }
 
-    if (truckNo) {
-      const sanitized = sanitizeRegexInput(truckNo as string);
-      if (sanitized) {
-        filter.truckNo = { $regex: sanitized, $options: 'i' };
+      if (truckNo) {
+        const sanitized = sanitizeRegexInput(truckNo as string);
+        if (sanitized) {
+          filter.truckNo = { $regex: sanitized, $options: 'i' };
+        }
+      }
+
+      if (destination) {
+        const sanitized = sanitizeRegexInput(destination as string);
+        if (sanitized) {
+          filter.destination = { $regex: sanitized, $options: 'i' };
+        }
       }
     }
 
     if (importOrExport && importOrExport !== 'ALL') {
       filter.importOrExport = importOrExport;
-    }
-
-    if (destination) {
-      const sanitized = sanitizeRegexInput(destination as string);
-      if (sanitized) {
-        filter.destination = { $regex: sanitized, $options: 'i' };
-      }
     }
 
     // If date filter is applied, include archived data

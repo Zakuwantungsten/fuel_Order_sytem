@@ -862,6 +862,25 @@ export const dashboardAPI = {
     });
     return response.data.data;
   },
+
+  getChartData: async (months: number = 4): Promise<any> => {
+    const response = await apiClient.get('/dashboard/chart-data', {
+      params: { months },
+    });
+    return response.data.data;
+  },
+
+  getMonthlyStats: async (months: number = 6): Promise<any> => {
+    const response = await apiClient.get('/dashboard/monthly-stats', {
+      params: { months },
+    });
+    return response.data.data;
+  },
+
+  getJourneyQueue: async (): Promise<any> => {
+    const response = await apiClient.get('/dashboard/journey-queue');
+    return response.data.data;
+  },
 };
 
 // Authentication API

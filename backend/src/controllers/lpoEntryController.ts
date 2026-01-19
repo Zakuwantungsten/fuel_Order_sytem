@@ -11,27 +11,49 @@ import { AuditService } from '../utils/auditService';
 export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, lpoNo, truckNo, station } = req.query;
+    const { dateFrom, dateTo, lpoNo, truckNo, station, search } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
 
+    // Use createdAt for date filtering since 'date' field is in "DD-MMM" format without year
     if (dateFrom || dateTo) {
-      filter.date = {};
-      if (dateFrom) filter.date.$gte = dateFrom;
-      if (dateTo) filter.date.$lte = dateTo;
+      filter.createdAt = {};
+      if (dateFrom) {
+        // Convert string date to start of day
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        filter.createdAt.$gte = fromDate;
+      }
+      if (dateTo) {
+        // Convert string date to end of day
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = toDate;
+      }
     }
 
-    if (lpoNo) {
-      filter.lpoNo = { $regex: lpoNo, $options: 'i' };
-    }
+    // Unified search parameter - searches across multiple fields
+    if (search) {
+      filter.$or = [
+        { lpoNo: { $regex: search, $options: 'i' } },
+        { truckNo: { $regex: search, $options: 'i' } },
+        { dieselAt: { $regex: search, $options: 'i' } },
+        { doSdo: { $regex: search, $options: 'i' } }
+      ];
+    } else {
+      // Individual field filters (backward compatibility)
+      if (lpoNo) {
+        filter.lpoNo = { $regex: lpoNo, $options: 'i' };
+      }
 
-    if (truckNo) {
-      filter.truckNo = { $regex: truckNo, $options: 'i' };
-    }
+      if (truckNo) {
+        filter.truckNo = { $regex: truckNo, $options: 'i' };
+      }
 
-    if (station) {
-      filter.dieselAt = { $regex: station, $options: 'i' };
+      if (station) {
+        filter.dieselAt = { $regex: station, $options: 'i' };
+      }
     }
 
     // Get data with pagination
