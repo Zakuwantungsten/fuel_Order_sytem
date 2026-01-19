@@ -82,8 +82,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
   const fetchChartData = async () => {
     try {
-      // Fetch chart data from backend (last 4 months)
-      const data = await dashboardAPI.getChartData(4);
+      // Fetch chart data from backend (last 120 months = 10 years to capture all data)
+      const data = await dashboardAPI.getChartData(120);
       console.log('Chart data received:', data);
       if (data) {
         setChartData({

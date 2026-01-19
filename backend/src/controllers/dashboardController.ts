@@ -562,16 +562,19 @@ export const healthCheck = async (req: AuthRequest, res: Response): Promise<void
  */
 export const getChartData = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { months = 4 } = req.query;
+    const { months = 120 } = req.query;
     
     // Calculate date range
     const endDate = new Date();
     const startDate = new Date();
     startDate.setMonth(endDate.getMonth() - parseInt(months as string, 10));
     
+    // IMPORTANT: Dates are stored as strings, not Date objects!
+    // MongoDB date comparison ($gte/$lte) doesn't work with strings
+    // So we fetch ALL records without date filtering
     const dateFilter: any = { 
-      isDeleted: false,
-      date: { $gte: startDate, $lte: endDate }
+      isDeleted: false
+      // Date filter removed because dates are stored as strings
     };
 
     // Fetch data for charts
