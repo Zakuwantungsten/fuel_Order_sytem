@@ -344,7 +344,7 @@ export const generateBulkDOsPDF = (
       try {
         const pageWidth = 595; // A4 width in points
         const pageHeight = 842; // A4 height in points
-        const watermarkSize = 200; // Logo size for watermark
+        const watermarkSize = 280; // Logo size for watermark (scaled up)
         const watermarkX = (pageWidth - watermarkSize) / 2;
         const watermarkY = (pageHeight - watermarkSize) / 2;
         
