@@ -35,6 +35,13 @@ router.post(
   asyncHandler(deliveryOrderController.downloadAmendedDOsPDF)
 );
 
+// Bulk DOs PDF download route (must be before /:id routes)
+router.post(
+  '/bulk/download-pdf',
+  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker', 'import_officer', 'export_officer'),
+  asyncHandler(deliveryOrderController.downloadBulkDOsPDF)
+);
+
 // Get routes
 router.get('/', commonValidation.pagination, validate, asyncHandler(deliveryOrderController.getAllDeliveryOrders));
 router.get('/next-do-number', asyncHandler(deliveryOrderController.getNextDONumber));

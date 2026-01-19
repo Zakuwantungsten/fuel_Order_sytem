@@ -2123,6 +2123,55 @@ export const downloadAmendedDOsPDF = async (req: AuthRequest, res: Response): Pr
 };
 
 /**
+ * Download bulk DOs as PDF (clean design with pdfkit)
+ */
+export const downloadBulkDOsPDF = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { doNumbers } = req.body;
+
+    if (!doNumbers || !Array.isArray(doNumbers) || doNumbers.length === 0) {
+      throw new ApiError(400, 'Please provide an array of DO numbers to download');
+    }
+
+    // Fetch the DOs by their DO numbers
+    const deliveryOrders = await DeliveryOrder.find({
+      doNumber: { $in: doNumbers },
+      isDeleted: false,
+    })
+      .sort({ doNumber: 1 }) // Sort by DO number for consistent order
+      .lean();
+
+    if (deliveryOrders.length === 0) {
+      throw new ApiError(404, 'No delivery orders found for the provided DO numbers');
+    }
+
+    // Import PDF generator
+    const { generateBulkDOsPDF, generateBulkDOsFilename } = await import('../utils/pdfGenerator');
+
+    // Generate PDF
+    const doc = generateBulkDOsPDF(deliveryOrders as any);
+
+    // Generate filename
+    const firstDO = deliveryOrders[0].doNumber;
+    const lastDO = deliveryOrders[deliveryOrders.length - 1].doNumber;
+    const doType = deliveryOrders[0].doType || 'DO';
+    const filename = generateBulkDOsFilename(firstDO, lastDO, doType);
+
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Pipe the PDF to response
+    doc.pipe(res);
+    doc.end();
+
+    logger.info(`Bulk DOs PDF downloaded: ${doNumbers.join(', ')} by ${req.user?.username}`);
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Get summary of recent amendments
  */
 export const getAmendmentsSummary = async (req: AuthRequest, res: Response): Promise<void> => {

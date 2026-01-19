@@ -279,6 +279,20 @@ export const deliveryOrdersAPI = {
   }): Promise<void> => {
     await apiClient.post('/delivery-orders/notify-bulk-failures', data);
   },
+
+  // Download bulk DOs as PDF (backend-generated with pdfkit)
+  downloadBulkPDF: async (doNumbers: string[]): Promise<Blob> => {
+    const response = await apiClient.post('/delivery-orders/bulk/download-pdf', 
+      { doNumbers },
+      { 
+        responseType: 'blob',
+        headers: {
+          'Accept': 'application/pdf'
+        }
+      }
+    );
+    return response.data;
+  },
 };
 
 // DO Workbook API (Excel-like workbook management - one workbook per year with monthly sheets)

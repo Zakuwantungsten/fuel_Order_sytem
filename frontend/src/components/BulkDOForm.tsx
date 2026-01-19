@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, FileDown, Plus, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-import DeliveryNotePrint from './DeliveryNotePrint';
 import { deliveryOrdersAPI } from '../services/api';
 import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
 
@@ -323,11 +320,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       setCreatedOrders(result.createdOrders);
       setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Generating PDF...' });
       
-      // Wait for DOM to render the hidden DO elements
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Automatically download PDF - use only the successfully created orders
-      console.log('Starting PDF download...');
+      // Automatically download PDF from backend - use only the successfully created orders
+      console.log('Starting PDF download from backend...');
       try {
         await downloadAllAsPDF(result.createdOrders);
         console.log('✓ PDF downloaded successfully!');
@@ -371,102 +365,39 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     }
 
     try {
-      console.log(`Generating PDF for ${orders.length} orders...`);
+      console.log(`Downloading PDF for ${orders.length} orders from backend...`);
       
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      let isFirstPage = true;
-      let successCount = 0;
-
-      // Get the container with hidden elements and move it into view temporarily
-      const hiddenContainer = document.getElementById('bulk-do-hidden-container');
-      const containerOriginalStyle = hiddenContainer?.style.cssText || '';
+      // Extract DO numbers from the orders
+      const doNumbers = orders.map(order => order.doNumber).filter(Boolean) as string[];
       
-      if (hiddenContainer) {
-        // Move container into view but make it invisible to user
-        hiddenContainer.style.position = 'absolute';
-        hiddenContainer.style.left = '0';
-        hiddenContainer.style.top = '0';
-        hiddenContainer.style.visibility = 'visible';
-        hiddenContainer.style.opacity = '0';
-        hiddenContainer.style.pointerEvents = 'none';
-        hiddenContainer.style.zIndex = '-9999';
+      if (doNumbers.length === 0) {
+        throw new Error('No valid DO numbers found');
       }
       
-      // Wait for container repositioning
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Call backend API to generate PDF
+      const pdfBlob = await deliveryOrdersAPI.downloadBulkPDF(doNumbers);
       
-      try {
-        for (let i = 0; i < orders.length; i++) {
-          const element = document.getElementById(`bulk-do-${i}`);
-          
-          if (!element) {
-            console.error(`Element bulk-do-${i} not found - skipping`);
-            continue;
-          }
-          
-          // Wait for images and content to load
-          await new Promise(resolve => setTimeout(resolve, 150));
-          
-          const canvas = await html2canvas(element, {
-            scale: 3,
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            allowTaint: true,
-            imageTimeout: 0,
-            windowWidth: 816,
-            onclone: (_clonedDoc, clonedElement) => {
-              // Ensure cloned element is properly visible in the clone
-              clonedElement.style.visibility = 'visible';
-              clonedElement.style.opacity = '1';
-            }
-          });
-          
-          const imgData = canvas.toDataURL('image/png', 1.0);
-          
-          // A4 dimensions in mm
-          const pdfWidth = 210;
-          
-          // Calculate dimensions to fit the content (3/4 width as per image)
-          const targetWidth = pdfWidth * 0.75; // 157.5mm width
-          const imgHeight = (canvas.height * targetWidth) / canvas.width;
-          
-          // Center horizontally
-          const xOffset = (pdfWidth - targetWidth) / 2;
-          const yOffset = 10; // Top margin
-          
-          if (!isFirstPage) {
-            pdf.addPage();
-          }
-          isFirstPage = false;
-          
-          pdf.addImage(imgData, 'PNG', xOffset, yOffset, targetWidth, imgHeight);
-          successCount++;
-          
-          console.log(`Added DO ${i + 1}/${orders.length} to PDF`);
-        }
-      } finally {
-        // Restore original container styles
-        if (hiddenContainer) {
-          hiddenContainer.style.cssText = containerOriginalStyle;
-        }
-      }
-
-      // Generate filename using the first and last DO numbers from created orders
+      // Create download link and trigger download
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename using the first and last DO numbers
       const firstDO = orders[0]?.doNumber || commonData.startingNumber;
       const lastDO = orders[orders.length - 1]?.doNumber || commonData.startingNumber;
-      const fileName = `${commonData.doType}-${firstDO}-to-${lastDO}.pdf`;
-      pdf.save(fileName);
+      const fileName = `${commonData.doType}_${firstDO}_to_${lastDO}.pdf`;
       
-      console.log(`✓ Successfully generated PDF with ${successCount} delivery orders`);
-      console.log(`PDF filename: ${fileName}`);
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      console.log(`✓ Successfully downloaded PDF: ${fileName}`);
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('Error downloading PDF:', error);
       throw error;
     }
   };
@@ -910,30 +841,6 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
               </div>
             )}
 
-            {/* Hidden elements for PDF generation */}
-            {createdOrders.length > 0 && (
-              <div 
-                id="bulk-do-hidden-container"
-                style={{ 
-                  position: 'fixed', 
-                  left: '-9999px', 
-                  top: 0, 
-                  width: '816px',
-                  visibility: 'hidden'
-                }}
-              >
-                {createdOrders.map((order, idx) => (
-                  <div key={idx} id={`bulk-do-${idx}`} style={{ 
-                    width: '816px', 
-                    backgroundColor: 'white',
-                    padding: '20px',
-                    marginBottom: '20px'
-                  }}>
-                    <DeliveryNotePrint order={order as DeliveryOrder} showOnScreen={true} />
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Footer */}
