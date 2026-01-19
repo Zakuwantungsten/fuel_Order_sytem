@@ -321,17 +321,19 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   // Quick actions
   const handleQuickAction = (action: string) => {
     if (onNavigate) {
-      // Use tab-based navigation
+      // Use tab-based navigation with action parameter
       switch (action) {
         case 'create-do':
+          onNavigate('do', 'action=create-do');
+          break;
         case 'bulk-create':
-          onNavigate('do');
+          onNavigate('do', 'action=bulk-create');
           break;
         case 'create-lpo':
-          onNavigate('lpo');
+          onNavigate('lpo', 'action=create-lpo');
           break;
         case 'create-fuel':
-          onNavigate('fuel_records');
+          onNavigate('fuel_records', 'action=create-fuel');
           break;
       }
     } else {

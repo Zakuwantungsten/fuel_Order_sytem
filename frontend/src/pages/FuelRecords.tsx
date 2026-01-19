@@ -113,11 +113,19 @@ const FuelRecords = () => {
   useEffect(() => {
     const handleUrlChange = () => {
       const url = new URL(window.location.href);
+      const actionParam = url.searchParams.get('action');
       const highlightId = url.searchParams.get('highlight');
       const yearParam = url.searchParams.get('year');
       const monthParam = url.searchParams.get('month');
       
-      if (highlightId && highlightId !== highlightProcessedRef.current) {
+      if (actionParam === 'create-fuel') {
+        console.log('Quick Action: Opening Fuel Record creation form');
+        setSelectedRecord(undefined);
+        setIsFormOpen(true);
+        // Clear the action param
+        url.searchParams.delete('action');
+        window.history.replaceState({}, '', url.toString());
+      } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
         console.log('Processing highlight for Fuel Record (Truck):', highlightId, 'Year:', yearParam, 'Month:', monthParam);
         

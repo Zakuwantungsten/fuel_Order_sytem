@@ -96,11 +96,18 @@ const LPOs = () => {
   useEffect(() => {
     const handleUrlChange = () => {
       const url = new URL(window.location.href);
+      const actionParam = url.searchParams.get('action');
       const highlightId = url.searchParams.get('highlight');
       const yearParam = url.searchParams.get('year');
       const monthParam = url.searchParams.get('month');
       
-      if (highlightId && highlightId !== highlightProcessedRef.current) {
+      if (actionParam === 'create-lpo') {
+        console.log('Quick Action: Opening LPO creation form');
+        setIsDetailFormOpen(true);
+        // Clear the action param
+        url.searchParams.delete('action');
+        window.history.replaceState({}, '', url.toString());
+      } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
         console.log('Processing highlight for LPO:', highlightId, 'Year:', yearParam, 'Month:', monthParam);
         

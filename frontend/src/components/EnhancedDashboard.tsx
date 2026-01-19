@@ -148,14 +148,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       // Update URL with highlight parameter
       const currentUrl = new URL(window.location.href);
       
-      // Parse compound parameters (e.g., "DO123&year=2025&month=12")
-      if (highlight.includes('&')) {
+      // Parse compound parameters (e.g., "DO123&year=2025&month=12" or "action=create-do")
+      if (highlight.includes('&') || highlight.includes('=')) {
         const parts = highlight.split('&');
-        const mainParam = parts[0]; // DO number, LPO number, or truck number
-        currentUrl.searchParams.set('highlight', mainParam);
         
-        // Set additional parameters
-        parts.slice(1).forEach(part => {
+        parts.forEach(part => {
           const [key, value] = part.split('=');
           if (key && value) {
             currentUrl.searchParams.set(key, value);

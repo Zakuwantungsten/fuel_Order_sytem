@@ -122,6 +122,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       // Force re-read of search params
       const url = new URL(window.location.href);
       const editId = url.searchParams.get('edit');
+      const actionParam = url.searchParams.get('action');
       const highlightId = url.searchParams.get('highlight');
       const yearParam = url.searchParams.get('year');
       const monthParam = url.searchParams.get('month');
@@ -140,6 +141,19 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         }).catch(err => {
           console.error('Failed to fetch DO for edit:', err);
         });
+      } else if (actionParam === 'create-do') {
+        console.log('Quick Action: Opening Create DO form');
+        setEditingOrder(null);
+        setIsFormOpen(true);
+        // Clear the action param
+        url.searchParams.delete('action');
+        window.history.replaceState({}, '', url.toString());
+      } else if (actionParam === 'bulk-create') {
+        console.log('Quick Action: Opening Bulk Create DO modal');
+        setIsBulkFormOpen(true);
+        // Clear the action param
+        url.searchParams.delete('action');
+        window.history.replaceState({}, '', url.toString());
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         // Mark as processed to avoid re-processing
         highlightProcessedRef.current = highlightId;
