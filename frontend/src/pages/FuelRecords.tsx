@@ -217,48 +217,26 @@ const FuelRecords = () => {
     console.log('%c=== HIGHLIGHT ATTEMPT ===' , 'background: #ef4444; color: white; font-size: 16px; padding: 8px;');
     console.log('Truck Number:', truckNo);
     
-    // Count all elements
-    const allElements = document.querySelectorAll('[data-truck-number]');
-    console.log('Total elements with data-truck-number:', allElements.length);
+    // Find all elements with this truck number
+    const allElements = document.querySelectorAll(`[data-truck-number="${truckNo}"]`);
+    console.log('Total elements found:', allElements.length);
     
-    // Check which one is visible (desktop or mobile)
+    // Find visible element (mobile or desktop depending on screen size)
     const visibleElements = Array.from(allElements).filter(el => {
-      const htmlEl = el as HTMLElement;
-      return htmlEl.offsetParent !== null; // offsetParent is null for hidden elements
+      return (el as HTMLElement).offsetParent !== null; // offsetParent is null for hidden elements
     });
     console.log('Visible elements:', visibleElements.length);
-    console.log('All elements:', Array.from(allElements).map(el => ({
-      truck: el.getAttribute('data-truck-number'),
-      tag: el.tagName,
-      visible: (el as HTMLElement).offsetParent !== null,
-      display: window.getComputedStyle(el as HTMLElement).display
-    })));
     
-    // Try to find visible element first, then fall back to any element
-    let element = visibleElements.find(el => el.getAttribute('data-truck-number') === truckNo) as HTMLElement;
-    if (!element) {
-      element = document.querySelector(`[data-truck-number="${truckNo}"]`) as HTMLElement;
+    // Prefer visible element, fall back to first element
+    let element = visibleElements[0] as HTMLElement;
+    if (!element && allElements.length > 0) {
+      element = allElements[0] as HTMLElement;
     }
     
     console.log('Element found:', !!element);
     console.log('Element is visible:', element?.offsetParent !== null);
     
     if (element) {
-      console.log('%c✅ ELEMENT FOUND!', 'background: #22c55e; color: white; font-size: 14px; padding: 4px;');
-      console.log('Element details:', {
-        tagName: element.tagName,
-        className: element.className,
-        id: element.id,
-        visible: element.offsetParent !== null,
-        display: window.getComputedStyle(element).display,
-        position: window.getComputedStyle(element).position,
-        zIndex: window.getComputedStyle(element).zIndex
-      });
-      
-      // Show alert to confirm function is running
-      console.log('🎯 Scrolling to element and applying highlight...');
-      
-      // Scroll to element
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // Store original styles
@@ -267,16 +245,8 @@ const FuelRecords = () => {
         border: element.style.border,
         backgroundColor: element.style.backgroundColor,
         transform: element.style.transform,
-        transition: element.style.transition,
-        outline: element.style.outline
+        transition: element.style.transition
       };
-      
-      console.log('Original styles:', originalStyles);
-      console.log('Computed styles before:', {
-        boxShadow: window.getComputedStyle(element).boxShadow,
-        border: window.getComputedStyle(element).border,
-        backgroundColor: window.getComputedStyle(element).backgroundColor
-      });
       
       // Apply subtle highlight with faint green
       element.style.setProperty('transition', 'all 0.3s ease-in-out', 'important');
@@ -287,38 +257,21 @@ const FuelRecords = () => {
       element.style.setProperty('z-index', '9999', 'important');
       element.style.setProperty('position', 'relative', 'important');
       
-      console.log('%c✅ Applied highlight styles successfully', 'background: #22c55e; color: white; padding: 4px;');
-      console.log('Inline styles after:', {
-        boxShadow: element.style.boxShadow,
-        border: element.style.border,
-        backgroundColor: element.style.backgroundColor,
-        transform: element.style.transform
-      });
-      console.log('Computed styles after:', {
-        boxShadow: window.getComputedStyle(element).boxShadow,
-        border: window.getComputedStyle(element).border,
-        backgroundColor: window.getComputedStyle(element).backgroundColor,
-        transform: window.getComputedStyle(element).transform
-      });
+      console.log('✅ Applied Fuel Record highlight');
       
       setTimeout(() => {
-        console.log('%c❌ Removing highlight', 'background: #ef4444; color: white; padding: 4px;');
         element.style.boxShadow = originalStyles.boxShadow;
         element.style.border = originalStyles.border;
         element.style.backgroundColor = originalStyles.backgroundColor;
         element.style.transform = originalStyles.transform;
         element.style.transition = originalStyles.transition;
-        element.style.outline = originalStyles.outline;
         element.style.position = '';
         element.style.zIndex = '';
+        console.log('❌ Removed Fuel Record highlight');
         clearHighlight();
       }, 3000);
     } else {
-      console.error('%c❌ ELEMENT NOT FOUND!', 'background: #ef4444; color: white; font-size: 14px; padding: 4px;');
-      const allTruckNos = Array.from(document.querySelectorAll('[data-truck-number]')).map(el => el.getAttribute('data-truck-number'));
-      console.log('Available truck numbers in DOM:', allTruckNos);
-      console.log('Looking for:', truckNo);
-      console.log('Exact match exists:', allTruckNos.includes(truckNo));
+      console.error('❌ Fuel Record Element not found:', truckNo);
       clearHighlight();
     }
   };

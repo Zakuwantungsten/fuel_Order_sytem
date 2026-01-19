@@ -165,8 +165,25 @@ const LPOs = () => {
   const scrollToAndHighlightLPO = (lpoNo: string) => {
     console.log('=== LPO HIGHLIGHT ATTEMPT ===');
     console.log('LPO Number:', lpoNo);
-    const element = document.querySelector(`[data-lpo-number="${lpoNo}"]`) as HTMLElement;
+    
+    // Find all elements with this LPO number
+    const allElements = document.querySelectorAll(`[data-lpo-number="${lpoNo}"]`);
+    console.log('Total elements found:', allElements.length);
+    
+    // Find visible element (mobile or desktop depending on screen size)
+    const visibleElements = Array.from(allElements).filter(el => {
+      return (el as HTMLElement).offsetParent !== null; // offsetParent is null for hidden elements
+    });
+    console.log('Visible elements:', visibleElements.length);
+    
+    // Prefer visible element, fall back to first element
+    let element = visibleElements[0] as HTMLElement;
+    if (!element && allElements.length > 0) {
+      element = allElements[0] as HTMLElement;
+    }
+    
     console.log('Element found:', !!element);
+    console.log('Element is visible:', element?.offsetParent !== null);
     
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
