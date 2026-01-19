@@ -331,8 +331,38 @@ export const generateBulkDOsPDF = (
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
+  const formatDateTime = (date: Date): string => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+  };
+
+  const generationTimestamp = formatDateTime(new Date());
+  const totalPages = deliveryOrders.length;
+
+  // Add footer to each page
+  const addFooter = (pageNumber: number) => {
+    const footerY = 792; // Bottom of A4 page (842 - 50 margin)
+    doc.fontSize(8).fillColor(colors.muted);
+    doc.text(
+      `Generated: ${generationTimestamp}`,
+      40,
+      footerY,
+      { align: 'left', width: 200 }
+    );
+    doc.text(
+      `Page ${pageNumber} of ${totalPages}`,
+      40,
+      footerY,
+      { align: 'right', width: 515 }
+    );
+  };
+
   // Generate individual DO page (clean design without heavy borders)
-  const generateDOPage = (order: IDeliveryOrder, isFirstPage: boolean) => {
+  const generateDOPage = (order: IDeliveryOrder, isFirstPage: boolean, pageNumber: number) => {
     if (!isFirstPage) {
       doc.addPage();
     }
@@ -566,11 +596,14 @@ export const generateBulkDOsPDF = (
     doc.text('National ID/Passport No.', 40, currentY);
     currentY += 15;
     drawLine(currentY, 40, 555);
+
+    // Add footer to this page
+    addFooter(pageNumber);
   };
 
   // Generate all DO pages
   deliveryOrders.forEach((order, index) => {
-    generateDOPage(order, index === 0);
+    generateDOPage(order, index === 0, index + 1);
   });
 
   return doc;
