@@ -82,8 +82,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
   const fetchChartData = async () => {
     try {
-      // Fetch chart data from backend (last 120 months = 10 years to capture all data)
-      const data = await dashboardAPI.getChartData(120);
+      // Fetch chart data from backend with proper date filtering
+      const data = await dashboardAPI.getChartData();
       console.log('Chart data received:', data);
       if (data) {
         setChartData({
@@ -204,15 +204,22 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         });
 
       // Process LPO results - NO FILTERING, backend already filtered
+      // Use createdAt or updatedAt timestamp (not the 'date' string field which lacks year)
       const lposResults: SearchResult[] = lposData
-        .map((lpo: any, index: number) => ({
-          id: `lpo-${lpo._id || lpo.id || index}`,
-          type: 'lpo' as const,
-          month: new Date(lpo.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          primaryText: `${lpo.lpoNo} - ${lpo.dieselAt}`,
-          secondaryText: `${lpo.truckNo} | ${lpo.ltrs}L | ${lpo.doSdo}`,
-          metadata: lpo
-        }));
+        .map((lpo: any, index: number) => {
+          // Get the actual record timestamp (createdAt or updatedAt)
+          const recordTimestamp = lpo.createdAt || lpo.updatedAt;
+          const lpoDate = recordTimestamp ? new Date(recordTimestamp) : null;
+          
+          return {
+            id: `lpo-${lpo._id || lpo.id || index}`,
+            type: 'lpo' as const,
+            month: lpoDate ? lpoDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown Date',
+            primaryText: `${lpo.lpoNo} - ${lpo.dieselAt}`,
+            secondaryText: `${lpo.truckNo} | ${lpo.ltrs}L | ${lpo.doSdo}`,
+            metadata: { ...lpo, _parsedDate: lpoDate }
+          };
+        });
 
       // Process Fuel Records results
       const fuelsResults: SearchResult[] = fuelsData
@@ -285,11 +292,15 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         const month = doDate.getMonth() + 1; // 1-indexed
         onNavigate('do', `${result.metadata.doNumber}&year=${year}&month=${month}`);
       } else if (result.type === 'lpo') {
-        // For LPOs, pass LPO number, year, and month
-        const lpoDate = new Date(result.metadata.date);
-        const year = lpoDate.getFullYear();
-        const month = lpoDate.getMonth() + 1; // 1-indexed
-        onNavigate('lpo', `${result.metadata.lpoNo}&year=${year}&month=${month}`);
+        // For LPOs, use the parsed timestamp from metadata
+        const lpoDate = result.metadata._parsedDate;
+        if (lpoDate) {
+          const year = lpoDate.getFullYear();
+          const month = lpoDate.getMonth() + 1; // 1-indexed
+          onNavigate('lpo', `${result.metadata.lpoNo}&year=${year}&month=${month}`);
+        } else {
+          onNavigate('lpo', result.metadata.lpoNo);
+        }
       } else if (result.type === 'fuel') {
         // For fuel records, pass truck number, year, and month
         const fuelDate = new Date(result.metadata.date);
@@ -305,10 +316,15 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         const month = doDate.getMonth() + 1;
         navigate(`/do?highlight=${result.metadata.doNumber}&year=${year}&month=${month}`);
       } else if (result.type === 'lpo') {
-        const lpoDate = new Date(result.metadata.date);
-        const year = lpoDate.getFullYear();
-        const month = lpoDate.getMonth() + 1;
-        navigate(`/lpo?highlight=${result.metadata.lpoNo}&year=${year}&month=${month}`);
+        // Use the parsed timestamp from metadata
+        const lpoDate = result.metadata._parsedDate;
+        if (lpoDate) {
+          const year = lpoDate.getFullYear();
+          const month = lpoDate.getMonth() + 1;
+          navigate(`/lpo?highlight=${result.metadata.lpoNo}&year=${year}&month=${month}`);
+        } else {
+          navigate(`/lpo?highlight=${result.metadata.lpoNo}`);
+        }
       } else if (result.type === 'fuel') {
         const fuelDate = new Date(result.metadata.date);
         const year = fuelDate.getFullYear();

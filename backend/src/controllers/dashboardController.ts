@@ -562,41 +562,49 @@ export const healthCheck = async (req: AuthRequest, res: Response): Promise<void
  */
 export const getChartData = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { months = 120 } = req.query;
+    // Calculate specific date ranges for each chart type
+    const now = new Date();
     
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(endDate.getMonth() - parseInt(months as string, 10));
+    // For LPO charts: Last 1 month
+    const lpoStartDate = new Date();
+    lpoStartDate.setMonth(now.getMonth() - 1);
     
-    // IMPORTANT: Dates are stored as strings, not Date objects!
-    // MongoDB date comparison ($gte/$lte) doesn't work with strings
-    // So we fetch ALL records without date filtering
-    const dateFilter: any = { 
-      isDeleted: false
-      // Date filter removed because dates are stored as strings
-    };
+    // For DO charts: Current year (Jan 1 - Dec 31, 2026)
+    const doStartDate = new Date(now.getFullYear(), 0, 1); // Jan 1
+    const doEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59); // Dec 31
+    
+    // For Fuel Consumption: Last 12 months (rolling year)
+    const fuelStartDate = new Date();
+    fuelStartDate.setMonth(now.getMonth() - 12);
 
-    // Fetch data for charts
+    // Fetch data for charts using createdAt timestamps for proper date filtering
     const [fuelRecords, deliveryOrders, lpoEntries] = await Promise.all([
       FuelRecord.find({ 
-        ...dateFilter,
-        isCancelled: { $ne: true }
+        isDeleted: false,
+        isCancelled: { $ne: true },
+        createdAt: { $gte: fuelStartDate, $lte: now }
       })
-        .select('date totalLts journeyStatus')
+        .select('date createdAt totalLts journeyStatus')
         .lean(),
-      DeliveryOrder.find(dateFilter)
-        .select('date doNumber')
+      DeliveryOrder.find({
+        isDeleted: false,
+        createdAt: { $gte: doStartDate, $lte: doEndDate }
+      })
+        .select('date createdAt doNumber')
         .lean(),
-      LPOEntry.find(dateFilter)
-        .select('date ltrs dieselAt')
+      LPOEntry.find({
+        isDeleted: false,
+        createdAt: { $gte: lpoStartDate, $lte: now }
+      })
+        .select('date createdAt ltrs dieselAt')
         .lean(),
     ]);
 
-    // Monthly fuel consumption
+    // Monthly fuel consumption (using createdAt timestamp)
     const monthlyFuelData: any = {};
     fuelRecords.forEach((record) => {
-      const month = new Date(record.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      const recordDate = record.createdAt ? new Date(record.createdAt) : new Date(record.date);
+      const month = recordDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       if (!monthlyFuelData[month]) {
         monthlyFuelData[month] = 0;
       }
@@ -606,10 +614,11 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const monthlyFuel = Object.entries(monthlyFuelData)
       .map(([month, value]) => ({ month, value: Math.round(value as number) }));
 
-    // DO creation trends
+    // DO creation trends (using createdAt timestamp)
     const doTrendsData: any = {};
     deliveryOrders.forEach((DO) => {
-      const month = new Date(DO.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      const doDate = DO.createdAt ? new Date(DO.createdAt) : new Date(DO.date);
+      const month = doDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       doTrendsData[month] = (doTrendsData[month] || 0) + 1;
     });
     
