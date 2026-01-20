@@ -162,7 +162,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         // Set year if provided
         if (yearParam) {
           const year = parseInt(yearParam);
-          if (!isNaN(year) && year !== selectedYear) {
+          if (!isNaN(year)) {
             console.log('Setting year to:', year);
             setSelectedYear(year);
           }
@@ -177,8 +177,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           }
         }
         
-        // Trigger highlight
-        setPendingHighlight(highlightId);
+        // Trigger highlight after a brief delay to let filters apply
+        setTimeout(() => setPendingHighlight(highlightId), 100);
       }
     };
     
@@ -195,7 +195,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   // Separate effect to handle highlight after orders are loaded
   useEffect(() => {
     if (pendingHighlight && orders.length > 0) {
-      console.log('Attempting to find and highlight DO:', pendingHighlight, 'in', orders.length, 'orders');
+      console.log('%c=== DO HIGHLIGHT SEARCH ===', 'background: #3b82f6; color: white; padding: 4px;');
+      console.log('Pending Highlight:', pendingHighlight);
+      console.log('Total orders:', orders.length);
+      console.log('Selected Year:', selectedYear);
+      console.log('Selected Months:', selectedMonths);
       
       // Find in filtered orders (after month/year filter applied)
       const filteredList = orders.filter(order => {
@@ -213,6 +217,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         return true;
       });
       
+      console.log('Filtered orders count:', filteredList.length);
       const recordIndex = filteredList.findIndex(o => o.doNumber === pendingHighlight);
       
       if (recordIndex >= 0) {
@@ -222,11 +227,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         
         if (targetPage !== currentPage) {
           setCurrentPage(targetPage);
-          // Wait for page change
-          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 800);
+          // Wait longer for page change and DOM update
+          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 1000);
         } else {
           // Already on correct page
-          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 300);
+          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 500);
         }
       } else {
         console.log('DO not found in filtered orders:', pendingHighlight);
@@ -578,6 +583,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       (filterStatus === 'active' && !order.isCancelled) ||
       (filterStatus === 'cancelled' && order.isCancelled);
     
+    // Year filter - filter by selected year using date field
+    const orderDate = new Date(order.date);
+    const orderYear = orderDate.getFullYear();
+    const matchesYear = orderYear === selectedYear;
+    
     // Month filter
     let matchesMonth = true;
     if (selectedMonths.length > 0 && selectedMonths.length < 12) {
@@ -585,7 +595,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       matchesMonth = orderMonth !== null && selectedMonths.includes(orderMonth);
     }
     
-    return matchesSearch && matchesStatus && matchesMonth;
+    return matchesSearch && matchesStatus && matchesYear && matchesMonth;
   }) : [];
 
   // Pagination calculations

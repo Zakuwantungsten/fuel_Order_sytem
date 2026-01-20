@@ -132,14 +132,12 @@ const FuelRecords = () => {
         // If year and month are provided, construct the YYYY-MM format
         if (yearParam && monthParam) {
           const targetMonth = `${yearParam}-${String(monthParam).padStart(2, '0')}`;
-          if (targetMonth !== selectedMonth) {
-            console.log('Setting month filter to:', targetMonth);
-            setSelectedMonth(targetMonth);
-          }
+          console.log('Setting month filter to:', targetMonth);
+          setSelectedMonth(targetMonth);
         }
         
-        // Trigger the highlight process
-        setPendingHighlight(highlightId);
+        // Trigger the highlight process after a brief delay to let filters apply
+        setTimeout(() => setPendingHighlight(highlightId), 200);
       }
     };
     
@@ -147,7 +145,7 @@ const FuelRecords = () => {
     handleUrlChange(); // Check on mount
     
     return () => window.removeEventListener('urlchange', handleUrlChange);
-  }, [selectedMonth]);
+  }, []); // Remove selectedMonth dependency to avoid re-triggering
 
   // Separate effect to handle highlight - fetch ALL records to find position
   useEffect(() => {

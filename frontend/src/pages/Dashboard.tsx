@@ -290,23 +290,23 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         const doDate = new Date(result.metadata.date);
         const year = doDate.getFullYear();
         const month = doDate.getMonth() + 1; // 1-indexed
-        onNavigate('do', `${result.metadata.doNumber}&year=${year}&month=${month}`);
+        onNavigate('do', `highlight=${result.metadata.doNumber}&year=${year}&month=${month}`);
       } else if (result.type === 'lpo') {
         // For LPOs, use the parsed timestamp from metadata
         const lpoDate = result.metadata._parsedDate;
         if (lpoDate) {
           const year = lpoDate.getFullYear();
           const month = lpoDate.getMonth() + 1; // 1-indexed
-          onNavigate('lpo', `${result.metadata.lpoNo}&year=${year}&month=${month}`);
+          onNavigate('lpo', `highlight=${result.metadata.lpoNo}&year=${year}&month=${month}`);
         } else {
-          onNavigate('lpo', result.metadata.lpoNo);
+          onNavigate('lpo', `highlight=${result.metadata.lpoNo}`);
         }
       } else if (result.type === 'fuel') {
         // For fuel records, pass truck number, year, and month
         const fuelDate = new Date(result.metadata.date);
         const year = fuelDate.getFullYear();
         const month = fuelDate.getMonth() + 1; // 1-indexed
-        onNavigate('fuel_records', `${result.metadata.truckNo}&year=${year}&month=${month}`);
+        onNavigate('fuel_records', `highlight=${result.metadata.truckNo}&year=${year}&month=${month}`);
       }
     } else {
       // Fallback to route-based navigation

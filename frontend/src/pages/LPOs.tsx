@@ -109,18 +109,23 @@ const LPOs = () => {
         window.history.replaceState({}, '', url.toString());
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
-        console.log('Processing highlight for LPO:', highlightId, 'Year:', yearParam, 'Month:', monthParam);
+        console.log('%c=== LPO URL HANDLER ===', 'background: #f59e0b; color: white; padding: 4px;');
+        console.log('Highlight ID:', highlightId);
+        console.log('Year Param:', yearParam);
+        console.log('Month Param:', monthParam);
+        console.log('Current selectedYear:', selectedYear);
+        console.log('Current selectedMonths:', selectedMonths);
         
-        // Set year if provided
+        // Set year if provided (important: do this first)
         if (yearParam) {
           const year = parseInt(yearParam);
-          if (!isNaN(year) && year !== selectedYear) {
+          if (!isNaN(year)) {
             console.log('Setting year to:', year);
             setSelectedYear(year);
           }
         }
         
-        // Set month if provided
+        // Set month if provided (this will trigger filtering)
         if (monthParam) {
           const month = parseInt(monthParam);
           if (!isNaN(month) && month >= 1 && month <= 12) {
@@ -129,8 +134,12 @@ const LPOs = () => {
           }
         }
         
-        // Trigger highlight
-        setPendingHighlight(highlightId);
+        // Trigger highlight after a brief delay to let filters apply
+        console.log('Will trigger highlight in 200ms');
+        setTimeout(() => {
+          console.log('Triggering highlight now');
+          setPendingHighlight(highlightId);
+        }, 200);
       }
     };
     
@@ -138,7 +147,7 @@ const LPOs = () => {
     handleUrlChange(); // Check on mount
     
     return () => window.removeEventListener('urlchange', handleUrlChange);
-  }, [selectedYear]);
+  }, []); // Remove selectedYear dependency to avoid re-triggering
 
   // Separate effect to handle highlight after LPOs are loaded and filtered
   useEffect(() => {
@@ -243,7 +252,7 @@ const LPOs = () => {
 
   useEffect(() => {
     filterLpos();
-  }, [searchTerm, stationFilter, dateFilter, selectedMonths, lpos]);
+  }, [searchTerm, stationFilter, dateFilter, selectedMonths, selectedYear, lpos]); // Added selectedYear!
 
   // Helper to parse date from various formats (e.g., "2-Dec", "1-Dec", "2025-12-02")
   const getMonthFromDate = (dateStr: string): number | null => {
@@ -346,21 +355,34 @@ const LPOs = () => {
 
   const fetchAvailableYears = async () => {
     try {
+      // Check if there's a year parameter in the URL first
+      const url = new URL(window.location.href);
+      const yearParam = url.searchParams.get('year');
+      const urlYear = yearParam ? parseInt(yearParam) : null;
+      
       const years = await lpoWorkbookAPI.getAvailableYears();
       if (years.length > 0) {
         setAvailableYears(years);
-        setSelectedYear(years[0]); // Most recent year
+        // If URL has a valid year param, use it; otherwise use most recent year
+        if (urlYear && !isNaN(urlYear) && years.includes(urlYear)) {
+          setSelectedYear(urlYear);
+        } else {
+          setSelectedYear(years[0]); // Most recent year
+        }
       } else {
         // Default to current year if no years available
         const currentYear = new Date().getFullYear();
         setAvailableYears([currentYear]);
-        setSelectedYear(currentYear);
+        setSelectedYear(urlYear && !isNaN(urlYear) ? urlYear : currentYear);
       }
     } catch (error) {
       console.error('Error fetching available years:', error);
+      const url = new URL(window.location.href);
+      const yearParam = url.searchParams.get('year');
+      const urlYear = yearParam ? parseInt(yearParam) : null;
       const currentYear = new Date().getFullYear();
       setAvailableYears([currentYear]);
-      setSelectedYear(currentYear);
+      setSelectedYear(urlYear && !isNaN(urlYear) ? urlYear : currentYear);
     }
   };
 
@@ -540,15 +562,43 @@ const LPOs = () => {
   };
 
   const filterLpos = () => {
+    console.log('=== FILTER LPOS START ===');
+    console.log('Total LPOs before filter:', lpos.length);
+    console.log('Selected Year:', selectedYear);
+    console.log('Selected Months:', selectedMonths);
+    
     let filtered = [...lpos];
+
+    // Filter by selected year using createdAt timestamp
+    filtered = filtered.filter((lpo) => {
+      const lpoDate = lpo.createdAt ? new Date(lpo.createdAt) : null;
+      if (!lpoDate) {
+        console.log('LPO without createdAt:', lpo.lpoNo);
+        return true; // Keep if no createdAt timestamp
+      }
+      const lpoYear = lpoDate.getFullYear();
+      const matches = lpoYear === selectedYear;
+      if (!matches) {
+        console.log(`Filtering out LPO ${lpo.lpoNo}: year ${lpoYear} !== ${selectedYear}`);
+      }
+      return matches;
+    });
+    
+    console.log('After year filter:', filtered.length);
 
     // Filter by selected months
     if (selectedMonths.length > 0 && selectedMonths.length < 12) {
       filtered = filtered.filter((lpo) => {
         const lpoMonth = getMonthFromDate(lpo.date);
-        return lpoMonth !== null && selectedMonths.includes(lpoMonth);
+        const matches = lpoMonth !== null && selectedMonths.includes(lpoMonth);
+        if (!matches) {
+          console.log(`Filtering out LPO ${lpo.lpoNo}: month ${lpoMonth} not in`, selectedMonths);
+        }
+        return matches;
       });
     }
+    
+    console.log('After month filter:', filtered.length);
 
     if (searchTerm) {
       filtered = filtered.filter(
