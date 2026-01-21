@@ -671,9 +671,51 @@ const LPOs = () => {
     setCurrentPage(1); // Reset to page 1 when filters change
   };
 
+  // Add month-based serial numbers to LPOs
+  const lposWithMonthlySerialNumbers = useMemo(() => {
+    // Group LPOs by month and year
+    const groupedByMonth: { [key: string]: LPOEntry[] } = {};
+    
+    filteredLpos.forEach(lpo => {
+      const month = getMonthFromDate(lpo.date);
+      const lpoDate = lpo.createdAt ? new Date(lpo.createdAt) : new Date();
+      const year = lpoDate.getFullYear();
+      const key = `${year}-${month}`; // e.g., "2026-1" for January 2026
+      
+      if (!groupedByMonth[key]) {
+        groupedByMonth[key] = [];
+      }
+      groupedByMonth[key].push(lpo);
+    });
+    
+    // Assign serial numbers within each month group
+    const lposWithSN: LPOEntry[] = [];
+    Object.keys(groupedByMonth).forEach(monthKey => {
+      const monthLpos = groupedByMonth[monthKey];
+      // Sort by the original sn or createdAt to maintain order
+      monthLpos.sort((a, b) => (a.sn || 0) - (b.sn || 0));
+      
+      monthLpos.forEach((lpo, index) => {
+        lposWithSN.push({
+          ...lpo,
+          sn: index + 1 // Reset to 1 for each month
+        });
+      });
+    });
+    
+    // Sort back to original order (by createdAt or original sn)
+    lposWithSN.sort((a, b) => {
+      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bDate - aDate; // Most recent first
+    });
+    
+    return lposWithSN;
+  }, [filteredLpos]);
+
   // Pagination calculations
-  const totalPages = Math.ceil(filteredLpos.length / itemsPerPage);
-  const paginatedLpos = filteredLpos.slice(
+  const totalPages = Math.ceil(lposWithMonthlySerialNumbers.length / itemsPerPage);
+  const paginatedLpos = lposWithMonthlySerialNumbers.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -778,7 +820,8 @@ const LPOs = () => {
     // Create worksheet data with headers
     const headers = ['S/No', 'Date', 'LPO No.', 'Station', 'DO/SDO', 'Truck No.', 'Ltrs', 'Price/Ltr', 'Dest.', 'Amount'];
     
-    const data = filteredLpos.map((lpo) => [
+    // Use lposWithMonthlySerialNumbers instead of filteredLpos to get correct serial numbers
+    const data = lposWithMonthlySerialNumbers.map((lpo) => [
       lpo.sn,
       lpo.date,
       lpo.lpoNo,
