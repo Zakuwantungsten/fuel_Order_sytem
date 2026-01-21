@@ -138,9 +138,9 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       const sanitized = sanitizeRegexInput(search as string);
       if (sanitized) {
         filter.$or = [
-          { truckNo: { $regex: sanitized, $options: 'i' } },
-          { goingDo: { $regex: sanitized, $options: 'i' } },
-          { returnDo: { $regex: sanitized, $options: 'i' } }
+          { truckNo: { $regex: `^${sanitized}`, $options: 'i' } },
+          { goingDo: { $regex: `^${sanitized}`, $options: 'i' } },
+          { returnDo: { $regex: `^${sanitized}`, $options: 'i' } }
         ];
       }
     } else if (truckNo) {

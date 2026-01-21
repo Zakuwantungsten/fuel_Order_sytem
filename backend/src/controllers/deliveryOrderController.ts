@@ -421,8 +421,8 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
       const sanitized = sanitizeRegexInput(search as string);
       if (sanitized) {
         filter.$or = [
-          { doNumber: { $regex: sanitized, $options: 'i' } },
-          { truckNo: { $regex: sanitized, $options: 'i' } },
+          { doNumber: { $regex: `^${sanitized}`, $options: 'i' } },
+          { truckNo: { $regex: `^${sanitized}`, $options: 'i' } },
           { clientName: { $regex: sanitized, $options: 'i' } },
           { destination: { $regex: sanitized, $options: 'i' } },
           { haulier: { $regex: sanitized, $options: 'i' } }

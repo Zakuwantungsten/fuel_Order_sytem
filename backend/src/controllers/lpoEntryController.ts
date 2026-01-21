@@ -47,7 +47,13 @@ export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise
     // Use ^ anchor to match from beginning of string for more precise results
     if (search) {
       const sanitized = sanitizeRegexInput(search as string);
+      logger.info('LPO Search - Original:', { search });
+      logger.info('LPO Search - Sanitized:', { sanitized });
+      logger.info('LPO Search - Final Pattern:', { pattern: `^${sanitized}` });
+      
       if (sanitized) {
+        // Pattern explanation: ^T158 matches strings starting with exactly "T158"
+        // The pattern must match the complete search term as prefix, not partial matches
         const searchOr = {
           $or: [
             { lpoNo: { $regex: `^${sanitized}`, $options: 'i' } },
