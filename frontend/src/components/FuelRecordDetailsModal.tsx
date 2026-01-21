@@ -178,7 +178,7 @@ export default function FuelRecordDetailsModal({
                   <div className={`p-4 rounded-lg ${record?.isCancelled ? 'bg-gray-100 dark:bg-gray-700' : 'bg-blue-50 dark:bg-blue-900/30'}`}>
                     <div className={`text-sm font-medium ${record?.isCancelled ? 'text-gray-500 dark:text-gray-400' : 'text-blue-600 dark:text-blue-400'}`}>Total Fuel</div>
                     <div className={`text-2xl font-bold ${record?.isCancelled ? 'text-gray-600 dark:text-gray-300 line-through' : 'text-blue-700 dark:text-blue-300'}`}>
-                      {allocations?.total.toLocaleString()} L
+                      {allocations?.total != null ? allocations.total.toLocaleString() : '0'} L
                     </div>
                   </div>
                   <div className={`p-4 rounded-lg ${record?.isCancelled ? 'bg-gray-100 dark:bg-gray-700' : 'bg-green-50 dark:bg-green-900/30'}`}>
@@ -196,7 +196,7 @@ export default function FuelRecordDetailsModal({
                   <div className={`p-4 rounded-lg ${record?.isCancelled ? 'bg-gray-100 dark:bg-gray-700' : 'bg-purple-50 dark:bg-purple-900/30'}`}>
                     <div className={`text-sm font-medium ${record?.isCancelled ? 'text-gray-500 dark:text-gray-400' : 'text-purple-600 dark:text-purple-400'}`}>Balance</div>
                     <div className={`text-2xl font-bold ${record?.isCancelled ? 'text-gray-600 dark:text-gray-300 line-through' : 'text-purple-700 dark:text-purple-300'}`}>
-                      {allocations?.balance.toLocaleString()} L
+                      {allocations?.balance != null ? allocations.balance.toLocaleString() : '0'} L
                     </div>
                   </div>
                 </div>
@@ -331,7 +331,7 @@ export default function FuelRecordDetailsModal({
                       <Fuel className="w-5 h-5 text-blue-500 dark:text-blue-400 mr-2" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">Going Journey Fuel</span>
                       <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                        ({allocations?.totalGoingFuel.toLocaleString()} L total)
+                        ({allocations?.totalGoingFuel != null ? allocations.totalGoingFuel.toLocaleString() : '0'} L total)
                       </span>
                     </div>
                     {expandedSections.goingFuel ? (
@@ -372,7 +372,7 @@ export default function FuelRecordDetailsModal({
                       <Fuel className="w-5 h-5 text-green-500 dark:text-green-400 mr-2" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">Return Journey Fuel</span>
                       <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                        ({allocations?.totalReturnFuel.toLocaleString()} L total)
+                        ({allocations?.totalReturnFuel != null ? allocations.totalReturnFuel.toLocaleString() : '0'} L total)
                       </span>
                     </div>
                     {expandedSections.returnFuel ? (
@@ -413,7 +413,7 @@ export default function FuelRecordDetailsModal({
                       <FileText className="w-5 h-5 text-orange-500 dark:text-orange-400 mr-2" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">LPO Entries</span>
                       <span className="text-sm text-gray-500 dark:text-gray-400">
-                        ({details.lpoEntries.length} entries • {details.summary.totalFuelOrdered.toLocaleString()} L)
+                        ({details.lpoEntries.length} entries • {details.summary.totalFuelOrdered != null ? details.summary.totalFuelOrdered.toLocaleString() : '0'} L)
                       </span>
                       {/* Show breakdown by type */}
                       {details.summary.cashLPOs && details.summary.cashLPOs > 0 && (
@@ -476,7 +476,7 @@ export default function FuelRecordDetailsModal({
                                   </td>
                                   <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100">
                                     <div className="flex flex-col items-end">
-                                      <span>{lpo.ltrs.toLocaleString()}</span>
+                                      <span>{lpo.ltrs != null ? lpo.ltrs.toLocaleString() : '0'}</span>
                                       {/* Show amendment info if liters were changed */}
                                       {lpo.originalLtrs !== undefined && lpo.originalLtrs !== null && lpo.originalLtrs !== lpo.ltrs && (
                                         <span className="text-xs text-amber-600 dark:text-amber-400">
@@ -485,7 +485,7 @@ export default function FuelRecordDetailsModal({
                                       )}
                                     </div>
                                   </td>
-                                  <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">{lpo.pricePerLtr.toLocaleString()}</td>
+                                  <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">{lpo.pricePerLtr != null ? lpo.pricePerLtr.toLocaleString() : '0'}</td>
                                   <td className="px-3 py-2 text-center">
                                     <span className={`px-2 py-0.5 rounded-full text-xs ${
                                       lpo.journeyType === 'going' 
@@ -523,7 +523,7 @@ export default function FuelRecordDetailsModal({
                       <MapPin className="w-5 h-5 text-purple-500 dark:text-purple-400 mr-2" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">Yard Fuel Dispenses</span>
                       <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                        ({details.yardDispenses.length} entries • {details.summary.totalYardFuel.toLocaleString()} L)
+                        ({details.yardDispenses.length} entries • {details.summary.totalYardFuel != null ? details.summary.totalYardFuel.toLocaleString() : '0'} L)
                       </span>
                     </div>
                     {expandedSections.yardDispenses ? (
@@ -556,7 +556,7 @@ export default function FuelRecordDetailsModal({
                                 <tr key={dispense.id || idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{dispense.date}</td>
                                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{dispense.yard}</td>
-                                  <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100">{dispense.liters.toLocaleString()}</td>
+                                  <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100">{dispense.liters != null ? dispense.liters.toLocaleString() : '0'}</td>
                                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{dispense.enteredBy}</td>
                                   <td className="px-3 py-2">
                                     <span className={`px-2 py-0.5 rounded-full text-xs ${
