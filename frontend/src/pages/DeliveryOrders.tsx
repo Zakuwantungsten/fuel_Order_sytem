@@ -2113,7 +2113,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             handleCloseModal();
             handleEditOrder(selectedOrder);
           }}
-          onPrint={handlePrintOrder}
         />
       )}
 

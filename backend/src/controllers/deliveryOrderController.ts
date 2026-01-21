@@ -3268,3 +3268,46 @@ export const createBulkDOFailureNotification = async (req: AuthRequest, res: Res
     throw error;
   }
 };
+
+/**
+ * Download single DO as PDF
+ */
+export const downloadSingleDOPDF = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Find the delivery order
+    const deliveryOrder = await DeliveryOrder.findOne({
+      _id: id,
+      isDeleted: false,
+    }).lean();
+
+    if (!deliveryOrder) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+
+    // Import PDF generator
+    const { generateBulkDOsPDF } = await import('../utils/pdfGenerator');
+
+    // Generate PDF with username (using the bulk function with single DO)
+    const username = req.user?.username || 'system';
+    const doc = generateBulkDOsPDF([deliveryOrder as any], username);
+
+    // Generate filename
+    const doType = deliveryOrder.doType || 'DO';
+    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const filename = `${doType}_${deliveryOrder.doNumber}_${timestamp}.pdf`;
+
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Pipe the PDF to response
+    doc.pipe(res);
+    doc.end();
+
+    logger.info(`Single DO PDF downloaded: ${deliveryOrder.doNumber} by ${req.user?.username}`);
+  } catch (error: any) {
+    throw error;
+  }
+};

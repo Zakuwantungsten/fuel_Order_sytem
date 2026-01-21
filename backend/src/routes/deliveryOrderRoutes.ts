@@ -49,6 +49,16 @@ router.get('/trucks', asyncHandler(deliveryOrderController.getAllTrucks));
 router.get('/truck/:truckNo', asyncHandler(deliveryOrderController.getDeliveryOrdersByTruck));
 router.get('/truck/:truckNo/current-journey', asyncHandler(deliveryOrderController.getCurrentJourneyByTruck));
 router.get('/journey/:doNumber', asyncHandler(deliveryOrderController.getJourneyByDO));
+
+// Single DO PDF download route (must be before generic /:id route)
+router.get(
+  '/:id/pdf',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker', 'import_officer', 'export_officer'),
+  validate,
+  asyncHandler(deliveryOrderController.downloadSingleDOPDF)
+);
+
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(deliveryOrderController.getDeliveryOrderById));
 
 // Create route (requires appropriate role)

@@ -24,33 +24,6 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
   return (
     <>
       <style>{`
-        @media print {
-          @page { 
-            size: A4;
-            margin: 10mm;
-          }
-          
-          body * {
-            visibility: hidden;
-          }
-          
-          .delivery-note-print-wrapper,
-          .delivery-note-print-wrapper * {
-            visibility: visible !important;
-          }
-          
-          .delivery-note-print-wrapper {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          
-          .no-print {
-            display: none !important;
-          }
-        }
-        
         .delivery-note-print-content {
           background: white;
           color: #333333;
@@ -80,15 +53,16 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
         
         .do-header-bg {
           background-color: #F8F9FA;
-        }
-        
-        ${!showOnScreen ? `
-          .delivery-note-print-wrapper {
-            position: fixed;
-            left: -9999px;
-            top: -9999px;
           }
-        ` : ''}
+          
+          ${!showOnScreen ? `
+            .delivery-note-print-wrapper {
+              position: fixed;
+              left: -9999px;
+              top: -9999px;
+            }
+          ` : ''}
+        }
       `}</style>
 
       <div className={`delivery-note-print-wrapper ${showOnScreen ? 'block' : ''}`}>

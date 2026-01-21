@@ -1,24 +1,69 @@
-import { X, Printer, Edit, Ban } from 'lucide-react';
+import { X, Printer, Edit, Ban, Download } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import DeliveryNotePrint from './DeliveryNotePrint';
+import { useState } from 'react';
+import axios from 'axios';
 
 interface DODetailModalProps {
   order: DeliveryOrder;
   isOpen: boolean;
   onClose: () => void;
   onEdit?: () => void;
-  onPrint?: () => void;
 }
 
-const DODetailModal = ({ order, isOpen, onClose, onEdit, onPrint }: DODetailModalProps) => {
+const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+
   if (!isOpen) return null;
 
-  const handlePrint = () => {
-    if (onPrint) {
-      onPrint();
-    } else {
-      // Use regular window.print with improved styles
-      window.print();
+  const handleDownloadPDF = async () => {
+    try {
+      setIsDownloading(true);
+      
+      // Get API base URL and auth token
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+      const token = localStorage.getItem('fuel_order_token');
+      
+      if (!token) {
+        alert('Authentication required. Please log in again.');
+        return;
+      }
+      
+      // Download PDF from backend with authentication
+      const response = await axios.get(
+        `${API_BASE_URL}/delivery-orders/${order._id}/pdf`,
+        {
+          responseType: 'blob',
+          withCredentials: true,
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename
+      const doType = order.doType || 'DO';
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.download = `${doType}_${order.doNumber}_${timestamp}.pdf`;
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Error downloading PDF:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+      alert(`Failed to download PDF: ${errorMessage}`);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -44,11 +89,22 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit, onPrint }: DODetailModa
             </div>
             <div className="flex items-center space-x-2">
               <button
-                onClick={handlePrint}
-                className={`p-2 text-white rounded ${order.isCancelled ? 'hover:bg-red-700' : 'hover:bg-primary-700'}`}
-                title="Print DO"
+                onClick={handleDownloadPDF}
+                disabled={isDownloading}
+                className={`p-2 text-white rounded ${
+                  isDownloading 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : order.isCancelled 
+                      ? 'hover:bg-red-700' 
+                      : 'hover:bg-primary-700'
+                }`}
+                title="Download PDF"
               >
-                <Printer className="w-5 h-5" />
+                {isDownloading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Download className="w-5 h-5" />
+                )}
               </button>
               {onEdit && !order.isCancelled && (
                 <button
@@ -115,10 +171,15 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit, onPrint }: DODetailModa
               </button>
             )}
             <button
-              onClick={handlePrint}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+              onClick={handleDownloadPDF}
+              disabled={isDownloading}
+              className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                isDownloading
+                  ? 'bg-primary-400 cursor-not-allowed'
+                  : 'bg-primary-600 hover:bg-primary-700'
+              }`}
             >
-              Print DO
+              {isDownloading ? 'Downloading...' : 'Download PDF'}
             </button>
           </div>
         </div>
