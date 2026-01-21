@@ -69,8 +69,20 @@ const FuelRecords = () => {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | number | null>(null);
   
-  // Month navigation state - default to current month
+  // Month navigation state - check URL params first, then default to current month
   const [selectedMonth, setSelectedMonth] = useState(() => {
+    // Check URL params on initial mount
+    const url = new URL(window.location.href);
+    const yearParam = url.searchParams.get('year');
+    const monthParam = url.searchParams.get('month');
+    
+    if (yearParam && monthParam) {
+      const targetMonth = `${yearParam}-${String(monthParam).padStart(2, '0')}`;
+      console.log('Initializing selectedMonth from URL params:', targetMonth);
+      return targetMonth;
+    }
+    
+    // Default to current month
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
@@ -102,12 +114,20 @@ const FuelRecords = () => {
   // Ref and state to track highlight
   const highlightProcessedRef = useRef<string | null>(null);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
+  const [monthInitialized, setMonthInitialized] = useState(false);
 
   useEffect(() => {
     fetchLpos();
-    fetchRoutes();
     fetchAvailableMonthsAndYears();
+    // fetchRoutes will be called when monthInitialized becomes true
   }, []);
+  
+  // Fetch routes once month is initialized
+  useEffect(() => {
+    if (monthInitialized) {
+      fetchRoutes();
+    }
+  }, [monthInitialized]);
   
   // Handle highlight from URL parameter
   useEffect(() => {
@@ -125,6 +145,7 @@ const FuelRecords = () => {
         // Clear the action param
         url.searchParams.delete('action');
         window.history.replaceState({}, '', url.toString());
+        setMonthInitialized(true);
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
         console.log('Processing highlight for Fuel Record (Truck):', highlightId, 'Year:', yearParam, 'Month:', monthParam);
@@ -134,10 +155,17 @@ const FuelRecords = () => {
           const targetMonth = `${yearParam}-${String(monthParam).padStart(2, '0')}`;
           console.log('Setting month filter to:', targetMonth);
           setSelectedMonth(targetMonth);
+          // Set flag to allow data fetching with the correct month
+          setMonthInitialized(true);
+        } else {
+          setMonthInitialized(true);
         }
         
         // Trigger the highlight process after a brief delay to let filters apply
         setTimeout(() => setPendingHighlight(highlightId), 200);
+      } else {
+        // No highlight, just initialize
+        setMonthInitialized(true);
       }
     };
     
@@ -314,10 +342,12 @@ const FuelRecords = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch records when pagination or filters change
+  // Fetch records when pagination or filters change - but only after month is initialized
   useEffect(() => {
-    fetchRecords();
-  }, [currentPage, itemsPerPage, searchTerm, routeFilter, selectedMonth, routeTypeFilter]);
+    if (monthInitialized) {
+      fetchRecords();
+    }
+  }, [currentPage, itemsPerPage, searchTerm, routeFilter, selectedMonth, routeTypeFilter, monthInitialized]);
 
   // Remove client-side filtering useEffect - filtering now happens on server
   // useEffect(() => {
@@ -326,9 +356,11 @@ const FuelRecords = () => {
 
   // Reset route filter and fetch routes when import/export type changes
   useEffect(() => {
-    setRouteFilter('');
-    fetchRoutes();
-  }, [routeTypeFilter]);
+    if (monthInitialized) {
+      setRouteFilter('');
+      fetchRoutes();
+    }
+  }, [routeTypeFilter, monthInitialized]);
   
   // Reset to page 1 when filters change
   useEffect(() => {
