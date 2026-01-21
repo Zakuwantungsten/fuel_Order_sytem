@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Eye, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
+import { Search, Plus, Download, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
 import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
@@ -1828,10 +1828,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                     <div
                       key={order.id || `order-${order.doNumber}`}
                       data-do-number={order.doNumber}
-                      className={`border rounded-xl p-4 transition-all ${
+                      onClick={() => handleViewOrder(order)}
+                      className={`border rounded-xl p-4 transition-all cursor-pointer ${
                         order.isCancelled
                           ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
-                          : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50'
+                          : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 hover:shadow-md'
                       }`}
                     >
                       {/* Header with checkbox and DO number */}
@@ -1841,6 +1842,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             type="checkbox"
                             checked={order.id ? selectedOrders.includes(order.id) : false}
                             onChange={() => order.id && handleSelectOrder(order.id)}
+                            onClick={(e) => e.stopPropagation()}
                             className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600 mt-1"
                             disabled={order.isCancelled}
                           />
@@ -1908,24 +1910,23 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
                       {/* Actions */}
                       <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
-                        <button
-                          onClick={() => handleViewOrder(order)}
-                          className="flex-1 px-3 py-2 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/30 inline-flex items-center justify-center"
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          View
-                        </button>
                         {!order.isCancelled && (
                           <>
                             <button
-                              onClick={() => handleEditOrder(order)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditOrder(order);
+                              }}
                               className="flex-1 px-3 py-2 text-xs font-medium text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 inline-flex items-center justify-center"
                             >
                               <Edit className="w-4 h-4 mr-1" />
                               Edit
                             </button>
                             <button
-                              onClick={() => handleOpenCancelModal(order)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenCancelModal(order);
+                              }}
                               className="flex-1 px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 inline-flex items-center justify-center"
                             >
                               <Ban className="w-4 h-4 mr-1" />
@@ -1972,11 +1973,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                         <tr
                           key={order.id || `order-${order.doNumber}`}
                           data-do-number={order.doNumber}
-                          className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                          onClick={() => handleViewOrder(order)}
+                          className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
                             order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
                           }`}
                         >
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={order.id ? selectedOrders.includes(order.id) : false}
@@ -2041,24 +2043,23 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             {order.tonnages} tons
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button
-                              onClick={() => handleViewOrder(order)}
-                              className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300 mr-3"
-                              title="View Details"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
                             {!order.isCancelled && (
                               <>
                                 <button
-                                  onClick={() => handleEditOrder(order)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditOrder(order);
+                                  }}
                                   className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-3"
                                   title="Edit"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => handleOpenCancelModal(order)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenCancelModal(order);
+                                  }}
                                   className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
                                   title="Cancel DO"
                                 >
