@@ -94,7 +94,7 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit, onPrint }: DODetailModa
           )}
 
           {/* Content - Show the actual DO form */}
-          <div className="bg-white dark:bg-gray-800 px-6 py-6 print:p-0 transition-colors">
+          <div className="bg-white px-6 py-6 print:p-0 overflow-x-auto">
             <DeliveryNotePrint order={order} showOnScreen={true} />
           </div>
 
