@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, Printer, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
+import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
 import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
@@ -8,7 +8,6 @@ import DODetailModal from '../components/DODetailModal';
 import DOForm from '../components/DOForm';
 import BulkDOForm from '../components/BulkDOForm';
 import MonthlySummary from '../components/MonthlySummary';
-import BatchDOPrint from '../components/BatchDOPrint';
 import DOWorkbook from '../components/DOWorkbook';
 import CancelDOModal from '../components/CancelDOModal';
 import AmendedDOsModal from '../components/AmendedDOsModal';
@@ -49,8 +48,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [isCancelling, setIsCancelling] = useState(false);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'summary' | 'workbook'>('list');
-  const [selectedOrders, setSelectedOrders] = useState<(string | number)[]>([]);
-  const [batchPrintOrders, setBatchPrintOrders] = useState<DeliveryOrder[]>([]);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -1170,29 +1167,20 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     };
   };
 
-  const handleSelectOrder = (orderId: string | number) => {
-    setSelectedOrders(prev => 
-      prev.includes(orderId) 
-        ? prev.filter(id => id !== orderId)
-        : [...prev, orderId]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedOrders.length === filteredOrders.length) {
-      setSelectedOrders([]);
-    } else {
-      setSelectedOrders(filteredOrders.map(o => o.id).filter((id): id is string | number => id !== undefined));
+  // Helper function to calculate S/N based on month
+  const calculateSerialNumber = (order: DeliveryOrder, index: number): number => {
+    const orderMonth = getMonthFromDate(order.date);
+    if (!orderMonth) return index + 1;
+    
+    // Count how many orders come before this one in the same month
+    let sn = 1;
+    for (let i = 0; i < index; i++) {
+      const prevOrderMonth = getMonthFromDate(filteredOrders[i].date);
+      if (prevOrderMonth === orderMonth) {
+        sn++;
+      }
     }
-  };
-
-  const handleBatchPrint = () => {
-    const ordersToPrint = orders.filter(o => o.id && selectedOrders.includes(o.id));
-    setBatchPrintOrders(ordersToPrint);
-    setTimeout(() => {
-      window.print();
-      setBatchPrintOrders([]);
-    }, 100);
+    return sn;
   };
 
   return (
@@ -1206,15 +1194,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           </p>
         </div>
         <div className="mt-4 sm:mt-0 flex flex-wrap gap-2 sm:gap-3">
-          {selectedOrders.length > 0 && (
-            <button 
-              onClick={handleBatchPrint}
-              className="inline-flex items-center px-4 py-2 border border-primary-600 dark:border-primary-500 rounded-md shadow-sm text-sm font-medium text-primary-600 dark:text-primary-400 bg-white dark:bg-gray-800 hover:bg-primary-50 dark:hover:bg-gray-700"
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Print {selectedOrders.length} DO{selectedOrders.length > 1 ? 's' : ''}
-            </button>
-          )}
           <button 
             onClick={() => handleExportWorkbook(new Date().getFullYear())}
             disabled={exportingYear !== null}
@@ -1835,17 +1814,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 hover:shadow-md'
                       }`}
                     >
-                      {/* Header with checkbox and DO number */}
+                      {/* Header with S/N and DO number */}
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={order.id ? selectedOrders.includes(order.id) : false}
-                            onChange={() => order.id && handleSelectOrder(order.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600 mt-1"
-                            disabled={order.isCancelled}
-                          />
+                          <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-semibold">
+                            {calculateSerialNumber(order, paginatedOrders.indexOf(order))}
+                          </div>
                           <div>
                             <h3 className={`text-base font-bold ${
                               order.isCancelled
@@ -1949,14 +1923,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-800">
                       <tr>
-                        <th className="px-6 py-3 text-left">
-                          <input
-                            type="checkbox"
-                            checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
-                            onChange={handleSelectAll}
-                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
-                          />
-                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">S/N</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO#</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
@@ -1978,14 +1945,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
                           }`}
                         >
-                          <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={order.id ? selectedOrders.includes(order.id) : false}
-                              onChange={() => order.id && handleSelectOrder(order.id)}
-                              className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-600"
-                              disabled={order.isCancelled}
-                            />
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {calculateSerialNumber(order, paginatedOrders.indexOf(order))}
                           </td>
                           <td className={`px-6 py-4 text-sm font-medium ${
                             order.isCancelled
@@ -2113,14 +2074,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             handleCloseModal();
             handleEditOrder(selectedOrder);
           }}
-        />
-      )}
-
-      {/* Batch DO Print */}
-      {batchPrintOrders.length > 0 && (
-        <BatchDOPrint 
-          orders={batchPrintOrders}
-          clientName={batchPrintOrders[0]?.clientName}
         />
       )}
 
