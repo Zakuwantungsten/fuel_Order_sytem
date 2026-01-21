@@ -4,7 +4,7 @@ import { ArchivedLPOSummary } from '../models/ArchivedData';
 import { FuelStationConfig } from '../models/FuelStationConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
 
@@ -481,7 +481,7 @@ export const getWorkbookByYear = async (req: AuthRequest, res: Response): Promis
 export const getAllLPOSummaries = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, lpoNo, station, year } = req.query;
+    const { dateFrom, dateTo, lpoNo, station, year, search } = req.query;
 
     const filter: any = { isDeleted: false };
 
@@ -490,17 +490,35 @@ export const getAllLPOSummaries = async (req: AuthRequest, res: Response): Promi
     }
 
     if (dateFrom || dateTo) {
-      filter.date = {};
-      if (dateFrom) filter.date.$gte = dateFrom;
-      if (dateTo) filter.date.$lte = dateTo;
+      filter.createdAt = {};
+      if (dateFrom) filter.createdAt.$gte = new Date(dateFrom as string);
+      if (dateTo) {
+        const endDate = new Date(dateTo as string);
+        endDate.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = endDate;
+      }
     }
 
-    if (lpoNo) {
-      filter.lpoNo = { $regex: lpoNo, $options: 'i' };
-    }
+    // Multi-field search parameter - searches across lpoNo, entries.truckNo, station, entries.doNo
+    if (search) {
+      const sanitized = sanitizeRegexInput(search as string);
+      if (sanitized) {
+        filter.$or = [
+          { lpoNo: { $regex: sanitized, $options: 'i' } },
+          { 'entries.truckNo': { $regex: sanitized, $options: 'i' } },
+          { station: { $regex: sanitized, $options: 'i' } },
+          { 'entries.doNo': { $regex: sanitized, $options: 'i' } }
+        ];
+      }
+    } else {
+      // Individual field filters (backward compatibility)
+      if (lpoNo) {
+        filter.lpoNo = { $regex: lpoNo, $options: 'i' };
+      }
 
-    if (station) {
-      filter.station = { $regex: station, $options: 'i' };
+      if (station) {
+        filter.station = { $regex: station, $options: 'i' };
+      }
     }
 
     // If date or year filter is applied, include archived data
@@ -522,14 +540,35 @@ export const getAllLPOSummaries = async (req: AuthRequest, res: Response): Promi
 
       // Apply additional filters
       let filteredLPOs = allLPOs;
-      if (lpoNo) {
-        const regex = new RegExp(lpoNo as string, 'i');
-        filteredLPOs = filteredLPOs.filter(l => regex.test(String(l.lpoNo)));
+      
+      // Apply search filter if present (multi-field search in nested entries)
+      if (search) {
+        const regex = new RegExp(search as string, 'i');
+        filteredLPOs = filteredLPOs.filter(l => {
+          // Search in top-level fields
+          if (regex.test(String(l.lpoNo)) || regex.test(l.station || '')) {
+            return true;
+          }
+          // Search in entries array for truckNo and doNo
+          if (l.entries && Array.isArray(l.entries)) {
+            return l.entries.some((entry: any) => 
+              regex.test(entry.truckNo || '') || regex.test(entry.doNo || '')
+            );
+          }
+          return false;
+        });
+      } else {
+        // Apply individual filters (backward compatibility)
+        if (lpoNo) {
+          const regex = new RegExp(lpoNo as string, 'i');
+          filteredLPOs = filteredLPOs.filter(l => regex.test(String(l.lpoNo)));
+        }
+        if (station) {
+          const regex = new RegExp(station as string, 'i');
+          filteredLPOs = filteredLPOs.filter(l => regex.test(l.station || ''));
+        }
       }
-      if (station) {
-        const regex = new RegExp(station as string, 'i');
-        filteredLPOs = filteredLPOs.filter(l => regex.test(l.station || ''));
-      }
+      
       if (year) {
         const yearNum = parseInt(year as string, 10);
         filteredLPOs = filteredLPOs.filter(l => l.year === yearNum);

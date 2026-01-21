@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 
 /**
@@ -16,45 +16,80 @@ export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise
     // Build filter
     const filter: any = { isDeleted: false };
 
-    // Use createdAt for date filtering since 'date' field is in "DD-MMM" format without year
+    // Use actualDate for date filtering (actual LPO date) instead of createdAt
+    // Falls back to createdAt for legacy records that don't have actualDate
     if (dateFrom || dateTo) {
-      filter.createdAt = {};
+      // Try to filter by actualDate first, fallback to createdAt for old records
+      const dateFilter: any = {};
       if (dateFrom) {
-        // Convert string date to start of day
         const fromDate = new Date(dateFrom as string);
         fromDate.setHours(0, 0, 0, 0);
-        filter.createdAt.$gte = fromDate;
+        dateFilter.$gte = fromDate;
       }
       if (dateTo) {
-        // Convert string date to end of day
         const toDate = new Date(dateTo as string);
         toDate.setHours(23, 59, 59, 999);
-        filter.createdAt.$lte = toDate;
+        dateFilter.$lte = toDate;
       }
+      
+      // Filter by actualDate, or fallback to createdAt for legacy records
+      filter.$and = [
+        {
+          $or: [
+            { actualDate: dateFilter },
+            { actualDate: { $exists: false }, createdAt: dateFilter }
+          ]
+        }
+      ];
     }
 
     // Unified search parameter - searches across multiple fields
+    // Use ^ anchor to match from beginning of string for more precise results
     if (search) {
-      filter.$or = [
-        { lpoNo: { $regex: search, $options: 'i' } },
-        { truckNo: { $regex: search, $options: 'i' } },
-        { dieselAt: { $regex: search, $options: 'i' } },
-        { doSdo: { $regex: search, $options: 'i' } }
-      ];
+      const sanitized = sanitizeRegexInput(search as string);
+      if (sanitized) {
+        const searchOr = {
+          $or: [
+            { lpoNo: { $regex: `^${sanitized}`, $options: 'i' } },
+            { truckNo: { $regex: `^${sanitized}`, $options: 'i' } },
+            { dieselAt: { $regex: `^${sanitized}`, $options: 'i' } },
+            { doSdo: { $regex: `^${sanitized}`, $options: 'i' } }
+          ]
+        };
+        
+        // Combine with date filter if it exists
+        if (filter.$and) {
+          filter.$and.push(searchOr);
+        } else {
+          filter.$and = [searchOr];
+        }
+      }
     } else {
       // Individual field filters (backward compatibility)
       if (lpoNo) {
-        filter.lpoNo = { $regex: lpoNo, $options: 'i' };
+        const sanitized = sanitizeRegexInput(lpoNo as string);
+        if (sanitized) {
+          filter.lpoNo = { $regex: `^${sanitized}`, $options: 'i' };
+        }
       }
 
       if (truckNo) {
-        filter.truckNo = { $regex: truckNo, $options: 'i' };
+        const sanitized = sanitizeRegexInput(truckNo as string);
+        if (sanitized) {
+          filter.truckNo = { $regex: `^${sanitized}`, $options: 'i' };
+        }
       }
 
       if (station) {
-        filter.dieselAt = { $regex: station, $options: 'i' };
+        const sanitized = sanitizeRegexInput(station as string);
+        if (sanitized) {
+          filter.dieselAt = { $regex: `^${sanitized}`, $options: 'i' };
+        }
       }
     }
+
+    // Log filter for debugging
+    logger.info('LPO Entry search filter:', { filter: JSON.stringify(filter), dateFrom, dateTo, search });
 
     // Get data with pagination
     const skip = calculateSkip(page, limit);

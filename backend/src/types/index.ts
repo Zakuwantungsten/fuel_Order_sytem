@@ -210,6 +210,7 @@ export interface IDeliveryOrderEditHistory {
 export interface ILPOEntry {
   sn: number;
   date: string;
+  actualDate?: Date;  // Full date with year for proper filtering
   lpoNo: string;
   dieselAt: string;
   doSdo: string;

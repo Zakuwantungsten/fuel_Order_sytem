@@ -116,22 +116,29 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     const query = searchQuery.trim();
     
     try {
+      // Calculate date restrictions
       const oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      
+      const fourMonthsAgo = new Date();
+      fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
       
       const today = new Date();
 
       console.log('Search params:', {
         query,
         today: today.toISOString().split('T')[0],
-        oneMonthAgoDate: oneMonthAgo.toISOString().split('T')[0]
+        oneMonthAgo: oneMonthAgo.toISOString().split('T')[0],
+        fourMonthsAgo: fourMonthsAgo.toISOString().split('T')[0]
       });
 
       // Search all three types in parallel
-      // DOs: No date limit, get 6 most recent | Fuel Records: No date limit, get 3 most recent | LPOs: Last 1 month, get up to 50
+      // DOs: Last 4 months, get 6 most recent | LPOs: Last 30 days, get up to 50 | Fuel Records: No date limit, get 3 most recent
       const [dosResponse, lposResponse, fuelsResponse] = await Promise.all([
         deliveryOrdersAPI.getAll({ 
           search: query,
+          dateFrom: fourMonthsAgo.toISOString().split('T')[0],
+          dateTo: today.toISOString().split('T')[0],
           limit: 6,
           sortBy: 'date',
           sortOrder: 'desc'
@@ -203,21 +210,65 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           };
         });
 
-      // Process LPO results - NO FILTERING, backend already filtered
-      // Use createdAt or updatedAt timestamp (not the 'date' string field which lacks year)
+      // Process LPO results - Backend filtered by actualDate (actual LPO date)
+      // Display the actualDate if available, otherwise parse date field + createdAt year
       const lposResults: SearchResult[] = lposData
         .map((lpo: any, index: number) => {
-          // Get the actual record timestamp (createdAt or updatedAt)
-          const recordTimestamp = lpo.createdAt || lpo.updatedAt;
-          const lpoDate = recordTimestamp ? new Date(recordTimestamp) : null;
+          let displayDate = 'Unknown Date';
+          
+          // Prefer actualDate if available
+          if (lpo.actualDate) {
+            const lpoDate = new Date(lpo.actualDate);
+            displayDate = lpoDate.toLocaleDateString('en-US', { 
+              day: 'numeric',
+              month: 'long', 
+              year: 'numeric' 
+            });
+          } else if (lpo.date && lpo.createdAt) {
+            // Fallback: Parse the 'date' field (e.g., "14-Dec") and combine with year from createdAt
+            try {
+              const createdYear = new Date(lpo.createdAt).getFullYear();
+              const dateParts = lpo.date.split('-');
+              if (dateParts.length >= 2) {
+                const day = dateParts[0];
+                let monthName = dateParts[1];
+                
+                // If month is a number, convert to name
+                if (!isNaN(parseInt(monthName))) {
+                  const monthNum = parseInt(monthName, 10);
+                  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                                    'July', 'August', 'September', 'October', 'November', 'December'];
+                  monthName = monthNames[monthNum - 1] || monthName;
+                }
+                
+                displayDate = `${day} ${monthName} ${createdYear}`;
+              }
+            } catch (e) {
+              // Fallback to createdAt if parsing fails
+              const lpoDate = new Date(lpo.createdAt);
+              displayDate = lpoDate.toLocaleDateString('en-US', { 
+                day: 'numeric',
+                month: 'long', 
+                year: 'numeric' 
+              });
+            }
+          } else if (lpo.createdAt) {
+            // Final fallback to createdAt
+            const lpoDate = new Date(lpo.createdAt);
+            displayDate = lpoDate.toLocaleDateString('en-US', { 
+              day: 'numeric',
+              month: 'long', 
+              year: 'numeric' 
+            });
+          }
           
           return {
             id: `lpo-${lpo._id || lpo.id || index}`,
             type: 'lpo' as const,
-            month: lpoDate ? lpoDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown Date',
+            month: displayDate,
             primaryText: `${lpo.lpoNo} - ${lpo.dieselAt}`,
             secondaryText: `${lpo.truckNo} | ${lpo.ltrs}L | ${lpo.doSdo}`,
-            metadata: { ...lpo, _parsedDate: lpoDate }
+            metadata: lpo
           };
         });
 

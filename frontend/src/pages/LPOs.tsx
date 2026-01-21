@@ -29,13 +29,43 @@ const LPOs = () => {
   const [filteredLpos, setFilteredLpos] = useState<LPOEntry[]>([]);
   const [workbooks, setWorkbooks] = useState<LPOWorkbookType[]>([]);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    // Check URL params on initial mount
+    const url = new URL(window.location.href);
+    const yearParam = url.searchParams.get('year');
+    
+    if (yearParam) {
+      const year = parseInt(yearParam);
+      if (!isNaN(year)) {
+        console.log('Initializing selectedYear from URL params:', year);
+        return year;
+      }
+    }
+    
+    // Default to current year
+    return new Date().getFullYear();
+  });
   const [loading, setLoading] = useState(true);
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
   const [stationFilter, setStationFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
-  // Month filter - default to current month (1-indexed)
-  const [selectedMonths, setSelectedMonths] = useState<number[]>([new Date().getMonth() + 1]);
+  // Month filter - check URL params first, then default to current month (1-indexed)
+  const [selectedMonths, setSelectedMonths] = useState<number[]>(() => {
+    // Check URL params on initial mount
+    const url = new URL(window.location.href);
+    const monthParam = url.searchParams.get('month');
+    
+    if (monthParam) {
+      const month = parseInt(monthParam);
+      if (!isNaN(month) && month >= 1 && month <= 12) {
+        console.log('Initializing selectedMonths from URL params:', [month]);
+        return [month];
+      }
+    }
+    
+    // Default to current month
+    return [new Date().getMonth() + 1];
+  });
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [searchParams] = useSearchParams();
   const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account'] as const;
@@ -70,6 +100,7 @@ const LPOs = () => {
   // Ref to track if we've processed a highlight
   const highlightProcessedRef = useRef<string | null>(null);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
+  const [filtersInitialized, setFiltersInitialized] = useState(false);
 
   // Click-outside detection for filter dropdowns
   useEffect(() => {
@@ -107,6 +138,7 @@ const LPOs = () => {
         // Clear the action param
         url.searchParams.delete('action');
         window.history.replaceState({}, '', url.toString());
+        setFiltersInitialized(true);
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
         console.log('%c=== LPO URL HANDLER ===', 'background: #f59e0b; color: white; padding: 4px;');
@@ -134,12 +166,18 @@ const LPOs = () => {
           }
         }
         
+        // Set flag to allow filtering with the correct year/month
+        setFiltersInitialized(true);
+        
         // Trigger highlight after a brief delay to let filters apply
         console.log('Will trigger highlight in 200ms');
         setTimeout(() => {
           console.log('Triggering highlight now');
           setPendingHighlight(highlightId);
         }, 200);
+      } else {
+        // No highlight, just initialize
+        setFiltersInitialized(true);
       }
     };
     
@@ -251,8 +289,10 @@ const LPOs = () => {
   };
 
   useEffect(() => {
-    filterLpos();
-  }, [searchTerm, stationFilter, dateFilter, selectedMonths, selectedYear, lpos]); // Added selectedYear!
+    if (filtersInitialized) {
+      filterLpos();
+    }
+  }, [searchTerm, stationFilter, dateFilter, selectedMonths, selectedYear, lpos, filtersInitialized]); // Added selectedYear!
 
   // Helper to parse date from various formats (e.g., "2-Dec", "1-Dec", "2025-12-02")
   const getMonthFromDate = (dateStr: string): number | null => {
