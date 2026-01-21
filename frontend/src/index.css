@@ -1156,6 +1156,18 @@ input[type="time"] {
   background-size: 1rem;
 }
 
+/* Hide the native calendar picker indicator on desktop since we're using custom icon */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  cursor: pointer;
+  position: absolute;
+  right: 0;
+  width: 2.5rem;
+  height: 100%;
+}
+
 html.dark input[type="date"],
 html.dark input[type="datetime-local"],
 html.dark input[type="time"] {
@@ -1173,13 +1185,16 @@ html.dark input[type="time"] {
     padding-right: 0.75rem;
   }
   
-  /* Ensure date picker popover stays within viewport */
+  /* Show and enable the native date picker popover on mobile */
   input[type="date"]::-webkit-calendar-picker-indicator,
   input[type="datetime-local"]::-webkit-calendar-picker-indicator,
   input[type="time"]::-webkit-calendar-picker-indicator {
+    opacity: 1;
     cursor: pointer;
     position: relative;
     z-index: 1;
+    width: auto;
+    height: auto;
   }
   
   /* Prevent date picker from overflowing */
