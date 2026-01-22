@@ -51,6 +51,11 @@ interface TruckFetchResult {
     queuedCount: number;
     nextJourney: FuelRecord;
   };
+  // Journey navigation: all available journeys for this truck
+  allJourneys?: {
+    active: FuelRecord | null;
+    queued: FuelRecord[];
+  };
 }
 
 interface EntryAutoFillData {
@@ -71,6 +76,13 @@ interface EntryAutoFillData {
     suggestedLiters: number;
     reason: string;
   };
+  // Journey navigation: track available journeys and current selection
+  allJourneys?: {
+    active: FuelRecord | null;
+    queued: FuelRecord[];
+  };
+  selectedJourneyIndex?: number; // -1 for active, 0+ for queued[index]
+  selectedJourneyType?: 'active' | 'queued';
 }
 
 // Inspect modal state
@@ -669,8 +681,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const response = await fuelRecordsAPI.getAll({ truckNo: truckNo.trim(), limit: 10000 });
       const fuelRecords = response.data;
       
+      // Debug: Log response structure to identify data flow issues
+      console.log(`[LPO Truck Lookup] Truck: ${truckNo}, Records fetched: ${fuelRecords?.length || 0}`);
+      if (fuelRecords && fuelRecords.length > 0) {
+        console.log(`[LPO Truck Lookup] First record:`, {
+          goingDo: fuelRecords[0]?.goingDo,
+          truckNo: fuelRecords[0]?.truckNo,
+          journeyStatus: fuelRecords[0]?.journeyStatus,
+          balance: fuelRecords[0]?.balance,
+          isCancelled: fuelRecords[0]?.isCancelled
+        });
+      }
+      
       // Filter out cancelled fuel records - ignore them as if they don't exist
       const activeFuelRecords = (fuelRecords || []).filter((r: FuelRecord) => !r.isCancelled);
+      console.log(`[LPO Truck Lookup] Active (non-cancelled) records: ${activeFuelRecords.length}`);
       
       if (!activeFuelRecords || activeFuelRecords.length === 0) {
         return {
@@ -754,8 +779,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       );
 
       // Search for active fuel record: current month → previous month → two months ago → three months ago
-      // Priority: ACTIVE status first (never return queued if active exists)
+      // Priority: ACTIVE status first, then QUEUED if no active exists
       let activeRecord: FuelRecord | null = null;
+      let queuedRecord: FuelRecord | null = null;
       let searchMonth = 'current';
 
       // Helper to check if a record is ACTIVE (not queued, not completed)
@@ -775,6 +801,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         return !isJourneyComplete(r);
       };
 
+      // Helper to check if a record is QUEUED
+      const isQueuedRecord = (r: FuelRecord): boolean => {
+        return r.journeyStatus === 'queued';
+      };
+
+      // STEP 1: Search for ACTIVE records across all months (highest priority)
       // First, try to find an ACTIVE record in current month
       activeRecord = sortedRecords.find((r: FuelRecord) => 
         isInMonth(r.date, currentMonth) && isActiveRecord(r)
@@ -804,8 +836,42 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         ) || null;
       }
 
-      // If still no active record, check if we have any record at all
+      // STEP 2: If no ACTIVE record, search for QUEUED records (fallback)
       if (!activeRecord) {
+        console.log('[LPO Truck Lookup] No active journey found, searching for queued journeys...');
+        searchMonth = 'current';
+        queuedRecord = sortedRecords.find((r: FuelRecord) => 
+          isInMonth(r.date, currentMonth) && isQueuedRecord(r)
+        ) || null;
+
+        if (!queuedRecord) {
+          searchMonth = 'previous';
+          queuedRecord = sortedRecords.find((r: FuelRecord) => 
+            isInMonth(r.date, previousMonth) && isQueuedRecord(r)
+          ) || null;
+        }
+
+        if (!queuedRecord) {
+          searchMonth = 'two months ago';
+          queuedRecord = sortedRecords.find((r: FuelRecord) => 
+            isInMonth(r.date, twoMonthsAgo) && isQueuedRecord(r)
+          ) || null;
+        }
+
+        if (!queuedRecord) {
+          searchMonth = 'three months ago';
+          queuedRecord = sortedRecords.find((r: FuelRecord) => 
+            isInMonth(r.date, threeMonthsAgo) && isQueuedRecord(r)
+          ) || null;
+        }
+      }
+
+      // Use queued record if no active record found
+      const selectedRecord = activeRecord || queuedRecord;
+
+      // If still no active or queued record, check if we have any record at all
+      if (!selectedRecord) {
+        console.log('[LPO Truck Lookup] No active or queued record found');
         // Get the most recent record regardless of month
         const mostRecent = sortedRecords[0];
         
@@ -815,6 +881,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           const destination = (mostRecent.originalGoingTo || mostRecent.to || '').toUpperCase();
           const isMSA = destination.includes('MSA') || destination.includes('MOMBASA');
           const returnCheckpoint = isMSA ? 'Tanga Return' : 'Mbeya Return';
+          console.log('[LPO Truck Lookup] Most recent journey is completed');
           return {
             fuelRecord: mostRecent,
             goingDo: mostRecent.goingDo || 'NIL',
@@ -828,7 +895,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           };
         }
 
-        // No active record found in last 4 months
+        // No active or queued record found in last 4 months
+        console.log('[LPO Truck Lookup] No active/queued journeys in last 4 months');
         return {
           fuelRecord: null,
           goingDo: 'NIL',
@@ -842,38 +910,40 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         };
       }
 
-      // Found active record with balance > 0
+      // Found record (active or queued)
       // IMPORTANT: Use originalGoingTo for the going destination if available
       // This handles the case where EXPORT DO has changed from/to fields
-      const goingDestination = activeRecord.originalGoingTo || activeRecord.to || 'NIL';
-      const currentDestination = activeRecord.to || 'NIL';
+      const goingDestination = selectedRecord.originalGoingTo || selectedRecord.to || 'NIL';
+      const currentDestination = selectedRecord.to || 'NIL';
       
-      // Check for queued journeys for this truck
+      // Check for other queued journeys for this truck (if selected record is active)
       const queuedJourneys = activeFuelRecords.filter((r: FuelRecord) => 
-        r.journeyStatus === 'queued' && r.truckNo === activeRecord.truckNo
+        r.journeyStatus === 'queued' && r.truckNo === selectedRecord.truckNo
       ).sort((a: any, b: any) => (a.queueOrder || 0) - (b.queueOrder || 0));
       
       // Build message with journey status
-      let statusMessage = `Found (${searchMonth} month): Going DO ${activeRecord.goingDo}, Balance: ${activeRecord.balance}L`;
+      let statusMessage = `Found (${searchMonth} month): Going DO ${selectedRecord.goingDo}, Balance: ${selectedRecord.balance}L`;
       
-      if (activeRecord.journeyStatus === 'queued') {
-        statusMessage = `⏳ QUEUED Journey (Position #${activeRecord.queueOrder || '?'}): ${activeRecord.goingDo} - Waiting to activate`;
-      } else if (activeRecord.journeyStatus === 'active') {
-        statusMessage = `🚛 ACTIVE Journey: DO ${activeRecord.goingDo}, Balance: ${activeRecord.balance}L`;
+      if (selectedRecord.journeyStatus === 'queued') {
+        statusMessage = `⏳ QUEUED Journey (Position #${selectedRecord.queueOrder || '?'}): ${selectedRecord.goingDo} - Waiting to activate`;
+        console.log('[LPO Truck Lookup] Using queued journey:', selectedRecord.goingDo);
+      } else if (selectedRecord.journeyStatus === 'active') {
+        statusMessage = `🚛 ACTIVE Journey: DO ${selectedRecord.goingDo}, Balance: ${selectedRecord.balance}L`;
         if (queuedJourneys.length > 0) {
           statusMessage += ` | ${queuedJourneys.length} queued`;
         }
-      } else if (activeRecord.journeyStatus === 'completed') {
-        statusMessage = `✓ COMPLETED Journey: DO ${activeRecord.goingDo}`;
+        console.log('[LPO Truck Lookup] Using active journey:', selectedRecord.goingDo);
+      } else if (selectedRecord.journeyStatus === 'completed') {
+        statusMessage = `✓ COMPLETED Journey: DO ${selectedRecord.goingDo}`;
       }
       
       return {
-        fuelRecord: activeRecord,
-        goingDo: activeRecord.goingDo || 'NIL',
-        returnDo: activeRecord.returnDo || 'NIL',
+        fuelRecord: selectedRecord,
+        goingDo: selectedRecord.goingDo || 'NIL',
+        returnDo: selectedRecord.returnDo || 'NIL',
         destination: currentDestination,  // Current destination (might have changed for return)
         goingDestination: goingDestination,  // Original going destination for fuel allocation
-        balance: activeRecord.balance || 0,
+        balance: selectedRecord.balance || 0,
         message: statusMessage,
         success: true,
         queueInfo: queuedJourneys.length > 0 ? {
@@ -881,6 +951,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           queuedCount: queuedJourneys.length,
           nextJourney: queuedJourneys[0],
         } : undefined,
+        // Return all available journeys for navigation
+        allJourneys: {
+          active: activeRecord,
+          queued: queuedJourneys,
+        },
       };
     } catch (error) {
       console.error('Error fetching truck data:', error);
@@ -1467,6 +1542,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           warningType: result.warningType || null,
           warningMessage: result.message,
           balanceInfo,  // Store balance info for display
+          // Journey navigation: store all available journeys
+          allJourneys: result.allJourneys,
+          selectedJourneyIndex: result.allJourneys?.active ? -1 : 0, // -1 for active, 0 for first queued
+          selectedJourneyType: result.allJourneys?.active ? 'active' : 'queued',
         }
       }));
     }
@@ -1674,6 +1753,97 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         [index]: { ...prev[index], direction: newDirection }
       }));
     }
+  };
+
+  /**
+   * Navigate between active and queued journeys for a truck
+   * Allows switching between different journeys when truck has multiple bookings
+   */
+  const handleJourneyNavigation = async (index: number, targetJourneyType: 'active' | 'queued', queuedIndex?: number) => {
+    const autoFill = entryAutoFillData[index];
+    if (!autoFill?.allJourneys) return;
+
+    const { active, queued } = autoFill.allJourneys;
+    
+    // Determine which journey to use
+    let selectedJourney: FuelRecord | null = null;
+    let journeyIndex = -1; // -1 for active, 0+ for queued
+    
+    if (targetJourneyType === 'active' && active) {
+      selectedJourney = active;
+      journeyIndex = -1;
+    } else if (targetJourneyType === 'queued' && queued && queued.length > 0) {
+      const targetIndex = queuedIndex ?? 0;
+      if (targetIndex < queued.length) {
+        selectedJourney = queued[targetIndex];
+        journeyIndex = targetIndex;
+      }
+    }
+
+    if (!selectedJourney) return;
+
+    const direction = autoFill.direction || 'going';
+    const doNumber = direction === 'going' ? selectedJourney.goingDo : (selectedJourney.returnDo || selectedJourney.goingDo);
+    
+    // Get destination
+    const goingDestination = selectedJourney.originalGoingTo || selectedJourney.to || 'NIL';
+    const currentDestination = selectedJourney.to || 'NIL';
+    const destinationForAllocation = direction === 'going' ? goingDestination : currentDestination;
+    
+    // Get defaults for this journey
+    const defaults = formData.station 
+      ? getStationDefaults(
+          formData.station, 
+          direction, 
+          destinationForAllocation,
+          selectedJourney.totalLts ?? undefined,
+          selectedJourney.extra ?? undefined,
+          selectedJourney.balance ?? undefined
+        ) 
+      : { liters: 350, rate: 1.2 };
+
+    // Calculate balance info for Mbeya returning
+    let balanceInfo = undefined;
+    if (selectedJourney && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
+      balanceInfo = calculateMbeyaReturnBalance(selectedJourney);
+    }
+
+    let litersToSet = defaults.liters;
+    if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
+      litersToSet = balanceInfo.suggestedLiters;
+    }
+
+    // Update form data
+    setFormData(prev => {
+      const newEntries = [...(prev.entries || [])];
+      if (newEntries[index]) {
+        newEntries[index] = {
+          ...newEntries[index],
+          doNo: doNumber,
+          dest: destinationForAllocation,
+          liters: litersToSet,
+          amount: litersToSet * defaults.rate
+        };
+      }
+      const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+      return { ...prev, entries: newEntries, total };
+    });
+
+    // Update autofill data
+    setEntryAutoFillData(prev => ({
+      ...prev,
+      [index]: {
+        ...prev[index],
+        fuelRecord: selectedJourney,
+        fuelRecordId: selectedJourney.id || selectedJourney._id,
+        selectedJourneyIndex: journeyIndex,
+        selectedJourneyType: targetJourneyType,
+        balanceInfo,
+        warningType: null, // Clear warning when explicitly selecting a journey
+      }
+    }));
+
+    console.log(`[Journey Navigation] Switched to ${targetJourneyType} journey:`, selectedJourney.goingDo);
   };
 
   const handleEntryChange = (index: number, field: keyof LPODetail, value: string | number) => {
@@ -2888,6 +3058,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 ➕ Top-up: +{duplicateInfo.newLiters}L (existing: {duplicateInfo.liters}L)
                               </div>
                             )}
+                            {/* Journey selection indicator */}
+                            {autoFill.fetched && autoFill.allJourneys && (
+                              <div className="mt-1 text-[10px] text-gray-600 dark:text-gray-400">
+                                {autoFill.selectedJourneyType === 'active' && autoFill.allJourneys.active && (
+                                  <span className="text-green-600 dark:text-green-400 font-medium">🚛 Active Journey</span>
+                                )}
+                                {autoFill.selectedJourneyType === 'queued' && autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0] && (
+                                  <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                    ⏳ Queued #{autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0]?.queueOrder || (autoFill.selectedJourneyIndex || 0) + 1}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           
                           {/* DO Number Input Cell - for DO-first search */}
@@ -2914,7 +3097,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           </td>
                           
                           <td className="px-3 py-3">
-                            <div className="flex flex-col">
+                            <div className="flex flex-col gap-1">
                               <button
                                 type="button"
                                 onClick={() => toggleDirection(index)}
@@ -2936,6 +3119,58 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 <span className="text-xs text-amber-600 dark:text-amber-400 mt-1" title="Return DO not yet inputted in fuel record">
                                   ⚠️ No Return DO
                                 </span>
+                              )}
+                              {/* Journey navigation: switch between active and queued journeys */}
+                              {autoFill.allJourneys && (autoFill.allJourneys.active && autoFill.allJourneys.queued.length > 0) && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleJourneyNavigation(index, 'active')}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                      autoFill.selectedJourneyType === 'active'
+                                        ? 'bg-green-500 text-white'
+                                        : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                                    }`}
+                                    title="Switch to active journey"
+                                  >
+                                    🚛 Active
+                                  </button>
+                                  {autoFill.allJourneys.queued.map((queuedJourney, qIdx) => (
+                                    <button
+                                      key={qIdx}
+                                      type="button"
+                                      onClick={() => handleJourneyNavigation(index, 'queued', qIdx)}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                        autoFill.selectedJourneyType === 'queued' && autoFill.selectedJourneyIndex === qIdx
+                                          ? 'bg-blue-500 text-white'
+                                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                                      }`}
+                                      title={`Switch to queued journey #${queuedJourney.queueOrder || qIdx + 1}: ${queuedJourney.goingDo}`}
+                                    >
+                                      ⏳ Q{queuedJourney.queueOrder || qIdx + 1}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Show only queued journeys if no active */}
+                              {autoFill.allJourneys && !autoFill.allJourneys.active && autoFill.allJourneys.queued.length > 1 && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  {autoFill.allJourneys.queued.map((queuedJourney, qIdx) => (
+                                    <button
+                                      key={qIdx}
+                                      type="button"
+                                      onClick={() => handleJourneyNavigation(index, 'queued', qIdx)}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                        autoFill.selectedJourneyType === 'queued' && autoFill.selectedJourneyIndex === qIdx
+                                          ? 'bg-blue-500 text-white'
+                                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                                      }`}
+                                      title={`Switch to queued journey #${queuedJourney.queueOrder || qIdx + 1}: ${queuedJourney.goingDo}`}
+                                    >
+                                      ⏳ Q{queuedJourney.queueOrder || qIdx + 1}
+                                    </button>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </td>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getRoleInfo } from '../utils/permissions';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
 import { useLocation, Link } from 'react-router-dom';
@@ -81,36 +80,11 @@ const Login: React.FC = () => {
     }
   };
 
-  // Demo accounts for easy testing
-  const demoAccounts = [
-    { username: 'superadmin', role: 'super_admin', password: 'admin123' },
-    { username: 'admin', role: 'admin', password: 'admin123' },
-    { username: 'supermanager', role: 'super_manager', password: 'manager123' },
-    { username: 'mgr_infinity', role: 'manager', password: 'manager123', station: 'INFINITY' },
-    { username: 'mgr_ndola', role: 'manager', password: 'manager123', station: 'LAKE NDOLA' },
-    { username: 'supervisor', role: 'supervisor', password: 'super123' },
-    { username: 'clerk', role: 'clerk', password: 'clerk123' },
-    { username: 'driver1', role: 'driver', password: 'driver123' },
-    { username: 'viewer', role: 'viewer', password: 'viewer123' },
-    // New enhanced roles
-    { username: 'fuelorder', role: 'fuel_order_maker', password: 'fuel123' },
-    { username: 'boss', role: 'boss', password: 'boss123' },
-    { username: 'yardman', role: 'yard_personnel', password: 'yard123' },
-    { username: 'attendant', role: 'fuel_attendant', password: 'fuel123' },
-    { username: 'stationmgr', role: 'station_manager', password: 'station123' },
-    { username: 'truck_driver', role: 'driver', password: 'drive123' },
-    { username: 'paymentmgr', role: 'payment_manager', password: 'payment123' },
-  ];
-
-  const fillDemo = (username: string, password: string) => {
-    setCredentials({ username, password });
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-3 sm:p-6 transition-all duration-500">
-      <div className="w-full max-w-6xl flex flex-col lg:flex-row bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-white/20 dark:border-gray-700/50">
-        {/* Left side - Login Form */}
-        <div className="w-full lg:w-1/2 p-4 sm:p-8 lg:p-12">
+      <div className="w-full max-w-md bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-white/20 dark:border-gray-700/50">
+        {/* Login Form */}
+        <div className="w-full p-4 sm:p-8 lg:p-12">
           <div className="max-w-md mx-auto">
             {/* Logo and Title */}
             <div className="text-center mb-6 sm:mb-8">
@@ -178,9 +152,6 @@ const Login: React.FC = () => {
                   Password
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
-                    <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-slate-400 dark:text-gray-500" />
-                  </div>
                   <input
                     id="password"
                     name="password"
@@ -188,7 +159,7 @@ const Login: React.FC = () => {
                     required
                     value={credentials.password}
                     onChange={handleInputChange}
-                    className="block w-full pl-10 sm:pl-12 pr-12 sm:pr-14 py-3 sm:py-4 text-base border-2 border-slate-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white/80 dark:bg-gray-700 text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-gray-500 backdrop-blur transition-all duration-200"
+                    className="block w-full pl-3 sm:pl-4 pr-12 sm:pr-14 py-3 sm:py-4 text-base border-2 border-slate-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white/80 dark:bg-gray-700 text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-gray-500 backdrop-blur transition-all duration-200"
                     placeholder="Enter your password"
                   />
                   <button
@@ -252,54 +223,6 @@ const Login: React.FC = () => {
                 )}
               </button>
             </form>
-          </div>
-        </div>
-
-        {/* Right side - Demo Accounts */}
-        <div className="hidden lg:block lg:w-1/2 bg-gradient-to-br from-orange-500 to-orange-600 p-8 lg:p-12">
-          <div className="h-full flex flex-col justify-center">
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold text-white mb-4">
-                Role-Based Access Control
-              </h2>
-              <p className="text-orange-100 text-lg leading-relaxed">
-                Our system supports 7 distinct user roles, each with carefully designed permissions 
-                to ensure secure and efficient operations.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold text-white mb-4">Demo Accounts:</h3>
-              <div className="grid gap-3 max-h-80 overflow-y-auto">
-                {demoAccounts.map((account) => {
-                  const roleInfo = getRoleInfo(account.role as any);
-                  return (
-                    <div
-                      key={account.username}
-                      onClick={() => fillDemo(account.username, account.password)}
-                      className="bg-black/20 backdrop-blur-sm rounded-lg p-4 cursor-pointer hover:bg-black/30 transition-all group border border-white/10"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-white group-hover:text-orange-100">
-                            {account.username}
-                          </div>
-                          <div className="text-sm text-orange-200">
-                            {roleInfo.name}
-                          </div>
-                        </div>
-                        <div className="text-xs text-orange-200 font-mono">
-                          {account.password}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-orange-200 text-sm mt-4">
-                Click on any account above to auto-fill credentials
-              </p>
-            </div>
           </div>
         </div>
       </div>

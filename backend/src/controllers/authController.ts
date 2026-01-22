@@ -117,7 +117,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
           req.ip,
           req.get('user-agent')
         );
-        throw new ApiError(401, 'Invalid credentials');
+        throw new ApiError(401, 'Invalid truck number or inactive driver account.');
       }
 
       // Verify PIN
@@ -131,7 +131,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
           req.ip,
           req.get('user-agent')
         );
-        throw new ApiError(401, 'Invalid credentials');
+        throw new ApiError(401, 'Invalid PIN. Please check your credentials and try again.');
       }
 
       // Update last login
@@ -196,7 +196,14 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     const user = await User.findOne({ username, isDeleted: false }).select('+password');
 
     if (!user) {
-      throw new ApiError(401, 'Invalid username or password');
+      // Log failed login attempt
+      await AuditService.logLogin(
+        username,
+        false,
+        req.ip,
+        req.get('user-agent')
+      );
+      throw new ApiError(401, 'Invalid username. Please check your credentials and try again.');
     }
 
     // Check if user is banned
@@ -220,7 +227,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         req.ip,
         req.get('user-agent')
       );
-      throw new ApiError(401, 'Invalid username or password');
+      throw new ApiError(401, 'Invalid password. Please check your credentials and try again.');
     }
 
     // Generate tokens
