@@ -354,13 +354,13 @@ const FuelRecords = () => {
   //   filterRecords();
   // }, [searchTerm, routeFilter, records, selectedMonth, routeTypeFilter]);
 
-  // Reset route filter and fetch routes when import/export type changes
+  // Reset route filter and fetch routes when import/export type or month changes
   useEffect(() => {
     if (monthInitialized) {
       setRouteFilter('');
       fetchRoutes();
     }
-  }, [routeTypeFilter, monthInitialized]);
+  }, [routeTypeFilter, selectedMonth, monthInitialized]);
   
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -384,12 +384,15 @@ const FuelRecords = () => {
         filters.search = searchTerm;
       }
       
-      // Add route filter
+      // Add route filter - routeFilter now contains "FROM-TO" format
       if (routeFilter) {
+        const [from, to] = routeFilter.split('-');
         if (routeTypeFilter === 'IMPORT') {
-          filters.to = routeFilter;
+          // For IMPORT, filter by the destination
+          filters.to = to;
         } else {
-          filters.from = routeFilter;
+          // For EXPORT, filter by the origin (which is 'from' in the route key)
+          filters.from = from;
         }
       }
       
@@ -450,33 +453,80 @@ const FuelRecords = () => {
 
   const fetchRoutes = async () => {
     try {
-      // Fetch ALL fuel records to extract actual routes used
-      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
+      // Build filters to fetch records for the selected month only
+      const filters: any = { limit: 10000 };
+      
+      // Add month filter - only fetch routes from current month
+      if (selectedMonth) {
+        const [year, monthNum] = selectedMonth.split('-');
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = monthNames[parseInt(monthNum) - 1];
+        filters.month = `${monthName} ${year}`;
+      }
+      
+      const response = await fuelRecordsAPI.getAll(filters);
       const allRecords = response.data;
       
-      // Extract unique routes based on route type filter
-      const routesSet = new Set<string>();
+      console.log(`Fetching ${routeTypeFilter} routes from ${selectedMonth}:`, {
+        totalRecords: allRecords.length,
+        sampleRecord: allRecords[0]
+      });
+      
+      // Extract unique routes with both from and to fields
+      const routesMap = new Map<string, { from: string; to: string }>();
       
       allRecords.forEach(record => {
         if (routeTypeFilter === 'IMPORT') {
-          // IMPORT = Going routes (records with goingDo)
-          if (record.goingDo && record.to) {
-            routesSet.add(record.to);
+          // IMPORT = Going routes - use originalGoingFrom/To (preserved) or fallback to from/to
+          // Only include records that have a goingDo (not empty/null)
+          if (record.goingDo && record.goingDo.trim() !== '') {
+            const goingFrom = record.originalGoingFrom || record.from;
+            const goingTo = record.originalGoingTo || record.to;
+            if (goingFrom && goingTo) {
+              const routeKey = `${goingFrom}-${goingTo}`;
+              console.log('Adding IMPORT route:', { 
+                goingDo: record.goingDo, 
+                returnDo: record.returnDo,
+                originalFrom: record.originalGoingFrom,
+                originalTo: record.originalGoingTo,
+                currentFrom: record.from, 
+                currentTo: record.to, 
+                usingFrom: goingFrom,
+                usingTo: goingTo,
+                routeKey 
+              });
+              routesMap.set(routeKey, { from: goingFrom, to: goingTo });
+            }
           }
         } else {
-          // EXPORT = Return routes (records with returnDo)
-          if (record.returnDo && record.from) {
-            routesSet.add(record.from);
+          // EXPORT = Return routes - use current from/to (already updated for return direction)
+          // Only include records that have a returnDo (not empty/null)
+          // DO NOT reverse - the from/to fields already represent the return journey direction
+          if (record.returnDo && record.returnDo.trim() !== '' && record.from && record.to) {
+            const routeKey = `${record.from}-${record.to}`;
+            console.log('Adding EXPORT route:', { 
+              returnDo: record.returnDo, 
+              originalFrom: record.originalGoingFrom,
+              originalTo: record.originalGoingTo,
+              currentFrom: record.from, 
+              currentTo: record.to, 
+              routeKey: `${record.from}-${record.to}` 
+            });
+            routesMap.set(routeKey, { from: record.from, to: record.to });
           }
         }
       });
       
-      // Convert to array and sort
-      const routes = Array.from(routesSet)
-        .sort()
-        .map(destination => ({ destination }));
+      // Convert to array and sort by the full route string
+      const routes = Array.from(routesMap.values())
+        .sort((a, b) => {
+          const routeA = `${a.from} - ${a.to}`;
+          const routeB = `${b.from} - ${b.to}`;
+          return routeA.localeCompare(routeB);
+        });
       
-      console.log(`Extracted ${routeTypeFilter} routes from records:`, routes);
+      console.log(`Extracted ${routeTypeFilter} routes from ${selectedMonth}:`, routes);
       setAvailableRoutes(routes);
     } catch (error) {
       console.error('Error fetching routes:', error);
@@ -911,7 +961,7 @@ const FuelRecords = () => {
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
             >
               <span className={!routeFilter ? 'text-gray-400' : ''}>
-                {routeFilter || 'All Routes'}
+                {routeFilter ? routeFilter.replace('-', ' → ') : 'All Routes'}
               </span>
               <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRouteDropdown ? 'rotate-180' : ''}`} />
             </button>
@@ -930,22 +980,26 @@ const FuelRecords = () => {
                   <span>All Routes</span>
                   {!routeFilter && <Check className="w-4 h-4" />}
                 </button>
-                {availableRoutes.map((route) => (
-                  <button
-                    key={`route-${route.destination}`}
-                    type="button"
-                    onClick={() => {
-                      setRouteFilter(route.destination);
-                      setShowRouteDropdown(false);
-                    }}
-                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                      routeFilter === route.destination ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
-                    }`}
-                  >
-                    <span>{route.destination}</span>
-                    {routeFilter === route.destination && <Check className="w-4 h-4" />}
-                  </button>
-                ))}
+                {availableRoutes.map((route) => {
+                  const routeKey = `${route.from}-${route.to}`;
+                  const routeDisplay = `${route.from} → ${route.to}`;
+                  return (
+                    <button
+                      key={`route-${routeKey}`}
+                      type="button"
+                      onClick={() => {
+                        setRouteFilter(routeKey);
+                        setShowRouteDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                        routeFilter === routeKey ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      <span>{routeDisplay}</span>
+                      {routeFilter === routeKey && <Check className="w-4 h-4" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
