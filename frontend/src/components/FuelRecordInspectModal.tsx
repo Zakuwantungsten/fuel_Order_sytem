@@ -244,13 +244,21 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                      fuelRecord.balance === 0 
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                        : fuelRecord.balance > 0 
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                      (fuelRecord as any).isLocked
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                        : fuelRecord.balance === 0 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                          : fuelRecord.balance > 0 
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
+                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
                     }`}>
-                      {fuelRecord.balance === 0 ? 'Completed' : fuelRecord.balance > 0 ? 'Active' : 'Overspent'}
+                      {(fuelRecord as any).isLocked 
+                        ? '🔒 Locked (Pending Config)' 
+                        : fuelRecord.balance === 0 
+                          ? 'Completed' 
+                          : fuelRecord.balance > 0 
+                            ? 'Active' 
+                            : 'Overspent'}
                     </span>
                   </div>
                 </div>
@@ -285,6 +293,30 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Locked Record Warning - Show configuration missing */}
+              {(fuelRecord as any).isLocked && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 rounded-lg">
+                  <div className="flex items-start">
+                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mr-3 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                        🔒 Record Locked - Missing Configuration
+                      </h4>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        {(fuelRecord as any).pendingConfigReason === 'both' 
+                          ? 'Missing: Route total liters AND truck batch assignment'
+                          : (fuelRecord as any).pendingConfigReason === 'missing_total_liters'
+                          ? 'Missing: Route total liters configuration'
+                          : 'Missing: Truck batch assignment'}
+                      </p>
+                      <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
+                        ℹ️ Contact admin to configure missing settings. Manual LPO entry is still allowed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Checkpoint Table - THE MAIN FEATURE */}
               <div>
