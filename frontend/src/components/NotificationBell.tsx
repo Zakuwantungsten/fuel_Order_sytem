@@ -70,18 +70,32 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
         // Admin sees action-oriented message
         const destination = notification.metadata?.destination;
         const truckSuffix = notification.metadata?.truckSuffix;
+        const truckNo = notification.metadata?.truckNo;
         
         if (notification.type === 'missing_total_liters') {
           return `Route "${destination}" needs configuration. Add it in System Config > Routes.`;
         } else if (notification.type === 'missing_extra_fuel') {
-          return `Truck suffix "${truckSuffix}" needs batch assignment. Go to System Config > Truck Batches.`;
+          return `Truck ${truckNo} suffix "${truckSuffix}" needs batch assignment. Go to System Config > Truck Batches.`;
         } else if (notification.type === 'both') {
           return `Add route total liters and truck batch in System Configuration.`;
+        }
+      } else {
+        // Fuel order maker sees helpful message with action items
+        const destination = notification.metadata?.destination;
+        const truckSuffix = notification.metadata?.truckSuffix;
+        const truckNo = notification.metadata?.truckNo;
+        
+        if (notification.type === 'missing_total_liters') {
+          return `Route "${destination}" is not configured. Contact admin or click to edit manually.`;
+        } else if (notification.type === 'missing_extra_fuel') {
+          return `Truck ${truckNo} (suffix: ${truckSuffix}) needs batch assignment. Contact admin or click to edit manually.`;
+        } else if (notification.type === 'both') {
+          return `${truckNo} needs route & batch config. Contact admin or click to edit manually.`;
         }
       }
     }
     
-    // Return original message for non-admins or other notification types
+    // Return original message for other notification types
     return notification.message;
   };
 
@@ -265,6 +279,13 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     if ((notification.type === 'yard_fuel_recorded' || notification.type === 'truck_pending_linking') && onViewPendingYardFuel) {
       setShowDropdown(false);
       onViewPendingYardFuel();
+      return;
+    }
+    
+    // For missing config notifications, navigate to the fuel record
+    if ((notification.type === 'missing_total_liters' || notification.type === 'missing_extra_fuel' || notification.type === 'both') && notification.metadata?.fuelRecordId && onNotificationClick) {
+      onNotificationClick(notification);
+      setShowDropdown(false);
       return;
     }
     

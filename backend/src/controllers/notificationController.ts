@@ -261,13 +261,13 @@ export const createMissingConfigNotification = async (
         ? `Configuration Required: ${metadata.doNumber}`
         : type === 'missing_total_liters'
         ? `Route Configuration Required: ${metadata.doNumber}`
-        : `Truck Batch Required: ${metadata.doNumber}`;
+        : `Truck Batch Assignment Needed: ${metadata.doNumber}`;
       
       const creatorMessage = type === 'both'
-        ? `The fuel record for ${metadata.truckNo} needs both route total liters and truck batch configuration. Please contact admin to add these configurations.`
+        ? `The fuel record for ${metadata.truckNo} (${metadata.destination}) needs both route total liters and truck batch configuration. Please contact admin to add these configurations, or you can manually edit the fuel record.`
         : type === 'missing_total_liters'
-        ? `Route "${metadata.destination}" needs total liters configuration. Please contact admin to add this route.`
-        : `Truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) needs batch assignment. Please contact admin to add this configuration.`;
+        ? `Route "${metadata.destination}" needs total liters configuration. Please contact admin to add this route, or you can manually edit the fuel record.`
+        : `Truck ${metadata.truckNo} with suffix "${metadata.truckSuffix}" needs extra fuel batch assignment. Contact admin to configure it in System Config > Truck Batches, or click here to manually edit this fuel record.`;
 
       // Send notification to the creator's userId if available
       const creatorRecipients = creatorUserId ? [creatorUserId] : ['fuel_order_maker'];

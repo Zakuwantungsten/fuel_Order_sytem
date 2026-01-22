@@ -695,7 +695,15 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
       {/* All Notifications Page Modal */}
       {showNotificationsPage && (
-        <NotificationsPage onClose={() => setShowNotificationsPage(false)} />
+        <NotificationsPage 
+          onClose={() => setShowNotificationsPage(false)}
+          onNotificationClick={(notification) => {
+            if (notification.metadata?.fuelRecordId) {
+              setShowNotificationsPage(false);
+              setActiveTab('fuel_records');
+            }
+          }}
+        />
       )}
     </div>
   );

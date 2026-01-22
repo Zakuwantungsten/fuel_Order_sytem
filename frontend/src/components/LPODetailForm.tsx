@@ -717,19 +717,26 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         const reasonText = lockedRecord.pendingConfigReason === 'both' 
           ? 'route total liters and truck batch assignment'
           : lockedRecord.pendingConfigReason === 'missing_total_liters'
-          ? 'route total liters configuration'
+          ? 'route total liters'
           : 'truck batch assignment';
         
+        console.log('[LPO Truck Lookup] Found locked record:', lockedRecord.goingDo);
         return {
           fuelRecord: lockedRecord,
           goingDo: lockedRecord.goingDo || 'NIL',
           returnDo: lockedRecord.returnDo || 'NIL',
           destination: lockedRecord.to || 'NIL',
           goingDestination: lockedRecord.originalGoingTo || lockedRecord.to || 'NIL',
-          balance: 0,
-          message: `🔒 LOCKED: This fuel record is waiting for admin to configure ${reasonText}.\n\nDO: ${lockedRecord.goingDo}\nTruck: ${lockedRecord.truckNo}\nDestination: ${lockedRecord.to}\n\nPlease contact admin to unlock this record before creating LPOs.`,
-          success: false,
-          warningType: 'not_found' as const
+          balance: lockedRecord.balance || 0,
+          message: `🔒 LOCKED: Missing configuration (${reasonText}).\n\nDO: ${lockedRecord.goingDo} | Truck: ${lockedRecord.truckNo} | Destination: ${lockedRecord.to}\n\nYou can:\n• Enter fuel amounts manually in this LPO form\n• Contact admin to configure the missing ${reasonText}\n\nℹ️ Manual entry allowed - auto-calculated values will be available after admin configures settings.`,
+          success: true,
+          // No warningType - locked records are not warnings, they're just pending config
+          // This prevents the "⚠️ No record found" badge from showing
+          // Add journey info so UI shows proper status indicator
+          allJourneys: {
+            active: lockedRecord, // Locked record is the active journey (pending config)
+            queued: []
+          }
         };
       }
 
@@ -749,27 +756,46 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
       /**
        * Check if a journey is complete based on return checkpoints
-       * - For non-MSA destinations: mbeyaReturn must be filled (not 0)
-       * - For MSA destinations: tangaReturn must be filled (not 0)
-       * - balance === 0 is also required
-       * - Negative balance is acceptable (not journey complete)
+       * - For non-MSA destinations: mbeyaReturn must be filled (not 0, not null, not undefined)
+       * - For MSA destinations: tangaReturn must be filled (not 0, not null, not undefined)
+       * - We only check if the checkpoint is FILLED, not the actual value
+       * - Balance can be 0, negative, or positive - we don't check balance anymore
+       * 
+       * IMPORTANT: Locked records with balance=0 should NOT be marked as complete
+       * A fresh DO import with missing config creates balance=0 + all checkpoints=0
+       * This is NOT a completed journey - it's a pending/locked journey
        */
       const isJourneyComplete = (record: FuelRecord): boolean => {
-        // Balance must be exactly 0 for journey to be complete
-        // Negative balance is acceptable and means journey is still active
-        if (record.balance !== 0) {
+        // CRITICAL FIX: Locked records are NEVER complete - they're pending configuration
+        // Fresh fuel records created with missing route/truck config have balance=0
+        // but all checkpoints are also 0, which would falsely trigger "journey complete"
+        if ((record as any).isLocked) {
+          return false; // Locked = pending admin config, not completed
+        }
+        
+        // Journey status 'completed' explicitly marks completion
+        if (record.journeyStatus === 'completed') {
+          return true;
+        }
+        
+        // Journey status 'active' or 'queued' means NOT complete
+        if (record.journeyStatus === 'active' || record.journeyStatus === 'queued') {
           return false;
         }
         
+        // Check if return checkpoint is FILLED (regardless of balance)
+        // The key indicator is whether the truck took fuel on the return journey
         const destination = (record.originalGoingTo || record.to || '').toUpperCase();
         const isMSADestination = destination.includes('MSA') || destination.includes('MOMBASA');
         
         if (isMSADestination) {
-          // For MSA destinations, check if tangaReturn is filled
-          return (record as any).tangaReturn !== 0 && (record as any).tangaReturn !== undefined;
+          // For MSA destinations, check if tangaReturn is filled (not 0, not null, not undefined)
+          const tangaReturn = (record as any).tangaReturn;
+          return tangaReturn !== 0 && tangaReturn !== null && tangaReturn !== undefined;
         } else {
-          // For non-MSA destinations, check if mbeyaReturn is filled
-          return (record as any).mbeyaReturn !== 0 && (record as any).mbeyaReturn !== undefined;
+          // For non-MSA destinations, check if mbeyaReturn is filled (not 0, not null, not undefined)
+          const mbeyaReturn = (record as any).mbeyaReturn;
+          return mbeyaReturn !== 0 && mbeyaReturn !== null && mbeyaReturn !== undefined;
         }
       };
 
@@ -3062,7 +3088,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             {autoFill.fetched && autoFill.allJourneys && (
                               <div className="mt-1 text-[10px] text-gray-600 dark:text-gray-400">
                                 {autoFill.selectedJourneyType === 'active' && autoFill.allJourneys.active && (
-                                  <span className="text-green-600 dark:text-green-400 font-medium">🚛 Active Journey</span>
+                                  <span className={`font-medium ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                                    {(autoFill.fuelRecord as any)?.isLocked ? '🔒 Locked (Manual entry)' : '🚛 Active Journey'}
+                                  </span>
                                 )}
                                 {autoFill.selectedJourneyType === 'queued' && autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0] && (
                                   <span className="text-blue-600 dark:text-blue-400 font-medium">

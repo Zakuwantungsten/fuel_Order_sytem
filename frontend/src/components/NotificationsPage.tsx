@@ -16,9 +16,10 @@ interface Notification {
 
 interface NotificationsPageProps {
   onClose: () => void;
+  onNotificationClick?: (notification: Notification) => void;
 }
 
-const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose }) => {
+const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotificationClick }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,18 +35,32 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose }) => {
         // Admin sees action-oriented message
         const destination = notification.metadata?.destination;
         const truckSuffix = notification.metadata?.truckSuffix;
+        const truckNo = notification.metadata?.truckNo;
         
         if (notification.type === 'missing_total_liters') {
           return `Route "${destination}" needs total liters configuration. Please add this route in System Configuration > Routes.`;
         } else if (notification.type === 'missing_extra_fuel') {
-          return `Truck suffix "${truckSuffix}" needs batch assignment. Please assign it in System Configuration > Truck Batches.`;
+          return `Truck ${truckNo} with suffix "${truckSuffix}" needs batch assignment. Please configure it in System Configuration > Truck Batches.`;
         } else if (notification.type === 'both') {
-          return `This fuel record needs both route total liters and truck batch configuration. Please add them in System Configuration.`;
+          return `${truckNo} needs both route total liters and truck batch configuration. Please add them in System Configuration.`;
+        }
+      } else {
+        // Fuel order maker sees helpful message
+        const destination = notification.metadata?.destination;
+        const truckSuffix = notification.metadata?.truckSuffix;
+        const truckNo = notification.metadata?.truckNo;
+        
+        if (notification.type === 'missing_total_liters') {
+          return `Route "${destination}" is not configured yet. Please contact admin to add this route, or click to edit the fuel record manually.`;
+        } else if (notification.type === 'missing_extra_fuel') {
+          return `Truck ${truckNo} (suffix: ${truckSuffix}) needs extra fuel batch assignment. Contact admin to configure it in System Config > Truck Batches, or click to manually edit this fuel record.`;
+        } else if (notification.type === 'both') {
+          return `${truckNo} needs route configuration and truck batch assignment. Contact admin or click to edit manually.`;
         }
       }
     }
     
-    // Return original message for non-admins or other notification types
+    // Return original message for other notification types
     return notification.message;
   };
 
@@ -246,9 +261,16 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose }) => {
               {filteredNotifications.map((notification) => (
                 <div
                   key={notification._id}
+                  onClick={() => {
+                    // Handle click for missing config notifications - navigate to fuel record
+                    if ((notification.type === 'missing_total_liters' || notification.type === 'missing_extra_fuel' || notification.type === 'both') && notification.metadata?.fuelRecordId && onNotificationClick) {
+                      markAsRead(notification._id);
+                      onNotificationClick(notification);
+                    }
+                  }}
                   className={`p-4 hover:bg-gray-50 transition-colors ${
                     !notification.isRead ? 'bg-blue-50' : ''
-                  }`}
+                  } ${(notification.type === 'missing_total_liters' || notification.type === 'missing_extra_fuel' || notification.type === 'both') && notification.metadata?.fuelRecordId ? 'cursor-pointer' : ''}`}
                 >
                   <div className="flex items-start space-x-3">
                     <div className="flex-shrink-0 mt-1">
