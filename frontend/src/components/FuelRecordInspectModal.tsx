@@ -264,35 +264,61 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                 </div>
               </div>
 
-              {/* Route Info */}
+              {/* Route Info - Going Journey */}
               <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2">
+                  🚛 Going Journey (IMPORT)
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
-                    <p className="text-sm text-blue-600 dark:text-blue-400">Going DO</p>
+                    <p className="text-sm text-blue-600 dark:text-blue-400">DO Number</p>
                     <p className="font-semibold text-blue-900 dark:text-blue-100">
                       {fuelRecord.goingDo || 'N/A'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-blue-600 dark:text-blue-400">Return DO</p>
-                    <p className="font-semibold text-blue-900 dark:text-blue-100">
-                      {fuelRecord.returnDo || 'N/A'}
-                    </p>
-                  </div>
-                  <div>
                     <p className="text-sm text-blue-600 dark:text-blue-400">From</p>
                     <p className="font-semibold text-blue-900 dark:text-blue-100">
-                      {fuelRecord.from || 'N/A'}
+                      {(fuelRecord as any).originalGoingFrom || fuelRecord.from || 'N/A'}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-blue-600 dark:text-blue-400">To</p>
                     <p className="font-semibold text-blue-900 dark:text-blue-100">
-                      {fuelRecord.to || 'N/A'}
+                      {(fuelRecord as any).originalGoingTo || fuelRecord.to || 'N/A'}
                     </p>
                   </div>
                 </div>
               </div>
+
+              {/* Route Info - Return Journey (only if exists) */}
+              {fuelRecord.returnDo && (
+                <div className="bg-green-50 dark:bg-green-900/30 rounded-xl p-4">
+                  <h4 className="text-sm font-semibold text-green-700 dark:text-green-300 mb-3 flex items-center gap-2">
+                    🔄 Return Journey (EXPORT)
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-green-600 dark:text-green-400">DO Number</p>
+                      <p className="font-semibold text-green-900 dark:text-green-100">
+                        {fuelRecord.returnDo}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-green-600 dark:text-green-400">From</p>
+                      <p className="font-semibold text-green-900 dark:text-green-100">
+                        {fuelRecord.from || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-green-600 dark:text-green-400">To</p>
+                      <p className="font-semibold text-green-900 dark:text-green-100">
+                        {fuelRecord.to || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Locked Record Warning - Show configuration missing */}
               {(fuelRecord as any).isLocked && (
