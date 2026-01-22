@@ -17,6 +17,14 @@ const Login: React.FC = () => {
   const { login, isLoading, error, clearError } = useAuth();
   const location = useLocation();
 
+  // Load saved username but clear password when component mounts
+  useEffect(() => {
+    const savedUsername = localStorage.getItem('fuel_order_last_username') || '';
+    setCredentials({ username: savedUsername, password: '' });
+    setShowPassword(false);
+    setRememberMe(false);
+  }, []);
+
   // Check for session expiration or inactivity message
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -72,6 +80,8 @@ const Login: React.FC = () => {
     }
 
     try {
+      // Save username for next login
+      localStorage.setItem('fuel_order_last_username', credentials.username);
       await login(credentials);
       // Login success will be handled by the auth context
     } catch (error) {

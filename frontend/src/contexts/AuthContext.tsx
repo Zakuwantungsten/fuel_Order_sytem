@@ -279,6 +279,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const defaultTheme = getInitialTheme(); // No userId = uses default
     dispatch({ type: 'AUTH_LOGOUT' });
     dispatch({ type: 'SET_THEME', payload: defaultTheme });
+    
+    // Force reload the page to ensure login form is cleared
+    window.location.href = '/login';
   };
 
   // Clear error function
