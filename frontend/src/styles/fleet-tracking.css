@@ -11,12 +11,30 @@
 /* Ensure Leaflet popup is styled properly */
 .leaflet-popup-content-wrapper {
   padding: 0 !important;
+  overflow: hidden !important;
 }
 
 .leaflet-popup-content {
   margin: 0 !important;
   padding: 12px !important;
   min-width: 250px;
+  max-width: 320px !important;
+  overflow-x: hidden !important;
+  overflow-y: auto;
+  word-wrap: break-word;
+  box-sizing: border-box;
+}
+
+/* Prevent horizontal scrolling in popups */
+.leaflet-popup-content * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Prevent button clicks from affecting map */
+.leaflet-popup-content button {
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 /* Scrollbar styling for truck list */

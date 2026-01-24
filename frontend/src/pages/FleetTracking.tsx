@@ -218,7 +218,13 @@ const FleetTracking = () => {
       
       console.log('After upload - data refreshed');
       const totalTrucks = uploadResponse.data?.data?.totalTrucks || uploadResponse.data?.totalTrucks || 0;
-      alert(`Upload successful! File processed: ${totalTrucks} trucks found`);
+      const fleetGroups = uploadResponse.data?.data?.fleetGroups || 0;
+      
+      if (totalTrucks === 0) {
+        alert(`⚠️ Upload completed but 0 trucks were processed.\n\nThis usually means:\n• The CSV/Excel format doesn't match expected structure\n• Headers are not recognized (should have 'RELOAD', 'BRIDGE', 'CONKEN', etc.)\n• Column positions are incorrect\n\nPlease check the file format and try again.`);
+      } else {
+        alert(`✅ Upload successful!\n\n${totalTrucks} trucks processed in ${fleetGroups} fleet groups`);
+      }
       
       // Reset file input
       event.target.value = '';
@@ -578,7 +584,7 @@ const FleetTracking = () => {
                       position={[checkpoint.coordinates!.latitude, checkpoint.coordinates!.longitude]}
                       icon={customIcon}
                     >
-                      <Popup maxHeight={450} maxWidth={320} autoPan={false}>
+                      <Popup maxHeight={450} maxWidth={320} autoPan={false} closeButton={true}>
                         <div className="min-w-[280px] max-w-[300px]">
                           {/* Header */}
                           <div className="font-bold text-base mb-2 pb-2 border-b border-gray-200">
@@ -598,18 +604,26 @@ const FleetTracking = () => {
                               return (
                                 <button
                                   key={status}
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
                                     setActiveStatusTab(prev => ({
                                       ...prev,
                                       [checkpointKey]: status
                                     }));
                                   }}
-                                  className="px-2 py-1 text-xs font-semibold rounded transition-all"
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="px-2 py-1 text-xs font-semibold rounded transition-all flex-shrink-0"
                                   style={{
                                     backgroundColor: isActive ? statusColor : `${statusColor}15`,
                                     color: isActive ? 'white' : statusColor,
-                                    border: `1px solid ${statusColor}40`
+                                    border: `1px solid ${statusColor}40`,
+                                    maxWidth: '160px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
                                   }}
+                                  title={`${status} (${count} trucks)`}
                                 >
                                   {status.length > 15 ? status.substring(0, 12) + '...' : status} ({count})
                                 </button>
@@ -644,12 +658,15 @@ const FleetTracking = () => {
                                 
                                 {/* Copy Button */}
                                 <button
-                                  onClick={async () => {
+                                  onClick={async (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
                                     const truckNumbers = trucksInGroup.map(t => t.truckNo).join(' ');
                                     await navigator.clipboard.writeText(truckNumbers);
                                     setCopiedCheckpoint(`${checkpoint.name}-${status}`);
                                     setTimeout(() => setCopiedCheckpoint(null), 2000);
                                   }}
+                                  onMouseDown={(e) => e.stopPropagation()}
                                   className="w-full px-3 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
                                   style={{
                                     backgroundColor: statusColor,
@@ -715,8 +732,8 @@ const FleetTracking = () => {
                           color="#FFFFFF"
                           weight={2.5}
                         >
-                          <Popup>
-                            <div className="min-w-[200px]">
+                          <Popup maxWidth={300} autoPan={false} closeButton={true}>
+                            <div className="min-w-[200px] max-w-[280px]">
                               <div className="font-bold text-lg mb-2">{truck.truckNo}</div>
                               {truck.trailerNo && (
                                 <div className="text-sm text-gray-600 mb-1">Trailer: {truck.trailerNo}</div>
@@ -724,13 +741,14 @@ const FleetTracking = () => {
                               <div className="text-sm mb-1">
                                 <span className="font-semibold">Location:</span> {checkpoint.displayName}
                               </div>
-                              <div className="text-sm mb-1">
+                              <div className="text-sm mb-1 flex flex-wrap items-center gap-1">
                                 <span className="font-semibold">Status:</span> 
                                 <span 
-                                  className="ml-1 px-2 py-0.5 rounded text-white text-xs"
+                                  className="px-2 py-0.5 rounded text-white text-xs break-words max-w-full"
                                   style={{ backgroundColor: color }}
+                                  title={truck.status}
                                 >
-                                  {truck.status}
+                                  {truck.status.length > 25 ? truck.status.substring(0, 22) + '...' : truck.status}
                                 </span>
                               </div>
                               <div className="text-sm mb-1">
@@ -747,10 +765,13 @@ const FleetTracking = () => {
                                 </div>
                               )}
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
                                   navigator.clipboard.writeText(truck.truckNo);
                                   alert(`Copied: ${truck.truckNo}`);
                                 }}
+                                onMouseDown={(e) => e.stopPropagation()}
                                 className="w-full text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
                               >
                                 Copy Truck Number

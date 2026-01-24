@@ -115,30 +115,72 @@ export class FleetReportParser {
     let currentGroupName = '';
     let currentGroupTrucks: ITruckPositionInSnapshot[] = [];
     let inDataSection = false;
+    let emptyRowCount = 0;
+
+    logger.info(`Processing ${rows.length} rows for multi-table fleet groups`);
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       if (!row || !Array.isArray(row)) continue;
 
-      // Check if this is a fleet group header (looks like: "CONKEN 4 TRUCKS" or "RELOAD 313MT DSM-LIKASI")
-      const firstCell = row[1]?.toString().trim();
-      if (firstCell && this.isFleetGroupHeader(firstCell)) {
+      // Check multiple columns for fleet group headers (columns 1-3)
+      // CSVs may have leading empty columns that shift data
+      let headerFound = false;
+      let headerText = '';
+      
+      for (let col = 1; col <= 3; col++) {
+        const cellText = row[col]?.toString().trim();
+        if (cellText && this.isFleetGroupHeader(cellText)) {
+          headerText = cellText;
+          headerFound = true;
+          break;
+        }
+      }
+
+      if (headerFound) {
         // Save previous group if exists
         if (currentGroupName && currentGroupTrucks.length > 0) {
+          logger.info(`Completed group "${currentGroupName}" with ${currentGroupTrucks.length} trucks`);
           groups.push(this.createFleetGroup(currentGroupName, currentGroupTrucks));
         }
         
         // Start new group
-        currentGroupName = firstCell;
+        currentGroupName = headerText;
         currentGroupTrucks = [];
         inDataSection = false;
+        emptyRowCount = 0;
+        logger.info(`Started new group: "${currentGroupName}"`);
         continue;
       }
 
       // Check if this is a column header row (S/N, TRUCK, TRAILER, etc.)
-      if (firstCell && (firstCell.toUpperCase() === 'S/N' || firstCell.toUpperCase() === 'SN')) {
+      // Also check multiple columns as data might be offset
+      let isHeaderRow = false;
+      for (let col = 1; col <= 3; col++) {
+        const cellText = row[col]?.toString().trim().toUpperCase();
+        if (cellText === 'S/N' || cellText === 'SN') {
+          isHeaderRow = true;
+          break;
+        }
+      }
+
+      if (isHeaderRow) {
         inDataSection = true;
+        emptyRowCount = 0;
+        logger.info(`Found data header row at line ${i}, starting data extraction for "${currentGroupName}"`);
         continue;
+      }
+
+      // Track consecutive empty rows (but allow some spacing)
+      if (this.isEmptyRow(row)) {
+        emptyRowCount++;
+        // Only end section after 2+ consecutive empty rows
+        if (emptyRowCount >= 2 && currentGroupTrucks.length > 0) {
+          inDataSection = false;
+        }
+        continue;
+      } else {
+        emptyRowCount = 0;
       }
 
       // Extract truck data if we're in a data section
@@ -146,21 +188,26 @@ export class FleetReportParser {
         const truck = this.extractTruckFromRow(row, 'IMPORT');
         if (truck) {
           currentGroupTrucks.push(truck);
+          if (currentGroupTrucks.length === 1) {
+            logger.info(`First truck in "${currentGroupName}": ${truck.truckNo} at ${truck.currentCheckpoint}`);
+          }
         }
-      }
-
-      // Empty rows or lines of commas might indicate end of group
-      if (this.isEmptyRow(row) && currentGroupTrucks.length > 0) {
-        inDataSection = false;
       }
     }
 
     // Add last group
     if (currentGroupName && currentGroupTrucks.length > 0) {
+      logger.info(`Completed final group "${currentGroupName}" with ${currentGroupTrucks.length} trucks`);
       groups.push(this.createFleetGroup(currentGroupName, currentGroupTrucks));
     }
 
-    logger.info(`Extracted ${groups.length} fleet groups with ${groups.reduce((sum, g) => sum + g.trucks.length, 0)} trucks`);
+    const totalTrucks = groups.reduce((sum, g) => sum + g.trucks.length, 0);
+    logger.info(`✅ Extracted ${groups.length} fleet groups with ${totalTrucks} total trucks`);
+    
+    if (groups.length === 0) {
+      logger.warn('⚠️ WARNING: No fleet groups extracted! Check if headers match expected patterns.');
+    }
+    
     return groups;
   }
 
@@ -208,18 +255,33 @@ export class FleetReportParser {
    * Check if a cell value looks like a fleet group header
    */
   private isFleetGroupHeader(text: string): boolean {
-    const upper = text.toUpperCase();
+    if (!text || text.trim().length === 0) return false;
+    
+    const upper = text.toUpperCase().trim();
+    
+    // Skip non-fleet headers
+    if (upper.includes('IMPORT REPORT') || upper.includes('POD SUMMARY')) {
+      return false;
+    }
+    
     // Look for patterns like "CONKEN", "RELOAD", "BRIDGE", "IMPALA", "POSEIDON", etc.
     const patterns = [
-      /^\s*[A-Z]+\s+\d+\s+TRUCKS?/i,
-      /^\s*RELOAD\s+\d+MT/i,
-      /^\s*BRIDGE\s+\d+MT/i,
-      /^\s*IMPALA\s+\d+MT/i,
-      /^\s*POSEIDON\s+\d+MT/i,
-      /^\s*POLYTRA\s+\d+MT/i,
+      /^[A-Z]+\s+\d+\s+TRUCKS?/i,           // "CONKEN 4 TRUCKS"
+      /^RELOAD\s+\d+MT/i,                    // "RELOAD 313MT DSM-LIKASI"
+      /^BRIDGE\s+\d+/i,                      // "BRIDGE 1043MT MBSA-KOLWEZI"
+      /^IMPALA\s+\d+MT/i,                    // "IMPALA 638MT DSM-KOLWEZI"
+      /^POSEIDON\s+\d+MT/i,                  // "POSEIDON 126MT DSM-COMIKA"
+      /^POLYTRA\s+\d+MT/i,                   // "POLYTRA 639MT DSM-KOLWEZI"
+      /^GREATLAKES\s+DSM/i,                  // "GREATLAKES DSM-LUBUMBASHI"
     ];
     
-    return patterns.some(pattern => pattern.test(text));
+    const isMatch = patterns.some(pattern => pattern.test(upper));
+    
+    if (isMatch) {
+      logger.debug(`✓ Recognized fleet group header: "${text}"`);
+    }
+    
+    return isMatch;
   }
 
   /**
@@ -231,28 +293,44 @@ export class FleetReportParser {
       // NO_ORDER: [1]=S/N, [2]=TRUCK, [3]=TRAILER, [4]=POSITION, [5]=TYPE, [6]=STATUS, [7]=C40, [8]=DSJ, [9]=DEPT DATE, [10]=DATE TODAY
       // IMPORT:   [1]=S/N, [2]=TRUCK, [3]=TRAILER, [4]=POSITION, [5]=STATUS, [6]=TYPE, [7]=RETURN, [8]=DSJ, [9]=DEPT DATE, [10]=DATE TODAY
       
-      const truckNo = row[2]?.toString().trim();
-      const trailerNo = row[3]?.toString().trim();
-      const position = row[4]?.toString().trim();
+      // Try to auto-detect column offset by looking for S/N number in first 3 columns
+      let offset = 0;
+      for (let i = 1; i <= 3; i++) {
+        const val = row[i]?.toString().trim();
+        if (val && /^\d+$/.test(val)) {
+          offset = i - 1;
+          break;
+        }
+      }
+      
+      const truckNo = row[2 + offset]?.toString().trim();
+      const trailerNo = row[3 + offset]?.toString().trim();
+      const position = row[4 + offset]?.toString().trim();
       
       // STATUS is at different columns depending on report type
       const status = reportType === 'IMPORT' 
-        ? row[5]?.toString().trim()  // Column 5 for IMPORT (after POSITION)
-        : row[6]?.toString().trim();  // Column 6 for NO_ORDER (after TYPE)
+        ? row[5 + offset]?.toString().trim()  // Column 5 for IMPORT (after POSITION)
+        : row[6 + offset]?.toString().trim();  // Column 6 for NO_ORDER (after TYPE)
       
       const vehicleType = reportType === 'IMPORT'
-        ? row[6]?.toString().trim()  // Column 6 for IMPORT (after STATUS)
-        : row[5]?.toString().trim();  // Column 5 for NO_ORDER (before STATUS)
+        ? row[6 + offset]?.toString().trim()  // Column 6 for IMPORT (after STATUS)
+        : row[5 + offset]?.toString().trim();  // Column 5 for NO_ORDER (before STATUS)
         
       const dsjText = reportType === 'IMPORT'
-        ? row[8]?.toString().trim()  // Column 8 for IMPORT
-        : row[8]?.toString().trim();  // Column 8 for NO_ORDER (same position)
+        ? row[8 + offset]?.toString().trim()  // Column 8 for IMPORT
+        : row[8 + offset]?.toString().trim();  // Column 8 for NO_ORDER (same position)
         
       const deptDateText = reportType === 'IMPORT'
-        ? row[9]?.toString().trim()  // Column 9 for IMPORT
-        : row[9]?.toString().trim();  // Column 9 for NO_ORDER (same position)
+        ? row[9 + offset]?.toString().trim()  // Column 9 for IMPORT
+        : row[9 + offset]?.toString().trim();  // Column 9 for NO_ORDER (same position)
 
-      if (!truckNo || !position) return null;
+      if (!truckNo || !position) {
+        // Only log if row has some data (not completely empty)
+        if (row.some((cell, idx) => idx > 0 && cell?.toString().trim())) {
+          logger.debug(`Skipping row - missing truck (${truckNo}) or position (${position})`);
+        }
+        return null;
+      }
 
       // Match position to checkpoint
       const checkpoint = this.matchCheckpoint(position);

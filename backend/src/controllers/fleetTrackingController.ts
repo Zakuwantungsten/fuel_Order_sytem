@@ -54,7 +54,9 @@ export const uploadFleetReport = async (req: AuthRequest, res: Response): Promis
     await fleetReportParser.initialize();
 
     // Parse the file
+    logger.info(`Parsing ${file.originalname} as Excel/CSV file...`);
     const parsedData = await fleetReportParser.parseExcelFile(file.buffer, file.originalname);
+    logger.info(`Parse complete: Type=${parsedData.reportType}, Groups=${parsedData.fleetGroups.length}, Trucks=${parsedData.totalTrucks}`);
 
     // Create snapshot
     const snapshot = await FleetSnapshot.create({
@@ -108,13 +110,20 @@ export const uploadFleetReport = async (req: AuthRequest, res: Response): Promis
     // TODO: Add audit logging once UPLOAD_FLEET_REPORT action is added to AuditLog enum
     // await AuditService.log({ ... });
 
-    logger.info(
-      `Fleet report processed: ${parsedData.totalTrucks} trucks in ${parsedData.fleetGroups.length} groups`
-    );
+    if (parsedData.totalTrucks === 0) {
+      logger.warn(`⚠️ WARNING: Fleet report processed but found 0 trucks! File: ${file.originalname}`);
+      logger.warn('This usually means the CSV/Excel format does not match expected structure.');
+    } else {
+      logger.info(
+        `✅ Fleet report processed: ${parsedData.totalTrucks} trucks in ${parsedData.fleetGroups.length} groups`
+      );
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Fleet report uploaded and processed successfully',
+      message: parsedData.totalTrucks > 0 
+        ? `Fleet report uploaded successfully: ${parsedData.totalTrucks} trucks processed` 
+        : 'Fleet report uploaded but no trucks found. Please check file format.',
       data: {
         snapshotId: snapshot._id,
         reportDate: parsedData.reportDate,
