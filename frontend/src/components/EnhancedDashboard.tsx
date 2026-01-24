@@ -22,7 +22,15 @@ import {
   TrendingUp,
   Route,
   Key,
-  Archive
+  Archive,
+  PackageCheck,
+  FolderOpen,
+  Navigation,
+  MapPinned,
+  FileBarChart,
+  Activity,
+  Building2,
+  Receipt
 } from 'lucide-react';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
@@ -227,10 +235,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_overview', label: 'Super Admin Overview', icon: Shield },
         { id: 'sa_database', label: 'Database Monitor', icon: Database },
         { id: 'sa_users', label: 'User Management', icon: Users },
-        { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Fuel },
+        { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Building2 },
         { id: 'sa_routes', label: 'Routes', icon: Route },
-        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: MapPin },
-        { id: 'checkpoints', label: 'Checkpoints', icon: MapPin },
+        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
+        { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
         { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
         { id: 'sa_config', label: 'Configuration', icon: Settings },
         { id: 'sa_audit', label: 'Audit & Logs', icon: FileSearch },
@@ -238,7 +246,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_trash', label: 'Trash Management', icon: Trash2 },
         { id: 'sa_archival', label: 'Data Archival', icon: Archive },
         { id: 'sa_backup', label: 'Backup & Recovery', icon: Database },
-        { id: 'sa_analytics', label: 'Analytics & Reports', icon: BarChart3 },
+        { id: 'sa_analytics', label: 'Analytics & Reports', icon: FileBarChart },
       ];
     }
 
@@ -246,18 +254,18 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     if (user.role === 'admin' || user.role === 'boss') {
       return [
         ...baseItems,
-        { id: 'do', label: 'DO Management', icon: FileText },
+        { id: 'do', label: 'DO Management', icon: PackageCheck },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
-        { id: 'lpo', label: 'LPO Management', icon: ClipboardList },
+        { id: 'lpo', label: 'LPO Management', icon: Receipt },
         { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
-        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: MapPin },
-        { id: 'checkpoints', label: 'Checkpoints', icon: MapPin },
-        { id: 'reports', label: 'Reports', icon: BarChart3 },
+        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
+        { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
+        { id: 'reports', label: 'Reports', icon: FileBarChart },
         // Admin sections - expanded in sidebar
-        { id: 'admin_overview', label: 'Operational Overview', icon: BarChart3 },
-        { id: 'admin_data', label: 'Data Management', icon: FileText },
+        { id: 'admin_overview', label: 'Operational Overview', icon: Activity },
+        { id: 'admin_data', label: 'Data Management', icon: FolderOpen },
         { id: 'admin_users', label: 'User Support', icon: Users },
-        { id: 'admin_fuel_stations', label: 'Fuel Stations', icon: Fuel },
+        { id: 'admin_fuel_stations', label: 'Fuel Stations', icon: Building2 },
         { id: 'admin_routes', label: 'Routes', icon: Route },
         { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
         { id: 'admin_reports', label: 'Admin Reports', icon: TrendingUp },
@@ -267,11 +275,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     if (user.role === 'fuel_order_maker') {
       return [
         ...baseItems,
-        { id: 'do', label: 'DO Management', icon: FileText },
+        { id: 'do', label: 'DO Management', icon: PackageCheck },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
-        { id: 'lpo', label: 'LPO Management', icon: ClipboardList },
-        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: MapPin },
-        { id: 'reports', label: 'Reports', icon: BarChart3 },
+        { id: 'lpo', label: 'LPO Management', icon: Receipt },
+        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
+        { id: 'reports', label: 'Reports', icon: FileBarChart },
       ];
     }
 
