@@ -54,8 +54,13 @@ interface StatusColorMap {
 function MapController({ center }: { center: [number, number] }) {
   const map = useMap();
   useEffect(() => {
-    map.setView(center, map.getZoom());
-  }, [center, map]);
+    const currentCenter = map.getCenter();
+    const [newLat, newLng] = center;
+    // Only update if the center has actually changed (not just reference)
+    if (Math.abs(currentCenter.lat - newLat) > 0.0001 || Math.abs(currentCenter.lng - newLng) > 0.0001) {
+      map.setView(center, map.getZoom());
+    }
+  }, [center[0], center[1], map]); // Depend on actual values, not array reference
   return null;
 }
 
@@ -585,7 +590,12 @@ const FleetTracking = () => {
                       icon={customIcon}
                     >
                       <Popup maxHeight={450} maxWidth={320} autoPan={false} closeButton={true}>
-                        <div className="min-w-[280px] max-w-[300px]">
+                        <div 
+                          className="min-w-[280px] max-w-[300px]"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                        >
                           {/* Header */}
                           <div className="font-bold text-base mb-2 pb-2 border-b border-gray-200">
                             {checkpoint.displayName}
@@ -607,12 +617,20 @@ const FleetTracking = () => {
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
+                                    e.nativeEvent.stopImmediatePropagation();
                                     setActiveStatusTab(prev => ({
                                       ...prev,
                                       [checkpointKey]: status
                                     }));
                                   }}
-                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  onTouchStart={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
                                   className="px-2 py-1 text-xs font-semibold rounded transition-all flex-shrink-0"
                                   style={{
                                     backgroundColor: isActive ? statusColor : `${statusColor}15`,
@@ -733,7 +751,12 @@ const FleetTracking = () => {
                           weight={2.5}
                         >
                           <Popup maxWidth={300} autoPan={false} closeButton={true}>
-                            <div className="min-w-[200px] max-w-[280px]">
+                            <div 
+                              className="min-w-[200px] max-w-[280px]"
+                              onClick={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onTouchStart={(e) => e.stopPropagation()}
+                            >
                               <div className="font-bold text-lg mb-2">{truck.truckNo}</div>
                               {truck.trailerNo && (
                                 <div className="text-sm text-gray-600 mb-1">Trailer: {truck.trailerNo}</div>
