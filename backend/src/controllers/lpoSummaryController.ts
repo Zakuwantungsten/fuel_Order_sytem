@@ -673,12 +673,18 @@ export const getLPOSummaryByLPONo = async (req: AuthRequest, res: Response): Pro
  */
 export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const lastLpo = await LPOSummary.findOne({ isDeleted: false })
+    const currentYear = new Date().getFullYear();
+    
+    // Find the last LPO for the current year
+    const lastLpo = await LPOSummary.findOne({ 
+      isDeleted: false,
+      year: currentYear 
+    })
       .sort({ lpoNo: -1 })
       .select('lpoNo')
       .lean();
 
-    let nextNumber = 2445;
+    let nextNumber = 1; // Start from 1 each year
 
     if (lastLpo && lastLpo.lpoNo) {
       const lastNumber = parseInt(lastLpo.lpoNo, 10);
@@ -687,10 +693,19 @@ export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise
       }
     }
 
-    let exists = await LPOSummary.exists({ lpoNo: nextNumber.toString(), isDeleted: false });
+    // Safety check - ensure this number doesn't exist for current year
+    let exists = await LPOSummary.exists({ 
+      lpoNo: nextNumber.toString(), 
+      year: currentYear,
+      isDeleted: false 
+    });
     while (exists) {
       nextNumber++;
-      exists = await LPOSummary.exists({ lpoNo: nextNumber.toString(), isDeleted: false });
+      exists = await LPOSummary.exists({ 
+        lpoNo: nextNumber.toString(), 
+        year: currentYear,
+        isDeleted: false 
+      });
     }
 
     res.status(200).json({
@@ -2171,9 +2186,17 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
       customReturnCheckpoint: targetStation.toUpperCase() === 'CUSTOM' ? customReturnCheckpoint : entry.customReturnCheckpoint,
     }));
 
-    // Get next LPO number
-    let nextNumber = 2445;
-    const lastLpo = await LPOSummary.findOne({ isDeleted: false })
+    // Create new LPO date
+    const lpoDate = date || new Date().toISOString().split('T')[0];
+    const dateObj = new Date(lpoDate);
+    const year = dateObj.getFullYear();
+
+    // Get next LPO number for this year
+    let nextNumber = 1;
+    const lastLpo = await LPOSummary.findOne({ 
+      isDeleted: false,
+      year: year 
+    })
       .sort({ lpoNo: -1 })
       .select('lpoNo')
       .lean();
@@ -2185,11 +2208,19 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
       }
     }
 
-    // Make sure the number doesn't already exist
-    let exists = await LPOSummary.exists({ lpoNo: nextNumber.toString(), isDeleted: false });
+    // Make sure the number doesn't already exist for this year
+    let exists = await LPOSummary.exists({ 
+      lpoNo: nextNumber.toString(), 
+      year: year,
+      isDeleted: false 
+    });
     while (exists) {
       nextNumber++;
-      exists = await LPOSummary.exists({ lpoNo: nextNumber.toString(), isDeleted: false });
+      exists = await LPOSummary.exists({ 
+        lpoNo: nextNumber.toString(), 
+        year: year,
+        isDeleted: false 
+      });
     }
 
     // Calculate total

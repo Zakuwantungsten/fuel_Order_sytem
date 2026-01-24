@@ -651,7 +651,7 @@ export const lpoDocumentsAPI = {
 
   getNextLpoNumber: async (): Promise<string> => {
     const response = await apiClient.get('/lpo-documents/next-number');
-    return response.data.data?.nextLpoNo || '2445';
+    return response.data.data?.nextLpoNo || '1';
   },
 
   // Keep the old method as fallback
@@ -666,7 +666,7 @@ export const lpoDocumentsAPI = {
       if (data && data.length > 0) {
         return data[0].lpoNo;
       }
-      return '2444';
+      return '1';
     }
   },
 

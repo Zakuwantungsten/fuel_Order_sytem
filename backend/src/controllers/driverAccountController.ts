@@ -8,27 +8,39 @@ import unifiedExportService from '../services/unifiedExportService';
 
 /**
  * Get the next available LPO number by checking both LPOSummary and DriverAccountEntry
+ * Resets to 1 every new year
  */
 async function getNextAvailableLPONumber(): Promise<string> {
-  // Get the highest LPO number from LPOSummary
-  const lastLpoSummary = await LPOSummary.findOne({ isDeleted: false })
+  const currentYear = new Date().getFullYear();
+  
+  // Get the highest LPO number from LPOSummary for current year
+  const lastLpoSummary = await LPOSummary.findOne({ 
+    isDeleted: false,
+    year: currentYear 
+  })
     .sort({ lpoNo: -1 })
     .select('lpoNo')
     .lean();
 
-  // Get the highest LPO number from DriverAccountEntry
-  const lastDriverAccount = await DriverAccountEntry.findOne({ isDeleted: false })
+  // Get the highest LPO number from DriverAccountEntry for current year
+  const lastDriverAccount = await DriverAccountEntry.findOne({ 
+    isDeleted: false,
+    year: currentYear 
+  })
     .sort({ lpoNo: -1 })
     .select('lpoNo')
     .lean();
 
-  // Get the highest LPO number from LPOEntry as well
-  const lastLpoEntry = await LPOEntry.findOne({ isDeleted: false })
+  // Get the highest LPO number from LPOEntry for current year
+  const lastLpoEntry = await LPOEntry.findOne({ 
+    isDeleted: false,
+    year: currentYear 
+  })
     .sort({ lpoNo: -1 })
     .select('lpoNo')
     .lean();
 
-  let maxNumber = 2444; // Default starting number
+  let maxNumber = 0; // Start from 0 (will become 1)
 
   if (lastLpoSummary?.lpoNo) {
     const num = parseInt(lastLpoSummary.lpoNo, 10);

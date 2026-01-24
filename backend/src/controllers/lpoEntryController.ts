@@ -285,15 +285,20 @@ export const getLPOEntriesByLPONo = async (req: AuthRequest, res: Response): Pro
 
 /**
  * Get next LPO number
+ * Resets to 1 every new year
  */
 export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const lastLPO = await LPOEntry.findOne()
+    const currentYear = new Date().getFullYear();
+    
+    const lastLPO = await LPOEntry.findOne({ 
+      year: currentYear 
+    })
       .sort({ lpoNo: -1 })
       .limit(1)
       .lean();
 
-    let nextLPONo = '2444'; // Default starting number
+    let nextLPONo = '1'; // Start from 1 each year
     
     if (lastLPO && lastLPO.lpoNo) {
       const currentNumber = parseInt(lastLPO.lpoNo);
