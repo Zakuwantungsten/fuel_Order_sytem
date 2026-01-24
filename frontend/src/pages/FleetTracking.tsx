@@ -466,7 +466,7 @@ const FleetTracking = () => {
                       className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                       onClick={async () => {
                         const trucksHere = truckPositions.filter(t => t.currentCheckpoint === cp.fullName);
-                        const truckNumbers = trucksHere.map(t => t.truckNo).join(' ');
+                        const truckNumbers = trucksHere.map(t => t.truckNo).join('\n');
                         await navigator.clipboard.writeText(truckNumbers);
                         setCopiedCheckpoint(cp.fullName);
                         setTimeout(() => setCopiedCheckpoint(null), 2000);
@@ -661,7 +661,7 @@ const FleetTracking = () => {
                                   onClick={async (e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    const truckNumbers = trucksInGroup.map(t => t.truckNo).join(' ');
+                                    const truckNumbers = trucksInGroup.map(t => t.truckNo).join('\n');
                                     await navigator.clipboard.writeText(truckNumbers);
                                     setCopiedCheckpoint(`${checkpoint.name}-${status}`);
                                     setTimeout(() => setCopiedCheckpoint(null), 2000);
