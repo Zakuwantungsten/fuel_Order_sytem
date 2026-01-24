@@ -75,17 +75,8 @@ export interface FuelConfig {
     [destination: string]: number;
   };
   
-  // Special loading point extra fuel allocations (for return journeys)
-  loadingPointExtraFuel: {
-    kamoa: number;
-    nmi: number;
-    kalongwe: number;
-  };
-  
-  // Special destination extra fuel (for return journeys)
-  destinationExtraFuel: {
-    moshi: number; // Msa
-  };
+  // Note: Loading point extras and destination extras are now managed via database
+  // through RouteConfig with destination-specific rules configured in admin panel
 }
 
 export interface FuelStation {
@@ -257,17 +248,7 @@ export const DEFAULT_FUEL_CONFIG: FuelConfig = {
     'LUSAKA': 1900,
   },
   
-  // Special loading point extra fuel allocations (for return journeys)
-  loadingPointExtraFuel: {
-    kamoa: 40,      // Extra 40L when loading from Kamoa
-    nmi: 20,        // Extra 20L when loading from NMI
-    kalongwe: 60,   // Extra 60L when loading from Kalongwe
-  },
-  
-  // Special destination extra fuel (for return journeys)
-  destinationExtraFuel: {
-    moshi: 170,     // Extra 170L when final destination is Moshi (Msa)
-  },
+  // Loading point extras and destination extras removed - now managed via database
 };
 
 /**
@@ -538,47 +519,18 @@ export class FuelConfigService {
   }
 
   /**
-   * Get extra fuel for special loading points (return journey)
-   * Matches location names with fuzzy logic to handle spelling variations
+   * DEPRECATED: Loading point and destination extras are now managed via database
+   * Use RouteConfig with destination-specific rules configured in admin panel
+   * These methods kept for backward compatibility but return 0
    */
   static getLoadingPointExtraFuel(loadingPoint: string, config?: FuelConfig): number {
-    const cfg = config || this.loadConfig();
-    const location = loadingPoint?.toUpperCase().trim() || '';
-    
-    if (!location) return 0;
-    
-    // Check each special loading point with fuzzy matching
-    if (this.isFuzzyMatch(location, 'KAMOA')) {
-      return cfg.loadingPointExtraFuel.kamoa;
-    }
-    
-    if (this.isFuzzyMatch(location, 'NMI')) {
-      return cfg.loadingPointExtraFuel.nmi;
-    }
-    
-    if (this.isFuzzyMatch(location, 'KALONGWE')) {
-      return cfg.loadingPointExtraFuel.kalongwe;
-    }
-    
-    return 0;
+    console.warn('⚠️ getLoadingPointExtraFuel is deprecated. Configure extras via admin panel RouteConfig.');
+    return 0; // All extras now managed via database
   }
 
-  /**
-   * Get extra fuel for special destinations (return journey)
-   * Matches destination names with fuzzy logic to handle spelling variations
-   */
   static getDestinationExtraFuel(destination: string, config?: FuelConfig): number {
-    const cfg = config || this.loadConfig();
-    const dest = destination?.toUpperCase().trim() || '';
-    
-    if (!dest) return 0;
-    
-    // Check for Moshi/Msa with fuzzy matching
-    if (this.isFuzzyMatch(dest, 'MOSHI') || this.isFuzzyMatch(dest, 'MSA')) {
-      return cfg.destinationExtraFuel.moshi;
-    }
-    
-    return 0;
+    console.warn('⚠️ getDestinationExtraFuel is deprecated. Configure extras via admin panel RouteConfig.');
+    return 0; // All extras now managed via database
   }
 
   /**

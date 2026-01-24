@@ -407,8 +407,8 @@ export function createFuelRecordFromDO(
  * 
  * FUEL ALLOCATION LOGIC:
  * - Export route liters: ADDED to totalLts (represents fuel loaded at export location)
- * - Destination extras: ADDED if destination is Moshi/MSA (+170L)
- * - Balance: Updated by adding export route liters + destination extras
+ * - All extras are configured via database RouteConfig (not hardcoded)
+ * - Balance: Updated by adding export route liters
  * 
  * Example: Going route DAR→KAMOA (2300L), Return route KAMOA→DAR (2200L)
  * - Original totalLts: 2300L
@@ -456,11 +456,8 @@ export async function updateFuelRecordWithReturnDO(
   
   // Add export route liters to the existing totalLts
   // This represents the fuel loaded at the export location for the return journey
-  let additionalFuelNeeded = exportRouteLiters;
-  
-  // Also add extra fuel if final destination is Moshi/Msa (with fuzzy matching)
-  const destinationExtra = FuelConfigService.getDestinationExtraFuel(finalDestination);
-  additionalFuelNeeded += destinationExtra;
+  // NOTE: All extras are now configured via database RouteConfig, not hardcoded
+  const additionalFuelNeeded = exportRouteLiters;
   
   // Calculate new total liters by ADDING export route liters to existing allocation
   const newTotalLiters = originalTotalLiters + additionalFuelNeeded;
@@ -469,7 +466,6 @@ export async function updateFuelRecordWithReturnDO(
   const additionalFuelInfo = {
     originalTotalLiters,
     exportRouteLiters,
-    destinationExtra,
     totalAdditionalFuel: additionalFuelNeeded,
     newTotalLiters,
     returnLoadingPoint,
@@ -479,9 +475,6 @@ export async function updateFuelRecordWithReturnDO(
   console.log('🔄 Return Journey Fuel Calculation:', additionalFuelInfo);
   console.log(`  Original totalLts: ${originalTotalLiters}L`);
   console.log(`  + Export route: ${exportRouteLiters}L`);
-  if (destinationExtra > 0) {
-    console.log(`  + Destination extra: ${destinationExtra}L`);
-  }
   console.log(`  = New totalLts: ${newTotalLiters}L`);
   
   // Update the from and to fields based on return journey

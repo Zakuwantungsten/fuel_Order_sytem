@@ -18,6 +18,8 @@ import notificationRoutes from './notificationRoutes';
 import archivalRoutes from './archivalRoutes';
 import systemConfigRoutes from './systemConfigRoutes';
 import driverCredentialRoutes from './driverCredentialRoutes';
+import checkpointRoutes from './checkpointRoutes';
+import fleetTrackingRoutes from './fleetTrackingRoutes';
 
 const router = Router();
 
@@ -41,5 +43,7 @@ router.use('/system-config', configRoutes);
 router.use('/system-admin/config', systemConfigRoutes); // Super admin only system configuration
 router.use('/archival', archivalRoutes);
 router.use('/driver-credentials', driverCredentialRoutes); // Driver credential management
+router.use('/checkpoints', checkpointRoutes); // Checkpoint management for fleet tracking
+router.use('/fleet-tracking', fleetTrackingRoutes); // Fleet position tracking and visualization
 
 export default router;

@@ -12,6 +12,11 @@ export { DriverCredential, IDriverCredential } from './DriverCredential';
 export { AuditLog, IAuditLogDocument } from './AuditLog';
 export { Notification, INotification } from './Notification';
 
+// Export fleet tracking models
+export { Checkpoint, ICheckpoint } from './Checkpoint';
+export { FleetSnapshot, IFleetSnapshot, IFleetGroup, ITruckPositionInSnapshot } from './FleetSnapshot';
+export { TruckPosition, ITruckPosition } from './TruckPosition';
+
 // Export archived data models
 export {
   ArchivedFuelRecord,

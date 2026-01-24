@@ -50,43 +50,8 @@ const DEFAULT_ROUTES = [
   { destination: 'LUSAKA', totalLiters: 1900, isActive: true },
 ];
 
-// Default truck batches - now using dynamic structure
-const DEFAULT_TRUCK_BATCHES = {
-  '100': [
-    { truckSuffix: 'dnh', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dny', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dpn', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dre', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'drf', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dnw', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dxy', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'eaf', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dtb', extraLiters: 100, addedBy: 'system', addedAt: new Date() },
-  ],
-  '80': [
-    { truckSuffix: 'dvk', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dvl', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dwk', extraLiters: 80, addedBy: 'system', addedAt: new Date() },
-  ],
-  '60': [
-    { truckSuffix: 'dyy', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'dzy', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'eag', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'ecq', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'edd', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'egj', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'ehj', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'ehe', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'ely', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'elv', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'eeq', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'eng', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'efp', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'efn', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'ekt', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-    { truckSuffix: 'eks', extraLiters: 60, addedBy: 'system', addedAt: new Date() },
-  ],
-};
+// Truck batches are now managed dynamically via database (admin panel)
+// No hardcoded defaults - all managed through SystemConfig
 
 const DEFAULT_STANDARD_ALLOCATIONS = {
   tangaYardToDar: 100,
@@ -508,7 +473,7 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
     if (!config) {
       config = await SystemConfig.create({
         configType: 'truck_batches',
-        truckBatches: DEFAULT_TRUCK_BATCHES,
+        truckBatches: {}, // Empty - admin must configure via admin panel
         lastUpdatedBy: 'system',
       });
     }
@@ -1081,7 +1046,7 @@ export const getAllConfig = async (req: AuthRequest, res: Response): Promise<voi
       data: {
         fuelStations: fuelStationsConfig?.fuelStations || DEFAULT_FUEL_STATIONS,
         routes: routesConfig?.routes || DEFAULT_ROUTES,
-        truckBatches: truckBatchesConfig?.truckBatches || DEFAULT_TRUCK_BATCHES,
+        truckBatches: truckBatchesConfig?.truckBatches || {}, // Empty if not configured
         standardAllocations: allocationsConfig?.standardAllocations || DEFAULT_STANDARD_ALLOCATIONS,
       },
     });

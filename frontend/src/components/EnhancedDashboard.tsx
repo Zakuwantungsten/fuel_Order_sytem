@@ -46,6 +46,8 @@ import DeliveryOrders from '../pages/DeliveryOrders';
 import LPOs from '../pages/LPOs';
 import FuelRecordsPage from '../pages/FuelRecords';
 import TruckBatchesPage from '../pages/TruckBatches';
+import FleetTracking from '../pages/FleetTracking';
+import CheckpointManagement from '../pages/CheckpointManagement';
 
 interface EnhancedDashboardProps {
   user: any;
@@ -68,19 +70,19 @@ const getInitialTab = (userRole: string): string => {
     if (isYardRole || userRole === 'yard_personnel') return ['yard_fuel'];
     if (userRole === 'super_admin') {
       return [
-        'overview', 'do', 'fuel_records', 'lpo', 'reports',
+        'overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports',
         'sa_overview', 'sa_database', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_config', 
-        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics'
+        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'driver_credentials'
       ];
     }
     if (userRole === 'admin' || userRole === 'boss') {
       return [
-        'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'reports',
-        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports'
+        'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'fleet_tracking', 'reports',
+        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports', 'driver_credentials'
       ];
     }
     if (userRole === 'fuel_order_maker') {
-      return ['overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'reports'];
+      return ['overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports'];
     }
     if (userRole === 'payment_manager') {
       return ['overview', 'payments'];
@@ -227,6 +229,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_users', label: 'User Management', icon: Users },
         { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Fuel },
         { id: 'sa_routes', label: 'Routes', icon: Route },
+        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: MapPin },
+        { id: 'checkpoints', label: 'Checkpoints', icon: MapPin },
         { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
         { id: 'sa_config', label: 'Configuration', icon: Settings },
         { id: 'sa_audit', label: 'Audit & Logs', icon: FileSearch },
@@ -246,6 +250,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: ClipboardList },
         { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
+        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: MapPin },
+        { id: 'checkpoints', label: 'Checkpoints', icon: MapPin },
         { id: 'reports', label: 'Reports', icon: BarChart3 },
         // Admin sections - expanded in sidebar
         { id: 'admin_overview', label: 'Operational Overview', icon: BarChart3 },
@@ -264,6 +270,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'do', label: 'DO Management', icon: FileText },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: ClipboardList },
+        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: MapPin },
         { id: 'reports', label: 'Reports', icon: BarChart3 },
       ];
     }
@@ -303,6 +310,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <LPOs />;
       case 'truck_batches':
         return <TruckBatchesPage />;
+      case 'fleet_tracking':
+        return <FleetTracking />;
+      case 'checkpoints':
+        return <CheckpointManagement />;
       case 'yard_fuel':
         return <YardFuelSimple user={user} />;
       case 'driver_portal':

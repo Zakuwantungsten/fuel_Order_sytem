@@ -4,6 +4,8 @@ import {
   FileText, 
   Receipt, 
   Fuel,
+  Truck,
+  MapPin,
   X,
   Users,
   Settings,
@@ -76,6 +78,20 @@ const Layout = ({ children }: LayoutProps) => {
       href: '/fuel-records', 
       icon: Fuel,
       resource: RESOURCES.FUEL_RECORDS,
+      action: ACTIONS.READ
+    },
+    { 
+      name: 'Fleet Tracking', 
+      href: '/fleet-tracking', 
+      icon: Truck,
+      resource: RESOURCES.FLEET_TRACKING,
+      action: ACTIONS.READ
+    },
+    { 
+      name: 'Checkpoints', 
+      href: '/checkpoints', 
+      icon: MapPin,
+      resource: RESOURCES.CHECKPOINTS,
       action: ACTIONS.READ
     },
     { 

@@ -1,0 +1,39 @@
+/* Custom marker styles for Fleet Tracking */
+.custom-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-marker:hover {
+  z-index: 1000 !important;
+}
+
+/* Ensure Leaflet popup is styled properly */
+.leaflet-popup-content-wrapper {
+  padding: 0 !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  padding: 12px !important;
+  min-width: 250px;
+}
+
+/* Scrollbar styling for truck list */
+.leaflet-popup-content div::-webkit-scrollbar {
+  width: 6px;
+}
+
+.leaflet-popup-content div::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.leaflet-popup-content div::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.leaflet-popup-content div::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

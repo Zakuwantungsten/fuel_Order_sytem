@@ -1001,10 +1001,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             `  Route: ${additionalFuelInfo.returnLoadingPoint} → ${additionalFuelInfo.finalDestination}`);
         }
         
-        // Show if destination extra was added
-        if (additionalFuelInfo.destinationExtra > 0) {
-          messages.push(`✓ Added destination extra: +${additionalFuelInfo.destinationExtra}L (${additionalFuelInfo.finalDestination})`);
-        }
+        // Note: All fuel extras are now configured via database RouteConfig
         
         // Show total update
         messages.push(`\nTotal Liters Updated:\n` +
