@@ -25,6 +25,7 @@
     "relink-yard-fuel": "ts-node src/scripts/relink-pending-yard-fuel.ts",
     "migrate:fuel-logic": "ts-node src/scripts/migrateFuelCalculationLogic.ts",
     "migrate:lpo-dates": "ts-node src/scripts/migrateActualDateForLPOs.ts",
+    "verify:balance": "ts-node src/scripts/verifyBalanceCalculation.ts",
     "db:clear": "ts-node src/scripts/clearDatabase.ts",
     "db:clear:force": "ts-node src/scripts/clearDatabase.ts --force"
   },

@@ -2226,11 +2226,6 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
     // Calculate total
     const total = forwardedEntries.reduce((sum: number, entry: any) => sum + entry.amount, 0);
 
-    // Create new LPO date
-    const lpoDate = date || new Date().toISOString().split('T')[0];
-    const dateObj = new Date(lpoDate);
-    const year = dateObj.getFullYear();
-
     // Ensure workbook exists for this year
     await getOrCreateWorkbook(year);
 

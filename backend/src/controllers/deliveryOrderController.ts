@@ -87,8 +87,31 @@ const cascadeUpdateToFuelRecord = async (
           updates.totalLts = newRoute.defaultTotalLiters;
           updates.isLocked = false; // Unlock if route is now found
           updates.pendingConfigReason = null;
+          
+          // Recalculate balance with new totalLts
+          const totalFuel = newRoute.defaultTotalLiters + (fuelRecord.extra || 0);
+          const totalCheckpoints = (
+            Math.abs(fuelRecord.mmsaYard || 0) +
+            Math.abs(fuelRecord.tangaYard || 0) +
+            Math.abs(fuelRecord.darYard || 0) +
+            Math.abs(fuelRecord.darGoing || 0) +
+            Math.abs(fuelRecord.moroGoing || 0) +
+            Math.abs(fuelRecord.mbeyaGoing || 0) +
+            Math.abs(fuelRecord.tdmGoing || 0) +
+            Math.abs(fuelRecord.zambiaGoing || 0) +
+            Math.abs(fuelRecord.congoFuel || 0) +
+            Math.abs(fuelRecord.zambiaReturn || 0) +
+            Math.abs(fuelRecord.tundumaReturn || 0) +
+            Math.abs(fuelRecord.mbeyaReturn || 0) +
+            Math.abs(fuelRecord.moroReturn || 0) +
+            Math.abs(fuelRecord.darReturn || 0) +
+            Math.abs(fuelRecord.tangaReturn || 0)
+          );
+          updates.balance = totalFuel - totalCheckpoints;
+          
           changes.push(`Total Liters: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L (route updated)`);
-          logger.info(`Recalculated totalLts for IMPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L`);
+          changes.push(`Balance recalculated: ${updates.balance}L`);
+          logger.info(`Recalculated totalLts and balance for IMPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L, balance: ${updates.balance}L`);
         } else {
           // Route not found - set totalLts to null and lock the record
           const oldTotalLts = fuelRecord.totalLts || 0;
@@ -126,8 +149,31 @@ const cascadeUpdateToFuelRecord = async (
           updates.totalLts = returnRoute.defaultTotalLiters;
           updates.isLocked = false; // Unlock if route is now found
           updates.pendingConfigReason = null;
+          
+          // Recalculate balance with new totalLts
+          const totalFuel = returnRoute.defaultTotalLiters + (fuelRecord.extra || 0);
+          const totalCheckpoints = (
+            Math.abs(fuelRecord.mmsaYard || 0) +
+            Math.abs(fuelRecord.tangaYard || 0) +
+            Math.abs(fuelRecord.darYard || 0) +
+            Math.abs(fuelRecord.darGoing || 0) +
+            Math.abs(fuelRecord.moroGoing || 0) +
+            Math.abs(fuelRecord.mbeyaGoing || 0) +
+            Math.abs(fuelRecord.tdmGoing || 0) +
+            Math.abs(fuelRecord.zambiaGoing || 0) +
+            Math.abs(fuelRecord.congoFuel || 0) +
+            Math.abs(fuelRecord.zambiaReturn || 0) +
+            Math.abs(fuelRecord.tundumaReturn || 0) +
+            Math.abs(fuelRecord.mbeyaReturn || 0) +
+            Math.abs(fuelRecord.moroReturn || 0) +
+            Math.abs(fuelRecord.darReturn || 0) +
+            Math.abs(fuelRecord.tangaReturn || 0)
+          );
+          updates.balance = totalFuel - totalCheckpoints;
+          
           changes.push(`Total Liters: ${oldTotalLts}L → ${returnRoute.defaultTotalLiters}L (return route updated)`);
-          logger.info(`Recalculated totalLts for EXPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${returnRoute.defaultTotalLiters}L`);
+          changes.push(`Balance recalculated: ${updates.balance}L`);
+          logger.info(`Recalculated totalLts and balance for EXPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${returnRoute.defaultTotalLiters}L, balance: ${updates.balance}L`);
         } else {
           // Return route not found - set totalLts to null and lock the record
           const oldTotalLts = fuelRecord.totalLts || 0;
@@ -171,8 +217,31 @@ const cascadeUpdateToFuelRecord = async (
           updates.totalLts = newRoute.defaultTotalLiters;
           updates.isLocked = false; // Unlock if route is now found
           updates.pendingConfigReason = null;
+          
+          // Recalculate balance with new totalLts
+          const totalFuel = newRoute.defaultTotalLiters + (fuelRecord.extra || 0);
+          const totalCheckpoints = (
+            Math.abs(fuelRecord.mmsaYard || 0) +
+            Math.abs(fuelRecord.tangaYard || 0) +
+            Math.abs(fuelRecord.darYard || 0) +
+            Math.abs(fuelRecord.darGoing || 0) +
+            Math.abs(fuelRecord.moroGoing || 0) +
+            Math.abs(fuelRecord.mbeyaGoing || 0) +
+            Math.abs(fuelRecord.tdmGoing || 0) +
+            Math.abs(fuelRecord.zambiaGoing || 0) +
+            Math.abs(fuelRecord.congoFuel || 0) +
+            Math.abs(fuelRecord.zambiaReturn || 0) +
+            Math.abs(fuelRecord.tundumaReturn || 0) +
+            Math.abs(fuelRecord.mbeyaReturn || 0) +
+            Math.abs(fuelRecord.moroReturn || 0) +
+            Math.abs(fuelRecord.darReturn || 0) +
+            Math.abs(fuelRecord.tangaReturn || 0)
+          );
+          updates.balance = totalFuel - totalCheckpoints;
+          
           changes.push(`Total Liters: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L (route updated with new origin)`);
-          logger.info(`Recalculated totalLts for IMPORT DO ${originalDO.doNumber} with new loading point: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L`);
+          changes.push(`Balance recalculated: ${updates.balance}L`);
+          logger.info(`Recalculated totalLts and balance for IMPORT DO ${originalDO.doNumber} with new loading point: ${oldTotalLts}L → ${newRoute.defaultTotalLiters}L, balance: ${updates.balance}L`);
         } else {
           // Route not found - set totalLts to null and lock the record
           const oldTotalLts = fuelRecord.totalLts || 0;

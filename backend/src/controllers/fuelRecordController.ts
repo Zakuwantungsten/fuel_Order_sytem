@@ -472,6 +472,19 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     const fillingTotalLiters = existingRecord.totalLts === null && req.body.totalLts !== null && req.body.totalLts !== undefined;
     const fillingExtraFuel = existingRecord.extra === null && req.body.extra !== null && req.body.extra !== undefined;
 
+    // Check if any balance-affecting fields are being updated
+    const checkpointFields = [
+      'mmsaYard', 'tangaYard', 'darYard', 'darGoing', 'moroGoing', 'mbeyaGoing',
+      'tdmGoing', 'zambiaGoing', 'congoFuel', 'zambiaReturn', 'tundumaReturn',
+      'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn'
+    ];
+    
+    const balanceFieldsUpdated = (
+      req.body.totalLts !== undefined ||
+      req.body.extra !== undefined ||
+      checkpointFields.some(field => req.body[field] !== undefined)
+    );
+
     // Auto-unlock if all required fields are now provided
     if (wasLocked && (fillingTotalLiters || fillingExtraFuel)) {
       const willHaveTotalLts = fillingTotalLiters ? req.body.totalLts : existingRecord.totalLts;
@@ -481,30 +494,34 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       if (willHaveTotalLts !== null && willHaveExtra !== null) {
         req.body.isLocked = false;
         req.body.pendingConfigReason = null;
-        
-        // Recalculate balance using formula: Balance = (Total + Extra) - (All Checkpoints)
-        const totalFuel = willHaveTotalLts + willHaveExtra;
-        const totalCheckpoints = (
-          Math.abs(existingRecord.mmsaYard || 0) +
-          Math.abs(existingRecord.tangaYard || 0) +
-          Math.abs(existingRecord.darYard || 0) +
-          Math.abs(existingRecord.darGoing || 0) +
-          Math.abs(existingRecord.moroGoing || 0) +
-          Math.abs(existingRecord.mbeyaGoing || 0) +
-          Math.abs(existingRecord.tdmGoing || 0) +
-          Math.abs(existingRecord.zambiaGoing || 0) +
-          Math.abs(existingRecord.congoFuel || 0) +
-          Math.abs(existingRecord.zambiaReturn || 0) +
-          Math.abs(existingRecord.tundumaReturn || 0) +
-          Math.abs(existingRecord.mbeyaReturn || 0) +
-          Math.abs(existingRecord.moroReturn || 0) +
-          Math.abs(existingRecord.darReturn || 0) +
-          Math.abs(existingRecord.tangaReturn || 0)
-        );
-        req.body.balance = totalFuel - totalCheckpoints;
-        
-        logger.info(`Unlocking fuel record ${id} - all required fields now provided, balance: ${req.body.balance}`);
+        logger.info(`Unlocking fuel record ${id} - all required fields now provided`);
       }
+    }
+
+    // ALWAYS recalculate balance when any balance-affecting field is updated
+    // This ensures balance is correct whether record is locked or unlocked
+    if (balanceFieldsUpdated) {
+      // Get the final values (use updated values if provided, otherwise existing)
+      const finalTotalLts = req.body.totalLts !== undefined ? req.body.totalLts : existingRecord.totalLts;
+      const finalExtra = req.body.extra !== undefined ? req.body.extra : existingRecord.extra;
+      
+      // Get all checkpoint values (updated or existing)
+      const getFinalValue = (field: string) => {
+        return req.body[field] !== undefined ? req.body[field] : (existingRecord as any)[field];
+      };
+      
+      // Calculate total fuel (handle null values for locked records)
+      const totalFuel = (finalTotalLts || 0) + (finalExtra || 0);
+      
+      // Calculate total checkpoints (all stored as positive values)
+      const totalCheckpoints = checkpointFields.reduce((sum, field) => {
+        return sum + Math.abs(getFinalValue(field) || 0);
+      }, 0);
+      
+      // Apply formula: Balance = (Total + Extra) - (All Checkpoints)
+      req.body.balance = totalFuel - totalCheckpoints;
+      
+      logger.info(`Recalculating balance for fuel record ${id}: (${finalTotalLts || 0} + ${finalExtra || 0}) - ${totalCheckpoints} = ${req.body.balance}L`);
     }
 
     const fuelRecord = await FuelRecord.findOneAndUpdate(
