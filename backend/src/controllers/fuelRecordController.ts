@@ -265,37 +265,53 @@ export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): P
     const doNoUpper = (doNumber || '').toString().trim().toUpperCase();
     const isNilDO = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A';
 
-    // Calculate date limit: 4 months ago (120 days)
-    const dateLimitForFuelRecords = new Date();
-    dateLimitForFuelRecords.setDate(dateLimitForFuelRecords.getDate() - 120);
-    const dateLimitString = dateLimitForFuelRecords.toISOString().split('T')[0]; // YYYY-MM-DD format
-
-    // First try to find by goingDo, only search last 4 months
+    // Search by DO number only (DO numbers are unique enough)
+    // Note: Removed date filtering because fuel record dates are stored as strings in various formats
+    // (e.g., "6-Oct", "2025-10-06") which don't work reliably with $gte string comparison
+    
+    // Debug: Log what we're searching for
+    logger.info(`[Fuel Record Lookup] Searching for DO: ${doNumber}`);
+    
+    // First try to find by goingDo, exclude cancelled records
     let fuelRecord = await FuelRecord.findOne({
       goingDo: doNumber,
       isDeleted: false,
-      date: { $gte: dateLimitString } // Only search last 4 months
-    });
+      isCancelled: { $ne: true },
+    }).sort({ createdAt: -1 }); // Get most recent if multiple exist
 
     let direction: 'going' | 'returning' = 'going';
 
-    // If not found as goingDo, try returnDo (also within last 4 months)
+    // If not found as goingDo, try returnDo, exclude cancelled records
     if (!fuelRecord) {
       fuelRecord = await FuelRecord.findOne({
         returnDo: doNumber,
         isDeleted: false,
-        date: { $gte: dateLimitString } // Only search last 4 months
-      });
+        isCancelled: { $ne: true },
+      }).sort({ createdAt: -1 }); // Get most recent if multiple exist
       direction = 'returning';
     }
 
     if (!fuelRecord) {
+      // Debug: Check if record exists but is cancelled or deleted
+      const anyRecord = await FuelRecord.findOne({
+        $or: [{ goingDo: doNumber }, { returnDo: doNumber }]
+      });
+      
+      if (anyRecord) {
+        logger.info(`[Fuel Record Lookup] Record exists for DO ${doNumber} but is ${anyRecord.isCancelled ? 'CANCELLED' : ''} ${anyRecord.isDeleted ? 'DELETED' : ''}`);
+      } else {
+        logger.info(`[Fuel Record Lookup] No record exists at all for DO: ${doNumber}`);
+      }
+      
       // Don't log 404 for NIL DOs as they are expected
       if (!isNilDO) {
-        logger.info(`Fuel record not found for DO: ${doNumber} (searched last 4 months)`);
+        logger.info(`Fuel record not found for DO: ${doNumber}`);
       }
       throw new ApiError(404, 'Fuel record not found');
     }
+    
+    // Debug: Log what we found
+    logger.info(`[Fuel Record Lookup] Found record for DO ${doNumber} - Date: ${fuelRecord.date}, Truck: ${fuelRecord.truckNo}, Direction: ${direction}`);
 
     // Include direction in the response
     const responseData = {

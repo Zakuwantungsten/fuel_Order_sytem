@@ -143,10 +143,11 @@ async function findFuelRecordWithDirection(
   doNumber: string,
   truckNo: string
 ): Promise<{ fuelRecord: any; direction: 'going' | 'returning'; journeyComplete: boolean } | null> {
-  // First try to find by DO number
+  // First try to find by DO number (exclude cancelled and deleted records)
   let fuelRecord = await FuelRecord.findOne({
     goingDo: doNumber,
     isDeleted: false,
+    isCancelled: { $ne: true },
   });
 
   let direction: 'going' | 'returning' = 'going';
@@ -155,6 +156,7 @@ async function findFuelRecordWithDirection(
     fuelRecord = await FuelRecord.findOne({
       returnDo: doNumber,
       isDeleted: false,
+      isCancelled: { $ne: true },
     });
     direction = 'returning';
   }
@@ -167,10 +169,11 @@ async function findFuelRecordWithDirection(
     const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
     const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
 
-    // Get all records for this truck
+    // Get all records for this truck (exclude cancelled and deleted)
     const truckRecords = await FuelRecord.find({
       truckNo: { $regex: truckNo, $options: 'i' },
       isDeleted: false,
+      isCancelled: { $ne: true },
     }).sort({ date: -1 });
 
     if (truckRecords.length === 0) {
@@ -349,18 +352,20 @@ async function updateFuelRecordForLPOEntry(
     }
 
     // Store checkpoint values as POSITIVE numbers
-    // Add liters to checkpoint (accumulate fuel dispensed)
+    // litersChange: positive = add fuel (LPO creation), negative = remove fuel (cancellation)
     const currentValue = Math.abs((fuelRecord as any)[fieldToUpdate] || 0);
-    const newValue = currentValue + Math.abs(litersChange);
+    const oldBalance = fuelRecord.balance;
+    const newValue = currentValue + litersChange; // For cancellation, litersChange is negative, so this subtracts
     
-    // Subtract from balance (reduce remaining fuel)
-    const newBalance = fuelRecord.balance - Math.abs(litersChange);
+    // Update balance: positive litersChange reduces balance, negative litersChange increases balance
+    const newBalance = fuelRecord.balance - litersChange; // For cancellation, litersChange is negative, so this adds
     
     const updateData: any = {};
-    updateData[fieldToUpdate] = newValue;
+    updateData[fieldToUpdate] = Math.max(0, newValue); // Ensure non-negative
     updateData.balance = newBalance;
 
-    logger.info(`Updating field ${fieldToUpdate}: ${currentValue}L -> ${newValue}L (added: ${Math.abs(litersChange)}L, balance: ${newBalance}L)`);
+    const action = litersChange > 0 ? 'added' : 'removed';
+    logger.info(`Updating field ${fieldToUpdate}: ${currentValue}L -> ${updateData[fieldToUpdate]}L (${action}: ${Math.abs(litersChange)}L, balance: ${oldBalance}L -> ${newBalance}L)`);
 
     await FuelRecord.findByIdAndUpdate(
       fuelRecord._id,
@@ -368,7 +373,7 @@ async function updateFuelRecordForLPOEntry(
       { new: true }
     );
 
-    logger.info(`✓ Updated fuel record ${fuelRecord._id} field ${fieldToUpdate}: ${litersChange > 0 ? '-' : '+'}${Math.abs(litersChange)}L`);
+    logger.info(`✓ Updated fuel record ${fuelRecord._id} field ${fieldToUpdate}: ${litersChange > 0 ? 'deducted' : 'restored'} ${Math.abs(litersChange)}L`);
   } catch (error: any) {
     logger.error(`Error updating fuel record for LPO: ${error.message}`);
   }

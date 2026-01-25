@@ -829,7 +829,9 @@ export const fuelRecordsAPI = {
   // Get fuel record by DO number and determine direction
   getByDoNumber: async (doNumber: string): Promise<{ fuelRecord: FuelRecord; direction: 'going' | 'returning' } | null> => {
     try {
-      const response = await apiClient.get(`/fuel-records/do/${doNumber}`);
+      // URL-encode the DO number to handle slashes (e.g., "0003/26" -> "0003%2F26")
+      const encodedDoNumber = encodeURIComponent(doNumber);
+      const response = await apiClient.get(`/fuel-records/do/${encodedDoNumber}`);
       if (response.data.data) {
         const fuelRecord = response.data.data;
         // Use the detected direction from the backend
