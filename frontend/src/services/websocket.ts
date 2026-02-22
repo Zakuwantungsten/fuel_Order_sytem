@@ -89,6 +89,29 @@ export const unsubscribeFromNotifications = (): void => {
 };
 
 /**
+ * Subscribe to session management events (force logout, deactivation, ban, etc.)
+ * These are emitted directly by the server when an admin performs an action on this user.
+ */
+export const subscribeToSessionEvents = (callback: (event: any) => void): void => {
+  if (!socket) {
+    console.error('[WebSocket] Socket not initialized for session events');
+    return;
+  }
+  socket.on('session_event', (event) => {
+    console.log('[WebSocket] Received session event:', event);
+    callback(event);
+  });
+};
+
+/**
+ * Unsubscribe from session management events
+ */
+export const unsubscribeFromSessionEvents = (): void => {
+  if (!socket) return;
+  socket.off('session_event');
+};
+
+/**
  * Disconnect WebSocket
  */
 export const disconnectWebSocket = (): void => {

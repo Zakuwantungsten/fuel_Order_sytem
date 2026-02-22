@@ -6,6 +6,7 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, fo
 import { AuditService } from '../utils/auditService';
 import { emailService } from '../services/emailService';
 import crypto from 'crypto';
+import { emitToUser } from '../services/websocket';
 
 /**
  * Get all users with pagination and filters
@@ -226,6 +227,16 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
 
     logger.info(`User updated: ${user.username} by ${req.user?.username}`);
 
+    // Notify the affected user via WebSocket so their session reflects changes immediately
+    const roleOrPermissionChanged = 'role' in updateData || 'station' in updateData || 'isActive' in updateData;
+    emitToUser(existingUser.username, 'session_event', {
+      type: 'account_updated',
+      message: roleOrPermissionChanged
+        ? 'Your account has been updated by an administrator. Please log in again to apply the changes.'
+        : 'Your account details have been updated by an administrator. Please log in again.',
+      requiresRelogin: true,
+    });
+
     // Log audit trail
     await AuditService.logUpdate(
       req.user?.userId || 'system',
@@ -276,6 +287,12 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 
     logger.info(`User deleted: ${user.username} by ${req.user?.username}`);
 
+    // Immediately kick the deleted user out via WebSocket
+    emitToUser(user.username, 'session_event', {
+      type: 'account_deleted',
+      message: 'Your account has been removed by an administrator.',
+    });
+
     // Log audit trail
     await AuditService.logDelete(
       req.user?.userId || 'system',
@@ -312,12 +329,19 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
     // Generate temporary password
     const temporaryPassword = crypto.randomBytes(8).toString('hex');
 
-    // Update password and flag for password change
+    // Update password, clear refresh token and flag for password change
     user.password = temporaryPassword;
     user.mustChangePassword = true;
+    user.refreshToken = undefined;
     await user.save();
 
     logger.info(`Password reset for user: ${user.username} by ${req.user?.username}`);
+
+    // Immediately kick the user out so they must re-login with the new password
+    emitToUser(user.username, 'session_event', {
+      type: 'password_reset',
+      message: 'Your password has been reset by an administrator. Please log in with your new credentials.',
+    });
 
     // Send password reset email
     let emailSent = false;
@@ -386,6 +410,14 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`User status toggled: ${user.username} (${user.isActive ? 'active' : 'inactive'}) by ${req.user?.username}`);
 
+    // If deactivating, immediately force the user off via WebSocket
+    if (!user.isActive) {
+      emitToUser(user.username, 'session_event', {
+        type: 'account_deactivated',
+        message: 'Your account has been deactivated by an administrator.',
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: `User ${user.isActive ? 'activated' : 'deactivated'} successfully`,
@@ -429,6 +461,12 @@ export const banUser = async (req: AuthRequest, res: Response): Promise<void> =>
     await user.save();
 
     logger.warn(`User banned: ${user.username} by ${req.user?.username}. Reason: ${reason}`);
+
+    // Immediately kick the banned user out via WebSocket
+    emitToUser(user.username, 'session_event', {
+      type: 'account_banned',
+      message: `Your account has been banned by an administrator. Reason: ${reason || 'No reason provided'}.`,
+    });
 
     res.status(200).json({
       success: true,

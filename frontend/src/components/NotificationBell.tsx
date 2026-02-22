@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, disconnectWebSocket } from '../services/websocket';
+import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, disconnectWebSocket, subscribeToSessionEvents, unsubscribeFromSessionEvents } from '../services/websocket';
 
 interface Notification {
   id?: string;
@@ -103,7 +103,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     loadNotifications();
     
     // Initialize WebSocket connection
-    const token = localStorage.getItem('fuel_order_token');
+    const token = sessionStorage.getItem('fuel_order_token');
     if (token) {
       try {
         initializeWebSocket(token);
@@ -127,6 +127,32 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
           // Show browser push notification
           showBrowserNotification(notification);
         });
+
+        // Subscribe to session management events from the server.
+        // These fire immediately when an admin deactivates, bans, deletes,
+        // resets the password of, or force-logs-out this user.
+        subscribeToSessionEvents((eventData: any) => {
+          console.log('[NotificationBell] Received session event:', eventData);
+
+          const SESSION_TERMINATING_EVENTS = [
+            'force_logout',
+            'account_deactivated',
+            'account_banned',
+            'account_deleted',
+            'password_reset',
+            'account_updated',
+          ];
+
+          if (SESSION_TERMINATING_EVENTS.includes(eventData.type)) {
+            // Clear all session data immediately
+            sessionStorage.removeItem('fuel_order_auth');
+            sessionStorage.removeItem('fuel_order_token');
+            sessionStorage.removeItem('fuel_order_active_tab');
+            sessionStorage.removeItem('fuel_order_active_role');
+            // Redirect to login with a descriptive reason
+            window.location.href = `/login?reason=${eventData.type}`;
+          }
+        });
       } catch (error) {
         console.error('[NotificationBell] Failed to initialize WebSocket:', error);
       }
@@ -135,6 +161,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     // Cleanup
     return () => {
       unsubscribeFromNotifications();
+      unsubscribeFromSessionEvents();
       disconnectWebSocket();
     };
   }, []);

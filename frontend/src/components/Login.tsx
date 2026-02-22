@@ -36,6 +36,18 @@ const Login: React.FC = () => {
       setSessionMessage('You were logged out due to 30 minutes of inactivity. Please log in again.');
     } else if (reason === 'unauthorized') {
       setSessionMessage('Your session is no longer valid. Please log in again.');
+    } else if (reason === 'force_logout') {
+      setSessionMessage('You have been logged out by an administrator.');
+    } else if (reason === 'account_deactivated') {
+      setSessionMessage('Your account has been deactivated. Please contact your administrator.');
+    } else if (reason === 'account_banned') {
+      setSessionMessage('Your account has been banned. Please contact your administrator.');
+    } else if (reason === 'account_deleted') {
+      setSessionMessage('Your account has been removed. Please contact your administrator.');
+    } else if (reason === 'password_reset') {
+      setSessionMessage('Your password was reset by an administrator. Please log in with your new credentials.');
+    } else if (reason === 'account_updated') {
+      setSessionMessage('Your account was updated by an administrator. Please log in again to apply the changes.');
     }
 
     // Clear the message after 8 seconds

@@ -6,6 +6,7 @@ import { logger } from '../utils';
 import { databaseMonitor } from '../utils/databaseMonitor';
 import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
+import { emitToUser } from '../services/websocket';
 
 /**
  * Add cache-busting headers to force immediate frontend refresh
@@ -1422,6 +1423,12 @@ export const forceLogout = async (req: AuthRequest, res: Response): Promise<void
     // Clear refresh token
     user.refreshToken = undefined;
     await user.save();
+
+    // Immediately kick the user off via WebSocket – no page refresh needed
+    emitToUser(user.username, 'session_event', {
+      type: 'force_logout',
+      message: 'You have been logged out by an administrator.',
+    });
 
     // Log the action
     await AuditService.log({

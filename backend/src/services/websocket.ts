@@ -155,10 +155,24 @@ export const isUserConnected = (userId: string): boolean => {
   return connectedUsers.has(userId) && connectedUsers.get(userId)!.size > 0;
 };
 
+/**
+ * Emit a targeted event directly to a specific user by username.
+ * Used for session management events (force logout, deactivation, bans, etc.)
+ */
+export const emitToUser = (username: string, event: string, data: any): void => {
+  if (!io) {
+    logger.warn(`WebSocket server not initialized – cannot emit '${event}' to user: ${username}`);
+    return;
+  }
+  io.to(`user:${username}`).emit(event, data);
+  logger.info(`Event '${event}' emitted to user: ${username}`);
+};
+
 export default {
   initializeWebSocket,
   emitNotification,
   emitToAll,
   getConnectedUsersCount,
   isUserConnected,
+  emitToUser,
 };
