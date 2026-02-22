@@ -900,8 +900,8 @@ const FuelRecords = () => {
       ) : (
         <>
           {/* Filters */}
-          <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-4 mb-6 transition-colors">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-3 mb-6 transition-colors">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
             <input
@@ -909,14 +909,14 @@ const FuelRecords = () => {
               placeholder="Search by Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              className="pl-10 w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm"
             />
           </div>
           <div className="relative" ref={routeTypeDropdownRef}>
             <button
               type="button"
               onClick={() => setShowRouteTypeDropdown(!showRouteTypeDropdown)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
+              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
             >
               <span>{routeTypeFilter === 'IMPORT' ? 'Import (Going)' : 'Export (Return)'}</span>
               <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRouteTypeDropdown ? 'rotate-180' : ''}`} />
@@ -958,7 +958,7 @@ const FuelRecords = () => {
             <button
               type="button"
               onClick={() => setShowRouteDropdown(!showRouteDropdown)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
+              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
             >
               <span className={!routeFilter ? 'text-gray-400' : ''}>
                 {routeFilter ? routeFilter.replace('-', ' → ') : 'All Routes'}
@@ -1020,7 +1020,7 @@ const FuelRecords = () => {
               <button
                 type="button"
                 onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center gap-2 min-w-[140px]"
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm flex items-center gap-2 min-w-[120px]"
               >
                 <span>{getMonthName(selectedMonth)}</span>
                 <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
