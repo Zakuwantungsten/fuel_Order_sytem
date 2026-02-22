@@ -133,7 +133,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     const checkExistingSession = () => {
       try {
-        const stored = localStorage.getItem('fuel_order_auth');
+        const stored = sessionStorage.getItem('fuel_order_auth');
         if (stored) {
           const authData = JSON.parse(stored);
           const permissions = getRolePermissions(authData.role);
@@ -153,7 +153,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       } catch (error) {
         console.error('Error checking existing session:', error);
-        localStorage.removeItem('fuel_order_auth');
+        sessionStorage.removeItem('fuel_order_auth');
       }
     };
 
@@ -163,7 +163,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const loadSystemSettings = async () => {
       try {
         // Check if user is authenticated first
-        const authData = localStorage.getItem('fuel_order_auth');
+        const authData = sessionStorage.getItem('fuel_order_auth');
         if (!authData) return;
         
         const parsedAuth = JSON.parse(authData);
@@ -197,8 +197,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const authResponse: AuthResponse = await authAPI.login(credentials);
       const { user, accessToken } = authResponse;
 
-      // Save token to localStorage
-      localStorage.setItem('fuel_order_token', accessToken);
+      // Save token to sessionStorage (cleared when tab/browser is closed)
+      sessionStorage.setItem('fuel_order_token', accessToken);
 
       // Get role permissions
       const permissions = getRolePermissions(user.role);
@@ -215,8 +215,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         theme: userTheme, // Include THIS user's theme
       };
 
-      // Store user data in localStorage
-      localStorage.setItem('fuel_order_auth', JSON.stringify({
+      // Store user data in sessionStorage (cleared when tab/browser is closed)
+      sessionStorage.setItem('fuel_order_auth', JSON.stringify({
         id: user.id,
         username: user.username,
         email: user.email,
@@ -236,7 +236,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }));
 
       // Clear active tab on login to force role default tab
-      localStorage.removeItem('fuel_order_active_tab');
+      sessionStorage.removeItem('fuel_order_active_tab');
 
       dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
       
@@ -270,10 +270,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Stop activity tracking
     activityTracker.stop();
     
-    localStorage.removeItem('fuel_order_auth');
-    localStorage.removeItem('fuel_order_token');
-    localStorage.removeItem('fuel_order_active_tab'); // Clear active tab on logout
-    localStorage.removeItem('fuel_order_active_role'); // Clear active role on logout
+    sessionStorage.removeItem('fuel_order_auth');
+    sessionStorage.removeItem('fuel_order_token');
+    sessionStorage.removeItem('fuel_order_active_tab'); // Clear active tab on logout
+    sessionStorage.removeItem('fuel_order_active_role'); // Clear active role on logout
     
     // Reset to default theme for logged-out state
     const defaultTheme = getInitialTheme(); // No userId = uses default

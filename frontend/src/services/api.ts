@@ -77,7 +77,7 @@ fetchCsrfToken().catch(err => {
 apiClient.interceptors.request.use(
   async (config) => {
     // Add auth token
-    const token = localStorage.getItem('fuel_order_token');
+    const token = sessionStorage.getItem('fuel_order_token');
     if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -140,8 +140,8 @@ apiClient.interceptors.response.use(
       
       if (!isLoginRequest) {
         // Clear auth data
-        localStorage.removeItem('fuel_order_auth');
-        localStorage.removeItem('fuel_order_token');
+        sessionStorage.removeItem('fuel_order_auth');
+        sessionStorage.removeItem('fuel_order_token');
         
         // Check if it's a token expiration
         const errorMessage = error.response?.data?.message || '';

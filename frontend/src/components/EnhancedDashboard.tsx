@@ -68,9 +68,9 @@ const getInitialTab = (userRole: string): string => {
   const isDriver = userRole === 'driver';
   const isManager = userRole === 'manager' || userRole === 'super_manager' || userRole === 'station_manager';
   
-  // Get stored tab and role from localStorage
-  const storedTab = localStorage.getItem('fuel_order_active_tab');
-  const storedRole = localStorage.getItem('fuel_order_active_role');
+  // Get stored tab and role from sessionStorage (cleared when tab/browser is closed)
+  const storedTab = sessionStorage.getItem('fuel_order_active_tab');
+  const storedRole = sessionStorage.getItem('fuel_order_active_role');
   
   // Define valid tabs for each role type
   const getValidTabs = () => {
@@ -138,10 +138,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { logout, toggleTheme, isDark } = useAuth();
 
-  // Persist active tab to localStorage whenever it changes
+  // Persist active tab to sessionStorage whenever it changes (cleared when tab/browser is closed)
   useEffect(() => {
-    localStorage.setItem('fuel_order_active_tab', activeTab);
-    localStorage.setItem('fuel_order_active_role', user.role);
+    sessionStorage.setItem('fuel_order_active_tab', activeTab);
+    sessionStorage.setItem('fuel_order_active_role', user.role);
   }, [activeTab, user.role]);
 
   // Reset to default tab when user role changes (e.g., after login/logout)
