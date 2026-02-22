@@ -5,7 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import AuditService from '../utils/auditService';
 import { config } from '../config';
-import { emitMaintenanceEvent, emitGeneralSettingsEvent } from '../services/websocket';
+import { emitMaintenanceEvent, emitGeneralSettingsEvent, emitSecuritySettingsEvent } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
 
 /**
@@ -184,6 +184,13 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
     systemConfig.markModified('systemSettings');
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
+
+    // Broadcast to all open super_admin tabs so SecurityTab and SystemConfigDashboard
+    // both reflect the new session settings immediately without a page refresh.
+    const savedSession = systemConfig.systemSettings?.session;
+    if (savedSession) {
+      emitSecuritySettingsEvent({ session: savedSession as any });
+    }
 
     // Audit log with HIGH severity
     await AuditService.log({

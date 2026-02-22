@@ -6,7 +6,7 @@ import { logger } from '../utils';
 import { databaseMonitor } from '../utils/databaseMonitor';
 import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
-import { emitToUser, emitMaintenanceEvent } from '../services/websocket';
+import { emitToUser, emitMaintenanceEvent, emitSecuritySettingsEvent } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
 
 /**
@@ -1936,6 +1936,44 @@ export const getMaintenanceStatus = async (req: AuthRequest, res: Response): Pro
 };
 
 /**
+ * Get security settings (session policy + password policy)
+ * Reads from the unified system_settings document so both SecurityTab
+ * and SystemConfigDashboard always see the same values.
+ */
+export const getSecuritySettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+
+    const session = config?.systemSettings?.session || {
+      sessionTimeout: 30,
+      jwtExpiry: 24,
+      refreshTokenExpiry: 7,
+      maxLoginAttempts: 5,
+      lockoutDuration: 15,
+      allowMultipleSessions: true,
+    };
+
+    const password = config?.securitySettings?.password || {
+      minLength: 12,
+      requireUppercase: true,
+      requireLowercase: true,
+      requireNumbers: true,
+      requireSpecialChars: true,
+      historyCount: 5,
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Security settings retrieved successfully',
+      data: { session, password },
+    });
+  } catch (error: any) {
+    logger.error('Error getting security settings:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
  * Update security settings (password policy or session settings)
  */
 export const updateSecuritySettings = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -1951,29 +1989,41 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       throw new ApiError(400, 'Invalid security settings type');
     }
 
-    let config = await SystemConfig.findOne({
-      configType: 'security_settings',
-      isDeleted: false,
-    });
-
+    // Both 'session' and 'password' are stored in the system_settings document
+    // so SecurityTab and SystemConfigDashboard always read/write the same values.
+    let config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
     if (!config) {
-      // Create default security config
-      config = await SystemConfig.create({
-        configType: 'security_settings',
-        securitySettings: {},
-        lastUpdatedBy: req.user?.username || 'system',
-      });
+      throw new ApiError(404, 'System configuration not found. Open System Configuration to initialize it.');
     }
 
-    // Update specific security setting type
-    if (!config.securitySettings) {
-      config.securitySettings = {};
+    if (type === 'session') {
+      if (!config.systemSettings) config.systemSettings = {} as any;
+      if (!config.systemSettings!.session) config.systemSettings!.session = {} as any;
+      const s = config.systemSettings!.session!;
+      const { sessionTimeout, jwtExpiry, refreshTokenExpiry, maxLoginAttempts, lockoutDuration, allowMultipleSessions } = settings;
+      if (sessionTimeout !== undefined) s.sessionTimeout = sessionTimeout;
+      if (jwtExpiry !== undefined) s.jwtExpiry = jwtExpiry;
+      if (refreshTokenExpiry !== undefined) s.refreshTokenExpiry = refreshTokenExpiry;
+      if (maxLoginAttempts !== undefined) s.maxLoginAttempts = maxLoginAttempts;
+      if (lockoutDuration !== undefined) s.lockoutDuration = lockoutDuration;
+      if (allowMultipleSessions !== undefined) s.allowMultipleSessions = allowMultipleSessions;
+      config.markModified('systemSettings');
+    } else if (type === 'password') {
+      if (!config.securitySettings) config.securitySettings = {} as any;
+      if (!config.securitySettings!.password) config.securitySettings!.password = {} as any;
+      Object.assign(config.securitySettings!.password!, settings);
+      config.markModified('securitySettings');
     }
 
-    config.securitySettings[type as keyof typeof config.securitySettings] = settings;
     config.lastUpdatedBy = req.user?.username || 'system';
-
     await config.save();
+
+    // Broadcast to all open super_admin tabs immediately
+    if (type === 'session') {
+      emitSecuritySettingsEvent({ session: config.systemSettings?.session as any });
+    } else if (type === 'password') {
+      emitSecuritySettingsEvent({ password: config.securitySettings?.password as any });
+    }
 
     // Log the change
     await AuditService.log({

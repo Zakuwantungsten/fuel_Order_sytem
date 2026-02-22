@@ -205,6 +205,37 @@ export const emitGeneralSettingsEvent = (settings: {
   logger.info(`General settings event broadcasted: systemName=${settings.systemName}, timezone=${settings.timezone}`);
 };
 
+/**
+ * Broadcast security & session settings changes to all super_admin sockets.
+ * Only super_admins have access to these settings, so we emit to their role room
+ * rather than to every connected client.
+ */
+export const emitSecuritySettingsEvent = (settings: {
+  session?: {
+    sessionTimeout: number;
+    jwtExpiry: number;
+    refreshTokenExpiry: number;
+    maxLoginAttempts: number;
+    lockoutDuration: number;
+    allowMultipleSessions: boolean;
+  };
+  password?: {
+    minLength: number;
+    requireUppercase: boolean;
+    requireLowercase: boolean;
+    requireNumbers: boolean;
+    requireSpecialChars: boolean;
+    historyCount: number;
+  };
+}): void => {
+  if (!io) {
+    logger.warn('WebSocket server not initialized – cannot emit security settings event');
+    return;
+  }
+  io.to('role:super_admin').emit('security_event', settings);
+  logger.info('Security settings event broadcasted to super_admin role');
+};
+
 export default {
   initializeWebSocket,
   emitNotification,
@@ -214,4 +245,5 @@ export default {
   emitToUser,
   emitMaintenanceEvent,
   emitGeneralSettingsEvent,
+  emitSecuritySettingsEvent,
 };

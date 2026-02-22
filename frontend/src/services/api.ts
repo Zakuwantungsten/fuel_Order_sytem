@@ -1495,6 +1495,11 @@ export const systemAdminAPI = {
   },
 
   // Security Settings
+  getSecuritySettings: async () => {
+    const response = await apiClient.get('/admin/security-settings');
+    return response.data.data;
+  },
+
   updateSecuritySettings: async (type: 'password' | 'session', settings: any) => {
     const response = await apiClient.put('/admin/security-settings', { type, settings });
     return response.data;

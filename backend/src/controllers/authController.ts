@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { User, DriverCredential } from '../models';
+import { User, DriverCredential, SystemConfig } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger, createDriverUserId } from '../utils';
 import { AuditService } from '../utils/auditService';
@@ -7,6 +7,7 @@ import { AuthRequest } from '../middleware/auth';
 import { LoginRequest, RegisterRequest, AuthResponse, JWTPayload } from '../types';
 import * as crypto from 'crypto';
 import emailService from '../services/emailService';
+import { emitToUser } from '../services/websocket';
 
 
 /**
@@ -228,6 +229,21 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         req.get('user-agent')
       );
       throw new ApiError(401, 'Invalid password. Please check your credentials and try again.');
+    }
+
+    // Enforce single-session policy if configured
+    const systemConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+    const allowMultipleSessions = systemConfig?.systemSettings?.session?.allowMultipleSessions ?? true;
+
+    if (!allowMultipleSessions) {
+      // Single-session policy: kick any existing session for this user.
+      // emitToUser sends to the 'user:<username>' socket room; if nobody is
+      // in that room yet (first login) this is a harmless no-op.
+      emitToUser(user.username, 'session_event', {
+        type: 'force_logout',
+        message: 'You have been logged out because a new session was started from another location.',
+      });
+      logger.info(`Single-session policy: existing session(s) for '${username}' were force-logged out`);
     }
 
     // Generate tokens

@@ -12,6 +12,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 let _sessionEventCallback: ((event: any) => void) | null = null;
 let _maintenanceEventCallback: ((event: any) => void) | null = null;
 let _settingsEventCallback: ((event: any) => void) | null = null;
+let _securityEventCallback: ((event: any) => void) | null = null;
 
 /**
  * Initialize WebSocket connection
@@ -50,6 +51,10 @@ export const initializeWebSocket = (token: string): Socket => {
   socket.on('settings_event', (event) => {
     console.log('[WebSocket] Received settings event:', event);
     if (_settingsEventCallback) _settingsEventCallback(event);
+  });
+  socket.on('security_event', (event) => {
+    console.log('[WebSocket] Received security event:', event);
+    if (_securityEventCallback) _securityEventCallback(event);
   });
 
   socket.on('connect', () => {
@@ -163,6 +168,22 @@ export const unsubscribeFromSettingsEvents = (): void => {
 };
 
 /**
+ * Subscribe to security & session settings change events.
+ * Emitted to the super_admin role room whenever session or password policy is saved.
+ * The callback receives { session?, password? }.
+ */
+export const subscribeToSecurityEvents = (callback: (event: any) => void): void => {
+  _securityEventCallback = callback;
+};
+
+/**
+ * Unsubscribe from security settings events
+ */
+export const unsubscribeFromSecurityEvents = (): void => {
+  _securityEventCallback = null;
+};
+
+/**
  * Disconnect WebSocket
  */
 export const disconnectWebSocket = (): void => {
@@ -197,6 +218,8 @@ export default {
   unsubscribeFromMaintenanceEvents,
   subscribeToSettingsEvents,
   unsubscribeFromSettingsEvents,
+  subscribeToSecurityEvents,
+  unsubscribeFromSecurityEvents,
   disconnectWebSocket,
   isConnected,
   getSocket,

@@ -17,6 +17,7 @@ import {
   Loader,
 } from 'lucide-react';
 import systemConfigAPI, { SystemSettings } from '../../services/systemConfigService';
+import { subscribeToSecurityEvents, unsubscribeFromSecurityEvents } from '../../services/websocket';
 
 interface SystemConfigDashboardProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -92,6 +93,18 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
 
   useEffect(() => {
     loadSystemSettings();
+
+    // When SecurityTab (sidebar) saves session settings, update our form too so
+    // both places always show the same values without needing a page refresh.
+    subscribeToSecurityEvents((event) => {
+      if (event.session) {
+        setSettings((prev) => ({
+          ...prev,
+          session: { ...prev.session, ...event.session },
+        }));
+      }
+    });
+    return () => unsubscribeFromSecurityEvents();
   }, []);
 
   const loadSystemSettings = async () => {
