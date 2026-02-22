@@ -13,6 +13,13 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Desktop: scale down slightly so site looks correct at 100% browser zoom */
+@media (min-width: 1024px) {
+  html {
+    font-size: 87.5%; /* 14px equivalent - matches how site was designed at ~80% zoom */
+  }
+}
+
 /* Mobile viewport scaling - allows pinch zoom */
 @media (max-width: 768px) {
   html {
