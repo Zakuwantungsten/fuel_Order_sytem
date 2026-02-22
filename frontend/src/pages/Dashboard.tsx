@@ -492,7 +492,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       </div>
 
       {/* Search Bar with Real-time Auto-suggestions */}
-      <div className="flex items-center gap-3 max-w-2xl">
+      <div className="flex items-center gap-3 max-w-sm">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
