@@ -1696,7 +1696,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   onClick={() => setShowDoTypeDropdown(!showDoTypeDropdown)}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
-                  <span>
+                  <span className="truncate min-w-0">
                     {filterDoType === 'DO' ? 'DO - Delivery Orders' : 
                      filterDoType === 'SDO' ? 'SDO - Special Delivery Orders' : 
                      'All Order Types'}
@@ -1729,7 +1729,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   onClick={() => setShowFilterTypeDropdown(!showFilterTypeDropdown)}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
-                  <span>
+                  <span className="truncate min-w-0">
                     {filterType === 'ALL' ? 'All Types' : 
                      filterType === 'IMPORT' ? 'Import' : 
                      'Export'}
@@ -1761,7 +1761,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   onClick={() => setShowFilterStatusDropdown(!showFilterStatusDropdown)}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
-                  <span>
+                  <span className="truncate min-w-0">
                     {filterStatus === 'all' ? 'All Status' : 
                      filterStatus === 'active' ? 'Active' : 
                      'Cancelled'}
@@ -1795,7 +1795,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   setSelectedMonths([new Date().getMonth() + 1]); // Reset to current month
                   setCurrentPage(1);
                 }}
-                className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Clear Filters
               </button>
