@@ -762,7 +762,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         type="number"
                         value={entry.liters}
                         onChange={(e) => handleEntryEdit(index, 'liters', parseFloat(e.target.value) || 0)}
-                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       />
                     ) : (
                       <span className={`text-sm ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.liters}</span>
@@ -776,7 +776,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         step="0.1"
                         value={entry.rate}
                         onChange={(e) => handleEntryEdit(index, 'rate', parseFloat(e.target.value) || 0)}
-                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       />
                     ) : (
                       <span className={`text-sm ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.rate}</span>
