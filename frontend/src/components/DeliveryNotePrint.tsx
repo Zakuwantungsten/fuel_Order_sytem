@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { DeliveryOrder } from '../types';
 import { cleanDriverName } from '../utils/dataCleanup';
-import { useAuth } from '../contexts/AuthContext';
+import { formatDateOnly } from '../utils/timezone';
 
 interface DeliveryNotePrintProps {
   order: DeliveryOrder;
@@ -14,9 +14,8 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
   const preparedByName = preparedBy || user?.username || '';
   
   const formatDate = (dateString: string) => {
-    if (!dateString) return new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    if (!dateString) return formatDateOnly(new Date());
+    return formatDateOnly(new Date(dateString));
   };
 
   const currentDate = formatDate(order.date);
@@ -263,7 +262,7 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
 
             {/* Footer - Generation Info */}
             <div style={{ marginTop: '30px', fontSize: '8px', color: '#666666', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Generated: {new Date().toLocaleString('en-GB')}</span>
+              <span>Generated: {formatDateOnly(new Date())}</span>
               <span>Page 1</span>
             </div>
           </div>

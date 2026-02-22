@@ -1,4 +1,5 @@
 import { DeliveryOrder } from '../types';
+import { formatDateOnly } from '../utils/timezone';
 import DeliveryNotePrint from './DeliveryNotePrint';
 
 interface BatchDOPrintProps {
@@ -52,7 +53,7 @@ const BatchDOPrint = ({ orders, clientName }: BatchDOPrintProps) => {
           Total Orders: <strong>{orders.length}</strong>
         </p>
         <p style={{ fontSize: '16px' }}>
-          Date: <strong>{new Date().toLocaleDateString()}</strong>
+          Date: <strong>{formatDateOnly(new Date())}</strong>
         </p>
       </div>
 

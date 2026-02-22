@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { formatDate as formatSystemDate } from '../../utils/timezone';
 import { 
   Trash2, 
   RefreshCw, 
@@ -210,9 +211,7 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
     setSelectedItems(newSelected);
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleString();
-  };
+  const formatDate = (date: string) => formatSystemDate(date);
 
   return (
     <div className="space-y-6">

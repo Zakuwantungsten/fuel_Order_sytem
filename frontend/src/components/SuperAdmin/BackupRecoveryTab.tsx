@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { formatDate as formatSystemDate } from '../../utils/timezone';
 import { Database, Download, Upload, Calendar, RefreshCw, Trash2, AlertCircle, CheckCircle, Clock, HardDrive, Package } from 'lucide-react';
 import { backupAPI } from '../../services/api';
 import { Backup, BackupSchedule, BackupStats } from '../../types';
@@ -108,9 +108,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleString();
-  };
+  const formatDate = (dateString: string): string => formatSystemDate(dateString);
 
   const getStatusIcon = (status: string) => {
     switch (status) {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { DeliveryOrder } from '../types';
 import { cleanDriverName } from '../utils/dataCleanup';
-import { useAuth } from '../contexts/AuthContext';
+import { formatDateOnly } from '../utils/timezone';
 
 interface DOSheetViewProps {
   order: DeliveryOrder;
@@ -17,9 +17,8 @@ const DOSheetView = ({ order, preparedBy }: DOSheetViewProps) => {
   const preparedByName = preparedBy || user?.username || '';
   
   const formatDate = (dateString: string) => {
-    if (!dateString) return new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    if (!dateString) return formatDateOnly(new Date());
+    return formatDateOnly(new Date(dateString));
   };
 
   const currentDate = formatDate(order.date);

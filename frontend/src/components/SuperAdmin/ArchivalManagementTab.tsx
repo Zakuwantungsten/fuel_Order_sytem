@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { formatDate as formatSystemDate } from '../../utils/timezone';
 import { 
   Archive, 
   Database, 
@@ -258,9 +258,7 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
     );
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
+  const formatDate = (dateString: string) => formatSystemDate(dateString);
 
   return (
     <div className="space-y-6">

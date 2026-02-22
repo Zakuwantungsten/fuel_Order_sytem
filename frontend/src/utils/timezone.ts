@@ -1,33 +1,66 @@
 /**
  * Timezone Utility
- * Provides timezone-aware date formatting based on system configuration
+ * Provides timezone-aware date formatting based on system configuration.
+ * Call setSystemTimezone(), setSystemDateFormat(), and setSystemName()
+ * once after loading system settings to apply them everywhere.
  */
 
 let systemTimezone = 'Africa/Nairobi'; // Default timezone
+let systemDateFormat = 'DD/MM/YYYY';   // Default date format
+let systemName = 'Fuel Order Management System';
 
-/**
- * Set the system timezone (should be called when system settings are loaded)
- */
+// ---- Setters (called from AuthContext after loading system settings) ----
+
 export const setSystemTimezone = (timezone: string): void => {
   systemTimezone = timezone;
 };
 
-/**
- * Get the current system timezone
- */
-export const getSystemTimezone = (): string => {
-  return systemTimezone;
+export const setSystemDateFormat = (format: string): void => {
+  systemDateFormat = format;
 };
 
 /**
- * Format a date using the system's configured timezone
+ * Set the system name and update the browser tab title.
+ */
+export const setSystemName = (name: string): void => {
+  systemName = name;
+  if (name && typeof document !== 'undefined') {
+    document.title = name;
+  }
+};
+
+// ---- Getters ----
+
+export const getSystemTimezone = (): string => systemTimezone;
+export const getSystemDateFormat = (): string => systemDateFormat;
+export const getSystemName = (): string => systemName;
+
+// ---- Internal helpers ----
+
+/**
+ * Build Intl.DateTimeFormat locale string from the stored dateFormat.
+ * Returns 'en-GB' for DD/MM/YYYY, 'en-US' for MM/DD/YYYY, 'sv-SE' for YYYY-MM-DD.
+ */
+const getLocaleForFormat = (): string => {
+  switch (systemDateFormat) {
+    case 'MM/DD/YYYY': return 'en-US';
+    case 'YYYY-MM-DD': return 'sv-SE';
+    default:           return 'en-GB'; // DD/MM/YYYY
+  }
+};
+
+// ---- Public formatters ----
+
+/**
+ * Format a date using the system configured timezone and date format.
+ * Pass explicit `options` to override specific fields (e.g. omit time).
  */
 export const formatDate = (
   date: Date | string | number,
   options?: Intl.DateTimeFormatOptions
 ): string => {
   const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
-  
+
   const defaultOptions: Intl.DateTimeFormatOptions = {
     year: 'numeric',
     month: '2-digit',
@@ -38,28 +71,28 @@ export const formatDate = (
     ...options,
   };
 
-  return new Intl.DateTimeFormat('en-GB', defaultOptions).format(dateObj);
+  return new Intl.DateTimeFormat(getLocaleForFormat(), defaultOptions).format(dateObj);
 };
 
 /**
- * Format a date with only date (no time)
+ * Format only the date portion (no time) using system timezone + date format.
  */
 export const formatDateOnly = (date: Date | string | number): string => {
-  return formatDate(date, {
+  const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+  return new Intl.DateTimeFormat(getLocaleForFormat(), {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour: undefined,
-    minute: undefined,
-  });
+    timeZone: systemTimezone,
+  }).format(dateObj);
 };
 
 /**
- * Format a date with only time (no date)
+ * Format only the time portion (no date) using system timezone.
  */
 export const formatTimeOnly = (date: Date | string | number): string => {
   const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
-  
+
   return new Intl.DateTimeFormat('en-GB', {
     hour: '2-digit',
     minute: '2-digit',

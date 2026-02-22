@@ -77,6 +77,12 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
   const [dbConfig, setDbConfig] = useState<any>(null);
   const [envVars, setEnvVars] = useState<any>(null);
 
+  // Email testing state
+  const [emailTestResult, setEmailTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [emailTesting, setEmailTesting] = useState(false);
+  const [testEmailRecipient, setTestEmailRecipient] = useState('');
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+
   // Profiling
   const [profiling, setProfiling] = useState({
     enabled: false,
@@ -184,6 +190,36 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
       onMessage('success', result.message);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'R2 connection test failed');
+    }
+  };
+
+  const handleTestEmailConnection = async () => {
+    setEmailTesting(true);
+    setEmailTestResult(null);
+    try {
+      const result = await systemConfigAPI.testEmailConnection();
+      setEmailTestResult(result);
+    } catch (error: any) {
+      setEmailTestResult({ success: false, message: error.response?.data?.message || 'SMTP connection failed' });
+    } finally {
+      setEmailTesting(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    const recipient = testEmailRecipient.trim();
+    if (!recipient) {
+      onMessage('error', 'Enter a recipient email address');
+      return;
+    }
+    setSendingTestEmail(true);
+    try {
+      const result = await systemConfigAPI.sendTestEmail(recipient);
+      onMessage('success', result.message || `Test email sent to ${recipient}`);
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Failed to send test email');
+    } finally {
+      setSendingTestEmail(false);
     }
   };
 
@@ -347,8 +383,7 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                           Timezone
                         </label>
-                        <input
-                          type="text"
+                        <select
                           value={settings.general.timezone}
                           onChange={(e) =>
                             setSettings({
@@ -357,7 +392,48 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                             })
                           }
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        />
+                        >
+                          <optgroup label="Africa">
+                            <option value="Africa/Dar_es_Salaam">East Africa Time — Dar es Salaam (EAT, UTC+3)</option>
+                            <option value="Africa/Nairobi">East Africa Time — Nairobi (EAT, UTC+3)</option>
+                            <option value="Africa/Kampala">East Africa Time — Kampala (EAT, UTC+3)</option>
+                            <option value="Africa/Lusaka">Central Africa Time — Lusaka (CAT, UTC+2)</option>
+                            <option value="Africa/Harare">Central Africa Time — Harare (CAT, UTC+2)</option>
+                            <option value="Africa/Johannesburg">South Africa Standard — Johannesburg (SAST, UTC+2)</option>
+                            <option value="Africa/Lagos">West Africa Time — Lagos (WAT, UTC+1)</option>
+                            <option value="Africa/Accra">Greenwich Mean Time — Accra (GMT, UTC+0)</option>
+                            <option value="Africa/Cairo">Eastern European Time — Cairo (EET, UTC+2)</option>
+                            <option value="Africa/Casablanca">Western European Time — Casablanca (WET, UTC+1)</option>
+                          </optgroup>
+                          <optgroup label="Europe">
+                            <option value="Europe/London">Greenwich Mean Time — London (GMT/BST, UTC+0/+1)</option>
+                            <option value="Europe/Paris">Central European Time — Paris (CET, UTC+1/+2)</option>
+                            <option value="Europe/Berlin">Central European Time — Berlin (CET, UTC+1/+2)</option>
+                            <option value="Europe/Moscow">Moscow Standard Time (MSK, UTC+3)</option>
+                            <option value="Europe/Istanbul">Turkey Time (TRT, UTC+3)</option>
+                            <option value="Europe/Dubai">Gulf Standard Time — Dubai (GST, UTC+4)</option>
+                          </optgroup>
+                          <optgroup label="Asia">
+                            <option value="Asia/Riyadh">Arabia Standard Time — Riyadh (AST, UTC+3)</option>
+                            <option value="Asia/Karachi">Pakistan Standard Time (PKT, UTC+5)</option>
+                            <option value="Asia/Kolkata">India Standard Time (IST, UTC+5:30)</option>
+                            <option value="Asia/Dhaka">Bangladesh Standard Time (BST, UTC+6)</option>
+                            <option value="Asia/Bangkok">Indochina Time — Bangkok (ICT, UTC+7)</option>
+                            <option value="Asia/Singapore">Singapore Standard Time (SGT, UTC+8)</option>
+                            <option value="Asia/Shanghai">China Standard Time (CST, UTC+8)</option>
+                            <option value="Asia/Tokyo">Japan Standard Time (JST, UTC+9)</option>
+                          </optgroup>
+                          <optgroup label="Americas">
+                            <option value="America/New_York">Eastern Time — New York (ET, UTC-5/-4)</option>
+                            <option value="America/Chicago">Central Time — Chicago (CT, UTC-6/-5)</option>
+                            <option value="America/Denver">Mountain Time — Denver (MT, UTC-7/-6)</option>
+                            <option value="America/Los_Angeles">Pacific Time — Los Angeles (PT, UTC-8/-7)</option>
+                            <option value="America/Sao_Paulo">Brasilia Time (BRT, UTC-3)</option>
+                          </optgroup>
+                          <optgroup label="UTC">
+                            <option value="UTC">Coordinated Universal Time (UTC+0)</option>
+                          </optgroup>
+                        </select>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1019,6 +1095,54 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                           {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                           Save Email Configuration
                         </button>
+                      </div>
+
+                      {/* Email Testing */}
+                      <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+                        <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Test Email Service</h5>
+
+                        {/* Test Connection */}
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={handleTestEmailConnection}
+                            disabled={emailTesting}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg text-sm disabled:opacity-50 border border-gray-300 dark:border-gray-600"
+                          >
+                            {emailTesting ? <Loader className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+                            Test SMTP Connection
+                          </button>
+                          {emailTestResult && (
+                            <span className={`flex items-center gap-1.5 text-sm font-medium ${
+                              emailTestResult.success
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}>
+                              {emailTestResult.success
+                                ? <CheckCircle className="w-4 h-4" />
+                                : <XCircle className="w-4 h-4" />}
+                              {emailTestResult.message}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Send Test Email */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="email"
+                            value={testEmailRecipient}
+                            onChange={(e) => setTestEmailRecipient(e.target.value)}
+                            placeholder="recipient@example.com"
+                            className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                          />
+                          <button
+                            onClick={handleSendTestEmail}
+                            disabled={sendingTestEmail || !testEmailRecipient.trim()}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm disabled:opacity-50"
+                          >
+                            {sendingTestEmail ? <Loader className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                            Send Test Email
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

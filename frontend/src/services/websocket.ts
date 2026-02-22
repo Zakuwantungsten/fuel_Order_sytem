@@ -11,6 +11,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 // remove the underlying socket.on listener.
 let _sessionEventCallback: ((event: any) => void) | null = null;
 let _maintenanceEventCallback: ((event: any) => void) | null = null;
+let _settingsEventCallback: ((event: any) => void) | null = null;
 
 /**
  * Initialize WebSocket connection
@@ -45,6 +46,10 @@ export const initializeWebSocket = (token: string): Socket => {
   socket.on('maintenance_event', (event) => {
     console.log('[WebSocket] Received maintenance event:', event);
     if (_maintenanceEventCallback) _maintenanceEventCallback(event);
+  });
+  socket.on('settings_event', (event) => {
+    console.log('[WebSocket] Received settings event:', event);
+    if (_settingsEventCallback) _settingsEventCallback(event);
   });
 
   socket.on('connect', () => {
@@ -141,6 +146,23 @@ export const unsubscribeFromMaintenanceEvents = (): void => {
 };
 
 /**
+ * Subscribe to general settings change events.
+ * Emitted whenever a super_admin saves General Settings (system name, timezone,
+ * date format, language). The callback receives { systemName, timezone, dateFormat, language }.
+ * All open tabs across all users apply the changes immediately without a refresh.
+ */
+export const subscribeToSettingsEvents = (callback: (event: any) => void): void => {
+  _settingsEventCallback = callback;
+};
+
+/**
+ * Unsubscribe from general settings events
+ */
+export const unsubscribeFromSettingsEvents = (): void => {
+  _settingsEventCallback = null;
+};
+
+/**
  * Disconnect WebSocket
  */
 export const disconnectWebSocket = (): void => {
@@ -173,6 +195,8 @@ export default {
   unsubscribeFromSessionEvents,
   subscribeToMaintenanceEvents,
   unsubscribeFromMaintenanceEvents,
+  subscribeToSettingsEvents,
+  unsubscribeFromSettingsEvents,
   disconnectWebSocket,
   isConnected,
   getSocket,

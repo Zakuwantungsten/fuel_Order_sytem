@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDate as formatSystemDate } from '../utils/timezone';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import { amendedDOsAPI } from '../services/api';
 import { X, Trash2, Download, FileText } from 'lucide-react';
@@ -81,15 +82,7 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
     }
   };
 
-  const formatDateTime = (date: Date) => {
-    return new Date(date).toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const formatDateTime = (date: Date) => formatSystemDate(date, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   if (!isOpen) return null;
 

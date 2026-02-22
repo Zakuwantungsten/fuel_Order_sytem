@@ -8,7 +8,8 @@ import ResetPassword from './pages/ResetPassword';
 import ProtectedRoute, { UnauthorizedPage } from './components/ProtectedRoute';
 import EnhancedDashboard from './components/EnhancedDashboard';
 import { systemAdminAPI } from './services/api';
-import { initializeWebSocket, subscribeToMaintenanceEvents, unsubscribeFromMaintenanceEvents } from './services/websocket';
+import { initializeWebSocket, subscribeToMaintenanceEvents, unsubscribeFromMaintenanceEvents, subscribeToSettingsEvents, unsubscribeFromSettingsEvents } from './services/websocket';
+import { setSystemName, setSystemTimezone, setSystemDateFormat } from './utils/timezone';
 import tahmeedLogo from './assets/logo.png';
 import tahmeedLogoDark from './assets/Dec 2, 2025, 06_08_52 PM.png';
 import { LogOut, RefreshCw, Wrench, Clock, Shield } from 'lucide-react';
@@ -207,8 +208,17 @@ function AppContent() {
       });
     });
 
+    // When a super_admin saves General Settings, every open tab (all users, all
+    // roles) receives the broadcast immediately and applies it — no refresh needed.
+    subscribeToSettingsEvents((event) => {
+      if (event.systemName) setSystemName(event.systemName);
+      if (event.timezone) setSystemTimezone(event.timezone);
+      if (event.dateFormat) setSystemDateFormat(event.dateFormat);
+    });
+
     return () => {
       unsubscribeFromMaintenanceEvents();
+      unsubscribeFromSettingsEvents();
     };
   }, [isAuthenticated, user?.role]);
 

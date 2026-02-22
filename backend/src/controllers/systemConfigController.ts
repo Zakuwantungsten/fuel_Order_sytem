@@ -5,7 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import AuditService from '../utils/auditService';
 import { config } from '../config';
-import { emitMaintenanceEvent } from '../services/websocket';
+import { emitMaintenanceEvent, emitGeneralSettingsEvent } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
 
 /**
@@ -108,6 +108,18 @@ export const updateGeneralSettings = async (req: AuthRequest, res: Response): Pr
     systemConfig.markModified('systemSettings');
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
+
+    // Broadcast the new settings to every connected client so all open tabs
+    // update their system name, timezone, and date format immediately.
+    const savedGeneral = systemConfig.systemSettings?.general;
+    if (savedGeneral) {
+      emitGeneralSettingsEvent({
+        systemName: savedGeneral.systemName || 'Fuel Order Management System',
+        timezone: savedGeneral.timezone || 'Africa/Nairobi',
+        dateFormat: savedGeneral.dateFormat || 'DD/MM/YYYY',
+        language: savedGeneral.language || 'en',
+      });
+    }
 
     // Audit log
     await AuditService.logConfigChange(

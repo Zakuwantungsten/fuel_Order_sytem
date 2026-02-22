@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { formatDateOnly } from '../utils/timezone';
 import { Lock, Unlock, Save, X, AlertCircle, CheckCircle, Truck, MapPin } from 'lucide-react';
 import { fuelRecordsAPI } from '../services/api';
 
@@ -223,7 +224,7 @@ export default function PendingConfigurations() {
                         {record.goingDo}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(record.date).toLocaleDateString()}
+                        {formatDateOnly(record.date)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

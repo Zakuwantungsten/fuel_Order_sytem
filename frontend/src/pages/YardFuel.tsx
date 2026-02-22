@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDate as formatSystemDate } from '../utils/timezone';
 import { useAuth } from '../contexts/AuthContext';
 import { yardFuelService } from '../services/yardFuelService';
 import { toast } from 'react-toastify';
@@ -246,7 +247,7 @@ const YardFuel: React.FC = () => {
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Note: {entry.notes}</p>
                   )}
                   <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-                    by {entry.enteredBy} • {new Date(entry.timestamp).toLocaleString()}
+                    by {entry.enteredBy} • {formatSystemDate(entry.timestamp)}
                   </p>
                 </div>
               ))}

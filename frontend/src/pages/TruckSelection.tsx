@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDateOnly } from '../utils/timezone';
 import { Truck, Search, ArrowRight, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -131,7 +132,7 @@ const TruckSelection: React.FC = () => {
                   </div>
                   {truck.lastUpdate && (
                     <div className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                      Last active: {new Date(truck.lastUpdate).toLocaleDateString()}
+                      Last active: {formatDateOnly(truck.lastUpdate)}
                     </div>
                   )}
                 </button>

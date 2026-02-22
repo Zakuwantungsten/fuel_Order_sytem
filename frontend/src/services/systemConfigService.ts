@@ -248,6 +248,26 @@ export const systemConfigAPI = {
     return response.data;
   },
 
+  // ===== Email Testing =====
+
+  /**
+   * Test if the current SMTP configuration is alive
+   * GET /api/admin/email/test-config
+   */
+  testEmailConnection: async (): Promise<{ success: boolean; message: string }> => {
+    const response = await apiClient.get('/admin/email/test-config');
+    return response.data;
+  },
+
+  /**
+   * Send a real test email to a specified recipient
+   * POST /api/admin/email/send-test
+   */
+  sendTestEmail: async (recipient: string): Promise<{ success: boolean; message: string }> => {
+    const response = await apiClient.post('/admin/email/send-test', { recipient });
+    return response.data;
+  },
+
   // ===== Critical System Access =====
 
   /**

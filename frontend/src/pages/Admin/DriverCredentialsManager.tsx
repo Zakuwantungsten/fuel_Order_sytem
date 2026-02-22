@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDate as formatSystemDate, formatDateOnly } from '../../utils/timezone';
 import {
   RefreshCw,
   Download,
@@ -390,10 +391,10 @@ const DriverCredentialsManager: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
-                      {new Date(credential.createdAt).toLocaleDateString()}
+                      {formatDateOnly(credential.createdAt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
-                      {credential.lastLogin ? new Date(credential.lastLogin).toLocaleDateString() : 'Never'}
+                      {credential.lastLogin ? formatDateOnly(credential.lastLogin) : 'Never'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
                       {credential.createdBy || 'System'}
@@ -475,7 +476,7 @@ const DriverCredentialsManager: React.FC = () => {
                           <span className="text-2xl font-mono font-bold text-indigo-600 dark:text-indigo-400">{cred.pin}</span>
                         </td>
                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                          {new Date(cred.createdAt).toLocaleString()}
+                          {formatSystemDate(cred.createdAt)}
                         </td>
                         <td className="px-4 py-3">
                           <button

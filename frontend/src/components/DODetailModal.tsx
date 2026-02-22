@@ -1,4 +1,5 @@
 import { X, Printer, Edit, Ban, Download } from 'lucide-react';
+import { formatDate as formatSystemDate } from '../utils/timezone';
 import { DeliveryOrder } from '../types';
 import DeliveryNotePrint from './DeliveryNotePrint';
 import { useState } from 'react';
@@ -140,7 +141,7 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
                   )}
                   {order.cancelledAt && (
                     <p className="text-xs text-red-500 dark:text-red-500 mt-1">
-                      Cancelled on: {new Date(order.cancelledAt).toLocaleString()}
+                      Cancelled on: {formatSystemDate(order.cancelledAt)}
                       {order.cancelledBy && ` by ${order.cancelledBy}`}
                     </p>
                   )}

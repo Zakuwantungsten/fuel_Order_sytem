@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { formatDateOnly } from '../utils/timezone';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
@@ -1125,7 +1126,7 @@ const FuelRecords = () => {
                           )}
                         </div>
                         <p className={`text-xs ${isCancelled ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                          {new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {formatDateOnly(record.date)}
                         </p>
                       </div>
                       <div className="text-right">
@@ -1336,7 +1337,7 @@ const FuelRecords = () => {
                       <td className={`px-1 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
                         {actualIndex + 1}
                       </td>
-                      <td className={`px-1 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</td>
+                      <td className={`px-1 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{formatDateOnly(record.date)}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs font-medium ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} title={record.truckNo}>{record.truckNo}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs truncate ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.goingDo}>{record.goingDo}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs truncate ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.returnDo || 'N/A'}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDate as formatSystemDate } from '../utils/timezone';
 import { X, Clock, Copy, Trash2, AlertTriangle, Search, Calendar } from 'lucide-react';
 import { CancellationReport } from '../types';
 import { getCancellationHistory, clearCancellationHistory } from '../services/cancellationService';
@@ -73,7 +74,7 @@ const CancellationHistoryModal: React.FC<CancellationHistoryModalProps> = ({ isO
 
   const formatDate = (dateString: string): string => {
     try {
-      return new Date(dateString).toLocaleString();
+      return formatSystemDate(dateString);
     } catch {
       return dateString;
     }

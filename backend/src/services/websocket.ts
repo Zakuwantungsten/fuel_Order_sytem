@@ -186,6 +186,25 @@ export const emitMaintenanceEvent = (
   logger.info(`Maintenance event broadcasted: ${enabled ? 'ENABLED' : 'DISABLED'}`);
 };
 
+/**
+ * Broadcast a general settings change to all connected clients so every open
+ * tab (across all users and roles) picks up the new system name, timezone, and
+ * date format immediately without needing a page refresh.
+ */
+export const emitGeneralSettingsEvent = (settings: {
+  systemName: string;
+  timezone: string;
+  dateFormat: string;
+  language: string;
+}): void => {
+  if (!io) {
+    logger.warn('WebSocket server not initialized – cannot emit settings event');
+    return;
+  }
+  io.emit('settings_event', settings);
+  logger.info(`General settings event broadcasted: systemName=${settings.systemName}, timezone=${settings.timezone}`);
+};
+
 export default {
   initializeWebSocket,
   emitNotification,
@@ -194,4 +213,5 @@ export default {
   isUserConnected,
   emitToUser,
   emitMaintenanceEvent,
+  emitGeneralSettingsEvent,
 };

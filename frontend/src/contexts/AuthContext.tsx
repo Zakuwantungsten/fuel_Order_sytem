@@ -3,7 +3,7 @@ import { AuthState, AuthUser, AuthResponse, LoginCredentials } from '../types';
 import { getRolePermissions } from '../utils/permissions';
 import { authAPI } from '../services/api';
 import { activityTracker } from '../utils/activityTracker';
-import { setSystemTimezone } from '../utils/timezone';
+import { setSystemTimezone, setSystemDateFormat, setSystemName } from '../utils/timezone';
 import systemConfigAPI from '../services/systemConfigService';
 
 // Auth Actions
@@ -159,29 +159,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     checkExistingSession();
 
-    // Load system settings to set timezone (only for super admins)
+    // Load system settings to apply timezone, date format, and system name for all users
     const loadSystemSettings = async () => {
       try {
         // Check if user is authenticated first
         const authData = sessionStorage.getItem('fuel_order_auth');
         if (!authData) return;
-        
-        const parsedAuth = JSON.parse(authData);
-        
-        // Only load system settings for super_admin role
-        if (parsedAuth?.role === 'super_admin') {
-          const settings = await systemConfigAPI.getSystemSettings();
-          if (settings?.general?.timezone) {
-            setSystemTimezone(settings.general.timezone);
-          }
-        } else {
-          // Use default timezone for non-super-admin users
-          setSystemTimezone('Africa/Dar_es_Salaam');
+
+        const settings = await systemConfigAPI.getSystemSettings();
+        if (settings?.general) {
+          if (settings.general.timezone)   setSystemTimezone(settings.general.timezone);
+          if (settings.general.dateFormat) setSystemDateFormat(settings.general.dateFormat);
+          if (settings.general.systemName) setSystemName(settings.general.systemName);
         }
       } catch (error) {
-        // Silently fail - use default timezone
-        console.log('Could not load system settings, using default timezone');
-        setSystemTimezone('Africa/Dar_es_Salaam');
+        // Silently fail - keep defaults
+        console.log('Could not load system settings, using defaults');
       }
     };
 
@@ -243,20 +236,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Apply the user's theme immediately after login
       dispatch({ type: 'SET_THEME', payload: userTheme });
 
-      // Load system settings for super admins
-      if (user.role === 'super_admin') {
-        try {
-          const settings = await systemConfigAPI.getSystemSettings();
-          if (settings?.general?.timezone) {
-            setSystemTimezone(settings.general.timezone);
-          }
-        } catch (error) {
-          // Silently fail - timezone already set to default
-          console.log('Could not load system settings after login');
+      // Load system settings for all roles
+      try {
+        const settings = await systemConfigAPI.getSystemSettings();
+        if (settings?.general) {
+          if (settings.general.timezone)   setSystemTimezone(settings.general.timezone);
+          if (settings.general.dateFormat) setSystemDateFormat(settings.general.dateFormat);
+          if (settings.general.systemName) setSystemName(settings.general.systemName);
         }
-      } else {
-        // Set default timezone for non-super-admin users
-        setSystemTimezone('Africa/Dar_es_Salaam');
+      } catch (error) {
+        // Silently fail - timezone already set to default
+        console.log('Could not load system settings after login');
       }
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Login failed';
