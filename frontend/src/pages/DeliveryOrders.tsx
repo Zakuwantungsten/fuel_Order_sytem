@@ -547,6 +547,23 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     return Array.from(months).sort((a, b) => a - b);
   }, [orders]);
 
+  // Auto-fallback to previous month if current month has no data
+  useEffect(() => {
+    if (loading || orders.length === 0) return;
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    // Only auto-fallback when on the default current-month/year selection
+    if (selectedMonths.length !== 1 || selectedMonths[0] !== currentMonth || selectedYear !== currentYear) return;
+    const hasCurrentMonthData = orders.some(order => {
+      const year = new Date(order.date).getFullYear();
+      return year === selectedYear && getMonthFromDate(order.date) === currentMonth;
+    });
+    if (!hasCurrentMonthData) {
+      const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+      setSelectedMonths([prevMonth]);
+    }
+  }, [orders, loading]);
+
   // Toggle month selection
   const toggleMonth = (month: number) => {
     setSelectedMonths(prev => {

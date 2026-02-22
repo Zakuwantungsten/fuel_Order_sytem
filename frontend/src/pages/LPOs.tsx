@@ -671,6 +671,19 @@ const LPOs = () => {
     setCurrentPage(1); // Reset to page 1 when filters change
   };
 
+  // Auto-fallback to previous month if current month has no data
+  useEffect(() => {
+    if (loading || lpos.length === 0 || !filtersInitialized) return;
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    // Only auto-fallback when on the default current-month/year selection
+    if (selectedMonths.length !== 1 || selectedMonths[0] !== currentMonth || selectedYear !== currentYear) return;
+    if (filteredLpos.length === 0) {
+      const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+      setSelectedMonths([prevMonth]);
+    }
+  }, [filteredLpos, loading, filtersInitialized]);
+
   // Add month-based serial numbers to LPOs
   const lposWithMonthlySerialNumbers = useMemo(() => {
     // Group LPOs by month and year
