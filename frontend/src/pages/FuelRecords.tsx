@@ -1250,8 +1250,8 @@ const FuelRecords = () => {
                 <th className="w-8 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">SN</th>
                 <th className="w-12 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Date</th>
                 <th className="w-16 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Truck</th>
-                <th className="w-20 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Go</th>
-                <th className="w-20 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Ret</th>
+                <th className="w-16 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Go</th>
+                <th className="w-14 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Ret</th>
                 <th className="w-10 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">St</th>
                 <th className="w-20 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Fr</th>
                 <th className="w-20 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">To</th>
