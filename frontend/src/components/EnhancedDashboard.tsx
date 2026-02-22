@@ -436,13 +436,13 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       {/* Sidebar */}
       <div className={`bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 right-0 lg:right-auto lg:left-0 z-30 transform ${
         sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
-      } w-64 ${!sidebarOpen && 'lg:w-16'}`}>
-        <div className="p-4 flex-shrink-0">
+      } w-56 ${!sidebarOpen && 'lg:w-14'}`}>
+        <div className="p-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             {sidebarOpen && (
               <div>
-                <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">Fuel Order</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Management System</p>
+                <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">Fuel Order</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Management System</p>
               </div>
             )}
             <button
@@ -469,33 +469,33 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   setActiveTab(item.id);
                   setSidebarOpen(false);
                 }}
-                className={`w-full flex items-center px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                className={`w-full flex items-center px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                   activeTab === item.id 
                     ? 'bg-indigo-50 dark:bg-indigo-900/30 border-r-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' 
                     : 'text-gray-700 dark:text-gray-300'
                 }`}
               >
-                <IconComponent className="w-5 h-5" />
-                {sidebarOpen && <span className="ml-3">{item.label}</span>}
+                <IconComponent className="w-4 h-4" />
+                {sidebarOpen && <span className="ml-2 text-sm">{item.label}</span>}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t dark:border-gray-700 flex-shrink-0 mt-auto">
+        <div className="p-3 border-t dark:border-gray-700 flex-shrink-0 mt-auto">
           {sidebarOpen && (
-            <div className="mb-4">
-              <div className="text-sm text-gray-500 dark:text-gray-400">Logged in as</div>
-              <div className="font-medium text-gray-800 dark:text-gray-100">{user.firstName} {user.lastName}</div>
+            <div className="mb-3">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Logged in as</div>
+              <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{user.firstName} {user.lastName}</div>
               <div className="text-xs text-gray-400 dark:text-gray-500 capitalize">{user.role?.replace('_', ' ')}</div>
             </div>
           )}
           <button
             onClick={logout}
-            className="w-full flex items-center px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+            className="w-full flex items-center px-2 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
           >
-            <LogOut className="w-5 h-5" />
-            {sidebarOpen && <span className="ml-3">Logout</span>}
+            <LogOut className="w-4 h-4" />
+            {sidebarOpen && <span className="ml-2 text-sm">Logout</span>}
           </button>
         </div>
       </div>
@@ -595,17 +595,17 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         </header>
         
         {/* Desktop Header */}
-        <header className="hidden lg:flex bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-4 flex-shrink-0 transition-colors">
+        <header className="hidden lg:flex bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-3 flex-shrink-0 transition-colors">
           <div className="flex items-center justify-between w-full">
             <div>
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
                 {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
               </h2>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <button 
                 onClick={toggleTheme}
-                className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -636,10 +636,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               <div className="relative">
                 <button 
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className="flex items-center space-x-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg p-2 transition-colors"
+                  className="flex items-center space-x-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-colors"
                 >
-                  <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-medium">
+                  <div className="w-7 h-7 bg-indigo-500 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs font-medium">
                       {user.firstName?.charAt(0).toUpperCase()}
                     </span>
                   </div>

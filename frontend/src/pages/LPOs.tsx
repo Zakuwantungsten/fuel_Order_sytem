@@ -943,28 +943,28 @@ const LPOs = () => {
             <div className="inline-flex rounded-md shadow-sm">
               <button
                 onClick={() => setViewMode('list')}
-                className="px-3 py-2 text-sm font-medium rounded-l-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                className="px-2.5 py-1.5 text-sm font-medium rounded-l-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <List className="w-4 h-4 mr-1 inline" />
                 List
               </button>
               <button
                 onClick={() => setViewMode('summary' as ViewMode)}
-                className="px-3 py-2 text-sm font-medium border-t border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                className="px-2.5 py-1.5 text-sm font-medium border-t border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <BarChart3 className="w-4 h-4 mr-1 inline" />
                 Summary
               </button>
               <button
                 onClick={() => setViewMode('workbook')}
-                className="px-3 py-2 text-sm font-medium border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                className="px-2.5 py-1.5 text-sm font-medium border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <Grid className="w-4 h-4 mr-1 inline" />
                 Workbook
               </button>
               <button
                 onClick={() => setViewMode('driver_account')}
-                className="px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b bg-blue-600 text-white border-blue-600"
+                className="px-2.5 py-1.5 text-sm font-medium rounded-r-md border-t border-r border-b bg-blue-600 text-white border-blue-600"
               >
                 <Wallet className="w-4 h-4 mr-1 inline" />
                 Driver Acc
@@ -993,28 +993,28 @@ const LPOs = () => {
             <div className="inline-flex rounded-md shadow-sm">
               <button
                 onClick={() => setViewMode('list')}
-                className="px-3 py-2 text-sm font-medium rounded-l-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                className="px-2.5 py-1.5 text-sm font-medium rounded-l-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <List className="w-4 h-4 mr-1 inline" />
                 List
               </button>
             <button
               onClick={() => setViewMode('summary' as ViewMode)}
-              className="px-3 py-2 text-sm font-medium border-t border-b bg-blue-600 text-white border-blue-600"
+              className="px-2.5 py-1.5 text-sm font-medium border-t border-b bg-blue-600 text-white border-blue-600"
               >
                 <BarChart3 className="w-4 h-4 mr-1 inline" />
                 Summary
               </button>
               <button
                 onClick={() => setViewMode('workbook')}
-                className="px-3 py-2 text-sm font-medium border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="px-2.5 py-1.5 text-sm font-medium border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <Grid className="w-4 h-4 mr-1 inline" />
                 Workbook
               </button>
               <button
                 onClick={() => setViewMode('driver_account')}
-                className="px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="px-2.5 py-1.5 text-sm font-medium rounded-r-md border-t border-r border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <Wallet className="w-4 h-4 mr-1 inline" />
                 Driver Acc
@@ -1047,7 +1047,7 @@ const LPOs = () => {
           <div className="inline-flex rounded-md shadow-sm overflow-hidden">
             <button
               onClick={() => setViewMode('list')}
-              className={`px-3 py-2 text-sm font-medium rounded-l-md border ${
+              className={`px-2.5 py-1.5 text-sm font-medium rounded-l-md border ${
                 viewMode === 'list'
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -1058,7 +1058,7 @@ const LPOs = () => {
             </button>
             <button
               onClick={() => setViewMode('summary' as ViewMode)}
-              className={`px-3 py-2 text-sm font-medium border-t border-b ${
+              className={`px-2.5 py-1.5 text-sm font-medium border-t border-b ${
                 (viewMode as ViewMode) === 'summary'
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -1094,7 +1094,7 @@ const LPOs = () => {
           <PermissionGuard resource={RESOURCES.LPOS} action={ACTIONS.EXPORT}>
             <button
               onClick={handleExport}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               <Download className="w-4 h-4 mr-2" />
               Export
@@ -1103,7 +1103,7 @@ const LPOs = () => {
           <PermissionGuard resource={RESOURCES.LPOS} action={ACTIONS.CREATE}>
             <button
               onClick={handleCreateDetailed}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+              className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create LPO Document
@@ -1227,33 +1227,33 @@ const LPOs = () => {
       {viewMode === 'list' && (
         <>
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 transition-colors">
-          <div className="text-sm text-gray-600 dark:text-gray-400">Total Entries</div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{filteredLpos.length}</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
+          <div className="text-xs text-gray-600 dark:text-gray-400">Total Entries</div>
+          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{filteredLpos.length}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 transition-colors">
-          <div className="text-sm text-gray-600 dark:text-gray-400">Total Liters</div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalLiters.toLocaleString()}</div>
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
+          <div className="text-xs text-gray-600 dark:text-gray-400">Total Liters</div>
+          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{totalLiters.toLocaleString()}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 transition-colors">
-          <div className="text-sm text-gray-600 dark:text-gray-400">Total Amount</div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
+          <div className="text-xs text-gray-600 dark:text-gray-400">Total Amount</div>
+          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
             TZS {totalAmount.toLocaleString()}
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 mb-6 transition-colors">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 mb-6 transition-colors">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
             <input
               type="text"
               placeholder="Search by LPO#, Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
           
@@ -1261,7 +1261,7 @@ const LPOs = () => {
           <div className="month-dropdown-container relative">
             <button
               onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
+              className="w-full flex items-center justify-between px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
             >
               <span className="flex items-center">
                 <Calendar className="w-4 h-4 mr-2 text-gray-400" />
@@ -1327,7 +1327,7 @@ const LPOs = () => {
             <button
               type="button"
               onClick={() => setShowStationDropdown(!showStationDropdown)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
             >
               <span>{stationFilter || 'All Stations'}</span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -1366,7 +1366,7 @@ const LPOs = () => {
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
           <button
             onClick={() => {
@@ -1375,7 +1375,7 @@ const LPOs = () => {
               setDateFilter('');
               setSelectedMonths([new Date().getMonth() + 1]); // Reset to current month
             }}
-            className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             Clear Filters
           </button>
@@ -1545,37 +1545,37 @@ const LPOs = () => {
               <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       S/N
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       Date
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       LPO#
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       Station
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       DO/SDO
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       Truck
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       Liters
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       $/L
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       Destination
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       Amount
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -1590,37 +1590,37 @@ const LPOs = () => {
                         className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
                         onClick={() => handleRowClick(lpo)}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900 dark:text-gray-100">
                           {lpo.sn}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.date}
                         </td>
-                        <td className="px-6 py-4 text-sm font-medium text-blue-600 dark:text-blue-400 underline">
+                        <td className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 underline">
                           {lpo.lpoNo}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.dieselAt}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.doSdo}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.truckNo}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.ltrs.toLocaleString()}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.pricePerLtr.toFixed(2)}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.destinations}
                         </td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <td className="px-3 py-2 text-xs font-semibold text-gray-900 dark:text-gray-100">
                           {(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
                           <div className="flex space-x-2 relative">
                             {/* Copy/Download Dropdown */}
                             <div className="relative">

@@ -1211,7 +1211,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           <button 
             onClick={() => handleExportWorkbook(new Date().getFullYear())}
             disabled={exportingYear !== null}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
           >
             {exportingYear ? (
               <>
@@ -1230,7 +1230,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           </button>
           <button 
             onClick={() => setIsAmendedDOsModalOpen(true)}
-            className="relative inline-flex items-center px-4 py-2 border border-orange-300 dark:border-orange-600 rounded-md shadow-sm text-sm font-medium text-orange-700 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40"
+            className="relative inline-flex items-center px-3 py-1.5 border border-orange-300 dark:border-orange-600 rounded-md shadow-sm text-sm font-medium text-orange-700 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40"
             title="Download amended/cancelled DOs as PDF"
           >
             <FileEdit className="w-4 h-4 mr-2" />
@@ -1243,14 +1243,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           </button>
           <button 
             onClick={() => setIsBulkFormOpen(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
           >
             <Plus className="w-4 h-4 mr-2" />
             Bulk Create
           </button>
           <button 
             onClick={handleNewDO}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
           >
             <Plus className="w-4 h-4 mr-2" />
             {filterDoType === 'SDO' ? 'New SDO' : 'New DO'}
@@ -1606,8 +1606,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       ) : activeTab === 'list' ? (
         <>
           {/* Filters */}
-          <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-4 mb-6 transition-colors">
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-3 mb-6 transition-colors">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
                 <input
@@ -1615,7 +1615,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   placeholder="Search by DO#, Truck, Client..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-10 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  className="pl-10 w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
               
@@ -1623,7 +1623,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
               <div className="relative" ref={monthDropdownRef}>
                 <button
                   onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-                  className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
                 >
                   <span className="flex items-center">
                     <Calendar className="w-4 h-4 mr-2 text-gray-400" />
@@ -1694,7 +1694,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowDoTypeDropdown(!showDoTypeDropdown)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterDoType === 'DO' ? 'DO - Delivery Orders' : 
@@ -1727,7 +1727,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowFilterTypeDropdown(!showFilterTypeDropdown)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterType === 'ALL' ? 'All Types' : 
@@ -1759,7 +1759,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowFilterStatusDropdown(!showFilterStatusDropdown)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterStatus === 'all' ? 'All Status' : 
@@ -1795,7 +1795,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   setSelectedMonths([new Date().getMonth() + 1]); // Reset to current month
                   setCurrentPage(1);
                 }}
-                className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Clear Filters
               </button>
@@ -1937,16 +1937,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-800">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">S/N</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO#</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Dest.</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tons</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Actions</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">S/N</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO#</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Type</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Status</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Dest.</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tons</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1959,22 +1959,22 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
                           }`}
                         >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          <td className="px-3 py-2 whitespace-nowrap text-xs font-semibold text-gray-900 dark:text-gray-100">
                             {calculateSerialNumber(order, paginatedOrders.indexOf(order))}
                           </td>
-                          <td className={`px-6 py-4 text-sm font-medium ${
+                          <td className={`px-3 py-2 text-xs font-medium ${
                             order.isCancelled
                               ? 'text-gray-400 dark:text-gray-500 line-through'
                               : 'text-gray-900 dark:text-gray-100'
                           }`}>
                             {order.doType}-{order.doNumber}
                           </td>
-                          <td className={`px-6 py-4 text-sm ${
+                          <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                           }`}>
                             {order.date}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-2 whitespace-nowrap">
                             <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                               order.isCancelled
                                 ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
@@ -1985,7 +1985,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               {order.importOrExport}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-2 whitespace-nowrap">
                             {order.isCancelled ? (
                               <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
                                 <Ban className="w-3 h-3 mr-1" />
@@ -1997,27 +1997,27 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               </span>
                             )}
                           </td>
-                          <td className={`px-6 py-4 text-sm ${
+                          <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                           }`}>
                             {order.clientName}
                           </td>
-                          <td className={`px-6 py-4 text-sm ${
+                          <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                           }`}>
                             {order.truckNo}
                           </td>
-                          <td className={`px-6 py-4 text-sm ${
+                          <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                           }`}>
                             {order.destination}
                           </td>
-                          <td className={`px-6 py-4 text-sm ${
+                          <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                           }`}>
                             {order.tonnages} tons
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <td className="px-3 py-2 whitespace-nowrap text-xs font-medium">
                             {!order.isCancelled && (
                               <>
                                 <button
