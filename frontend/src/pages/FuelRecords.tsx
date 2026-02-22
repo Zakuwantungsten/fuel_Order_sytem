@@ -1247,33 +1247,33 @@ const FuelRecords = () => {
               <table className="w-full text-xs divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
-                <th className="w-12 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">SN</th>
-                <th className="w-16 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Date</th>
-                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Truck</th>
-                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Go</th>
-                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Ret</th>
-                <th className="px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">St</th>
-                <th className="w-24 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Fr</th>
-                <th className="w-28 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">To</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Tot</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Ex</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MMS</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TnY</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrY</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrG</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MoG</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MbG</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TdG</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">ZmG</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Cng</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">ZmR</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TdR</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MbR</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MoR</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrR</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TnR</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Bal</th>
-                <th className="px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Act</th>
+                <th className="w-8 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">SN</th>
+                <th className="w-12 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Date</th>
+                <th className="w-16 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Truck</th>
+                <th className="w-20 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Go</th>
+                <th className="w-20 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Ret</th>
+                <th className="w-10 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">St</th>
+                <th className="w-20 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Fr</th>
+                <th className="w-20 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">To</th>
+                <th className="w-10 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Tot</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Ex</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MMS</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TnY</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrY</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrG</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MoG</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MbG</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TdG</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">ZmG</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Cng</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">ZmR</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TdR</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MbR</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MoR</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrR</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TnR</th>
+                <th className="w-11 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Bal</th>
+                <th className="w-10 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">Act</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1333,13 +1333,13 @@ const FuelRecords = () => {
                       onClick={() => handleRowClick(record)}
                       title={isCancelled ? 'This fuel record has been cancelled' : 'Click to view full details'}
                     >
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
+                      <td className={`px-1 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
                         {actualIndex + 1}
                       </td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</td>
+                      <td className={`px-1 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{new Date(record.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs font-medium ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} title={record.truckNo}>{record.truckNo}</td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.goingDo}>{record.goingDo}</td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.returnDo || 'N/A'}>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs truncate ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.goingDo}>{record.goingDo}</td>
+                      <td className={`px-2 py-2 text-[10px] sm:text-xs truncate ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.returnDo || 'N/A'}>
                         {isCancelled ? (
                           <span>{record.returnDo || '-'}</span>
                         ) : record.returnDo ? (
