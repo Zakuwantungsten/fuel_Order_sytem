@@ -473,18 +473,18 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Fuel Order Dashboard</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Fuel Order Dashboard</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
         <button
           onClick={fetchStats}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
         >
           <Activity className="w-4 h-4" />
           Refresh
@@ -527,7 +527,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
       {/* Search Results */}
       {(searchResults.dos.length > 0 || searchResults.lpos.length > 0 || searchResults.fuels.length > 0) && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
           {/* Delivery Orders Results */}
           {searchResults.dos.length > 0 && (
             <div>
@@ -643,7 +643,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
        searchResults.dos.length === 0 && 
        searchResults.lpos.length === 0 && 
        searchResults.fuels.length === 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-5 text-center">
           <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
           <p className="text-gray-500 dark:text-gray-400 font-medium">No results found</p>
           <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
@@ -653,24 +653,24 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {statsCards.map((stat) => (
           <div
             key={stat.name}
             className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg rounded-xl transition-all hover:shadow-xl border border-gray-200 dark:border-gray-700"
           >
-            <div className="p-5">
+            <div className="p-3">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
                     {stat.name}
                   </p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+                  <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">
                     {stat.value}
                   </p>
                 </div>
-                <div className={`${stat.lightColor} p-3 rounded-lg`}>
-                  <stat.icon className="w-6 h-6" style={{ color: stat.color.replace('bg-', '#') }} />
+                <div className={`${stat.lightColor} p-2 rounded-lg`}>
+                  <stat.icon className="w-5 h-5" style={{ color: stat.color.replace('bg-', '#') }} />
                 </div>
               </div>
             </div>
@@ -679,65 +679,65 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Plus className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Quick Actions</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Plus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Quick Actions</h2>
         </div>
         
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <button
             onClick={() => handleQuickAction('create-do')}
-            className="flex flex-col items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all hover:scale-105"
+            className="flex flex-col items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all hover:scale-105"
           >
-            <div className="p-3 bg-blue-600 rounded-full">
-              <FileText className="w-6 h-6 text-white" />
+            <div className="p-2 bg-blue-600 rounded-full">
+              <FileText className="w-5 h-5 text-white" />
             </div>
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create DO</span>
+            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Create DO</span>
           </button>
 
           <button
             onClick={() => handleQuickAction('bulk-create')}
-            className="flex flex-col items-center gap-3 p-4 bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-all hover:scale-105"
+            className="flex flex-col items-center gap-2 p-3 bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-all hover:scale-105"
           >
-            <div className="p-3 bg-indigo-600 rounded-full">
-              <Package className="w-6 h-6 text-white" />
+            <div className="p-2 bg-indigo-600 rounded-full">
+              <Package className="w-5 h-5 text-white" />
             </div>
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Bulk Create</span>
+            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Bulk Create</span>
           </button>
 
           <button
             onClick={() => handleQuickAction('create-lpo')}
-            className="flex flex-col items-center gap-3 p-4 bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all hover:scale-105"
+            className="flex flex-col items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all hover:scale-105"
           >
-            <div className="p-3 bg-purple-600 rounded-full">
-              <ClipboardList className="w-6 h-6 text-white" />
+            <div className="p-2 bg-purple-600 rounded-full">
+              <ClipboardList className="w-5 h-5 text-white" />
             </div>
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create LPO</span>
+            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Create LPO</span>
           </button>
 
           <button
             onClick={() => handleQuickAction('create-fuel')}
-            className="flex flex-col items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-all hover:scale-105"
+            className="flex flex-col items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-all hover:scale-105"
           >
-            <div className="p-3 bg-green-600 rounded-full">
-              <Fuel className="w-6 h-6 text-white" />
+            <div className="p-2 bg-green-600 rounded-full">
+              <Fuel className="w-5 h-5 text-white" />
             </div>
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Fuel Record</span>
+            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Fuel Record</span>
           </button>
         </div>
       </div>
 
       {/* Charts & Analytics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Monthly Fuel Consumption */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Monthly Fuel Consumption</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Monthly Fuel Consumption</h3>
           </div>
           {chartData.monthlyFuel.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chartData.monthlyFuel}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#6b7280" />
@@ -750,18 +750,18 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400">No data available</div>
+            <div className="h-48 flex items-center justify-center text-gray-400">No data available</div>
           )}
         </div>
 
         {/* DO Creation Trends */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">DO Creation Trends</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">DO Creation Trends</h3>
           </div>
           {chartData.doTrends.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData.doTrends}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#6b7280" />
@@ -774,18 +774,18 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400">No data available</div>
+            <div className="h-48 flex items-center justify-center text-gray-400">No data available</div>
           )}
         </div>
 
         {/* Station-wise LPO Distribution */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <PieChart className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Station-wise LPO Distribution</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <PieChart className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Station-wise LPO Distribution</h3>
           </div>
           {chartData.stationDistribution.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={200}>
               <RePieChart>
                 <Pie
                   data={chartData.stationDistribution}
@@ -805,18 +805,18 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
               </RePieChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400">No data available</div>
+            <div className="h-48 flex items-center justify-center text-gray-400">No data available</div>
           )}
         </div>
 
         {/* Journey Status */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Activity className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Journey Status Overview</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Journey Status Overview</h3>
           </div>
           {chartData.journeyStatus.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={200}>
               <RePieChart>
                 <Pie
                   data={chartData.journeyStatus}
@@ -836,18 +836,18 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
               </RePieChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400">No data available</div>
+            <div className="h-48 flex items-center justify-center text-gray-400">No data available</div>
           )}
         </div>
       </div>
 
       {/* Alerts & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Alerts Section */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">System Status</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">System Status</h3>
           </div>
           <div className="space-y-3">
             {stats.activeTrips > 0 && (
@@ -872,8 +872,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
 
         {/* Recent Delivery Orders */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Recent DOs</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Recent DOs</h3>
           <div className="space-y-3">
             {stats.recentActivities?.deliveryOrders && stats.recentActivities.deliveryOrders.length > 0 ? (
               stats.recentActivities.deliveryOrders.slice(0, 5).map((DO: any) => (
@@ -889,8 +889,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
 
         {/* Recent LPOs */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Recent LPOs</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Recent LPOs</h3>
           <div className="space-y-3">
             {stats.recentActivities?.lpoEntries && stats.recentActivities.lpoEntries.length > 0 ? (
               stats.recentActivities.lpoEntries.slice(0, 5).map((lpo: any) => (
