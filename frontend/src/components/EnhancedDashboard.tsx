@@ -475,7 +475,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                     : 'text-gray-700 dark:text-gray-300'
                 }`}
               >
-                <IconComponent className="w-4 h-4" />
+                <IconComponent className="w-5 h-5" />
                 {sidebarOpen && <span className="ml-2 text-sm">{item.label}</span>}
               </button>
             );
@@ -494,7 +494,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             onClick={logout}
             className="w-full flex items-center px-2 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-5 h-5" />
             {sidebarOpen && <span className="ml-2 text-sm">Logout</span>}
           </button>
         </div>
