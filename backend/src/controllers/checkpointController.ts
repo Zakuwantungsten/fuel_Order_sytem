@@ -62,8 +62,8 @@ export const getCheckpointById = async (req: AuthRequest, res: Response): Promis
 export const createCheckpoint = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = req.user;
-    if (!user || !['super_admin', 'admin'].includes(user.role)) {
-      throw new ApiError(403, 'Only administrators can create checkpoints');
+    if (!user || !['super_admin', 'admin', 'fuel_order_maker'].includes(user.role)) {
+      throw new ApiError(403, 'Only administrators and fuel order makers can create checkpoints');
     }
 
     const {
@@ -175,8 +175,8 @@ export const createCheckpoint = async (req: AuthRequest, res: Response): Promise
 export const updateCheckpoint = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = req.user;
-    if (!user || !['super_admin', 'admin'].includes(user.role)) {
-      throw new ApiError(403, 'Only administrators can update checkpoints');
+    if (!user || !['super_admin', 'admin', 'fuel_order_maker'].includes(user.role)) {
+      throw new ApiError(403, 'Only administrators and fuel order makers can update checkpoints');
     }
 
     const { id } = req.params;
@@ -287,8 +287,8 @@ export const deleteCheckpoint = async (req: AuthRequest, res: Response): Promise
 export const reorderCheckpoints = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = req.user;
-    if (!user || !['super_admin', 'admin'].includes(user.role)) {
-      throw new ApiError(403, 'Only administrators can reorder checkpoints');
+    if (!user || !['super_admin', 'admin', 'fuel_order_maker'].includes(user.role)) {
+      throw new ApiError(403, 'Only administrators and fuel order makers can reorder checkpoints');
     }
 
     const { checkpoints } = req.body;

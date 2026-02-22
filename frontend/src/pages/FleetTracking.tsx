@@ -76,6 +76,7 @@ const FleetTracking = () => {
   const [viewMode, setViewMode] = useState<'checkpoints' | 'trucks'>('checkpoints');
   const [deletingSnapshot, setDeletingSnapshot] = useState<string | null>(null);
   const [activeStatusTab, setActiveStatusTab] = useState<Record<string, string>>({});
+  const [uploadProgress, setUploadProgress] = useState<{ stage: string; percent: number } | null>(null);
 
   // Fetch checkpoints on mount
   useEffect(() => {
@@ -210,31 +211,52 @@ const FleetTracking = () => {
     formData.append('file', file);
 
     setUploadingFile(true);
+    setUploadProgress({ stage: 'Uploading file...', percent: 15 });
+
     try {
+      // Stage 1: upload & parse on server
       const uploadResponse = await apiClient.post('/fleet-tracking/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          const pct = e.total ? Math.round((e.loaded / e.total) * 40) : 20;
+          setUploadProgress({ stage: 'Uploading file...', percent: pct });
+        },
       });
-      
-      console.log('Upload response:', uploadResponse.data);
-      
-      // Refresh both checkpoints and snapshots after upload
-      await fetchCheckpoints();
-      await fetchSnapshots();
-      
-      console.log('After upload - data refreshed');
-      const totalTrucks = uploadResponse.data?.data?.totalTrucks || uploadResponse.data?.totalTrucks || 0;
-      const fleetGroups = uploadResponse.data?.data?.fleetGroups || 0;
-      
-      if (totalTrucks === 0) {
-        alert(`⚠️ Upload completed but 0 trucks were processed.\n\nThis usually means:\n• The CSV/Excel format doesn't match expected structure\n• Headers are not recognized (should have 'RELOAD', 'BRIDGE', 'CONKEN', etc.)\n• Column positions are incorrect\n\nPlease check the file format and try again.`);
-      } else {
-        alert(`✅ Upload successful!\n\n${totalTrucks} trucks processed in ${fleetGroups} fleet groups`);
+
+      setUploadProgress({ stage: 'Processing trucks...', percent: 60 });
+
+      const data = uploadResponse.data?.data;
+      const totalTrucks = data?.totalTrucks || 0;
+      const fleetGroups = data?.fleetGroups || 0;
+      const newSnapshotId = data?.snapshotId;
+
+      // Stage 2: fetch only the updated snapshot list (skip re-fetching checkpoints)
+      const snapshotsResponse = await apiClient.get('/fleet-tracking/snapshots');
+      const snapshotsData = Array.isArray(snapshotsResponse.data)
+        ? snapshotsResponse.data
+        : (snapshotsResponse.data.data || []);
+      setSnapshots(snapshotsData);
+
+      setUploadProgress({ stage: 'Loading map...', percent: 80 });
+
+      // Stage 3: select the new snapshot directly (triggers fetchTruckPositions via useEffect)
+      if (newSnapshotId) {
+        setSelectedSnapshot(newSnapshotId);
+      } else if (snapshotsData.length > 0) {
+        setSelectedSnapshot(snapshotsData[0]._id);
       }
-      
-      // Reset file input
+
+      setUploadProgress({ stage: 'Done!', percent: 100 });
+      setTimeout(() => setUploadProgress(null), 1200);
+
+      if (totalTrucks === 0) {
+        alert(`⚠️ Upload completed but 0 trucks were processed.\n\nThis usually means:\n• The CSV/Excel format doesn't match expected structure\n• Headers are not recognized\n• Column positions are incorrect\n\nPlease check the file format and try again.`);
+      }
+
       event.target.value = '';
     } catch (error) {
       console.error('Error uploading file:', error);
+      setUploadProgress(null);
       alert('Error uploading file. Please try again.');
     } finally {
       setUploadingFile(false);
@@ -328,7 +350,7 @@ const FleetTracking = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
-              <TruckIcon className="w-8 h-8 mr-3 text-primary-600" />
+              <img src="/truck-image.png" alt="Fleet" className="w-20 h-20 mr-3 object-contain" />
               Fleet Tracking
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
@@ -336,9 +358,9 @@ const FleetTracking = () => {
             </p>
           </div>
           
-          <label className="btn btn-primary cursor-pointer flex items-center">
+          <label className={`inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white cursor-pointer ${uploadingFile ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}>
             <Upload className="w-4 h-4 mr-2" />
-            {uploadingFile ? 'Uploading...' : 'Upload Report'}
+            {uploadingFile ? uploadProgress?.stage || 'Uploading...' : 'Upload Report'}
             <input
               type="file"
               accept=".xlsx,.xls"
@@ -350,6 +372,33 @@ const FleetTracking = () => {
         </div>
       </div>
 
+      {/* Upload Progress Bar */}
+      {uploadProgress && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow px-6 py-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{uploadProgress.stage}</span>
+            <span className="text-sm font-bold text-primary-600">{uploadProgress.percent}%</span>
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+            <div
+              className="h-3 rounded-full transition-all duration-500 ease-out"
+              style={{
+                width: `${uploadProgress.percent}%`,
+                background: uploadProgress.percent === 100
+                  ? 'linear-gradient(90deg, #10B981, #059669)'
+                  : 'linear-gradient(90deg, #3B82F6, #6366F1)',
+              }}
+            />
+          </div>
+          <div className="flex justify-between mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <span className={uploadProgress.percent >= 40 ? 'text-primary-600 font-semibold' : ''}>Upload</span>
+            <span className={uploadProgress.percent >= 60 ? 'text-primary-600 font-semibold' : ''}>Processing</span>
+            <span className={uploadProgress.percent >= 80 ? 'text-primary-600 font-semibold' : ''}>Loading map</span>
+            <span className={uploadProgress.percent === 100 ? 'text-green-600 font-semibold' : ''}>Done</span>
+          </div>
+        </div>
+      )}
+
       {/* Snapshot Selector */}
       {snapshots.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
@@ -360,7 +409,7 @@ const FleetTracking = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setViewMode(viewMode === 'checkpoints' ? 'trucks' : 'checkpoints')}
-                className="btn btn-secondary text-sm flex items-center gap-1"
+                className="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
               >
                 {viewMode === 'checkpoints' ? (
                   <>
@@ -378,7 +427,7 @@ const FleetTracking = () => {
                 <button
                   onClick={() => deleteFleetSnapshot(selectedSnapshot)}
                   disabled={deletingSnapshot === selectedSnapshot}
-                  className="btn btn-danger text-sm flex items-center gap-1"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-60"
                 >
                   {deletingSnapshot === selectedSnapshot ? (
                     <>
@@ -857,14 +906,14 @@ const FleetTracking = () => {
       {/* Empty State */}
       {snapshots.length === 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
-          <TruckIcon className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+          <img src="/truck-image.png" alt="Fleet" className="w-16 h-16 mx-auto object-contain mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
             No Fleet Reports Yet
           </h3>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             Upload an Excel fleet report to start tracking truck positions
           </p>
-          <label className="btn btn-primary cursor-pointer inline-flex items-center">
+          <label className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 cursor-pointer">
             <Upload className="w-4 h-4 mr-2" />
             Upload Your First Report
             <input

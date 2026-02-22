@@ -75,30 +75,16 @@ export const uploadFleetReport = async (req: AuthRequest, res: Response): Promis
     });
 
     // Create individual truck position records for easier querying
+    // No per-truck DO/FuelRecord lookups needed — trucks are displayed on map regardless of records
     const truckPositions = [];
     for (const group of parsedData.fleetGroups) {
       for (const truck of group.trucks) {
-        // Try to link to existing DO/Fuel Record
-        const deliveryOrder = await DeliveryOrder.findOne({
-          truckNo: new RegExp(`^${truck.truckNo}$`, 'i'),
-          isDeleted: false,
-          isCancelled: false,
-        }).sort({ date: -1 });
-
-        const fuelRecord = await FuelRecord.findOne({
-          truckNo: new RegExp(`^${truck.truckNo}$`, 'i'),
-          isDeleted: false,
-          isCancelled: false,
-        }).sort({ date: -1 });
-
         truckPositions.push({
           ...truck,
           fleetGroup: group.name,
           fleetGroupId: snapshot._id,
           reportDate: parsedData.reportDate,
           snapshotId: snapshot._id,
-          deliveryOrderId: deliveryOrder?._id,
-          fuelRecordId: fuelRecord?._id,
         });
       }
     }
@@ -400,13 +386,13 @@ export const getCopyableTruckList = async (req: AuthRequest, res: Response): Pro
 /**
  * Delete fleet snapshot
  * DELETE /api/fleet-tracking/snapshots/:id
- * Access: admin, super_admin
+ * Access: fuel_order_maker, admin, super_admin
  */
 export const deleteSnapshot = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = req.user;
-    if (!user || !['admin', 'super_admin'].includes(user.role)) {
-      throw new ApiError(403, 'Only administrators can delete snapshots');
+    if (!user || !['fuel_order_maker', 'admin', 'super_admin'].includes(user.role)) {
+      throw new ApiError(403, 'Only fuel order makers and administrators can delete snapshots');
     }
 
     const { id } = req.params;

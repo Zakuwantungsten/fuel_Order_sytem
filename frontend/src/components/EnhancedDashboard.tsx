@@ -279,6 +279,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: Receipt },
         { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
+        { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
         { id: 'reports', label: 'Reports', icon: FileBarChart },
       ];
     }

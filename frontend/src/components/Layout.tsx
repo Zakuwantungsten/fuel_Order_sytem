@@ -83,7 +83,8 @@ const Layout = ({ children }: LayoutProps) => {
     { 
       name: 'Fleet Tracking', 
       href: '/fleet-tracking', 
-      icon: Truck,
+      icon: null,
+      imgSrc: '/truck-image.png',
       resource: RESOURCES.FLEET_TRACKING,
       action: ACTIONS.READ
     },
@@ -187,7 +188,7 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
         <nav className="mt-6 px-2">
           {navigation.map((item) => {
-            const Icon = item.icon;
+            const Icon = item.icon as React.ElementType | null;
             return (
               <Link
                 key={item.name}
@@ -203,7 +204,15 @@ const Layout = ({ children }: LayoutProps) => {
                 `}
                 title={!shouldShowText ? item.name : undefined}
               >
-                <Icon className={`w-5 h-5 ${shouldShowText ? 'mr-3' : ''} flex-shrink-0`} />
+                {item.imgSrc ? (
+                  <img
+                    src={item.imgSrc}
+                    alt={item.name}
+                    className={`w-5 h-5 object-contain flex-shrink-0 ${shouldShowText ? 'mr-3' : ''}`}
+                  />
+                ) : (
+                  <Icon className={`w-5 h-5 ${shouldShowText ? 'mr-3' : ''} flex-shrink-0`} />
+                )}
                 {shouldShowText && (
                   <span className="font-medium whitespace-nowrap overflow-hidden">
                     {item.name}
