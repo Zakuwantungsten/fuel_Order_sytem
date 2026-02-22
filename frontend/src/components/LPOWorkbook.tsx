@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, Save, FileSpreadsheet, Trash2, Edit2 } from 'lucide-react';
+import { X, Download, Save, FileSpreadsheet, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { LPOWorkbook, LPOSummary } from '../types';
 import { lpoWorkbookAPI, lpoDocumentsAPI } from '../services/api';
 import LPOSheetView from './LPOSheetView';
@@ -10,6 +10,8 @@ interface LPOWorkbookProps {
   initialLpoNo?: string; // LPO number to open by default
 }
 
+const TABS_PER_PAGE = 8;
+
 const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialLpoNo }) => {
   const [workbook, setWorkbook] = useState<LPOWorkbook | null>(null);
   const [activeSheetId, setActiveSheetId] = useState<string | number | null>(null);
@@ -19,7 +21,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   const [workbookName, setWorkbookName] = useState('');
   const [isRenamingWorkbook, setIsRenamingWorkbook] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [isDeletingSheet, setIsDeletingSheet] = useState(false);
+  const [tabPageStart, setTabPageStart] = useState(0);
 
   useEffect(() => {
     if (workbookId) {
@@ -63,39 +65,16 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
     }
   };
 
-  const handleDeleteSheet = async (sheetId: string | number | undefined) => {
-    if (!sheetId) {
-      alert('Cannot delete: Sheet ID is missing. Please refresh the page.');
-      return;
-    }
-    
-    if (!workbook || !workbook.sheets || workbook.sheets.length <= 1) {
-      alert('Cannot delete the last sheet in the workbook');
-      return;
-    }
-    
-    if (isDeletingSheet) return;
-    
-    if (window.confirm('Are you sure you want to delete this LPO sheet? This will also revert the fuel records.')) {
-      setIsDeletingSheet(true);
-      try {
-        await lpoDocumentsAPI.delete(sheetId);
-        
-        const updatedSheets = workbook.sheets.filter(sheet => sheet.id !== sheetId);
-        setWorkbook(prev => prev ? { ...prev, sheets: updatedSheets } : null);
-        
-        if (activeSheetId === sheetId) {
-          setActiveSheetId(updatedSheets[0]?.id || null);
-        }
-      } catch (error: any) {
-        console.error('Error deleting sheet:', error);
-        const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
-        alert(`Error deleting LPO sheet: ${errorMsg}`);
-      } finally {
-        setIsDeletingSheet(false);
-      }
-    }
-  };
+  useEffect(() => {
+    if (!workbook?.sheets || activeSheetId === null) return;
+    const activeIndex = workbook.sheets.findIndex(s => s.id === activeSheetId);
+    if (activeIndex < 0) return;
+    setTabPageStart(prev => {
+      if (activeIndex < prev) return activeIndex;
+      if (activeIndex >= prev + TABS_PER_PAGE) return activeIndex - TABS_PER_PAGE + 1;
+      return prev;
+    });
+  }, [activeSheetId, workbook?.sheets]);
 
   const handleRenameSheet = async (sheetId: string | number | undefined, newName: string) => {
     if (!workbook || !sheetId) {
@@ -168,6 +147,10 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   }
 
   const activeSheet = getActiveSheet();
+  const sheets = workbook.sheets || [];
+  const visibleSheets = sheets.slice(tabPageStart, tabPageStart + TABS_PER_PAGE);
+  const canGoPrev = tabPageStart > 0;
+  const canGoNext = tabPageStart + TABS_PER_PAGE < sheets.length;
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800 transition-colors">
@@ -238,9 +221,18 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
 
       {/* Sheet Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
-        <div className="flex items-center overflow-x-auto">
-          {(workbook.sheets || []).map((sheet, index) => (
-            <div key={sheet.id || `sheet-${sheet.lpoNo}-${index}`} className="flex items-center">
+        <div className="flex items-center">
+          {canGoPrev && (
+            <button
+              onClick={() => setTabPageStart(prev => Math.max(0, prev - TABS_PER_PAGE))}
+              className="px-2 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-r border-gray-300 dark:border-gray-600 flex-shrink-0"
+              title="Previous sheets"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
+          {visibleSheets.map((sheet, index) => (
+            <div key={sheet.id || `sheet-${sheet.lpoNo}-${tabPageStart + index}`} className="flex items-center">
               <button
                 onClick={() => sheet.id && setActiveSheetId(sheet.id)}
                 className={`px-4 py-2 text-sm font-medium border-r border-gray-300 dark:border-gray-600 whitespace-nowrap ${
@@ -270,34 +262,32 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
                   <span>LPO {sheet.lpoNo}</span>
                 )}
               </button>
-              
               {activeSheetId === sheet.id && (
-                <div className="flex items-center ml-1">
-                  <button
-                    onClick={() => {
-                      if (sheet.id) {
-                        setIsRenaming(sheet.id);
-                        setNewSheetName(sheet.lpoNo);
-                      }
-                    }}
-                    disabled={!sheet.id}
-                    className={`p-1 ${!sheet.id ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
-                    title={!sheet.id ? 'Cannot rename: No ID' : 'Rename'}
-                  >
-                    <Edit2 className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteSheet(sheet.id)}
-                    disabled={isDeletingSheet || !sheet.id}
-                    className={`p-1 ${isDeletingSheet || !sheet.id ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 dark:hover:text-red-400'}`}
-                    title={!sheet.id ? 'Cannot delete: No ID' : 'Delete'}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    if (sheet.id) {
+                      setIsRenaming(sheet.id);
+                      setNewSheetName(sheet.lpoNo);
+                    }
+                  }}
+                  disabled={!sheet.id}
+                  className={`p-1 ml-1 ${!sheet.id ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                  title={!sheet.id ? 'Cannot rename: No ID' : 'Rename'}
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
               )}
             </div>
           ))}
+          {canGoNext && (
+            <button
+              onClick={() => setTabPageStart(prev => Math.min(sheets.length - TABS_PER_PAGE, prev + TABS_PER_PAGE))}
+              className="px-2 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-l border-gray-300 dark:border-gray-600 flex-shrink-0"
+              title="Next sheets"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
