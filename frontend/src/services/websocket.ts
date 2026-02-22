@@ -4,6 +4,14 @@ let socket: Socket | null = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
+// ----- Stable module-level callbacks -----
+// These are set by subscribe* functions and read by listeners registered
+// once inside initializeWebSocket. This means react re-renders, effect
+// cleanups, and react strict-mode double-invocations can never accidentally
+// remove the underlying socket.on listener.
+let _sessionEventCallback: ((event: any) => void) | null = null;
+let _maintenanceEventCallback: ((event: any) => void) | null = null;
+
 /**
  * Initialize WebSocket connection
  */
@@ -25,6 +33,18 @@ export const initializeWebSocket = (token: string): Socket => {
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+  });
+
+  // Register stable application-event listeners once per socket instance.
+  // Routing through module-level callbacks means the subscriber (React component)
+  // can be swapped without ever touching socket.on / socket.off again.
+  socket.on('session_event', (event) => {
+    console.log('[WebSocket] Received session event:', event);
+    if (_sessionEventCallback) _sessionEventCallback(event);
+  });
+  socket.on('maintenance_event', (event) => {
+    console.log('[WebSocket] Received maintenance event:', event);
+    if (_maintenanceEventCallback) _maintenanceEventCallback(event);
   });
 
   socket.on('connect', () => {
@@ -90,25 +110,34 @@ export const unsubscribeFromNotifications = (): void => {
 
 /**
  * Subscribe to session management events (force logout, deactivation, ban, etc.)
- * These are emitted directly by the server when an admin performs an action on this user.
+ * Sets the module-level callback — the socket listener is already registered in
+ * initializeWebSocket and will call this callback whenever an event arrives.
  */
 export const subscribeToSessionEvents = (callback: (event: any) => void): void => {
-  if (!socket) {
-    console.error('[WebSocket] Socket not initialized for session events');
-    return;
-  }
-  socket.on('session_event', (event) => {
-    console.log('[WebSocket] Received session event:', event);
-    callback(event);
-  });
+  _sessionEventCallback = callback;
 };
 
 /**
  * Unsubscribe from session management events
  */
 export const unsubscribeFromSessionEvents = (): void => {
-  if (!socket) return;
-  socket.off('session_event');
+  _sessionEventCallback = null;
+};
+
+/**
+ * Subscribe to system-wide maintenance mode events.
+ * Emitted by the server whenever an admin enables or disables maintenance mode.
+ * The callback receives { enabled, message, allowedRoles }.
+ */
+export const subscribeToMaintenanceEvents = (callback: (event: any) => void): void => {
+  _maintenanceEventCallback = callback;
+};
+
+/**
+ * Unsubscribe from maintenance mode events
+ */
+export const unsubscribeFromMaintenanceEvents = (): void => {
+  _maintenanceEventCallback = null;
 };
 
 /**
@@ -140,6 +169,10 @@ export default {
   initializeWebSocket,
   subscribeToNotifications,
   unsubscribeFromNotifications,
+  subscribeToSessionEvents,
+  unsubscribeFromSessionEvents,
+  subscribeToMaintenanceEvents,
+  unsubscribeFromMaintenanceEvents,
   disconnectWebSocket,
   isConnected,
   getSocket,

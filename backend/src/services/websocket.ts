@@ -168,6 +168,24 @@ export const emitToUser = (username: string, event: string, data: any): void => 
   logger.info(`Event '${event}' emitted to user: ${username}`);
 };
 
+/**
+ * Broadcast a maintenance mode change to all connected clients.
+ * The frontend uses 'enabled' and the client's own role to decide
+ * whether to show a full blocking maintenance page or just an info banner.
+ */
+export const emitMaintenanceEvent = (
+  enabled: boolean,
+  message: string,
+  allowedRoles: string[] = ['super_admin']
+): void => {
+  if (!io) {
+    logger.warn('WebSocket server not initialized – cannot emit maintenance event');
+    return;
+  }
+  io.emit('maintenance_event', { enabled, message, allowedRoles });
+  logger.info(`Maintenance event broadcasted: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+};
+
 export default {
   initializeWebSocket,
   emitNotification,
@@ -175,4 +193,5 @@ export default {
   getConnectedUsersCount,
   isUserConnected,
   emitToUser,
+  emitMaintenanceEvent,
 };

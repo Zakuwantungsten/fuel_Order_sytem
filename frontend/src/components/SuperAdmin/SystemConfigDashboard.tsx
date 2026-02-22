@@ -27,6 +27,9 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
   const [activeSection, setActiveSection] = useState<'general' | 'security' | 'data' | 'notifications' | 'maintenance'>('general');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Inline per-section feedback — shown directly inside the settings card so it's
+  // always visible regardless of the user's scroll position.
+  const [sectionFeedback, setSectionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // System Settings
   const [settings, setSettings] = useState<SystemSettings>({
@@ -141,6 +144,7 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
 
   const saveSettings = async (section: keyof SystemSettings) => {
     setSaving(true);
+    setSectionFeedback(null);
     try {
       switch (section) {
         case 'general':
@@ -159,9 +163,16 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
           await systemConfigAPI.updateMaintenanceMode(settings.maintenance);
           break;
       }
-      onMessage('success', `${section.charAt(0).toUpperCase() + section.slice(1)} settings updated successfully`);
+      const msg = `${section.charAt(0).toUpperCase() + section.slice(1)} settings updated successfully`;
+      // Bubble up to parent banner AND show inline so it's visible when scrolled down
+      onMessage('success', msg);
+      setSectionFeedback({ type: 'success', message: msg });
+      setTimeout(() => setSectionFeedback(null), 4000);
     } catch (error: any) {
-      onMessage('error', error.response?.data?.message || 'Failed to save settings');
+      const msg = error.response?.data?.message || 'Failed to save settings';
+      onMessage('error', msg);
+      setSectionFeedback({ type: 'error', message: msg });
+      setTimeout(() => setSectionFeedback(null), 6000);
     } finally {
       setSaving(false);
     }
@@ -267,6 +278,19 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
 
       {/* Content */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        {/* Inline feedback banner — visible at the top of the card regardless of scroll */}
+        {sectionFeedback && (
+          <div className={`flex items-center gap-3 rounded-lg px-4 py-3 mb-5 text-sm font-medium ${
+            sectionFeedback.type === 'success'
+              ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 text-green-800 dark:text-green-300'
+              : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-800 dark:text-red-300'
+          }`}>
+            {sectionFeedback.type === 'success'
+              ? <CheckCircle className="w-4 h-4 flex-shrink-0" />
+              : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+            <span>{sectionFeedback.message}</span>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader className="w-8 h-8 animate-spin text-purple-600" />

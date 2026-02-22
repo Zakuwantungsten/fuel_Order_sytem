@@ -5,6 +5,8 @@ import { ApiError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import AuditService from '../utils/auditService';
 import { config } from '../config';
+import { emitMaintenanceEvent } from '../services/websocket';
+import { invalidateMaintenanceCache } from '../middleware/maintenance';
 
 /**
  * Get all system settings
@@ -103,6 +105,7 @@ export const updateGeneralSettings = async (req: AuthRequest, res: Response): Pr
       if (language !== undefined) systemConfig.systemSettings.general.language = language;
     }
 
+    systemConfig.markModified('systemSettings');
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
 
@@ -166,6 +169,7 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       if (allowMultipleSessions !== undefined) systemConfig.systemSettings.session.allowMultipleSessions = allowMultipleSessions;
     }
 
+    systemConfig.markModified('systemSettings');
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
 
@@ -241,6 +245,7 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
       }
     }
 
+    systemConfig.markModified('systemSettings');
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
 
@@ -304,6 +309,7 @@ export const updateNotificationSettings = async (req: AuthRequest, res: Response
       if (storageWarningThreshold !== undefined) systemConfig.systemSettings.notifications.storageWarningThreshold = storageWarningThreshold;
     }
 
+    systemConfig.markModified('systemSettings');
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
 
@@ -357,8 +363,20 @@ export const updateMaintenanceMode = async (req: AuthRequest, res: Response): Pr
       if (allowedRoles !== undefined) systemConfig.systemSettings.maintenance.allowedRoles = allowedRoles;
     }
 
+    systemConfig.markModified('systemSettings');
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
+
+    // Invalidate cache so the next API request re-reads the new state from DB
+    invalidateMaintenanceCache();
+
+    // Broadcast the change to all connected clients in real time
+    const currentMaintenance = systemConfig.systemSettings?.maintenance;
+    emitMaintenanceEvent(
+      currentMaintenance?.enabled ?? false,
+      currentMaintenance?.message ?? 'System is under maintenance.',
+      currentMaintenance?.allowedRoles ?? ['super_admin']
+    );
 
     // Audit log with CRITICAL severity
     await AuditService.log({

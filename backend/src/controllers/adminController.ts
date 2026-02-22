@@ -6,7 +6,8 @@ import { logger } from '../utils';
 import { databaseMonitor } from '../utils/databaseMonitor';
 import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
-import { emitToUser } from '../services/websocket';
+import { emitToUser, emitMaintenanceEvent } from '../services/websocket';
+import { invalidateMaintenanceCache } from '../middleware/maintenance';
 
 /**
  * Add cache-busting headers to force immediate frontend refresh
@@ -1808,6 +1809,7 @@ export const updateSystemSettings = async (req: AuthRequest, res: Response): Pro
     }
 
     config.systemSettings[section as keyof typeof config.systemSettings] = settings;
+    config.markModified('systemSettings');
     config.lastUpdatedBy = req.user?.username || 'system';
 
     await config.save();
@@ -1865,8 +1867,17 @@ export const toggleMaintenanceMode = async (req: AuthRequest, res: Response): Pr
       config.systemSettings.maintenance.enabled = newState;
     }
 
+    config.markModified('systemSettings');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
+
+    // Invalidate cache + broadcast to all clients in real time
+    invalidateMaintenanceCache();
+    emitMaintenanceEvent(
+      newState,
+      config.systemSettings.maintenance.message,
+      config.systemSettings.maintenance.allowedRoles
+    );
 
     // Log critical action
     await AuditService.log({

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { checkMaintenanceMode } from '../middleware/maintenance';
 import authRoutes from './authRoutes';
 import deliveryOrderRoutes from './deliveryOrderRoutes';
 import lpoEntryRoutes from './lpoEntryRoutes';
@@ -26,6 +27,10 @@ const router = Router();
 // Mount routes
 router.use('/auth', authRoutes);
 router.use('/config', publicConfigRoutes); // Public read-only config for all authenticated users
+
+// --- Maintenance mode gate: blocks all routes below for non-allowed roles ---
+router.use(checkMaintenanceMode);
+
 router.use('/delivery-orders', deliveryOrderRoutes);
 router.use('/lpo-entries', lpoEntryRoutes);
 router.use('/lpo-documents', lpoSummaryRoutes);

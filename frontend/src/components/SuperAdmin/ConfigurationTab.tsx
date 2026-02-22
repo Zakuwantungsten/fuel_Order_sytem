@@ -8,6 +8,7 @@ interface ConfigurationTabProps {
 
 export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
   const [activeSection, setActiveSection] = useState<'general' | 'session' | 'data' | 'notifications' | 'maintenance'>('general');
+  const [configLoading, setConfigLoading] = useState(true);
 
   // System Configuration States
   const [generalSettings, setGeneralSettings] = useState({
@@ -56,6 +57,7 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
   }, []);
 
   const loadData = async () => {
+    setConfigLoading(true);
     try {
       // Load actual system settings from backend
       const settings = await systemAdminAPI.getSystemSettings();
@@ -68,6 +70,8 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
       }
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to load configuration');
+    } finally {
+      setConfigLoading(false);
     }
   };
 
@@ -115,6 +119,17 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
     }
   };
 
+  // Also refresh from the dedicated status endpoint to keep the badge in sync
+  // after a toggle (in case the settings endpoint returns stale data).
+  const refreshMaintenanceStatus = async () => {
+    try {
+      const status = await systemAdminAPI.getMaintenanceStatus();
+      if (status) setMaintenanceMode(status);
+    } catch {
+      // silently ignore
+    }
+  };
+
   const sections = [
     { id: 'general', label: 'General', icon: Settings },
     { id: 'session', label: 'Session & Security', icon: Shield },
@@ -138,6 +153,7 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
         <nav className="flex gap-4 overflow-x-auto">
           {sections.map((section) => {
             const Icon = section.icon;
+            const isMaintenanceActive = section.id === 'maintenance' && !configLoading && maintenanceMode.enabled;
             return (
               <button
                 key={section.id}
@@ -150,6 +166,17 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
               >
                 <Icon className="w-4 h-4" />
                 {section.label}
+                {/* Live maintenance status dot on the tab button */}
+                {section.id === 'maintenance' && !configLoading && (
+                  <span
+                    title={isMaintenanceActive ? 'Maintenance mode is ON' : 'Maintenance mode is OFF'}
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      isMaintenanceActive
+                        ? 'bg-orange-500 animate-pulse'
+                        : 'bg-green-500'
+                    }`}
+                  />
+                )}
               </button>
             );
           })}
@@ -525,6 +552,53 @@ export default function ConfigurationTab({ onMessage }: ConfigurationTabProps) {
       {/* Maintenance Mode */}
       {activeSection === 'maintenance' && (
         <div className="space-y-6">
+          {/* Prominent current-state status card */}
+          <div className={`rounded-xl border-2 p-4 flex items-center justify-between ${
+            configLoading
+              ? 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+              : maintenanceMode.enabled
+                ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 dark:border-orange-700'
+                : 'bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-700'
+          }`}>
+            <div className="flex items-center gap-3">
+              {configLoading ? (
+                <div className="w-3 h-3 rounded-full bg-gray-400 animate-pulse" />
+              ) : (
+                <div className={`w-3 h-3 rounded-full ${
+                  maintenanceMode.enabled ? 'bg-orange-500 animate-pulse' : 'bg-green-500'
+                }`} />
+              )}
+              <div>
+                <p className={`text-sm font-semibold ${
+                  configLoading
+                    ? 'text-gray-500 dark:text-gray-400'
+                    : maintenanceMode.enabled
+                      ? 'text-orange-900 dark:text-orange-100'
+                      : 'text-green-900 dark:text-green-100'
+                }`}>
+                  {configLoading ? 'Checking status…' : maintenanceMode.enabled ? 'Maintenance Mode is ON' : 'Maintenance Mode is OFF'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {configLoading
+                    ? 'Loading current system state'
+                    : maintenanceMode.enabled
+                      ? 'Non-admin users are currently blocked from the system'
+                      : 'The system is fully accessible to all users'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={refreshMaintenanceStatus}
+              disabled={configLoading}
+              title="Refresh status"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+
           <div className={`rounded-lg border p-6 shadow-sm ${
             maintenanceMode.enabled 
               ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
