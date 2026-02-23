@@ -186,18 +186,12 @@ export default function TruckBatches() {
         extraLiters: newRule.extraLiters
       });
       
-      // React Query will auto-refresh batches, update selected truck
-      const batchKey = selectedTruck.batch.toString() as keyof typeof batches;
-      const batch = batches[batchKey];
-      if (Array.isArray(batch)) {
-        const truck = batch.find((t: any) => (typeof t === 'string' ? t : t.truckSuffix) === selectedTruck.suffix);
-        if (truck && typeof truck !== 'string') {
-          setSelectedTruck({ ...selectedTruck, rules: truck.destinationRules || [] });
-        }
-      }
-      
+      // Immediately update local modal state — don't wait for stale batches refetch
+      setSelectedTruck({
+        ...selectedTruck,
+        rules: [...selectedTruck.rules, { destination: newRule.destination.trim(), extraLiters: newRule.extraLiters }],
+      });
       setNewRule({ destination: '', extraLiters: selectedTruck.batch });
-      alert(`✓ Destination rule added for ${selectedTruck.suffix.toUpperCase()}`);
     } catch (error: any) {
       alert(`Failed to add rule: ${error.response?.data?.error || error.message}`);
     }
@@ -215,17 +209,11 @@ export default function TruckBatches() {
         destination
       });
       
-      // React Query will auto-refresh batches, update selected truck
-      const batchKey = selectedTruck.batch.toString() as keyof typeof batches;
-      const batch = batches[batchKey];
-      if (Array.isArray(batch)) {
-        const truck = batch.find((t: any) => (typeof t === 'string' ? t : t.truckSuffix) === selectedTruck.suffix);
-        if (truck && typeof truck !== 'string') {
-          setSelectedTruck({ ...selectedTruck, rules: truck.destinationRules || [] });
-        }
-      }
-      
-      alert(`✓ Destination rule deleted for ${selectedTruck.suffix.toUpperCase()}`);
+      // Immediately update local modal state — don't wait for stale batches refetch
+      setSelectedTruck({
+        ...selectedTruck,
+        rules: selectedTruck.rules.filter((r) => r.destination !== destination),
+      });
     } catch (error: any) {
       alert(`Failed to delete rule: ${error.response?.data?.error || error.message}`);
     }
@@ -583,10 +571,15 @@ export default function TruckBatches() {
                 </div>
                 <button
                   onClick={handleAddRule}
-                  className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  disabled={addRuleMutation.isPending}
+                  className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
-                  <Plus className="w-4 h-4" />
-                  Add Rule
+                  {addRuleMutation.isPending ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                  {addRuleMutation.isPending ? 'Adding...' : 'Add Rule'}
                 </button>
               </div>
 
@@ -622,10 +615,15 @@ export default function TruckBatches() {
                         </div>
                         <button
                           onClick={() => handleDeleteRule(rule.destination)}
-                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                          disabled={deleteRuleMutation.isPending}
+                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 rounded-lg transition-colors"
                           title="Delete rule"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {deleteRuleMutation.isPending ? (
+                            <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                     ))}
