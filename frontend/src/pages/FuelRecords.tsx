@@ -633,9 +633,10 @@ const FuelRecords = () => {
     // Fetch ALL records for the selected year (no pagination for export)
     try {
       const response = await fuelRecordsAPI.getAll({
-        limit: 10000, // Very high limit to get all records
+        limit: 5000,
         sort: 'date',
-        order: 'desc'
+        order: 'desc',
+        year: year,
       });
       
       const allRecords = response.data;

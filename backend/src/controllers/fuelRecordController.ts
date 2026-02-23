@@ -116,7 +116,7 @@ async function activateNextQueuedJourney(truckNo: string, username: string): Pro
 export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, truckNo, from, to, month, search, excludeCancelled } = req.query;
+    const { dateFrom, dateTo, truckNo, from, to, month, year, search, excludeCancelled } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -200,6 +200,17 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       } else if (sanitized) {
         filter.month = { $regex: sanitized, $options: 'i' };
       }
+    }
+
+    // Year filter — handles both ISO "YYYY-MM-DD" and "D-Mon-YYYY" stored dates
+    if (year && /^\d{4}$/.test(year as string)) {
+      const yearStr = year as string;
+      const yearConditions = [
+        { date: { $regex: `^${yearStr}-` } },          // ISO format: "2026-01-15"
+        { date: { $regex: `-${yearStr}$` } },           // D-Mon-YYYY format: "7-Jan-2026"
+      ];
+      if (!filter.$and) filter.$and = [];
+      (filter.$and as any[]).push({ $or: yearConditions });
     }
 
     // Get data with pagination
