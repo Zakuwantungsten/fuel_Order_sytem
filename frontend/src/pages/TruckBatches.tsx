@@ -257,6 +257,19 @@ export default function TruckBatches() {
 
   const totalTrucks = batchList.reduce((sum, batch) => sum + batch.count, 0);
 
+  const colorConfig: Record<string, { bg: string; border: string; text: string; badge: string; subtext: string }> = {
+    green:  { bg: 'bg-green-50 dark:bg-green-900/20',   border: 'border-green-200 dark:border-green-800',   text: 'text-green-900 dark:text-green-100',   badge: 'bg-green-600',   subtext: 'text-green-700 dark:text-green-300' },
+    yellow: { bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-200 dark:border-yellow-800', text: 'text-yellow-900 dark:text-yellow-100', badge: 'bg-yellow-600', subtext: 'text-yellow-700 dark:text-yellow-300' },
+    blue:   { bg: 'bg-blue-50 dark:bg-blue-900/20',     border: 'border-blue-200 dark:border-blue-800',     text: 'text-blue-900 dark:text-blue-100',     badge: 'bg-blue-600',   subtext: 'text-blue-700 dark:text-blue-300' },
+    purple: { bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800', text: 'text-purple-900 dark:text-purple-100', badge: 'bg-purple-600', subtext: 'text-purple-700 dark:text-purple-300' },
+    pink:   { bg: 'bg-pink-50 dark:bg-pink-900/20',     border: 'border-pink-200 dark:border-pink-800',     text: 'text-pink-900 dark:text-pink-100',     badge: 'bg-pink-600',   subtext: 'text-pink-700 dark:text-pink-300' },
+    indigo: { bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800', text: 'text-indigo-900 dark:text-indigo-100', badge: 'bg-indigo-600', subtext: 'text-indigo-700 dark:text-indigo-300' },
+    red:    { bg: 'bg-red-50 dark:bg-red-900/20',       border: 'border-red-200 dark:border-red-800',       text: 'text-red-900 dark:text-red-100',       badge: 'bg-red-600',    subtext: 'text-red-700 dark:text-red-300' },
+    orange: { bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-800', text: 'text-orange-900 dark:text-orange-100', badge: 'bg-orange-600', subtext: 'text-orange-700 dark:text-orange-300' },
+    teal:   { bg: 'bg-teal-50 dark:bg-teal-900/20',     border: 'border-teal-200 dark:border-teal-800',     text: 'text-teal-900 dark:text-teal-100',     badge: 'bg-teal-600',   subtext: 'text-teal-700 dark:text-teal-300' },
+    cyan:   { bg: 'bg-cyan-50 dark:bg-cyan-900/20',     border: 'border-cyan-200 dark:border-cyan-800',     text: 'text-cyan-900 dark:text-cyan-100',     badge: 'bg-cyan-600',   subtext: 'text-cyan-700 dark:text-cyan-300' },
+  };
+
   const getColorForIndex = (index: number) => {
     const colors = ['green', 'yellow', 'blue', 'purple', 'pink', 'indigo', 'red', 'orange', 'teal', 'cyan'];
     return colors[index % colors.length];
@@ -265,53 +278,50 @@ export default function TruckBatches() {
   const renderBatchCard = (batchSize: number, trucks: any[], colorIndex: number) => {
     const filteredTrucks = filterTrucks(trucks);
     const color = getColorForIndex(colorIndex);
-    const bgColor = `bg-${color}-50`;
-    const borderColor = `border-${color}-200`;
-    const textColor = `text-${color}-900`;
-    const badgeColor = `bg-${color}-600`;
+    const { bg, border, text, badge, subtext } = colorConfig[color];
 
     return (
-      <div key={batchSize} className={`${bgColor} ${borderColor} border-2 rounded-lg p-6`}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 ${badgeColor} rounded-lg`}>
-              <Fuel className="w-6 h-6 text-white" />
+      <div key={batchSize} className={`${bg} ${border} border-2 rounded-lg p-4`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className={`p-1.5 ${badge} rounded-lg`}>
+              <Fuel className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className={`text-lg font-semibold ${textColor}`}>
+              <h3 className={`text-base font-semibold ${text}`}>
                 {batchSize}L Extra Fuel
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className={`text-xs ${subtext}`}>
                 {filteredTrucks.length} truck{filteredTrucks.length !== 1 ? 's' : ''} (going + returning)
                 {searchQuery && trucks.length !== filteredTrucks.length && ` · ${trucks.length} total`}
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             <button
               onClick={() => {
                 setEditingBatch({ extraLiters: batchSize, trucks });
                 setNewBatchLiters(batchSize);
                 setShowEditBatchModal(true);
               }}
-              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
               title="Edit batch"
             >
-              <Edit2 className="w-4 h-4" />
+              <Edit2 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => handleDeleteBatch(batchSize)}
-              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Delete batch"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        <div className="space-y-2 max-h-96 overflow-y-auto">
+        <div className="space-y-1.5 max-h-80 overflow-y-auto">
           {filteredTrucks.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
+            <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-3">
               {searchQuery ? 'No matching trucks' : 'No trucks in this batch'}
             </p>
           ) : (
@@ -322,30 +332,30 @@ export default function TruckBatches() {
               return (
                 <div
                   key={suffix}
-                  className="bg-white rounded-lg p-3 shadow-sm"
+                  className="bg-white dark:bg-gray-700/80 rounded-md p-2 shadow-sm"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-gray-500" />
+                    <div className="flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                       <div>
-                        <span className="font-medium text-gray-900 uppercase">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 uppercase">
                           {suffix}
                         </span>
                         {hasRules && (
-                          <div className="flex items-center gap-1 text-xs text-blue-600 mt-1">
-                            <MapPin className="w-3 h-3" />
-                            <span>{truck.destinationRules.length} destination rule{truck.destinationRules.length !== 1 ? 's' : ''}</span>
+                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <MapPin className="w-2.5 h-2.5" />
+                            <span>{truck.destinationRules.length} rule{truck.destinationRules.length !== 1 ? 's' : ''}</span>
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1">
                       <button
                         onClick={() => handleManageRules(truck, batchSize)}
-                        className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors flex items-center gap-1"
+                        className="px-1.5 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded transition-colors flex items-center gap-0.5"
                         title="Manage destination rules"
                       >
-                        <MapPin className="w-3 h-3" />
+                        <MapPin className="w-2.5 h-2.5" />
                         Rules
                       </button>
                       {batchList.slice(0, 3).map((batch) => {
@@ -354,7 +364,7 @@ export default function TruckBatches() {
                           <button
                             key={batch.extraLiters}
                             onClick={() => handleMoveTruck(suffix, batch.extraLiters)}
-                            className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                            className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded transition-colors"
                             title={`Move to ${batch.extraLiters}L batch`}
                           >
                             → {batch.extraLiters}L
@@ -363,10 +373,10 @@ export default function TruckBatches() {
                       })}
                       <button
                         onClick={() => handleDeleteTruck(suffix)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                        className="p-0.5 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
                         title="Remove from batches"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -391,14 +401,14 @@ export default function TruckBatches() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
-            <Truck className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+            <Truck className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                 Truck Batch Configuration
               </h1>
               <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -416,21 +426,22 @@ export default function TruckBatches() {
         </div>
 
         {/* Dynamic Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">Total Batches</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{batchList.length}</p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <p className="text-xs text-gray-600 dark:text-gray-400">Total Batches</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{batchList.length}</p>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">Total Trucks</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalTrucks}</p>
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <p className="text-xs text-gray-600 dark:text-gray-400">Total Trucks</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{totalTrucks}</p>
           </div>
           {batchList.slice(0, 2).map((batch, idx) => {
             const color = getColorForIndex(idx);
+            const { bg, text, subtext } = colorConfig[color];
             return (
-              <div key={batch.extraLiters} className={`bg-${color}-50 dark:bg-${color}-900/20 rounded-lg p-4`}>
-                <p className={`text-sm text-${color}-700 dark:text-${color}-400`}>{batch.extraLiters}L Batch</p>
-                <p className={`text-2xl font-bold text-${color}-900 dark:text-${color}-100`}>{batch.count}</p>
+              <div key={batch.extraLiters} className={`${bg} rounded-lg p-3`}>
+                <p className={`text-xs ${subtext}`}>{batch.extraLiters}L Batch</p>
+                <p className={`text-xl font-bold ${text}`}>{batch.count}</p>
               </div>
             );
           })}
@@ -438,8 +449,8 @@ export default function TruckBatches() {
       </div>
 
       {/* Add New Truck */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">
           Add New Truck Suffix
         </h2>
         <div className="flex gap-4 items-end">
@@ -484,21 +495,21 @@ export default function TruckBatches() {
       </div>
 
       {/* Search */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search truck suffixes..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+            className="w-full pl-9 pr-4 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
       </div>
 
       {/* Dynamic Batches Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {batchList.map((batch, index) => renderBatchCard(batch.extraLiters, batch.trucks, index))}
       </div>
 
@@ -513,23 +524,6 @@ export default function TruckBatches() {
           </button>
         </div>
       )}
-
-      {/* Info */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-          How Truck Batches Work
-        </h3>
-        <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-          <li>• Truck suffixes determine extra fuel allocation (e.g., T 123 <strong>DNH</strong>)</li>
-          <li>• Each truck gets <strong>ONE fixed allocation</strong> for both going AND returning</li>
-          <li>• Create custom batches with any liter amount (e.g., 120L, 150L, 200L batches)</li>
-          <li>• Assign trucks to batches based on their fuel capacity needs</li>
-          <li>• ⚠️ Trucks NOT in any batch will require <strong>manual extra fuel input</strong></li>
-          <li>• 🎯 <strong>Destination Rules:</strong> Override batch defaults for specific destinations</li>
-          <li>• Admin will be notified when unconfigured trucks are used</li>
-          <li>• You can create, edit, delete batches and move trucks between them</li>
-        </ul>
-      </div>
 
       {/* Destination Rules Modal */}
       {showRulesModal && selectedTruck && (
