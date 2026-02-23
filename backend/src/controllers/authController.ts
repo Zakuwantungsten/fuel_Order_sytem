@@ -580,7 +580,7 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
     await user.save();
 
     // Create reset URL - adjust frontend URL as needed
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
     // Send email
@@ -700,8 +700,12 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
       req.ip
     );
 
-    // Send confirmation email
-    await emailService.sendPasswordChangedEmail(user.email, `${user.firstName} ${user.lastName}`);
+    // Send confirmation email — non-fatal if it fails
+    try {
+      await emailService.sendPasswordChangedEmail(user.email, `${user.firstName} ${user.lastName}`);
+    } catch (emailError) {
+      logger.error('Failed to send password-changed confirmation email:', emailError);
+    }
 
     res.status(200).json({
       success: true,
