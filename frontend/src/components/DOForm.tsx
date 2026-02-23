@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Download, ChevronDown, Check } from 'lucide-react';
+import { X, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import axios from 'axios';
-import DeliveryNotePrint from './DeliveryNotePrint';
 import { cleanDeliveryOrder, isCorruptedDriverName } from '../utils/dataCleanup';
 
 interface DOFormProps {
@@ -55,7 +54,6 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   }, [defaultDoType, getCurrentDate, user]);
 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
-  const [createdOrder, setCreatedOrder] = useState<DeliveryOrder | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = !!order;
@@ -189,9 +187,10 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       console.log('onSave returned:', savedOrder);
       
       if (!order && savedOrder) {
-        // For new DOs, show download option
-        console.log('Setting created order for download');
-        setCreatedOrder(savedOrder as DeliveryOrder);
+        // For new DOs, auto-download PDF then close
+        console.log('Auto-downloading PDF for new DO...');
+        await handleDownload(savedOrder as DeliveryOrder);
+        onClose();
       } else {
         // For edits, just close
         console.log('Edit complete, closing form');
@@ -207,9 +206,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     console.log('=== DOForm handleSubmit END ===');
   };
 
-  const handleDownload = async () => {
-    if (!createdOrder || isDownloading) return;
-
+  const handleDownload = async (targetOrder: DeliveryOrder) => {
     setIsDownloading(true);
     try {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -220,15 +217,14 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
         return;
       }
 
-      const orderId = (createdOrder as any)._id || createdOrder.id;
+      const orderId = (targetOrder as any)._id || targetOrder.id;
       if (!orderId) {
-        alert('Error: Could not find the delivery order ID. Please try downloading from the orders list.');
+        alert('Error: Could not find the delivery order ID. You can download it from the orders list.');
         return;
       }
 
       const response = await axios.get(
         `${API_BASE_URL}/delivery-orders/${orderId}/pdf`,
-        
         {
           responseType: 'blob',
           withCredentials: true,
@@ -241,9 +237,9 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       const link = document.createElement('a');
       link.href = url;
 
-      const doType = createdOrder.doType || 'DO';
+      const doType = targetOrder.doType || 'DO';
       const timestamp = new Date().toISOString().split('T')[0];
-      const fileName = `${doType}_${createdOrder.doNumber}_${timestamp}.pdf`;
+      const fileName = `${doType}_${targetOrder.doNumber}_${timestamp}.pdf`;
       link.download = fileName;
 
       document.body.appendChild(link);
@@ -252,11 +248,10 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       window.URL.revokeObjectURL(url);
 
       console.log(`✓ PDF downloaded: ${fileName}`);
-      alert(`✓ Success!\n\nDelivery Order PDF has been downloaded.\n\nFile: ${fileName}`);
     } catch (error: any) {
       console.error('Error downloading PDF:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Failed to download PDF: ${errorMessage}`);
+      alert(`Failed to download PDF: ${errorMessage}\n\nYou can download it from the orders list.`);
     } finally {
       setIsDownloading(false);
     }
@@ -724,59 +719,31 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
 
             {/* Footer */}
             <div className="mt-6 flex justify-end space-x-3">
-              {createdOrder ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
-                  >
-                    Done
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDownload}
-                    disabled={isDownloading}
-                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 disabled:opacity-50"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    {isDownloading ? 'Downloading...' : 'Download DO'}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                        {order ? 'Updating...' : 'Creating...'}
-                      </>
-                    ) : (
-                      <>{order ? 'Update' : 'Create'} DO</>
-                    )}
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={isSubmitting || isDownloading}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting || isDownloading}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting || isDownloading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    {isDownloading ? 'Downloading PDF...' : (order ? 'Updating...' : 'Creating...')}
+                  </>
+                ) : (
+                  <>{order ? 'Update' : 'Create'} DO</>
+                )}
+              </button>
             </div>
           </form>
 
-          {/* Hidden print preview for PDF generation */}
-          {createdOrder && (
-            <div id="do-print-preview" className="hidden">
-              <DeliveryNotePrint order={createdOrder} showOnScreen={true} />
-            </div>
-          )}
         </div>
       </div>
     </div>
