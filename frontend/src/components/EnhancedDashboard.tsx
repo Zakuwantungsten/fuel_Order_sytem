@@ -85,7 +85,7 @@ const getInitialTab = (userRole: string): string => {
     }
     if (userRole === 'admin' || userRole === 'boss') {
       return [
-        'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'fleet_tracking', 'reports',
+        'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'fleet_tracking',
         'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports', 'driver_credentials'
       ];
     }
@@ -260,7 +260,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
         { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
         { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
-        { id: 'reports', label: 'Reports', icon: FileBarChart },
         // Admin sections - expanded in sidebar
         { id: 'admin_overview', label: 'Operational Overview', icon: Activity },
         { id: 'admin_data', label: 'Data Management', icon: FolderOpen },
