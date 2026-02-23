@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Download, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import axios from 'axios';
 import DeliveryNotePrint from './DeliveryNotePrint';
 import { cleanDeliveryOrder, isCorruptedDriverName } from '../utils/dataCleanup';
 
@@ -58,6 +57,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
   const [createdOrder, setCreatedOrder] = useState<DeliveryOrder | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = !!order;
   
   // Dropdown states
@@ -156,6 +156,8 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     
     console.log('=== DOForm handleSubmit START ===');
     console.log('Form data before clean:', formData);
@@ -198,6 +200,8 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       alert('Failed to save delivery order. Check console for details.');
+    } finally {
+      setIsSubmitting(false);
     }
     
     console.log('=== DOForm handleSubmit END ===');
@@ -205,78 +209,54 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
 
   const handleDownload = async () => {
     if (!createdOrder || isDownloading) return;
-    
+
     setIsDownloading(true);
     try {
-      const element = document.getElementById('do-print-preview');
-      if (!element) {
-        console.error('Print preview element not found');
-        alert('Error: Could not find the delivery order to download.');
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+      const token = localStorage.getItem('fuel_order_token');
+
+      if (!token) {
+        alert('Authentication required. Please log in again.');
         return;
       }
 
-      // Wait for rendering and ensure all content is loaded
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Force layout recalculation
-      element.style.display = 'block';
-      element.style.visibility = 'visible';
-      
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        allowTaint: true,
-        imageTimeout: 15000,
-        windowWidth: 816,
-        windowHeight: 1056,
-        scrollX: 0,
-        scrollY: 0,
-        foreignObjectRendering: false,
-        removeContainer: true,
-        onclone: (clonedDoc) => {
-          // Ensure cloned document has proper styles
-          const clonedElement = clonedDoc.getElementById('do-print-preview');
-          if (clonedElement) {
-            clonedElement.style.display = 'block';
-            clonedElement.style.visibility = 'visible';
-            clonedElement.style.backgroundColor = 'white';
-            clonedElement.style.color = 'black';
-          }
+      const orderId = (createdOrder as any)._id || createdOrder.id;
+      if (!orderId) {
+        alert('Error: Could not find the delivery order ID. Please try downloading from the orders list.');
+        return;
+      }
+
+      const response = await axios.get(
+        `${API_BASE_URL}/delivery-orders/${orderId}/pdf`,
+        
+        {
+          responseType: 'blob',
+          withCredentials: true,
+          headers: { 'Authorization': `Bearer ${token}` },
         }
-      });
+      );
 
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
 
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      const pdfWidth = 210;
-      const targetWidth = pdfWidth * 0.75; // 3/4 width as per company format
-      const imgHeight = (canvas.height * targetWidth) / canvas.width;
-      const xOffset = (pdfWidth - targetWidth) / 2;
-      const yOffset = 10;
+      const doType = createdOrder.doType || 'DO';
+      const timestamp = new Date().toISOString().split('T')[0];
+      const fileName = `${doType}_${createdOrder.doNumber}_${timestamp}.pdf`;
+      link.download = fileName;
 
-      pdf.addImage(imgData, 'PNG', xOffset, yOffset, targetWidth, imgHeight);
-      
-      const paddedNumber = createdOrder.doNumber.padStart(4, '0');
-      const fileName = `${createdOrder.doType}-${paddedNumber}.pdf`;
-      
-      // Save only once
-      pdf.save(fileName);
-      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
       console.log(`✓ PDF downloaded: ${fileName}`);
-      
-      // Small delay before showing alert to ensure PDF save completed
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       alert(`✓ Success!\n\nDelivery Order PDF has been downloaded.\n\nFile: ${fileName}`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Error downloading DO. Please try again.');
+    } catch (error: any) {
+      console.error('Error downloading PDF:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+      alert(`Failed to download PDF: ${errorMessage}`);
     } finally {
       setIsDownloading(false);
     }
@@ -774,9 +754,17 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
+                    disabled={isSubmitting}
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {order ? 'Update' : 'Create'} DO
+                    {isSubmitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        {order ? 'Updating...' : 'Creating...'}
+                      </>
+                    ) : (
+                      <>{order ? 'Update' : 'Create'} DO</>
+                    )}
                   </button>
                 </>
               )}
