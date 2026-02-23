@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { formatDateOnly } from '../utils/timezone';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
@@ -116,6 +115,30 @@ const FuelRecords = () => {
   const highlightProcessedRef = useRef<string | null>(null);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [monthInitialized, setMonthInitialized] = useState(false);
+
+  // Robust date parser that handles both YYYY-MM-DD (UI records) and D-Mon-YYYY (imported records)
+  const parseRecordDate = (dateStr: string): Date | null => {
+    if (!dateStr) return null;
+    // ISO format: "2026-02-15"
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const d = new Date(dateStr + 'T12:00:00Z');
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // "D-Mon-YYYY" format: "7-Jan-2025"
+    const abbrvMatch = dateStr.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+    if (abbrvMatch) {
+      const monthMap: Record<string, number> = {
+        jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11
+      };
+      const idx = monthMap[abbrvMatch[2].toLowerCase()];
+      if (idx !== undefined) {
+        return new Date(parseInt(abbrvMatch[3]), idx, parseInt(abbrvMatch[1]));
+      }
+    }
+    // Fallback
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d;
+  };
 
   useEffect(() => {
     fetchLpos();
@@ -618,9 +641,10 @@ const FuelRecords = () => {
       const allRecords = response.data;
       
       // Filter all records for the selected year (yearly export)
+      // Use parseRecordDate to handle both YYYY-MM-DD and D-Mon-YYYY formats
       const yearlyRecords = allRecords.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate.getFullYear() === year;
+        const recordDate = parseRecordDate(record.date as string);
+        return recordDate !== null && recordDate.getFullYear() === year;
       });
     
       if (yearlyRecords.length === 0) {
@@ -633,7 +657,7 @@ const FuelRecords = () => {
     const monthOrder: string[] = []; // To maintain order
     
     yearlyRecords.forEach(record => {
-      const recordDate = new Date(record.date);
+      const recordDate = parseRecordDate(record.date as string) || new Date(record.date);
       const monthName = recordDate.toLocaleDateString('en-US', { month: 'long' }); // e.g., "January", "February"
       
       if (!recordsByMonth[monthName]) {
@@ -651,7 +675,7 @@ const FuelRecords = () => {
     // Helper function to format record for export
     const formatRecordForExport = (record: FuelRecord) => {
       const isCancelled = record.isCancelled === true;
-      const recordDate = new Date(record.date);
+      const recordDate = parseRecordDate(record.date as string) || new Date(record.date);
       const formattedDate = `${recordDate.getDate()}-${recordDate.toLocaleDateString('en-US', { month: 'short' })}`;
       
       return {
@@ -725,7 +749,8 @@ const FuelRecords = () => {
       const years = new Set<number>();
       
       allRecords.forEach(record => {
-        const date = new Date(record.date);
+        const date = parseRecordDate(record.date as string);
+        if (!date) return;
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         months.add(monthKey);
         years.add(date.getFullYear());
@@ -749,54 +774,56 @@ const FuelRecords = () => {
     return availableMonths;
   };
 
-  // Update selected month if it's not in available months
-  useEffect(() => {
-    if (availableMonths.length > 0) {
-      // If no month selected or selected month not available, use current month or closest available
-      if (!selectedMonth || !availableMonths.includes(selectedMonth)) {
-        const now = new Date();
-        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        
-        if (availableMonths.includes(currentMonthKey)) {
-          // Current month has records
-          setSelectedMonth(currentMonthKey);
-        } else {
-          // Use most recent month with records
-          setSelectedMonth(availableMonths[availableMonths.length - 1]);
-        }
-      }
-    }
-  }, [availableMonths]);
+  // Format a date string (any format) as "D-Mon" e.g. "4-Jan" or "22-Feb"
+  const formatDateShort = (dateStr: string): string => {
+    const d = parseRecordDate(dateStr);
+    if (!d) return dateStr; // fallback: show raw value
+    const day = d.getDate();
+    const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    return `${day}-${mon}`;
+  };
 
   const goToPreviousMonth = () => {
-    if (!selectedMonth) return;
-    
-    const date = new Date(selectedMonth + '-01');
-    date.setMonth(date.getMonth() - 1);
-    const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    setSelectedMonth(newMonth);
+    if (!selectedMonth || availableMonths.length === 0) return;
+    const currentIndex = availableMonths.indexOf(selectedMonth);
+    if (currentIndex > 0) {
+      // Jump directly to the previous available month (skip empty months)
+      setSelectedMonth(availableMonths[currentIndex - 1]);
+    } else if (currentIndex === -1) {
+      // Not in list — find nearest available month before this one
+      const before = availableMonths.filter(m => m < selectedMonth);
+      if (before.length > 0) setSelectedMonth(before[before.length - 1]);
+    }
   };
 
   const goToNextMonth = () => {
-    if (!selectedMonth) return;
-    
-    const date = new Date(selectedMonth + '-01');
-    date.setMonth(date.getMonth() + 1);
-    const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    setSelectedMonth(newMonth);
+    if (!selectedMonth || availableMonths.length === 0) return;
+    const currentIndex = availableMonths.indexOf(selectedMonth);
+    if (currentIndex >= 0 && currentIndex < availableMonths.length - 1) {
+      // Jump directly to the next available month (skip empty months)
+      setSelectedMonth(availableMonths[currentIndex + 1]);
+    } else if (currentIndex === -1) {
+      // Not in list — find nearest available month after this one
+      const after = availableMonths.filter(m => m > selectedMonth);
+      if (after.length > 0) setSelectedMonth(after[0]);
+    }
   };
   
-  // Check if previous/next month has records
+  // Check if previous/next available month exists
   const canGoToPreviousMonth = () => {
     if (!selectedMonth || availableMonths.length === 0) return false;
     const currentIndex = availableMonths.indexOf(selectedMonth);
-    return currentIndex > 0;
+    if (currentIndex > 0) return true;
+    if (currentIndex === -1) return availableMonths.some(m => m < selectedMonth);
+    return false;
   };
   
   const canGoToNextMonth = () => {
     if (!selectedMonth || availableMonths.length === 0) return false;
     const currentIndex = availableMonths.indexOf(selectedMonth);
-    return currentIndex < availableMonths.length - 1 && currentIndex !== -1;
+    if (currentIndex >= 0 && currentIndex < availableMonths.length - 1) return true;
+    if (currentIndex === -1) return availableMonths.some(m => m > selectedMonth);
+    return false;
   };
 
   const getMonthName = (monthKey: string) => {
@@ -1126,7 +1153,7 @@ const FuelRecords = () => {
                           )}
                         </div>
                         <p className={`text-xs ${isCancelled ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                          {formatDateOnly(record.date)}
+                          {formatDateShort(record.date as string)}
                         </p>
                       </div>
                       <div className="text-right">
@@ -1337,7 +1364,7 @@ const FuelRecords = () => {
                       <td className={`px-1 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
                         {actualIndex + 1}
                       </td>
-                      <td className={`px-1 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{formatDateOnly(record.date)}</td>
+                      <td className={`px-1 py-2 text-[10px] sm:text-xs ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{formatDateShort(record.date as string)}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs font-medium ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`} title={record.truckNo}>{record.truckNo}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs truncate ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.goingDo}>{record.goingDo}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs truncate ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`} title={record.returnDo || 'N/A'}>

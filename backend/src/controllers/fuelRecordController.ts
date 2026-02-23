@@ -166,8 +166,38 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
     }
 
     if (month) {
-      const sanitized = sanitizeRegexInput(month as string);
-      if (sanitized) {
+      // Parse "Full Month YYYY" or "Abbr YYYY" (e.g. "December 2025" or "Dec 2025")
+      const monthStr = (month as string).trim();
+      const parts = monthStr.split(/\s+/);
+      const rawMonth = (parts[0] || '').toLowerCase();
+      const year = parts[1] || '';
+      const monthAbbrs: Record<string, string> = {
+        'january': 'jan', 'february': 'feb', 'march': 'mar', 'april': 'apr',
+        'may': 'may', 'june': 'jun', 'july': 'jul', 'august': 'aug',
+        'september': 'sep', 'october': 'oct', 'november': 'nov', 'december': 'dec',
+      };
+      const monthNums: Record<string, string> = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+        'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12',
+      };
+      const abbr = monthAbbrs[rawMonth] || rawMonth.substring(0, 3);
+      const num = monthNums[abbr] || '';
+      const sanitized = sanitizeRegexInput(monthStr);
+
+      if (year && abbr && num) {
+        // Match any of:
+        // 1. month field "February 2026" (records created via UI)
+        // 2. date field "7-Jan-2025" style (imported records — abbr + year both present in string)
+        // 3. date field ISO "2025-12-07" style
+        const monthConditions: any[] = [];
+        if (sanitized) monthConditions.push({ month: { $regex: sanitized, $options: 'i' } });
+        monthConditions.push(
+          { $and: [{ date: { $regex: abbr, $options: 'i' } }, { date: { $regex: year } }] },
+          { date: { $regex: `^${year}-${num}-` } },
+        );
+        if (!filter.$and) filter.$and = [];
+        (filter.$and as any[]).push({ $or: monthConditions });
+      } else if (sanitized) {
         filter.month = { $regex: sanitized, $options: 'i' };
       }
     }

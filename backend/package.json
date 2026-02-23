@@ -27,7 +27,9 @@
     "migrate:lpo-dates": "ts-node src/scripts/migrateActualDateForLPOs.ts",
     "verify:balance": "ts-node src/scripts/verifyBalanceCalculation.ts",
     "db:clear": "ts-node src/scripts/clearDatabase.ts",
-    "db:clear:force": "ts-node src/scripts/clearDatabase.ts --force"
+    "db:clear:force": "ts-node src/scripts/clearDatabase.ts --force",
+    "import:excel": "ts-node --transpile-only src/scripts/importExcelData.ts",
+    "import:excel:dry": "ts-node --transpile-only src/scripts/importExcelData.ts --dry-run"
   },
   "keywords": [
     "fuel",
