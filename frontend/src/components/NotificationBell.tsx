@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, disconnectWebSocket, subscribeToSessionEvents, unsubscribeFromSessionEvents } from '../services/websocket';
+import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, subscribeToSessionEvents, unsubscribeFromSessionEvents } from '../services/websocket';
 
 interface Notification {
   id?: string;
@@ -158,11 +158,11 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       }
     }
     
-    // Cleanup
+    // Cleanup — only clear module-level callbacks; do NOT disconnect the
+    // shared WebSocket (its lifecycle is managed at the App level).
     return () => {
       unsubscribeFromNotifications();
       unsubscribeFromSessionEvents();
-      disconnectWebSocket();
     };
   }, []);
 

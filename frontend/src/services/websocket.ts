@@ -9,6 +9,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 // once inside initializeWebSocket. This means react re-renders, effect
 // cleanups, and react strict-mode double-invocations can never accidentally
 // remove the underlying socket.on listener.
+let _notificationCallback: ((notification: any) => void) | null = null;
 let _sessionEventCallback: ((event: any) => void) | null = null;
 let _maintenanceEventCallback: ((event: any) => void) | null = null;
 let _settingsEventCallback: ((event: any) => void) | null = null;
@@ -40,6 +41,10 @@ export const initializeWebSocket = (token: string): Socket => {
   // Register stable application-event listeners once per socket instance.
   // Routing through module-level callbacks means the subscriber (React component)
   // can be swapped without ever touching socket.on / socket.off again.
+  socket.on('notification', (notification) => {
+    console.log('[WebSocket] Received notification:', notification);
+    if (_notificationCallback) _notificationCallback(notification);
+  });
   socket.on('session_event', (event) => {
     console.log('[WebSocket] Received session event:', event);
     if (_sessionEventCallback) _sessionEventCallback(event);
@@ -96,26 +101,19 @@ export const initializeWebSocket = (token: string): Socket => {
 };
 
 /**
- * Subscribe to notification events
+ * Subscribe to notification events.
+ * Uses the stable module-level callback pattern so the listener survives
+ * socket auto-reconnects and React effect cleanups / Strict Mode double-invocations.
  */
 export const subscribeToNotifications = (callback: (notification: any) => void): void => {
-  if (!socket) {
-    console.error('[WebSocket] Socket not initialized');
-    return;
-  }
-
-  socket.on('notification', (notification) => {
-    console.log('[WebSocket] Received notification:', notification);
-    callback(notification);
-  });
+  _notificationCallback = callback;
 };
 
 /**
  * Unsubscribe from notification events
  */
 export const unsubscribeFromNotifications = (): void => {
-  if (!socket) return;
-  socket.off('notification');
+  _notificationCallback = null;
 };
 
 /**
