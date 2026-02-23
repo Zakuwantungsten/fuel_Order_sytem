@@ -158,32 +158,34 @@ export default function DatabaseMonitorTab({ onMessage }: DatabaseMonitorTabProp
           Active Connections
         </h3>
         <div className="space-y-2">
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  admin@192.168.1.10
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Active 5min - 234 queries
-                </p>
+          {metrics?.activeConnections?.length > 0 ? (
+            metrics.activeConnections.map((conn: any, index: number) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {conn.user}
+                      <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">@ {conn.ip}</span>
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Active {conn.durationSeconds < 60
+                        ? `${conn.durationSeconds}s`
+                        : `${Math.floor(conn.durationSeconds / 60)}min`} — {conn.requestCount} {conn.requestCount === 1 ? 'request' : 'requests'}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 capitalize">
+                  {conn.role?.replace(/_/g, ' ')}
+                </span>
               </div>
+            ))
+          ) : (
+            <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+              <Activity className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No active connections detected</p>
             </div>
-          </div>
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  clerk@192.168.1.25
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Active 2min - 45 queries
-                </p>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 

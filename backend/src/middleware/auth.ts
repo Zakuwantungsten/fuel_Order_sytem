@@ -4,6 +4,7 @@ import { config } from '../config';
 import { JWTPayload, UserRole } from '../types';
 import { User } from '../models';
 import logger from '../utils/logger';
+import { activeSessionTracker } from '../utils/activeSessionTracker';
 
 // Extend Express Request type
 export interface AuthRequest extends Request {
@@ -58,6 +59,12 @@ export const authenticate = async (
         role: decoded.role,
       };
 
+      const driverIp =
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+        req.socket?.remoteAddress ||
+        'unknown';
+      activeSessionTracker.touch(decoded.userId, decoded.username, decoded.role, driverIp);
+
       next();
       return;
     }
@@ -79,6 +86,12 @@ export const authenticate = async (
       username: decoded.username,
       role: decoded.role,
     };
+
+    const ip =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+      req.socket?.remoteAddress ||
+      'unknown';
+    activeSessionTracker.touch(decoded.userId, decoded.username, decoded.role, ip);
 
     next();
   } catch (error: any) {

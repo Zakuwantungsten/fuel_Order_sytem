@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import { EventEmitter } from 'events';
 import logger from './logger';
-import { IDatabaseMetrics, ISlowQuery, ICollectionStats } from '../types';
+import { IDatabaseMetrics, IActiveConnection, ISlowQuery, ICollectionStats } from '../types';
+import { activeSessionTracker } from './activeSessionTracker';
 import { sendCriticalEmail } from '../services/emailService';
 
 /**
@@ -145,6 +146,8 @@ export class DatabaseMonitor extends EventEmitter {
       // Get collection stats (simplified - just count documents, skip detailed stats)
       const collections = await this.getCollectionStatsSimple();
 
+      const activeConnections = await this.getActiveConnections();
+
       const metrics: IDatabaseMetrics = {
         connections: {
           current: serverStatus.connections?.current || 0,
@@ -165,6 +168,7 @@ export class DatabaseMonitor extends EventEmitter {
           growthRate: 0,
         },
         collections,
+        activeConnections,
       };
 
       this.emit('metrics', metrics);
@@ -176,6 +180,26 @@ export class DatabaseMonitor extends EventEmitter {
       this.emit('error', { error: error.message, timestamp: new Date() });
       return null;
     }
+  }
+
+  /**
+   * Get active application sessions tracked by activeSessionTracker.
+   * This works on all MongoDB Atlas tiers (no admin commands required).
+   */
+  async getActiveConnections(): Promise<IActiveConnection[]> {
+    const sessions = activeSessionTracker.getActive();
+    const now = Date.now();
+
+    return sessions.map((s) => ({
+      identifier: `${s.username}@${s.ip}`,
+      user: s.username,
+      role: s.role,
+      ip: s.ip,
+      requestCount: s.requestCount,
+      durationSeconds: Math.floor((now - s.firstSeen.getTime()) / 1000),
+      activeSince: s.firstSeen.toISOString(),
+      lastSeen: s.lastSeen.toISOString(),
+    }));
   }
 
   /**

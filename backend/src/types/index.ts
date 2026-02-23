@@ -56,6 +56,17 @@ export interface IAuditLog {
 }
 
 // Database Metrics Types
+export interface IActiveConnection {
+  identifier: string; // "username@ip"
+  user: string;
+  role: string;
+  ip: string;
+  requestCount: number;
+  durationSeconds: number; // seconds since first seen
+  activeSince: string;     // ISO timestamp
+  lastSeen: string;        // ISO timestamp
+}
+
 export interface IDatabaseMetrics {
   connections: {
     current: number;
@@ -76,6 +87,7 @@ export interface IDatabaseMetrics {
     growthRate: number;
   };
   collections: ICollectionStats[];
+  activeConnections: IActiveConnection[];
 }
 
 export interface ISlowQuery {
