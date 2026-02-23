@@ -24,6 +24,7 @@ const Pagination: React.FC<PaginationProps> = ({
 }) => {
   const [showPerPageDropdown, setShowPerPageDropdown] = useState(false);
   const [dropdownAlignment, setDropdownAlignment] = useState<'left' | 'right'>('right');
+  const [dropdownDirection, setDropdownDirection] = useState<'down' | 'up'>('down');
   const perPageDropdownRef = useRef<HTMLDivElement>(null);
   
   const startItem = (currentPage - 1) * itemsPerPage + 1;
@@ -34,11 +35,16 @@ const Pagination: React.FC<PaginationProps> = ({
     if (!showPerPageDropdown && perPageDropdownRef.current) {
       const rect = perPageDropdownRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
       const dropdownWidth = 70; // min-w-[70px]
+      const dropdownHeight = 160; // approximate height for 4 options
       const spaceOnRight = viewportWidth - rect.right;
-      
+      const spaceBelow = viewportHeight - rect.bottom;
+
       // If not enough space on right, align to left
       setDropdownAlignment(spaceOnRight < dropdownWidth ? 'left' : 'right');
+      // If not enough space below, open upward
+      setDropdownDirection(spaceBelow < dropdownHeight ? 'up' : 'down');
     }
     setShowPerPageDropdown(!showPerPageDropdown);
   };
@@ -123,7 +129,7 @@ const Pagination: React.FC<PaginationProps> = ({
               
               {/* Custom Dropdown Menu */}
               {showPerPageDropdown && (
-                <div className={`absolute z-50 ${dropdownAlignment === 'right' ? 'right-0' : 'left-0'} mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg min-w-[70px] max-w-[calc(100vw-20px)] max-h-[60vh] overflow-y-auto`}>
+                <div className={`absolute z-50 ${dropdownAlignment === 'right' ? 'right-0' : 'left-0'} ${dropdownDirection === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg min-w-[70px] max-w-[calc(100vw-20px)] max-h-[60vh] overflow-y-auto`}>
                   {itemsPerPageOptions.map((option) => (
                     <button
                       key={option}
