@@ -52,5 +52,6 @@ router.post('/logout', authenticate, asyncHandler(authController.logout));
 router.get('/me', authenticate, asyncHandler(authController.getProfile));
 router.put('/me', authenticate, userValidation.update, validate, asyncHandler(authController.updateProfile));
 router.post('/change-password', authenticate, asyncHandler(authController.changePassword));
+router.patch('/preferences', authenticate, asyncHandler(authController.updatePreferences));
 
 export default router;

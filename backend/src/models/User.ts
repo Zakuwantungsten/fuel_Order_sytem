@@ -129,6 +129,11 @@ const userSchema = new Schema<IUserDocument>(
     deletedAt: {
       type: Date,
     },
+    theme: {
+      type: String,
+      enum: ['light', 'dark'],
+      default: 'light',
+    },
   },
   {
     timestamps: true,

@@ -555,6 +555,44 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
 };
 
 /**
+ * Update current user preferences (theme, etc.)
+ */
+export const updatePreferences = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new ApiError(401, 'Not authenticated');
+    }
+
+    const { theme } = req.body;
+
+    if (theme !== undefined && theme !== 'light' && theme !== 'dark') {
+      throw new ApiError(400, 'Invalid theme value. Must be "light" or "dark".');
+    }
+
+    const update: any = {};
+    if (theme !== undefined) update.theme = theme;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { $set: update },
+      { new: true }
+    );
+
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Preferences updated successfully',
+      data: { theme: user.theme },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Reset password with token
  */
 export const resetPassword = async (req: AuthRequest, res: Response): Promise<void> => {

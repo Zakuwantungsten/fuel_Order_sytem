@@ -938,6 +938,10 @@ export const authAPI = {
     const response = await apiClient.post('/auth/reset-password', data);
     return response.data;
   },
+
+  updatePreferences: async (preferences: { theme?: 'light' | 'dark' }): Promise<void> => {
+    await apiClient.patch('/auth/preferences', preferences);
+  },
 };
 
 // Users Management API (Admin only)

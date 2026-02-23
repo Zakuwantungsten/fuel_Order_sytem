@@ -199,8 +199,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Get role permissions
       const permissions = getRolePermissions(user.role);
 
-      // Load THIS user's theme preference (not the previous user's)
-      const userTheme = getInitialTheme(user.id);
+      // Use the server-stored theme as the authoritative source so the
+      // preference follows the user across all devices and browsers.
+      // Fall back to localStorage (same device, same user) if the server
+      // doesn't have one yet (e.g. existing accounts before this feature).
+      const serverTheme = user.theme;
+      const userTheme: 'light' | 'dark' = serverTheme ?? getInitialTheme(user.id);
 
       // Create authenticated user object
       const authUser: AuthUser = {
@@ -208,7 +212,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         token: accessToken,
         permissions,
         lastLogin: new Date().toISOString(),
-        theme: userTheme, // Include THIS user's theme
+        theme: userTheme,
       };
 
       // Store user data in sessionStorage (cleared when tab/browser is closed)
@@ -228,7 +232,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         lastLogin: authUser.lastLogin,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
-        theme: userTheme, // Include THIS user's theme preference
+        theme: userTheme,
       }));
 
       // Clear active tab on login to force role default tab
@@ -315,10 +319,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const toggleTheme = () => {
     const newTheme = state.theme === 'light' ? 'dark' : 'light';
     dispatch({ type: 'SET_THEME', payload: newTheme });
+    // Persist to server so the preference follows the user across devices
+    if (state.isAuthenticated) {
+      authAPI.updatePreferences({ theme: newTheme }).catch(() => {
+        // Silently ignore – local theme still applied
+      });
+    }
   };
 
   const setTheme = (theme: 'light' | 'dark') => {
     dispatch({ type: 'SET_THEME', payload: theme });
+    // Persist to server so the preference follows the user across devices
+    if (state.isAuthenticated) {
+      authAPI.updatePreferences({ theme }).catch(() => {
+        // Silently ignore – local theme still applied
+      });
+    }
   };
 
   // Apply theme to DOM whenever theme changes
