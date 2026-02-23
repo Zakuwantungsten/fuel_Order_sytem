@@ -108,7 +108,8 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       try {
         initializeWebSocket(token);
         
-        // Subscribe to real-time notifications
+        // Subscribe to real-time notifications (id 'bell' scopes this subscription
+        // so it doesn't overwrite other components' subscriptions)
         subscribeToNotifications((notification) => {
           console.log('[NotificationBell] Received real-time notification:', notification);
           
@@ -126,7 +127,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
           
           // Show browser push notification
           showBrowserNotification(notification);
-        });
+        }, 'bell');
 
         // Subscribe to session management events from the server.
         // These fire immediately when an admin deactivates, bans, deletes,
@@ -158,10 +159,10 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       }
     }
     
-    // Cleanup — only clear module-level callbacks; do NOT disconnect the
+    // Cleanup — only clear this component's callbacks; do NOT disconnect the
     // shared WebSocket (its lifecycle is managed at the App level).
     return () => {
-      unsubscribeFromNotifications();
+      unsubscribeFromNotifications('bell');
       unsubscribeFromSessionEvents();
     };
   }, []);

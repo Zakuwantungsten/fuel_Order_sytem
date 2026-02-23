@@ -9,7 +9,11 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 // once inside initializeWebSocket. This means react re-renders, effect
 // cleanups, and react strict-mode double-invocations can never accidentally
 // remove the underlying socket.on listener.
-let _notificationCallback: ((notification: any) => void) | null = null;
+//
+// _notificationCallbacks is a Map so multiple components (e.g. NotificationBell
+// AND ManagerView) can each hold their own subscription without overwriting each
+// other. subscribeToNotifications(cb, id) / unsubscribeFromNotifications(id).
+const _notificationCallbacks = new Map<string, (notification: any) => void>();
 let _sessionEventCallback: ((event: any) => void) | null = null;
 let _maintenanceEventCallback: ((event: any) => void) | null = null;
 let _settingsEventCallback: ((event: any) => void) | null = null;
@@ -22,8 +26,12 @@ export const initializeWebSocket = (token: string): Socket => {
   // Use actual backend URL for WebSocket (not the proxy)
   const WS_URL = 'http://localhost:5000';
 
-  if (socket?.connected) {
-    console.log('[WebSocket] Already connected');
+  // Guard against creating multiple socket instances.
+  // Check for ANY existing socket (connected OR still connecting) so that
+  // concurrent calls from App, NotificationBell, and ManagerView never
+  // create more than one socket — which would cause duplicate notifications.
+  if (socket) {
+    console.log('[WebSocket] Already initialised (connected:', socket.connected, ')');
     return socket;
   }
 
@@ -43,7 +51,7 @@ export const initializeWebSocket = (token: string): Socket => {
   // can be swapped without ever touching socket.on / socket.off again.
   socket.on('notification', (notification) => {
     console.log('[WebSocket] Received notification:', notification);
-    if (_notificationCallback) _notificationCallback(notification);
+    _notificationCallbacks.forEach((cb) => cb(notification));
   });
   socket.on('session_event', (event) => {
     console.log('[WebSocket] Received session event:', event);
@@ -102,18 +110,21 @@ export const initializeWebSocket = (token: string): Socket => {
 
 /**
  * Subscribe to notification events.
- * Uses the stable module-level callback pattern so the listener survives
- * socket auto-reconnects and React effect cleanups / Strict Mode double-invocations.
+ * Pass a unique `id` (e.g. 'bell', 'manager') so multiple components can
+ * hold independent subscriptions without overwriting each other.
+ * The listener on the socket is registered once in initializeWebSocket and
+ * fans out to every registered callback.
  */
-export const subscribeToNotifications = (callback: (notification: any) => void): void => {
-  _notificationCallback = callback;
+export const subscribeToNotifications = (callback: (notification: any) => void, id: string = 'default'): void => {
+  _notificationCallbacks.set(id, callback);
 };
 
 /**
- * Unsubscribe from notification events
+ * Unsubscribe a specific notification subscriber by id.
+ * If no id is given, 'default' is used (backwards-compatible).
  */
-export const unsubscribeFromNotifications = (): void => {
-  _notificationCallback = null;
+export const unsubscribeFromNotifications = (id: string = 'default'): void => {
+  _notificationCallbacks.delete(id);
 };
 
 /**

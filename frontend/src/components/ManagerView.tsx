@@ -32,7 +32,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Pagination from './Pagination';
 import ChangePasswordModal from './ChangePasswordModal';
 import NotificationBell from './NotificationBell';
-import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, disconnectWebSocket } from '../services/websocket';
+import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 
 import XLSX from 'xlsx-js-style';
 
@@ -258,32 +258,22 @@ export function ManagerView({ user }: ManagerViewProps) {
     // Initial data fetch
     fetchLPOEntries();
     
-    // Initialize WebSocket for real-time updates
-    const token = localStorage.getItem('fuel_order_token');
-    if (token) {
-      try {
-        initializeWebSocket(token);
-        
-        // Subscribe to LPO creation notifications
-        subscribeToNotifications((notification) => {
-          console.log('[ManagerView] Received real-time notification:', notification);
-          
-          // If it's an LPO notification, refresh the list immediately
-          if (notification.type === 'lpo_created') {
-            console.log('[ManagerView] LPO created - refreshing data...');
-            fetchLPOEntries(true); // Silent refresh
-          }
-        });
-        
-        console.log('[ManagerView] WebSocket initialized for real-time updates');
-      } catch (error) {
-        console.error('[ManagerView] Failed to initialize WebSocket:', error);
+    // Subscribe to LPO creation notifications.
+    // The WebSocket is a shared singleton already initialised by App/NotificationBell;
+    // we just register our own named subscription here — do NOT call
+    // initializeWebSocket() again or disconnectWebSocket() on cleanup.
+    subscribeToNotifications((notification) => {
+      console.log('[ManagerView] Received real-time notification:', notification);
+      
+      // If it's an LPO notification, refresh the list immediately
+      if (notification.type === 'lpo_created') {
+        console.log('[ManagerView] LPO created - refreshing data...');
+        fetchLPOEntries(true); // Silent refresh
       }
-    }
+    }, 'manager');
     
     return () => {
-      unsubscribeFromNotifications();
-      disconnectWebSocket();
+      unsubscribeFromNotifications('manager');
     };
   }, [fetchLPOEntries]);
 
