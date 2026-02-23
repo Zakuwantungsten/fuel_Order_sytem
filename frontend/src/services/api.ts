@@ -942,6 +942,10 @@ export const authAPI = {
   updatePreferences: async (preferences: { theme?: 'light' | 'dark' }): Promise<void> => {
     await apiClient.patch('/auth/preferences', preferences);
   },
+
+  firstLoginPassword: async (data: { newPassword: string }): Promise<void> => {
+    await apiClient.post('/auth/first-login-password', data);
+  },
 };
 
 // Users Management API (Admin only)

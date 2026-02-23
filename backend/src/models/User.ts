@@ -110,6 +110,10 @@ const userSchema = new Schema<IUserDocument>(
       type: Boolean,
       default: false,
     },
+    passwordResetAt: {
+      type: Date,
+      default: null,
+    },
     refreshToken: {
       type: String,
       select: false,

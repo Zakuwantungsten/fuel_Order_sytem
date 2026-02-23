@@ -144,7 +144,8 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       truckNo: formattedTruckNo,
       isActive: true,
       isDeleted: false,
-      mustChangePassword: true, // Flag to force password change on first login
+      mustChangePassword: true,
+      passwordResetAt: new Date(),
     });
 
     // Send welcome email with credentials
@@ -332,6 +333,7 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
     // Update password, clear refresh token and flag for password change
     user.password = temporaryPassword;
     user.mustChangePassword = true;
+    user.passwordResetAt = new Date();
     user.refreshToken = undefined;
     await user.save();
 

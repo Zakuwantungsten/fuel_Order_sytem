@@ -13,7 +13,8 @@ type AuthAction =
   | { type: 'AUTH_ERROR'; payload: string }
   | { type: 'AUTH_LOGOUT' }
   | { type: 'AUTH_CLEAR_ERROR' }
-  | { type: 'SET_THEME'; payload: 'light' | 'dark' };
+  | { type: 'SET_THEME'; payload: 'light' | 'dark' }
+  | { type: 'CLEAR_MUST_CHANGE_PASSWORD' };
 
 // Helper function to get user-specific theme key
 const getUserThemeKey = (userId?: string | number): string => {
@@ -82,6 +83,11 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         ...state,
         theme: action.payload,
       };
+    case 'CLEAR_MUST_CHANGE_PASSWORD':
+      return {
+        ...state,
+        user: state.user ? { ...state.user, mustChangePassword: false } : null,
+      };
     default:
       return state;
   }
@@ -92,6 +98,7 @@ interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => void;
   clearError: () => void;
+  clearMustChangePassword: () => void;
   hasPermission: (resource: string, action: string) => boolean;
   checkRouteAccess: (route: string) => boolean;
   toggleTheme: () => void;
@@ -228,6 +235,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         truckNo: (user as any).truckNo,
         currentDO: (user as any).currentDO,
         isActive: user.isActive,
+        mustChangePassword: user.mustChangePassword ?? false,
         token: accessToken,
         lastLogin: authUser.lastLogin,
         createdAt: user.createdAt,
@@ -285,6 +293,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Clear error function
   const clearError = () => {
     dispatch({ type: 'AUTH_CLEAR_ERROR' });
+  };
+
+  // Clear mustChangePassword flag after successful first-login password set
+  const clearMustChangePassword = () => {
+    dispatch({ type: 'CLEAR_MUST_CHANGE_PASSWORD' });
+    try {
+      const stored = sessionStorage.getItem('fuel_order_auth');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        parsed.mustChangePassword = false;
+        sessionStorage.setItem('fuel_order_auth', JSON.stringify(parsed));
+      }
+    } catch {
+      // Ignore storage errors
+    }
   };
 
   // Check permission function
@@ -388,6 +411,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     logout,
     clearError,
+    clearMustChangePassword,
     hasPermission,
     checkRouteAccess,
     toggleTheme,

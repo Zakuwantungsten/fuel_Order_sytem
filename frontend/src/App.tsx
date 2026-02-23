@@ -5,6 +5,7 @@ import { AmendedDOsProvider } from './contexts/AmendedDOsContext';
 import Login from './components/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import ForcePasswordChange from './pages/ForcePasswordChange';
 import ProtectedRoute, { UnauthorizedPage } from './components/ProtectedRoute';
 import EnhancedDashboard from './components/EnhancedDashboard';
 import { systemAdminAPI } from './services/api';
@@ -142,7 +143,7 @@ function MaintenancePage({ message, onLogout }: { message: string; onLogout: () 
 
 // App content with authentication
 function AppContent() {
-  const { isAuthenticated, isLoading, user, logout } = useAuth();
+  const { isAuthenticated, isLoading, user, logout, clearMustChangePassword } = useAuth();
 
   const [maintenanceMode, setMaintenanceMode] = useState<{
     enabled: boolean;
@@ -274,6 +275,11 @@ function AppContent() {
     !maintenanceMode.allowedRoles?.includes(user?.role ?? '')
   ) {
     return <MaintenancePage message={maintenanceMode.message} onLogout={logout} />;
+  }
+
+  // Force password change for new users before accessing any other page
+  if (isAuthenticated && user?.mustChangePassword) {
+    return <ForcePasswordChange onSuccess={clearMustChangePassword} />;
   }
 
   return (

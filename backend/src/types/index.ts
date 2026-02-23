@@ -143,6 +143,7 @@ export interface IUser {
   bannedReason?: string;
   lastLogin?: Date;
   mustChangePassword?: boolean;
+  passwordResetAt?: Date;
   refreshToken?: string;
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;

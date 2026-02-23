@@ -207,6 +207,13 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       throw new ApiError(401, 'Invalid username. Please check your credentials and try again.');
     }
 
+    // Auto-clear stale mustChangePassword for users created before this feature was deployed.
+    // A stale flag has no passwordResetAt (the new tracking field). Users with a proper
+    // forced-change requirement DO have passwordResetAt set, so they are unaffected.
+    if (user.mustChangePassword && !user.passwordResetAt) {
+      user.mustChangePassword = false;
+    }
+
     // Check if user is banned
     if (user.isBanned) {
       throw new ApiError(403, `Your account has been banned. Reason: ${user.bannedReason || 'Violation of terms'}. Please contact administrator.`);
@@ -455,8 +462,10 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
       throw new ApiError(401, 'Current password is incorrect');
     }
 
-    // Update password
+    // Update password and clear any forced-change flag
     user.password = newPassword;
+    user.mustChangePassword = false;
+    user.passwordResetAt = undefined;
     await user.save();
 
     logger.info(`Password changed for user: ${user.username}`);
@@ -467,6 +476,55 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     res.status(200).json({
       success: true,
       message: 'Password changed successfully',
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * First-login password set (no current password required)
+ * Only works when mustChangePassword === true on the user account.
+ */
+export const firstLoginPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new ApiError(401, 'Not authenticated');
+    }
+
+    const { newPassword } = req.body;
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+      throw new ApiError(400, 'New password must be at least 8 characters');
+    }
+
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    if (!user.mustChangePassword) {
+      throw new ApiError(403, 'Password change is not required for this account');
+    }
+
+    user.password = newPassword;
+    user.mustChangePassword = false;
+    user.passwordResetAt = undefined;
+    await user.save();
+
+    logger.info(`First-login password set for user: ${user.username}`);
+
+    // Send confirmation email
+    try {
+      await emailService.sendPasswordChangedEmail(user.email, `${user.firstName} ${user.lastName}`);
+    } catch (emailError) {
+      logger.error('Failed to send password-changed email:', emailError);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Password set successfully. Welcome!',
     });
   } catch (error: any) {
     throw error;

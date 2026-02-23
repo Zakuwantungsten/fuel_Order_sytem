@@ -424,6 +424,7 @@ export interface User {
   bannedBy?: string;
   bannedReason?: string;
   lastLogin?: string;
+  mustChangePassword?: boolean;
   theme?: 'light' | 'dark';
   createdAt: string;
   updatedAt: string;

@@ -770,6 +770,7 @@ function CreateUserModal({
   const [stations, setStations] = useState<any[]>([]);
   const [loadingStations, setLoadingStations] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   // Fetch stations on mount
   useEffect(() => {
@@ -819,7 +820,10 @@ function CreateUserModal({
       }
 
       await usersAPI.create(submitData);
-      onSuccess();
+      setSuccess(true);
+      setTimeout(() => {
+        onSuccess();
+      }, 1800);
     } catch (error: any) {
       onError(error.response?.data?.message || 'Failed to create user');
     } finally {
@@ -857,6 +861,19 @@ function CreateUserModal({
         {/* Form */}
         <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-180px)]">
           <div className="p-6 space-y-6">
+            {/* Success Banner */}
+            {success && (
+              <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-xl">
+                <div className="w-8 h-8 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-green-800 dark:text-green-300">User created successfully!</p>
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">Login credentials have been sent to the user's email.</p>
+                </div>
+              </div>
+            )}
+
             {/* Account Information Section */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-medium">
@@ -877,7 +894,7 @@ function CreateUserModal({
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
-                    placeholder="johndoe"
+                    placeholder="hamdunassor"
                   />
                 </div>
 
@@ -891,7 +908,7 @@ function CreateUserModal({
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
-                    placeholder="john@example.com"
+                    placeholder="hamdunassor111@gmail.com"
                   />
                   <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                     Login credentials will be sent to this email
@@ -908,7 +925,7 @@ function CreateUserModal({
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
-                    placeholder="John"
+                    placeholder="Hamdu"
                   />
                 </div>
 
@@ -922,7 +939,7 @@ function CreateUserModal({
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
-                    placeholder="Doe"
+                    placeholder="Nassor"
                   />
                 </div>
               </div>
@@ -1049,11 +1066,11 @@ function CreateUserModal({
             </button>
             <button
               type="submit"
-              disabled={loading || (requiresStation && !formData.station) || (requiresYard && !formData.yard)}
+              disabled={loading || success || (requiresStation && !formData.station) || (requiresYard && !formData.yard)}
               className="px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium shadow-lg shadow-green-500/30"
             >
               {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
-              {loading ? 'Creating User...' : 'Create User & Send Email'}
+              {loading ? 'Creating User...' : success ? 'Done!' : 'Create User & Send Email'}
             </button>
           </div>
         </form>
