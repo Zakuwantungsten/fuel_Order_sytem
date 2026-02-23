@@ -43,15 +43,31 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Unified search states
-  const [searchQuery, setSearchQuery] = useState('');
+  // Unified search states — persisted in sessionStorage so results survive tab navigation
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    try { return sessionStorage.getItem('dashboard_search_query') || ''; } catch { return ''; }
+  });
   const [searchResults, setSearchResults] = useState<{
     dos: SearchResult[];
     lpos: SearchResult[];
     fuels: SearchResult[];
-  }>({ dos: [], lpos: [], fuels: [] });
+  }>(() => {
+    try {
+      const saved = sessionStorage.getItem('dashboard_search_results');
+      return saved ? JSON.parse(saved) : { dos: [], lpos: [], fuels: [] };
+    } catch { return { dos: [], lpos: [], fuels: [] }; }
+  });
   const [searching, setSearching] = useState(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Persist search state to sessionStorage whenever it changes
+  useEffect(() => {
+    try { sessionStorage.setItem('dashboard_search_query', searchQuery); } catch {}
+  }, [searchQuery]);
+
+  useEffect(() => {
+    try { sessionStorage.setItem('dashboard_search_results', JSON.stringify(searchResults)); } catch {}
+  }, [searchResults]);
 
   // Chart data
   const [chartData, setChartData] = useState<any>({
@@ -302,26 +318,34 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     }
   };
 
-  // Handle search input with debouncing for real-time search
+  // Clear search query and results, also wipes sessionStorage
+  const handleClearSearch = () => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    setSearchQuery('');
+    setSearchResults({ dos: [], lpos: [], fuels: [] });
+    try {
+      sessionStorage.removeItem('dashboard_search_query');
+      sessionStorage.removeItem('dashboard_search_results');
+    } catch {}
+  };
+
+  // Handle search input — debounce auto-search as the user types
   const handleSearchInput = (value: string) => {
     setSearchQuery(value);
     
-    // Clear existing timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     
-    // Clear results if search is empty
     if (!value.trim()) {
       setSearchResults({ dos: [], lpos: [], fuels: [] });
       return;
     }
     
-    // Set new timer for auto-search (300ms delay)
     debounceTimerRef.current = setTimeout(() => {
       performUnifiedSearch();
     }, 300);
   };
+
+  const hasResults = searchResults.dos.length > 0 || searchResults.lpos.length > 0 || searchResults.fuels.length > 0;
 
   // Cleanup debounce timer on unmount
   useEffect(() => {
@@ -491,38 +515,42 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </button>
       </div>
 
-      {/* Search Bar with Real-time Auto-suggestions */}
-      <div className="flex items-center gap-3 max-w-sm">
+      {/* Search Bar */}
+      <div className="flex items-center gap-2 max-w-lg">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search DO, LPO, or Truck... (auto-suggestions as you type)"
+            placeholder="Search DO, LPO, or Truck..."
             value={searchQuery}
             onChange={(e) => handleSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && performUnifiedSearch()}
-            className="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
-          {searchQuery && (
-            <button
-              onClick={() => { 
-                setSearchQuery(''); 
-                setSearchResults({ dos: [], lpos: [], fuels: [] });
-                if (debounceTimerRef.current) {
-                  clearTimeout(debounceTimerRef.current);
-                }
-              }}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
           {searching && (
-            <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
               <Loader className="w-4 h-4 animate-spin text-indigo-600" />
             </div>
           )}
         </div>
+        {hasResults ? (
+          <button
+            onClick={handleClearSearch}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors whitespace-nowrap"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear
+          </button>
+        ) : (
+          <button
+            onClick={performUnifiedSearch}
+            disabled={!searchQuery.trim() || searching}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+          >
+            <Search className="w-3.5 h-3.5" />
+            Search
+          </button>
+        )}
       </div>
 
       {/* Search Results */}
