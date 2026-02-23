@@ -9,6 +9,7 @@ export interface IFuelStationConfig extends Document {
   fuelRecordFieldReturning?: string;  // e.g., 'zambiaReturn', 'mbeyaReturn'
   formulaGoing?: string; // e.g., "totalLiters + extraLiters - 900"
   formulaReturning?: string;
+  currency: 'USD' | 'TZS'; // USD for Zambia stations, TZS for Tanzania stations
   isActive: boolean;
   createdBy: string;
   updatedBy?: string;
@@ -58,6 +59,11 @@ const FuelStationConfigSchema = new Schema<IFuelStationConfig>(
     formulaReturning: {
       type: String,
       trim: true,
+    },
+    currency: {
+      type: String,
+      enum: ['USD', 'TZS'],
+      default: 'TZS',
     },
     isActive: {
       type: Boolean,

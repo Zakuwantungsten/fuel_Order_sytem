@@ -54,7 +54,16 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
     .filter(entry => !entry.isCancelled)
     .reduce((sum, entry) => sum + entry.amount, 0);
 
-  // Render table header
+  // Derive currency from stored value or fallback heuristic
+  const printCurrency: 'USD' | 'TZS' = data.currency || (() => {
+    const upper = (data.station || '').toUpperCase();
+    return (upper.startsWith('LAKE') && !upper.includes('TUNDUMA')) ? 'USD' : 'TZS';
+  })();
+
+  const formatAmount = (amount: number) =>
+    printCurrency === 'USD'
+      ? `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : `TZS ${amount.toLocaleString()}`;
   const renderTableHeader = () => (
     <thead>
       <tr style={{ backgroundColor: '#f5f5f5' }}>
@@ -104,7 +113,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           verticalAlign: 'middle',
           lineHeight: '1.2'
         }}>
-          Rate
+          Rate ({printCurrency})
         </th>
         <th style={{ 
           border: '1px solid #000',
@@ -116,7 +125,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           verticalAlign: 'middle',
           lineHeight: '1.2'
         }}>
-          Amount
+          Amount ({printCurrency})
         </th>
         <th style={{ 
           border: '1px solid #000',
@@ -452,10 +461,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                       color: '#000',
                       lineHeight: '1.4'
                     }}>
-                      {totalAmount.toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}
+                      {formatAmount(totalAmount)}
                     </td>
                     <td style={{ 
                       border: '1px solid #000',

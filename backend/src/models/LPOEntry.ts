@@ -83,6 +83,11 @@ const lpoEntrySchema = new Schema<ILPOEntryDocument>(
       enum: ['STATION', 'CASH', 'DRIVER_ACCOUNT'],
       default: 'STATION',
     },
+    currency: {
+      type: String,
+      enum: ['USD', 'TZS'],
+      default: 'TZS',
+    },
   },
   {
     timestamps: true,

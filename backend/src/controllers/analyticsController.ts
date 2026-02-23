@@ -723,8 +723,8 @@ async function exportRevenueToExcel(req: AuthRequest, res: Response, start: Date
     'Customer': order.customerName,
     'Destination': order.destination,
     'Tonnage': order.tonnages,
-    'Rate/Ton (TSh)': order.ratePerTon,
-    'Total Amount (TSh)': order.tonnages * order.ratePerTon,
+    'Rate/Ton (USD)': order.ratePerTon,
+    'Total Amount (USD)': order.tonnages * order.ratePerTon,
   }));
 
   const workbook = XLSX.utils.book_new();
@@ -756,8 +756,8 @@ async function exportFuelToExcel(req: AuthRequest, res: Response, start: Date, e
     'Station': record.station,
     'Fuel Type': record.fuelType,
     'Liters': record.liters,
-    'Price/Liter (TSh)': record.pricePerLiter,
-    'Total Cost (TSh)': record.totalAmount,
+    'Price/Liter (TZS)': record.pricePerLiter,
+    'Total Cost (TZS)': record.totalAmount,
     'Odometer': record.odometerReading,
   }));
 
@@ -813,7 +813,7 @@ async function exportComprehensiveToExcel(req: AuthRequest, res: Response, start
   
   const summaryData = [
     { Metric: 'Report Period', Value: `${start.toLocaleDateString()} - ${end.toLocaleDateString()}` },
-    { Metric: 'Total Revenue (TSh)', Value: totalRevenue },
+    { Metric: 'Total Revenue (USD)', Value: totalRevenue },
     { Metric: 'Total Fuel Dispensed (L)', Value: totalFuel },
     { Metric: 'Active Trucks', Value: activeTrucks },
     { Metric: 'Generated At', Value: new Date().toLocaleString() },
@@ -836,8 +836,8 @@ async function exportComprehensiveToExcel(req: AuthRequest, res: Response, start
       'Customer': order.customerName,
       'Destination': order.destination,
       'Tonnage': order.tonnages,
-      'Rate/Ton (TSh)': order.ratePerTon,
-      'Total (TSh)': order.tonnages * order.ratePerTon,
+      'Rate/Ton (USD)': order.ratePerTon,
+      'Total (USD)': order.tonnages * order.ratePerTon,
     }));
     const revenueSheet = XLSX.utils.json_to_sheet(revenueData);
     XLSX.utils.book_append_sheet(workbook, revenueSheet, 'Revenue Details');
@@ -858,8 +858,8 @@ async function exportComprehensiveToExcel(req: AuthRequest, res: Response, start
       'Station': record.station,
       'Fuel Type': record.fuelType,
       'Liters': record.liters,
-      'Price/Liter (TSh)': record.pricePerLiter,
-      'Total (TSh)': record.totalAmount,
+      'Price/Liter (TZS)': record.pricePerLiter,
+      'Total (TZS)': record.totalAmount,
     }));
     const fuelSheet = XLSX.utils.json_to_sheet(fuelData);
     XLSX.utils.book_append_sheet(workbook, fuelSheet, 'Fuel Records');

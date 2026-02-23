@@ -4,6 +4,13 @@ import { LPOEntry, DriverAccountEntry } from '../types';
 import { driverAccountAPI } from '../services/api';
 import XLSX from 'xlsx-js-style';
 
+// Helper to derive currency from station name
+const getCurrencyFromStation = (station: string): 'USD' | 'TZS' => {
+  const upper = (station || '').toUpperCase();
+  if (upper.startsWith('LAKE') && !upper.includes('TUNDUMA')) return 'USD';
+  return 'TZS';
+};
+
 // Extended LPO entry type that includes driver account flag
 interface ExtendedLPOEntry extends LPOEntry {
   isDriverAccount?: boolean;
@@ -27,7 +34,11 @@ interface MonthlySummaryData {
   totalLPOs: number;
   totalLiters: number;
   totalAmount: number;
+  totalAmountTZS: number;
+  totalAmountUSD: number;
   avgPricePerLiter: number;
+  avgPricePerLiterTZS: number;
+  avgPricePerLiterUSD: number;
   byStation: Record<string, {
     lpos: number;
     liters: number;
@@ -223,7 +234,19 @@ const LPOSummary = ({
       
       const totalLiters = filteredEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
       const totalAmount = filteredEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
+      const totalAmountTZS = filteredEntries
+        .filter(e => getCurrencyFromStation(e.dieselAt) === 'TZS')
+        .reduce((sum, e) => sum + (e.ltrs * e.pricePerLtr), 0);
+      const totalAmountUSD = filteredEntries
+        .filter(e => getCurrencyFromStation(e.dieselAt) === 'USD')
+        .reduce((sum, e) => sum + (e.ltrs * e.pricePerLtr), 0);
       const avgPricePerLiter = totalLiters > 0 ? totalAmount / totalLiters : 0;
+      const tzsList = filteredEntries.filter(e => getCurrencyFromStation(e.dieselAt) === 'TZS');
+      const usdList = filteredEntries.filter(e => getCurrencyFromStation(e.dieselAt) === 'USD');
+      const totalLitersTZS = tzsList.reduce((s, e) => s + e.ltrs, 0);
+      const totalLitersUSD = usdList.reduce((s, e) => s + e.ltrs, 0);
+      const avgPricePerLiterTZS = totalLitersTZS > 0 ? totalAmountTZS / totalLitersTZS : 0;
+      const avgPricePerLiterUSD = totalLitersUSD > 0 ? totalAmountUSD / totalLitersUSD : 0;
 
       // Count driver account vs regular LPOs
       const driverAccountCount = filteredEntries.filter(e => e.isDriverAccount).length;
@@ -254,7 +277,11 @@ const LPOSummary = ({
         totalLPOs: filteredEntries.length,
         totalLiters,
         totalAmount,
+        totalAmountTZS,
+        totalAmountUSD,
         avgPricePerLiter,
+        avgPricePerLiterTZS,
+        avgPricePerLiterUSD,
         byStation,
         byDestination,
         entries: filteredEntries,
@@ -321,6 +348,7 @@ const LPOSummary = ({
       'Date': entry.date,
       'LPO No.': entry.lpoNo,
       'Diesel At': entry.dieselAt,
+      'Currency': getCurrencyFromStation(entry.dieselAt),
       'DO/SDO': entry.doSdo,
       'Truck No.': entry.truckNo,
       'Liters': entry.ltrs,
@@ -354,6 +382,7 @@ const LPOSummary = ({
           'Date': entry.date,
           'LPO No.': entry.lpoNo,
           'Diesel At': entry.dieselAt,
+          'Currency': getCurrencyFromStation(entry.dieselAt),
           'DO/SDO': entry.doSdo,
           'Truck No.': entry.truckNo,
           'Liters': entry.ltrs,
@@ -375,7 +404,9 @@ const LPOSummary = ({
     const yearSummary = availableMonths.map(month => {
       const monthEntries = combinedEntries.filter(entry => entry.date.includes(month));
       const totalLiters = monthEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
-      const totalAmount = monthEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
+      const totalAmountTZS = monthEntries.filter(e => getCurrencyFromStation(e.dieselAt) === 'TZS').reduce((sum, e) => sum + (e.ltrs * e.pricePerLtr), 0);
+      const totalAmountUSD = monthEntries.filter(e => getCurrencyFromStation(e.dieselAt) === 'USD').reduce((sum, e) => sum + (e.ltrs * e.pricePerLtr), 0);
+      const totalAmount = totalAmountTZS + totalAmountUSD;
       const driverAccountLPOs = monthEntries.filter(e => e.isDriverAccount).length;
       
       return {
@@ -384,7 +415,8 @@ const LPOSummary = ({
         'Regular LPOs': monthEntries.length - driverAccountLPOs,
         'Driver Account LPOs': driverAccountLPOs,
         'Total Liters': totalLiters,
-        'Total Amount (TZS)': totalAmount,
+        'Total Amount (TZS)': totalAmountTZS,
+        'Total Amount (USD)': totalAmountUSD,
         'Average Price/Liter': totalLiters > 0 ? (totalAmount / totalLiters).toFixed(2) : 0
       };
     });
@@ -602,11 +634,27 @@ const LPOSummary = ({
             <p className="text-sm text-green-600 dark:text-green-400">Total Amount</p>
             <DollarSign className="w-5 h-5 text-green-400 dark:text-green-300" />
           </div>
-          <p className="text-2xl font-bold text-green-900 dark:text-green-100">TZS {summary.totalAmount.toLocaleString()}</p>
+          {summary.totalAmountTZS > 0 && (
+            <p className="text-xl font-bold text-green-900 dark:text-green-100">TZS {summary.totalAmountTZS.toLocaleString()}</p>
+          )}
+          {summary.totalAmountUSD > 0 && (
+            <p className="text-xl font-bold text-green-700 dark:text-green-200">$ {summary.totalAmountUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          )}
+          {summary.totalAmountTZS === 0 && summary.totalAmountUSD === 0 && (
+            <p className="text-2xl font-bold text-green-900 dark:text-green-100">—</p>
+          )}
         </div>
         <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg shadow dark:shadow-gray-700/30 transition-colors">
           <p className="text-sm text-yellow-600 dark:text-yellow-400">Avg Price/Liter</p>
-          <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">TZS {summary.avgPricePerLiter.toFixed(2)}</p>
+          {summary.avgPricePerLiterTZS > 0 && (
+            <p className="text-xl font-bold text-yellow-900 dark:text-yellow-100">TZS {summary.avgPricePerLiterTZS.toFixed(2)}</p>
+          )}
+          {summary.avgPricePerLiterUSD > 0 && (
+            <p className="text-xl font-bold text-yellow-700 dark:text-yellow-200">$ {summary.avgPricePerLiterUSD.toFixed(4)}</p>
+          )}
+          {summary.avgPricePerLiterTZS === 0 && summary.avgPricePerLiterUSD === 0 && (
+            <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">—</p>
+          )}
         </div>
       </div>
 
@@ -654,10 +702,14 @@ const LPOSummary = ({
                           {data.liters.toLocaleString()} L
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-600 dark:text-primary-400">
-                          TZS {data.amount.toLocaleString()}
+                          {getCurrencyFromStation(station) === 'USD'
+                            ? `$ ${data.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : `TZS ${data.amount.toLocaleString()}`}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          TZS {(data.amount / data.liters).toFixed(2)}
+                          {getCurrencyFromStation(station) === 'USD'
+                            ? `$ ${(data.amount / data.liters).toFixed(4)}`
+                            : `TZS ${(data.amount / data.liters).toFixed(2)}`}
                         </td>
                       </tr>
                     ))}
@@ -777,10 +829,14 @@ const LPOSummary = ({
                         {entry.ltrs.toLocaleString()}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100">
-                        TZS {entry.pricePerLtr.toFixed(2)}
+                        {getCurrencyFromStation(entry.dieselAt) === 'USD'
+                          ? `$ ${entry.pricePerLtr.toFixed(4)}`
+                          : `TZS ${entry.pricePerLtr.toFixed(2)}`}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-primary-600 dark:text-primary-400">
-                        TZS {(entry.ltrs * entry.pricePerLtr).toLocaleString()}
+                        {getCurrencyFromStation(entry.dieselAt) === 'USD'
+                          ? `$ ${(entry.ltrs * entry.pricePerLtr).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : `TZS ${(entry.ltrs * entry.pricePerLtr).toLocaleString()}`}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.destinations}
@@ -802,7 +858,8 @@ const LPOSummary = ({
                   </td>
                   <td className="px-4 py-3"></td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-primary-600 dark:text-primary-400">
-                    TZS {summary.totalAmount.toLocaleString()}
+                    {summary.totalAmountTZS > 0 && <div>TZS {summary.totalAmountTZS.toLocaleString()}</div>}
+                    {summary.totalAmountUSD > 0 && <div>$ {summary.totalAmountUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>}
                   </td>
                   <td className="px-4 py-3"></td>
                 </tr>

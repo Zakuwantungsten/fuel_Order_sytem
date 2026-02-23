@@ -182,6 +182,11 @@ const lpoSummarySchema = new Schema<ILPOSummaryDocument>(
         trim: true,
       },
     },
+    currency: {
+      type: String,
+      enum: ['USD', 'TZS'],
+      default: 'TZS',
+    },
     createdBy: {
       type: String,
       trim: true,

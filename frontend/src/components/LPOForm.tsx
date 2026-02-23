@@ -918,10 +918,14 @@ const LPOForm: React.FC<LPOFormProps> = ({
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Amount:</span>
               <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {(formData.ltrs! * formData.pricePerLtr!).toLocaleString('en-US', {
-                  style: 'currency',
-                  currency: 'TZS',
-                })}
+                {(() => {
+                  const upper = (formData.dieselAt || '').toUpperCase();
+                  const isUSD = upper.startsWith('LAKE') && !upper.includes('TUNDUMA');
+                  const amt = (formData.ltrs! * formData.pricePerLtr!);
+                  return isUSD
+                    ? `$ ${amt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `TZS ${amt.toLocaleString()}`;
+                })()}
               </span>
             </div>
           </div>

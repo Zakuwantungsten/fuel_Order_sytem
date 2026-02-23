@@ -3294,7 +3294,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             <div className="flex justify-between items-center">
               <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">TOTAL:</span>
               <span className="text-2xl font-bold text-primary-700 dark:text-primary-400">
-                {formData.total?.toFixed(2)}
+                {(() => {
+                  const stationUpper = (formData.station || '').toUpperCase();
+                  const stationDefaults = STATION_DEFAULTS[stationUpper];
+                  const currency = stationDefaults?.currency || (stationUpper.startsWith('LAKE') && !stationUpper.includes('TUNDUMA') ? 'USD' : 'TZS');
+                  const total = formData.total || 0;
+                  return currency === 'USD'
+                    ? `$ ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `TZS ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                })()}
               </span>
             </div>
             {formData.entries && formData.entries.length > 0 && (

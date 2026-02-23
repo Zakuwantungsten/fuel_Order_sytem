@@ -60,6 +60,7 @@ export interface LPOEntry {
   ltrs: number;
   pricePerLtr: number;
   destinations: string;
+  currency?: 'USD' | 'TZS'; // USD for Zambia stations, TZS for Tanzania stations
   // Amendment tracking
   originalLtrs?: number | null;
   amendedAt?: string | null;
@@ -118,6 +119,7 @@ export interface LPOSummary {
   orderOf: string; // e.g., "TAHMEED"
   entries: LPODetail[];
   total: number;
+  currency?: 'USD' | 'TZS'; // USD for Zambia stations, TZS for Tanzania stations
   createdBy?: string; // Username of who created this LPO
   approvedBy?: string; // Name of approver (optional - for any LPO that needs approval signature)
   createdAt?: string;
@@ -894,6 +896,7 @@ export interface FuelStationConfig {
   fuelRecordFieldReturning?: FuelRecordField;  // e.g., 'zambiaReturn', 'mbeyaReturn'
   formulaGoing?: string;
   formulaReturning?: string;
+  currency?: 'USD' | 'TZS'; // USD for Zambia stations, TZS for Tanzania stations
   isActive: boolean;
   createdBy: string;
   updatedBy?: string;

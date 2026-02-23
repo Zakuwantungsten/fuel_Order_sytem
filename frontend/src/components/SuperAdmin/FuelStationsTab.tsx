@@ -23,6 +23,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
     fuelRecordFieldReturning: '',
     formulaGoing: '',
     formulaReturning: '',
+    currency: 'TZS' as 'USD' | 'TZS',
   });
   
   // Dropdown states
@@ -107,6 +108,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         fuelRecordFieldReturning: stationForm.fuelRecordFieldReturning || undefined,
         formulaGoing: stationForm.formulaGoing?.trim() || undefined,
         formulaReturning: stationForm.formulaReturning?.trim() || undefined,
+        currency: stationForm.currency,
       });
       onMessage('success', 'Fuel station created successfully');
       setShowStationModal(false);
@@ -160,6 +162,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         fuelRecordFieldReturning: stationForm.fuelRecordFieldReturning || undefined,
         formulaGoing: stationForm.formulaGoing?.trim() || undefined,
         formulaReturning: stationForm.formulaReturning?.trim() || undefined,
+        currency: stationForm.currency,
       });
       onMessage('success', 'Fuel station updated successfully');
       setShowStationModal(false);
@@ -194,6 +197,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         fuelRecordFieldReturning: station.fuelRecordFieldReturning || '',
         formulaGoing: station.formulaGoing || '',
         formulaReturning: station.formulaReturning || '',
+        currency: station.currency || 'TZS',
       });
     }
     setShowStationModal(true);
@@ -209,6 +213,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
       fuelRecordFieldReturning: '',
       formulaGoing: '',
       formulaReturning: '',
+      currency: 'TZS',
     });
   };
 
@@ -242,7 +247,14 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
             {stations.map((station) => (
               <tr key={station._id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{station.stationName}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">TSh {station.defaultRate}</td>
+                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mr-1 ${
+                    (station.currency || 'TZS') === 'USD'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                  }`}>{station.currency || 'TZS'}</span>
+                  {station.defaultRate}
+                </td>
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersGoing}</td>
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersReturning}</td>
                 <td className="px-4 py-3 text-xs">
@@ -313,6 +325,18 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                   <p className="text-xs text-yellow-800 dark:text-yellow-200">
                     ⚠️ At least one of Going or Returning must be greater than 0
                   </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Currency *</label>
+                  <select
+                    value={stationForm.currency}
+                    onChange={(e) => setStationForm({ ...stationForm, currency: e.target.value as 'USD' | 'TZS' })}
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="TZS">TZS – Tanzanian Shilling</option>
+                    <option value="USD">USD – US Dollar</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">Select USD for Zambia (Lake) stations, TZS for Tanzania stations</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                 <div className="relative" ref={goingFieldDropdownRef}>

@@ -913,6 +913,12 @@ const LPOs = () => {
   // Calculate totals for display
   const totalLiters = filteredLpos.reduce((sum, lpo) => sum + lpo.ltrs, 0);
   const totalAmount = filteredLpos.reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
+  const totalAmountTZS = filteredLpos
+    .filter(lpo => { const u = (lpo.dieselAt || '').toUpperCase(); return !(u.startsWith('LAKE') && !u.includes('TUNDUMA')); })
+    .reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
+  const totalAmountUSD = filteredLpos
+    .filter(lpo => { const u = (lpo.dieselAt || '').toUpperCase(); return u.startsWith('LAKE') && !u.includes('TUNDUMA'); })
+    .reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
 
   // Show workbook view if selected
   if (viewMode === 'workbook' && selectedWorkbookId) {
@@ -1238,9 +1244,19 @@ const LPOs = () => {
         </div>
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
           <div className="text-xs text-gray-600 dark:text-gray-400">Total Amount</div>
-          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-            TZS {totalAmount.toLocaleString()}
-          </div>
+          {totalAmountTZS > 0 && (
+            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              TZS {totalAmountTZS.toLocaleString()}
+            </div>
+          )}
+          {totalAmountUSD > 0 && (
+            <div className="text-lg font-bold text-gray-700 dark:text-gray-300">
+              $ {totalAmountUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          )}
+          {totalAmountTZS === 0 && totalAmountUSD === 0 && (
+            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">—</div>
+          )}
         </div>
       </div>
 

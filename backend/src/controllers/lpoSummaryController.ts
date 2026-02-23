@@ -787,6 +787,7 @@ const syncLPOEntriesToList = async (
         isDriverAccount: entry.isDriverAccount || false,
         referenceDo: entry.referenceDo || null,
         paymentMode,
+        currency: (lpoSummary as any).currency || 'TZS',
       });
     }
 
@@ -837,6 +838,16 @@ const syncLPOEntriesOnUpdate = async (
         continue;
       }
 
+      // Resolve currency from station name for updated entries
+      let entryCurrency: 'USD' | 'TZS' = 'TZS';
+      const stationCfg = await FuelStationConfig.findOne({ stationName: station, isActive: true }).lean();
+      if (stationCfg?.currency) {
+        entryCurrency = stationCfg.currency as 'USD' | 'TZS';
+      } else {
+        const upperStation = (station || '').toUpperCase();
+        if (upperStation.startsWith('LAKE') && !upperStation.includes('TUNDUMA')) entryCurrency = 'USD';
+      }
+
       await LPOEntry.create({
         sn: nextSn++,
         date: formattedDate,
@@ -849,6 +860,7 @@ const syncLPOEntriesOnUpdate = async (
         destinations: entry.dest || 'PENDING',
         originalLtrs: entry.originalLiters || null,
         amendedAt: entry.amendedAt || null,
+        currency: entryCurrency,
       });
     }
 
@@ -897,9 +909,23 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     // Ensure workbook exists for this year
     await getOrCreateWorkbook(year);
 
+    // Resolve station currency from FuelStationConfig (USD for Zambia, TZS for Tanzania)
+    let resolvedCurrency: 'USD' | 'TZS' = 'TZS';
+    if (data.station && data.station !== 'CASH' && data.station !== 'CUSTOM') {
+      const stationConfig = await FuelStationConfig.findOne({ stationName: data.station, isActive: true }).lean();
+      if (stationConfig?.currency) {
+        resolvedCurrency = stationConfig.currency as 'USD' | 'TZS';
+      } else {
+        // Fallback heuristic: Lake Zambia stations = USD, everything else = TZS
+        const upper = (data.station as string).toUpperCase();
+        if (upper.startsWith('LAKE') && !upper.includes('TUNDUMA')) resolvedCurrency = 'USD';
+      }
+    }
+
     // Create the LPO document with year and createdBy
     const lpoSummary = await LPOSummary.create({
       ...data,
+      currency: data.currency || resolvedCurrency,
       year,
       createdBy: req.user?.username || 'Unknown',
     });
