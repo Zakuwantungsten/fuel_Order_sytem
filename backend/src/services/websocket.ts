@@ -72,6 +72,13 @@ export const initializeWebSocket = (server: HTTPServer): SocketIOServer => {
       logger.info(`User ${socket.username} joined user room: user:${socket.username}`);
     }
 
+    // Join room based on userId (for direct user notifications keyed by MongoDB ObjectId)
+    // emitNotification() stores creatorUserId (ObjectId string) as recipient for personal notifications
+    if (socket.userId) {
+      socket.join(`user:${socket.userId}`);
+      logger.info(`User ${socket.username} joined userId room: user:${socket.userId}`);
+    }
+
     // Handle disconnection
     socket.on('disconnect', () => {
       logger.info(`WebSocket client disconnected: ${socket.username} - Socket ID: ${socket.id}`);

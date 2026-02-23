@@ -92,7 +92,6 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
         defaults.doType = defaultDoType; // Ensure we use the passed default
         setFormData(defaults);
       }
-      setCreatedOrder(null);
     }
   }, [isOpen, order, defaultDoType, getDefaultFormData]);
 
@@ -210,7 +209,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     setIsDownloading(true);
     try {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-      const token = localStorage.getItem('fuel_order_token');
+      const token = sessionStorage.getItem('fuel_order_token');
 
       if (!token) {
         alert('Authentication required. Please log in again.');
@@ -258,7 +257,6 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   };
 
   const handleClose = () => {
-    setCreatedOrder(null);
     onClose();
   };
 
