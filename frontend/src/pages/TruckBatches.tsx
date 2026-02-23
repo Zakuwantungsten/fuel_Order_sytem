@@ -187,11 +187,13 @@ export default function TruckBatches() {
       });
       
       // React Query will auto-refresh batches, update selected truck
-      const batchKey = `batch_${selectedTruck.batch}` as keyof typeof batches;
+      const batchKey = selectedTruck.batch.toString() as keyof typeof batches;
       const batch = batches[batchKey];
-      const truck = batch.find((t: any) => (typeof t === 'string' ? t : t.truckSuffix) === selectedTruck.suffix);
-      if (truck && typeof truck !== 'string') {
-        setSelectedTruck({ ...selectedTruck, rules: truck.destinationRules || [] });
+      if (Array.isArray(batch)) {
+        const truck = batch.find((t: any) => (typeof t === 'string' ? t : t.truckSuffix) === selectedTruck.suffix);
+        if (truck && typeof truck !== 'string') {
+          setSelectedTruck({ ...selectedTruck, rules: truck.destinationRules || [] });
+        }
       }
       
       setNewRule({ destination: '', extraLiters: selectedTruck.batch });
@@ -214,11 +216,13 @@ export default function TruckBatches() {
       });
       
       // React Query will auto-refresh batches, update selected truck
-      const batchKey = `batch_${selectedTruck.batch}` as keyof typeof batches;
+      const batchKey = selectedTruck.batch.toString() as keyof typeof batches;
       const batch = batches[batchKey];
-      const truck = batch.find((t: any) => (typeof t === 'string' ? t : t.truckSuffix) === selectedTruck.suffix);
-      if (truck && typeof truck !== 'string') {
-        setSelectedTruck({ ...selectedTruck, rules: truck.destinationRules || [] });
+      if (Array.isArray(batch)) {
+        const truck = batch.find((t: any) => (typeof t === 'string' ? t : t.truckSuffix) === selectedTruck.suffix);
+        if (truck && typeof truck !== 'string') {
+          setSelectedTruck({ ...selectedTruck, rules: truck.destinationRules || [] });
+        }
       }
       
       alert(`✓ Destination rule deleted for ${selectedTruck.suffix.toUpperCase()}`);
@@ -267,7 +271,7 @@ export default function TruckBatches() {
     const badgeColor = `bg-${color}-600`;
 
     return (
-      <div className={`${bgColor} ${borderColor} border-2 rounded-lg p-6`}>
+      <div key={batchSize} className={`${bgColor} ${borderColor} border-2 rounded-lg p-6`}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className={`p-2 ${badgeColor} rounded-lg`}>
