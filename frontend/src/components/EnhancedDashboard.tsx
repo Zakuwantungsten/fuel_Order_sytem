@@ -411,7 +411,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     return (
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden transition-colors">
         {/* Main Content - Full screen without sidebar */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+        <main id="main-scroll-container" className="flex-1 overflow-y-auto overflow-x-hidden">
           {renderActiveComponent()}
         </main>
       </div>
@@ -423,7 +423,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     return (
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden transition-colors">
         {/* Main Content - Full screen without sidebar */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+        <main id="main-scroll-container" className="flex-1 overflow-y-auto overflow-x-hidden">
           {renderActiveComponent()}
         </main>
       </div>
@@ -686,7 +686,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 transition-colors">
+        <main id="main-scroll-container" className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 transition-colors">
           {successMessage && (
             <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center justify-between">
               <span className="text-green-800 dark:text-green-200">{successMessage}</span>

@@ -26,6 +26,23 @@ const Pagination: React.FC<PaginationProps> = ({
   const [dropdownAlignment, setDropdownAlignment] = useState<'left' | 'right'>('right');
   const [dropdownDirection, setDropdownDirection] = useState<'down' | 'up'>('down');
   const perPageDropdownRef = useRef<HTMLDivElement>(null);
+  // Track how many times a page-navigation occurred so the effect fires on
+  // every click including when the page number itself doesn't change
+  // (e.g. items-per-page change keeps page 1 → still need to scroll).
+  const [scrollTick, setScrollTick] = useState(0);
+
+  // Scroll to top after every page navigation, once React has committed the new
+  // content to the DOM.  The app uses h-screen + overflow-y-auto on <main>, so
+  // the window itself never scrolls — we must scroll the <main> element.
+  useEffect(() => {
+    if (scrollTick === 0) return; // skip the initial mount
+    const mainEl = document.getElementById('main-scroll-container');
+    if (mainEl) {
+      mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [scrollTick]);
   
   const startItem = (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
@@ -100,6 +117,12 @@ const Pagination: React.FC<PaginationProps> = ({
     return pages;
   };
 
+  // Scroll to top of page whenever the user navigates to a different page
+  const handlePageChange = (page: number) => {
+    setScrollTick((t) => t + 1);
+    onPageChange(page);
+  };
+
   if (totalItems === 0) return null;
 
   return (
@@ -135,6 +158,7 @@ const Pagination: React.FC<PaginationProps> = ({
                       key={option}
                       type="button"
                       onClick={() => {
+                        setScrollTick((t) => t + 1);
                         onItemsPerPageChange(option);
                         setShowPerPageDropdown(false);
                       }}
@@ -157,7 +181,7 @@ const Pagination: React.FC<PaginationProps> = ({
       <div className="flex items-center gap-1">
         {/* First page */}
         <button
-          onClick={() => onPageChange(1)}
+          onClick={() => handlePageChange(1)}
           disabled={currentPage === 1}
           className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent transition-colors"
           title="First page"
@@ -167,7 +191,7 @@ const Pagination: React.FC<PaginationProps> = ({
 
         {/* Previous page */}
         <button
-          onClick={() => onPageChange(currentPage - 1)}
+          onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage === 1}
           className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent transition-colors"
           title="Previous page"
@@ -183,7 +207,7 @@ const Pagination: React.FC<PaginationProps> = ({
                 <span className="px-2 py-1 text-gray-500 dark:text-gray-400">...</span>
               ) : (
                 <button
-                  onClick={() => onPageChange(page as number)}
+                  onClick={() => handlePageChange(page as number)}
                   className={`min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors ${
                     currentPage === page
                       ? 'bg-primary-600 text-white'
@@ -199,7 +223,7 @@ const Pagination: React.FC<PaginationProps> = ({
 
         {/* Next page */}
         <button
-          onClick={() => onPageChange(currentPage + 1)}
+          onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent transition-colors"
           title="Next page"
@@ -209,7 +233,7 @@ const Pagination: React.FC<PaginationProps> = ({
 
         {/* Last page */}
         <button
-          onClick={() => onPageChange(totalPages)}
+          onClick={() => handlePageChange(totalPages)}
           disabled={currentPage === totalPages}
           className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent transition-colors"
           title="Last page"
