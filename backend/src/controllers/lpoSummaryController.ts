@@ -1420,8 +1420,10 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // Get all LPO documents for this year (INCLUDING ARCHIVED DATA)
-    const startDate = new Date(year, 0, 1); // Jan 1
-    const endDate = new Date(year, 11, 31, 23, 59, 59); // Dec 31
+    // Use Date.UTC so .toISOString() always returns the correct year string
+    // regardless of the server's local timezone.
+    const startDate = new Date(Date.UTC(year, 0, 1)); // Jan 1 UTC
+    const endDate = new Date(Date.UTC(year, 11, 31, 23, 59, 59)); // Dec 31 UTC
     
     const allLPOSummaries = await unifiedExportService.getAllLPOSummaries({
       startDate,

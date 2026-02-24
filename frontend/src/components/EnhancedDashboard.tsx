@@ -30,7 +30,8 @@ import {
   FileBarChart,
   Activity,
   Building2,
-  Receipt
+  Receipt,
+  FileUp
 } from 'lucide-react';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
@@ -53,6 +54,7 @@ import Dashboard from '../pages/Dashboard';
 import DeliveryOrders from '../pages/DeliveryOrders';
 import LPOs from '../pages/LPOs';
 import FuelRecordsPage from '../pages/FuelRecords';
+import ExcelImport from '../pages/ExcelImport';
 import TruckBatchesPage from '../pages/TruckBatches';
 import FleetTracking from '../pages/FleetTracking';
 import CheckpointManagement from '../pages/CheckpointManagement';
@@ -80,13 +82,13 @@ const getInitialTab = (userRole: string): string => {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports',
         'sa_overview', 'sa_database', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_config', 
-        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'driver_credentials'
+        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'admin' || userRole === 'boss') {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'fleet_tracking',
-        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports', 'driver_credentials'
+        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'fuel_order_maker') {
@@ -247,6 +249,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_archival', label: 'Data Archival', icon: Archive },
         { id: 'sa_backup', label: 'Backup & Recovery', icon: Database },
         { id: 'sa_analytics', label: 'Analytics & Reports', icon: FileBarChart },
+        { id: 'excel_import', label: 'Excel Import', icon: FileUp },
       ];
     }
 
@@ -268,6 +271,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'admin_routes', label: 'Routes', icon: Route },
         { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
         { id: 'admin_reports', label: 'Admin Reports', icon: TrendingUp },
+        { id: 'excel_import', label: 'Excel Import', icon: FileUp },
       ];
     }
 
@@ -375,6 +379,9 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       
       case 'driver_credentials':
         return <DriverCredentialsManager />;
+      
+      case 'excel_import':
+        return <ExcelImport />;
       
       case 'manager_view':
         return <ManagerView user={user} />;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import usePersistedState from '../hooks/usePersistedState';
 import { X, CheckCircle, Clock, Bell, Trash2, Eye } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,7 +24,7 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'resolved'>('all');
+  const [filter, setFilter] = usePersistedState<'all' | 'pending' | 'resolved'>('notif:filter', 'all');
 
   // Helper function to tailor notification message based on viewer's role
   const getTailoredMessage = (notification: Notification): string => {

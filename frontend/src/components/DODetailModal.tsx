@@ -23,7 +23,7 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
       
       // Get API base URL and auth token
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-      const token = localStorage.getItem('fuel_order_token');
+      const token = sessionStorage.getItem('fuel_order_token');
       
       if (!token) {
         alert('Authentication required. Please log in again.');

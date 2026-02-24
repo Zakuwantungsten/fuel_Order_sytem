@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
@@ -52,46 +53,59 @@ const getExtraAmount = (field: string, value: number | undefined): number => {
 };
 
 const FuelRecords = () => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistedState('fr:searchTerm', '');
   const [records, setRecords] = useState<FuelRecord[]>([]);
   const [lpos, setLpos] = useState<LPOEntry[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<FuelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FuelRecord | undefined>();
-  const [routeFilter, setRouteFilter] = useState('');
-  const [routeTypeFilter, setRouteTypeFilter] = useState<'IMPORT' | 'EXPORT'>('IMPORT');
+  const [routeFilter, setRouteFilter] = usePersistedState('fr:routeFilter', '');
+  const [routeTypeFilter, setRouteTypeFilter] = usePersistedState<'IMPORT' | 'EXPORT'>('fr:routeTypeFilter', 'IMPORT');
   const [availableRoutes, setAvailableRoutes] = useState<any[]>([]);
   const [exportYear, setExportYear] = useState<number>(() => new Date().getFullYear());
-  const [viewMode, setViewMode] = useState<'records' | 'analytics'>('records');
+  const [viewMode, setViewMode] = usePersistedState<'records' | 'analytics'>('fr:viewMode', 'records');
   
   // Details modal state
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | number | null>(null);
   
-  // Month navigation state - check URL params first, then default to current month
+  // Month navigation state — priority: URL params (deep-links) > localStorage > current month
   const [selectedMonth, setSelectedMonth] = useState(() => {
-    // Check URL params on initial mount
+    // URL params take highest priority (for deep links from notifications)
     const url = new URL(window.location.href);
     const yearParam = url.searchParams.get('year');
     const monthParam = url.searchParams.get('month');
-    
+
     if (yearParam && monthParam) {
       const targetMonth = `${yearParam}-${String(monthParam).padStart(2, '0')}`;
       console.log('Initializing selectedMonth from URL params:', targetMonth);
       return targetMonth;
     }
-    
+
+    // Fall back to persisted value
+    try {
+      const stored = localStorage.getItem('fuel-order:fr:selectedMonth');
+      if (stored) return JSON.parse(stored) as string;
+    } catch { /* ignore */ }
+
     // Default to current month
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Keep selectedMonth persisted whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('fuel-order:fr:selectedMonth', JSON.stringify(selectedMonth));
+    } catch { /* ignore */ }
+  }, [selectedMonth]);
   
   const [searchParams] = useSearchParams();
   
   // Pagination state (server-side)
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = usePersistedState('fr:itemsPerPage', 10);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import usePersistedState from '../../hooks/usePersistedState';
 import { FileSearch, Download, ChevronDown, Check } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
 
@@ -30,7 +31,7 @@ const SEVERITY_TYPES = [
 export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = usePersistedState('audit:filters', {
     action: '',
     severity: '',
     username: '',

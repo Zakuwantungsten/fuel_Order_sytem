@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import usePersistedState from '../hooks/usePersistedState';
 import { Search, CheckCircle, XCircle, Fuel, Truck, MapPin } from 'lucide-react';
 import Pagination from './Pagination';
 
@@ -21,7 +22,7 @@ interface StationViewProps {
 
 export function StationView({ user }: StationViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'fulfilled'>('all');
+  const [filterStatus, setFilterStatus] = usePersistedState<'all' | 'pending' | 'fulfilled'>('sv:filterStatus', 'all');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);

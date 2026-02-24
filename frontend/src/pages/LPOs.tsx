@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2 } from 'lucide-react';
 import XLSX from 'xlsx-js-style';
@@ -24,16 +25,16 @@ const MONTH_NAMES = [
 
 const LPOs = () => {
   const { user } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistedState('lpo:searchTerm', '');
   const [lpos, setLpos] = useState<LPOEntry[]>([]);
   const [filteredLpos, setFilteredLpos] = useState<LPOEntry[]>([]);
   const [workbooks, setWorkbooks] = useState<LPOWorkbookType[]>([]);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+  // selectedYear — priority: URL params (deep-links) > localStorage > current year
   const [selectedYear, setSelectedYear] = useState<number>(() => {
-    // Check URL params on initial mount
     const url = new URL(window.location.href);
     const yearParam = url.searchParams.get('year');
-    
+
     if (yearParam) {
       const year = parseInt(yearParam);
       if (!isNaN(year)) {
@@ -41,38 +42,39 @@ const LPOs = () => {
         return year;
       }
     }
-    
+
+    // Fall back to persisted value
+    try {
+      const stored = localStorage.getItem('fuel-order:lpo:selectedYear');
+      if (stored) return JSON.parse(stored) as number;
+    } catch { /* ignore */ }
+
     // Default to current year
     return new Date().getFullYear();
   });
+
+  // Keep selectedYear persisted whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('fuel-order:lpo:selectedYear', JSON.stringify(selectedYear));
+    } catch { /* ignore */ }
+  }, [selectedYear]);
   const [loading, setLoading] = useState(true);
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
-  const [stationFilter, setStationFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
-  // Month filter - check URL params first, then default to current month (1-indexed)
-  const [selectedMonths, setSelectedMonths] = useState<number[]>(() => {
-    // Check URL params on initial mount
-    const url = new URL(window.location.href);
-    const monthParam = url.searchParams.get('month');
-    
-    if (monthParam) {
-      const month = parseInt(monthParam);
-      if (!isNaN(month) && month >= 1 && month <= 12) {
-        console.log('Initializing selectedMonths from URL params:', [month]);
-        return [month];
-      }
-    }
-    
-    // Default to current month
-    return [new Date().getMonth() + 1];
-  });
+  const [stationFilter, setStationFilter] = usePersistedState('lpo:stationFilter', '');
+  const [dateFilter, setDateFilter] = usePersistedState('lpo:dateFilter', '');
+  // Period filter — {year, month} pairs, same as DO management
+  const [selectedPeriods, setSelectedPeriods] = usePersistedState<Array<{year: number; month: number}>>(
+    'lpo:selectedPeriods',
+    [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]
+  );
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [searchParams] = useSearchParams();
   const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account'] as const;
   type ViewMode = typeof VIEW_MODES[number];
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = usePersistedState<ViewMode>('lpo:viewMode', 'list');
   const [selectedWorkbookId, setSelectedWorkbookId] = useState<string | number | null>(null);
-  const [summaryFilters, setSummaryFilters] = useState({
+  const [summaryFilters, setSummaryFilters] = usePersistedState('lpo:summaryFilters', {
     stations: [] as string[],
     dateFrom: '',
     dateTo: ''
@@ -86,7 +88,7 @@ const LPOs = () => {
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [itemsPerPage, setItemsPerPage] = usePersistedState('lpo:itemsPerPage', 25);
 
   // Filter dropdown states
   const [showWorkbookYearDropdown, setShowWorkbookYearDropdown] = useState(false);
@@ -148,21 +150,21 @@ const LPOs = () => {
         console.log('Current selectedYear:', selectedYear);
         console.log('Current selectedMonths:', selectedMonths);
         
-        // Set year if provided (important: do this first)
+        // Set year if provided (used for workbook display)
+        let urlFilterYear = new Date().getFullYear();
         if (yearParam) {
           const year = parseInt(yearParam);
           if (!isNaN(year)) {
-            console.log('Setting year to:', year);
             setSelectedYear(year);
+            urlFilterYear = year;
           }
         }
         
-        // Set month if provided (this will trigger filtering)
+        // Set period filter if month provided
         if (monthParam) {
           const month = parseInt(monthParam);
           if (!isNaN(month) && month >= 1 && month <= 12) {
-            console.log('Setting month filter to:', month);
-            setSelectedMonths([month]);
+            setSelectedPeriods([{ year: urlFilterYear, month }]);
           }
         }
         
@@ -292,36 +294,44 @@ const LPOs = () => {
     if (filtersInitialized) {
       filterLpos();
     }
-  }, [searchTerm, stationFilter, dateFilter, selectedMonths, selectedYear, lpos, filtersInitialized]); // Added selectedYear!
+  }, [searchTerm, stationFilter, dateFilter, selectedPeriods, lpos, filtersInitialized]);
 
   // Helper to parse date from various formats (e.g., "2-Dec", "1-Dec", "2025-12-02")
   const getMonthFromDate = (dateStr: string): number | null => {
     if (!dateStr) return null;
-    
-    // Try parsing "D-MMM" format (e.g., "2-Dec")
-    const shortMonthMatch = dateStr.match(/^\d{1,2}-(\w{3})$/i);
-    if (shortMonthMatch) {
-      const monthAbbr = shortMonthMatch[1].toLowerCase();
-      const monthMap: { [key: string]: number } = {
-        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
-      };
-      return monthMap[monthAbbr] || null;
-    }
-    
-    // Try parsing ISO format "YYYY-MM-DD"
-    const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (isoMatch) {
-      return parseInt(isoMatch[2], 10);
-    }
-    
-    // Try parsing as Date object
-    const date = new Date(dateStr);
-    if (!isNaN(date.getTime())) {
-      return date.getMonth() + 1;
-    }
-    
+    const MON: Record<string, number> = {
+      jan:1, feb:2, mar:3, apr:4, may:5, jun:6,
+      jul:7, aug:8, sep:9, oct:10, nov:11, dec:12,
+    };
+    // ISO "YYYY-MM-DD"
+    const iso = dateStr.match(/^\d{4}-(\d{2})-\d{2}/);
+    if (iso) return parseInt(iso[1], 10);
+    // "DD-Mon-YYYY" or "DD-Mon"
+    const dmon = dateStr.match(/^\d{1,2}[\-\/\s]([A-Za-z]{3,})/i);
+    if (dmon) return MON[dmon[1].toLowerCase().substring(0, 3)] ?? null;
+    // Native JS fallback
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d.getMonth() + 1;
+  };
+
+  // Extract year from a stored date string (ISO or DD-Mon-YYYY)
+  const getYearFromDate = (dateStr: string): number | null => {
+    if (!dateStr) return null;
+    const iso = dateStr.match(/^(\d{4})-\d{2}-\d{2}/);
+    if (iso) return parseInt(iso[1]);
+    const dmy = dateStr.match(/^\d{1,2}[\-\/\s][A-Za-z]+[\-\/\s](\d{4})$/);
+    if (dmy) return parseInt(dmy[1]);
     return null;
+  };
+
+  // Get the effective year for an LPO record.
+  // Imported data: year is embedded in the ISO date ("2025-12-15" → 2025).
+  // Manually-created data: date is "DD-Mon" (no year) → fall back to createdAt year.
+  const getEffectiveYear = (lpo: LPOEntry): number => {
+    const fromDate = getYearFromDate(lpo.date);
+    if (fromDate !== null) return fromDate;
+    if (lpo.createdAt) return new Date(lpo.createdAt).getFullYear();
+    return new Date().getFullYear();
   };
 
   // Get unique stations from the data
@@ -335,16 +345,22 @@ const LPOs = () => {
     return Array.from(stations).sort();
   }, [lpos]);
 
-  // Get months that have data
-  const availableMonths = useMemo(() => {
-    const months = new Set<number>();
+  // All year+month periods that have LPO data — used for the period picker dropdown.
+  // getEffectiveYear handles both ISO dates (imported) and DD-Mon dates (manually created).
+  const availablePeriods = useMemo(() => {
+    const seen = new Map<string, { year: number; month: number }>();
     lpos.forEach(lpo => {
+      const year = getEffectiveYear(lpo);
       const month = getMonthFromDate(lpo.date);
       if (month !== null) {
-        months.add(month);
+        const key = `${year}-${month}`;
+        if (!seen.has(key)) seen.set(key, { year, month });
       }
     });
-    return Array.from(months).sort((a, b) => a - b);
+    // Sort: most recent year first, most recent month first within each year
+    return Array.from(seen.values()).sort((a, b) =>
+      b.year !== a.year ? b.year - a.year : b.month - a.month
+    );
   }, [lpos]);
 
   // Close dropdowns when clicking outside
@@ -425,6 +441,17 @@ const LPOs = () => {
       setSelectedYear(urlYear && !isNaN(urlYear) ? urlYear : currentYear);
     }
   };
+
+  // Merge all unique years (via getEffectiveYear) into availableYears so that
+  // the workbook export year picker shows all years including imported historical data.
+  useEffect(() => {
+    if (lpos.length === 0) return;
+    const yearsFromData = [...new Set(lpos.map(lpo => getEffectiveYear(lpo)))].sort((a, b) => b - a);
+    setAvailableYears(prev => {
+      const merged = [...new Set([...prev, ...yearsFromData])].sort((a, b) => b - a);
+      return merged.join(',') === prev.join(',') ? prev : merged;
+    });
+  }, [lpos]);
 
   const handleExportWorkbook = async (year: number) => {
     try {
@@ -580,65 +607,44 @@ const LPOs = () => {
     setOpenDropdowns({});
   };
 
-  // Toggle month selection
-  const toggleMonth = (month: number) => {
-    setSelectedMonths(prev => {
-      if (prev.includes(month)) {
-        // Don't allow deselecting all months
-        if (prev.length === 1) return prev;
-        return prev.filter(m => m !== month);
-      } else {
-        return [...prev, month].sort((a, b) => a - b);
+  // Toggle a year+month period on/off (at least one must remain selected)
+  const togglePeriod = (year: number, month: number) => {
+    setSelectedPeriods(prev => {
+      const exists = prev.some(p => p.year === year && p.month === month);
+      if (exists) {
+        if (prev.length === 1) return prev; // keep at least one selected
+        return prev.filter(p => !(p.year === year && p.month === month));
       }
+      return [...prev, { year, month }].sort((a, b) =>
+        b.year !== a.year ? b.year - a.year : b.month - a.month
+      );
     });
   };
 
-  // Get display text for selected months
-  const getMonthsDisplayText = (): string => {
-    if (selectedMonths.length === 0) return 'Select Month';
-    if (selectedMonths.length === 1) return MONTH_NAMES[selectedMonths[0] - 1];
-    if (selectedMonths.length === availableMonths.length && availableMonths.length > 0) return 'All Months';
-    return `${selectedMonths.length} months`;
+  // Display text for the period picker button
+  const getPeriodsDisplayText = (): string => {
+    if (selectedPeriods.length === 0) return 'Select Period';
+    if (selectedPeriods.length === 1) {
+      const p = selectedPeriods[0];
+      return `${MONTH_NAMES[p.month - 1]} ${p.year}`;
+    }
+    if (selectedPeriods.length === availablePeriods.length && availablePeriods.length > 0) return 'All Periods';
+    return `${selectedPeriods.length} periods`;
   };
 
   const filterLpos = () => {
-    console.log('=== FILTER LPOS START ===');
-    console.log('Total LPOs before filter:', lpos.length);
-    console.log('Selected Year:', selectedYear);
-    console.log('Selected Months:', selectedMonths);
-    
     let filtered = [...lpos];
 
-    // Filter by selected year using createdAt timestamp
-    filtered = filtered.filter((lpo) => {
-      const lpoDate = lpo.createdAt ? new Date(lpo.createdAt) : null;
-      if (!lpoDate) {
-        console.log('LPO without createdAt:', lpo.lpoNo);
-        return true; // Keep if no createdAt timestamp
-      }
-      const lpoYear = lpoDate.getFullYear();
-      const matches = lpoYear === selectedYear;
-      if (!matches) {
-        console.log(`Filtering out LPO ${lpo.lpoNo}: year ${lpoYear} !== ${selectedYear}`);
-      }
-      return matches;
-    });
-    
-    console.log('After year filter:', filtered.length);
-
-    // Filter by selected months
-    if (selectedMonths.length > 0 && selectedMonths.length < 12) {
+    // Period filter — match (year, month) pairs exactly, same as DO management.
+    // getEffectiveYear correctly handles both ISO imported dates and DD-Mon legacy dates.
+    if (selectedPeriods.length > 0) {
       filtered = filtered.filter((lpo) => {
+        const lpoYear = getEffectiveYear(lpo);
         const lpoMonth = getMonthFromDate(lpo.date);
-        const matches = lpoMonth !== null && selectedMonths.includes(lpoMonth);
-        if (!matches) {
-          console.log(`Filtering out LPO ${lpo.lpoNo}: month ${lpoMonth} not in`, selectedMonths);
-        }
-        return matches;
+        if (lpoMonth === null) return true; // no month info — keep
+        return selectedPeriods.some(p => p.year === lpoYear && p.month === lpoMonth);
       });
     }
-    
-    console.log('After month filter:', filtered.length);
 
     if (searchTerm) {
       filtered = filtered.filter(
@@ -654,14 +660,11 @@ const LPOs = () => {
     }
 
     if (dateFilter) {
-      // Convert ISO date (e.g., "2026-01-13") to match LPO date format (e.g., "13-Jan")
+      // dateFilter is ISO "YYYY-MM-DD"; LPO dates may be ISO or legacy "D-Mon"
       try {
-        const selectedDate = new Date(dateFilter);
-        const day = selectedDate.getDate();
-        const month = selectedDate.toLocaleDateString('en-US', { month: 'short' });
-        const formattedDate = `${day}-${month}`; // "13-Jan"
-        
-        filtered = filtered.filter((lpo) => lpo.date === formattedDate);
+        const d = new Date(dateFilter);
+        const legacy = `${d.getDate()}-${d.toLocaleDateString('en-US', { month: 'short' })}`; // "13-Jan"
+        filtered = filtered.filter((lpo) => lpo.date === dateFilter || lpo.date === legacy);
       } catch (error) {
         console.error('Error parsing date filter:', error);
       }
@@ -671,18 +674,18 @@ const LPOs = () => {
     setCurrentPage(1); // Reset to page 1 when filters change
   };
 
-  // Auto-fallback to previous month if current month has no data
+  // Auto-fallback: if the default current period (today's year+month) has no data,
+  // automatically switch to the most recent period that does.
   useEffect(() => {
     if (loading || lpos.length === 0 || !filtersInitialized) return;
-    const currentMonth = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
-    // Only auto-fallback when on the default current-month/year selection
-    if (selectedMonths.length !== 1 || selectedMonths[0] !== currentMonth || selectedYear !== currentYear) return;
-    if (filteredLpos.length === 0) {
-      const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-      setSelectedMonths([prevMonth]);
+    const now = new Date();
+    const defYear = now.getFullYear(), defMonth = now.getMonth() + 1;
+    // Only auto-switch when still on the initial default selection
+    if (selectedPeriods.length !== 1 || selectedPeriods[0].year !== defYear || selectedPeriods[0].month !== defMonth) return;
+    if (filteredLpos.length === 0 && availablePeriods.length > 0) {
+      setSelectedPeriods([availablePeriods[0]]);
     }
-  }, [filteredLpos, loading, filtersInitialized]);
+  }, [filteredLpos, loading, filtersInitialized, availablePeriods]);
 
   // Add month-based serial numbers to LPOs
   const lposWithMonthlySerialNumbers = useMemo(() => {
@@ -691,9 +694,8 @@ const LPOs = () => {
     
     filteredLpos.forEach(lpo => {
       const month = getMonthFromDate(lpo.date);
-      const lpoDate = lpo.createdAt ? new Date(lpo.createdAt) : new Date();
-      const year = lpoDate.getFullYear();
-      const key = `${year}-${month}`; // e.g., "2026-1" for January 2026
+      const year = getEffectiveYear(lpo); // ISO date year OR createdAt year for DD-Mon records
+      const key = `${year}-${month}`; // e.g., "2025-10" for October 2025
       
       if (!groupedByMonth[key]) {
         groupedByMonth[key] = [];
@@ -1281,7 +1283,7 @@ const LPOs = () => {
             >
               <span className="flex items-center">
                 <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                {getMonthsDisplayText()}
+                {getPeriodsDisplayText()}
               </span>
               <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
             </button>
@@ -1290,46 +1292,58 @@ const LPOs = () => {
               <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-y-auto left-0 right-0">
                 {/* Quick Select Options */}
                 <div className="p-2 border-b border-gray-200 dark:border-gray-600">
-                  {availableMonths.includes(new Date().getMonth() + 1) && (
+                  {availablePeriods.some(p => p.year === new Date().getFullYear() && p.month === new Date().getMonth() + 1) && (
                     <button
                       onClick={() => {
-                        setSelectedMonths([new Date().getMonth() + 1]);
+                        setSelectedPeriods([{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
                         setShowMonthDropdown(false);
                       }}
                       className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
                     >
-                      Current Month ({MONTH_NAMES[new Date().getMonth()]})
+                      Current Month ({MONTH_NAMES[new Date().getMonth()]} {new Date().getFullYear()})
                     </button>
                   )}
                   <button
                     onClick={() => {
-                      setSelectedMonths(availableMonths.length > 0 ? [...availableMonths] : [new Date().getMonth() + 1]);
+                      setSelectedPeriods(availablePeriods.length > 0 ? [...availablePeriods] : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
                       setShowMonthDropdown(false);
                     }}
                     className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
                   >
-                    All Months ({availableMonths.length})
+                    All Periods ({availablePeriods.length})
                   </button>
                 </div>
-                
-                {/* Month Checkboxes - Only show months that have data */}
+
+                {/* Period checkboxes — grouped by year */}
                 <div className="p-2">
-                  {availableMonths.length > 0 ? (
-                    availableMonths.map((monthNum) => (
-                      <label
-                        key={monthNum}
-                        className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedMonths.includes(monthNum)}
-                          onChange={() => toggleMonth(monthNum)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{MONTH_NAMES[monthNum - 1]}</span>
-                      </label>
-                    ))
-                  ) : (
+                  {availablePeriods.length > 0 ? (() => {
+                    const byYear = availablePeriods.reduce<Record<number, number[]>>((acc, p) => {
+                      if (!acc[p.year]) acc[p.year] = [];
+                      acc[p.year].push(p.month);
+                      return acc;
+                    }, {});
+                    return Object.entries(byYear)
+                      .sort(([a], [b]) => Number(b) - Number(a))
+                      .map(([yearStr, months]) => (
+                        <div key={yearStr}>
+                          <div className="px-2 pt-2 pb-0.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{yearStr}</div>
+                          {months.map(monthNum => (
+                            <label
+                              key={`${yearStr}-${monthNum}`}
+                              className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedPeriods.some(p => p.year === Number(yearStr) && p.month === monthNum)}
+                                onChange={() => { togglePeriod(Number(yearStr), monthNum); setCurrentPage(1); }}
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                              />
+                              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{MONTH_NAMES[monthNum - 1]}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ));
+                  })() : (
                     <div className="px-2 py-1.5 text-sm text-gray-500 dark:text-gray-400">
                       No data available
                     </div>
@@ -1389,7 +1403,11 @@ const LPOs = () => {
               setSearchTerm('');
               setStationFilter('');
               setDateFilter('');
-              setSelectedMonths([new Date().getMonth() + 1]); // Reset to current month
+              setSelectedPeriods(
+                availablePeriods.length > 0
+                  ? [availablePeriods[0]]
+                  : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]
+              );
             }}
             className="inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >

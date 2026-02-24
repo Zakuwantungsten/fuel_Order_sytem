@@ -181,7 +181,7 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
                   <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}>1</td>
                   <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}>{order.cargoType || 'GOODS'}</td>
                   <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}>
-                    {order.rateType === 'per_ton' ? `${order.tonnages} TONS` : '-'}
+                    {order.rateType === 'per_ton' ? `${order.tonnages ?? 0} TONS` : '-'}
                   </td>
                   <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}></td>
                 </tr>
@@ -218,9 +218,9 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
             <div style={{ marginBottom: '15px' }}>
               <div style={{ fontSize: '10px', color: '#333333', marginBottom: '10px' }}>REMARKS:</div>
               <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#333333', textAlign: 'center', padding: '10px 0' }}>
-                {order.rateType === 'per_ton' 
-                  ? `$${order.ratePerTon} PER TON`
-                  : `TOTAL: $${order.ratePerTon?.toLocaleString() || 0}`}
+                {order.rateType === 'per_ton' || !order.rateType
+                  ? `$${order.ratePerTon ?? 0} PER TON`
+                  : `TOTAL: $${(order.totalAmount ?? order.ratePerTon ?? 0).toLocaleString()}`}
               </div>
             </div>
 

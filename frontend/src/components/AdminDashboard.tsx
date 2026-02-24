@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import usePersistedState from '../hooks/usePersistedState';
 import {
   Settings,
   Users,
@@ -1073,8 +1074,8 @@ function UsersTab({
   onShowCreateUser: () => void;
   onUsersCreated: () => void;
 }) {
-  const [filter, setFilter] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  const [filter, setFilter] = usePersistedState('admin:usersTab:filter', '');
+  const [roleFilter, setRoleFilter] = usePersistedState('admin:usersTab:roleFilter', '');
   const [showBatchCreate, setShowBatchCreate] = useState(false);
   
   // Pagination state

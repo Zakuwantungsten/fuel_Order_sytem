@@ -7,7 +7,10 @@ import { validate } from '../utils/validate';
 
 const router = Router();
 
-// All routes require authentication and admin-level access
+// Public (auth required but any role) — must be registered BEFORE the authorize middleware
+router.get('/maintenance-mode/status', asyncHandler(adminController.getMaintenanceStatus));
+
+// All routes below require authentication and admin-level access
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'boss'));
 
@@ -255,7 +258,7 @@ router.post('/email/weekly-summary', authorize('super_admin'), asyncHandler(admi
 router.get('/system-settings', authorize('super_admin'), asyncHandler(adminController.getSystemSettings));
 router.put('/system-settings', authorize('super_admin'), asyncHandler(adminController.updateSystemSettings));
 router.post('/maintenance-mode/toggle', authorize('super_admin'), asyncHandler(adminController.toggleMaintenanceMode));
-router.get('/maintenance-mode/status', asyncHandler(adminController.getMaintenanceStatus)); // Public endpoint
+// Note: GET /maintenance-mode/status is registered above the authorize middleware (any authenticated user)
 
 // Security Settings
 router.get('/security-settings', authorize('super_admin'), asyncHandler(adminController.getSecuritySettings));

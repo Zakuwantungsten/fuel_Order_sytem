@@ -334,30 +334,30 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
       startDate.setMonth(endDate.getMonth() - 6);
     }
 
-    // NOTE: The 'date' field on all models is stored as a String (e.g. "15-Jan"),
-    // so date-range comparisons must use proper Date fields:
-    //   DeliveryOrder / FuelRecord / YardFuelDispense → createdAt  (timestamps: true)
-    //   LPOEntry → actualDate  (Date field auto-populated from the string date)
-    const createdAtFilter = { $gte: startDate, $lte: endDate };
+    // Use actual date fields so imported historical data shows in the correct period.
+    // DeliveryOrder.date and FuelRecord.date are proper Date fields.
+    // LPOEntry uses actualDate (set by import pipeline) with createdAt as fallback
+    // for any legacy records that pre-date the actualDate field.
+    const dateFilter = { $gte: startDate, $lte: endDate };
 
     // Fetch all necessary data
     const [deliveryOrders, fuelRecords, lpoEntries, yardFuelDispenses] = await Promise.all([
-      DeliveryOrder.find({ isDeleted: false, createdAt: createdAtFilter })
+      DeliveryOrder.find({ isDeleted: false, date: dateFilter })
         .select('date tonnages ratePerTon truckNo from to importOrExport')
         .lean(),
-      FuelRecord.find({ isDeleted: false, isCancelled: { $ne: true }, createdAt: createdAtFilter })
+      FuelRecord.find({ isDeleted: false, isCancelled: { $ne: true }, date: dateFilter })
         .select('date totalLts mmsaYard tangaYard darYard truckNo journeyStatus balance')
         .lean(),
       LPOEntry.find({
         isDeleted: false,
         $or: [
-          { actualDate: createdAtFilter },
-          { actualDate: { $exists: false }, createdAt: createdAtFilter },
+          { actualDate: dateFilter },
+          { actualDate: { $exists: false }, createdAt: dateFilter },
         ],
       })
         .select('date actualDate ltrs pricePerLtr dieselAt truckNo')
         .lean(),
-      YardFuelDispense.find({ isDeleted: false, createdAt: createdAtFilter })
+      YardFuelDispense.find({ isDeleted: false, createdAt: dateFilter })
         .select('date liters yard status')
         .lean(),
     ]);
@@ -450,9 +450,9 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const monthlyData: any = {};
 
-    // Group fuel data by month
+    // Group fuel data by month — use actual date field
     fuelRecords.forEach((record) => {
-      const date = new Date((record as any).createdAt);
+      const date = record.date ? new Date(record.date) : new Date((record as any).createdAt);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
       
       if (!monthlyData[monthKey]) {
@@ -469,9 +469,9 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
       monthlyData[monthKey].fuel += record.totalLts || 0;
     });
 
-    // Group DO data by month
+    // Group DO data by month — use actual date field
     deliveryOrders.forEach((DO) => {
-      const date = new Date(DO.date) instanceof Date && !isNaN(new Date(DO.date).getTime())
+      const date = DO.date && !isNaN(new Date(DO.date).getTime())
         ? new Date(DO.date)
         : new Date((DO as any).createdAt);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
@@ -490,7 +490,7 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
       monthlyData[monthKey].dos += 1;
     });
 
-    // Group LPO data by month
+    // Group LPO data by month — prefer actualDate, fall back to createdAt for legacy records
     lpoEntries.forEach((lpo) => {
       const date = (lpo as any).actualDate
         ? new Date((lpo as any).actualDate)
@@ -601,51 +601,56 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const fuelStartDate = new Date();
     fuelStartDate.setMonth(now.getMonth() - 12);
 
-    // Fetch data for charts using createdAt timestamps for proper date filtering
+    // Use actual date fields for correct historical bucketing.
+    // FuelRecord.date and DeliveryOrder.date are proper Date fields.
+    // LPOEntry uses actualDate (set inline by import) with createdAt fallback for legacy records.
     const [fuelRecords, deliveryOrders, lpoEntries] = await Promise.all([
-      FuelRecord.find({ 
+      FuelRecord.find({
         isDeleted: false,
         isCancelled: { $ne: true },
-        createdAt: { $gte: fuelStartDate, $lte: now }
+        date: { $gte: fuelStartDate, $lte: now },
       })
-        .select('date createdAt totalLts journeyStatus')
+        .select('date totalLts journeyStatus')
         .lean(),
       DeliveryOrder.find({
         isDeleted: false,
-        createdAt: { $gte: doStartDate, $lte: doEndDate }
+        date: { $gte: doStartDate, $lte: doEndDate },
       })
-        .select('date createdAt doNumber')
+        .select('date doNumber')
         .lean(),
       LPOEntry.find({
         isDeleted: false,
-        createdAt: { $gte: lpoStartDate, $lte: now }
+        $or: [
+          { actualDate: { $gte: lpoStartDate, $lte: now } },
+          { actualDate: { $exists: false }, createdAt: { $gte: lpoStartDate, $lte: now } },
+        ],
       })
-        .select('date createdAt ltrs dieselAt')
+        .select('date actualDate ltrs dieselAt')
         .lean(),
     ]);
 
-    // Monthly fuel consumption (using createdAt timestamp)
+    // Monthly fuel consumption — use actual date field
     const monthlyFuelData: any = {};
     fuelRecords.forEach((record) => {
-      const recordDate = record.createdAt ? new Date(record.createdAt) : new Date(record.date);
+      const recordDate = record.date ? new Date(record.date) : new Date((record as any).createdAt);
       const month = recordDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      if (!monthlyFuelData[month]) {
-        monthlyFuelData[month] = 0;
-      }
+      if (!monthlyFuelData[month]) monthlyFuelData[month] = 0;
       monthlyFuelData[month] += record.totalLts || 0;
     });
-    
+
     const monthlyFuel = Object.entries(monthlyFuelData)
       .map(([month, value]) => ({ month, value: Math.round(value as number) }));
 
-    // DO creation trends (using createdAt timestamp)
+    // DO trends — use actual date field
     const doTrendsData: any = {};
     deliveryOrders.forEach((DO) => {
-      const doDate = DO.createdAt ? new Date(DO.createdAt) : new Date(DO.date);
+      const doDate = DO.date && !isNaN(new Date(DO.date).getTime())
+        ? new Date(DO.date)
+        : new Date((DO as any).createdAt);
       const month = doDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       doTrendsData[month] = (doTrendsData[month] || 0) + 1;
     });
-    
+
     const doTrends = Object.entries(doTrendsData)
       .map(([month, count]) => ({ month, count }));
 

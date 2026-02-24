@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import usePersistedState from '../../hooks/usePersistedState';
 import { formatDate as formatSystemDate, formatDateOnly } from '../../utils/timezone';
 import {
   RefreshCw,
@@ -53,11 +54,11 @@ const DriverCredentialsManager: React.FC = () => {
 
   // Pagination and search state
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = usePersistedState('dcm:itemsPerPage', 10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [searchTerm, setSearchTerm] = usePersistedState('dcm:searchTerm', '');
+  const [statusFilter, setStatusFilter] = usePersistedState<'all' | 'active' | 'inactive'>('dcm:statusFilter', 'all');
 
   // Dialog states
   const [showNewCredentials, setShowNewCredentials] = useState(false);

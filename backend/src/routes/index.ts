@@ -21,6 +21,7 @@ import systemConfigRoutes from './systemConfigRoutes';
 import driverCredentialRoutes from './driverCredentialRoutes';
 import checkpointRoutes from './checkpointRoutes';
 import fleetTrackingRoutes from './fleetTrackingRoutes';
+import importRoutes from './importRoutes';
 
 const router = Router();
 
@@ -50,5 +51,6 @@ router.use('/archival', archivalRoutes);
 router.use('/driver-credentials', driverCredentialRoutes); // Driver credential management
 router.use('/checkpoints', checkpointRoutes); // Checkpoint management for fleet tracking
 router.use('/fleet-tracking', fleetTrackingRoutes); // Fleet position tracking and visualization
+router.use('/import', importRoutes); // Excel data import (admin only)
 
 export default router;

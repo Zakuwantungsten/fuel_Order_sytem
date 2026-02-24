@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
@@ -29,14 +30,17 @@ interface DeliveryOrdersProps {
 
 const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistedState('do:searchTerm', '');
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterType, setFilterType] = useState('ALL');
-  const [filterDoType, setFilterDoType] = useState<'ALL' | 'DO' | 'SDO'>('DO'); // Filter by DO or SDO type
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'cancelled'>('all');
-  // Month filter - default to current month (1-indexed)
-  const [selectedMonths, setSelectedMonths] = useState<number[]>([new Date().getMonth() + 1]);
+  const [filterType, setFilterType] = usePersistedState('do:filterType', 'ALL');
+  const [filterDoType, setFilterDoType] = usePersistedState<'ALL' | 'DO' | 'SDO'>('do:filterDoType', 'DO');
+  const [filterStatus, setFilterStatus] = usePersistedState<'all' | 'active' | 'cancelled'>('do:filterStatus', 'all');
+  // Period filter — each entry is a {year, month} pair so Jan 2025 ≠ Jan 2026
+  const [selectedPeriods, setSelectedPeriods] = usePersistedState<Array<{year: number; month: number}>>(
+    'do:selectedPeriods',
+    [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]
+  );
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,11 +51,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [cancellingOrder, setCancellingOrder] = useState<DeliveryOrder | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
-  const [activeTab, setActiveTab] = useState<'list' | 'summary' | 'workbook'>('list');
+  const [activeTab, setActiveTab] = usePersistedState<'list' | 'summary' | 'workbook'>('do:activeTab', 'list');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [itemsPerPage, setItemsPerPage] = usePersistedState('do:itemsPerPage', 25);
   
   // Amended DOs context for session tracking
   const { addAmendedDO, count: amendedDOsCount } = useAmendedDOs();
@@ -169,8 +173,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         if (monthParam) {
           const month = parseInt(monthParam);
           if (!isNaN(month) && month >= 1 && month <= 12) {
-            console.log('Setting month filter to:', month);
-            setSelectedMonths([month]);
+            const hlYear = (yearParam && !isNaN(parseInt(yearParam)))
+              ? parseInt(yearParam)
+              : new Date().getFullYear();
+            console.log('Setting period filter to:', hlYear, month);
+            setSelectedPeriods([{ year: hlYear, month }]);
           }
         }
         
@@ -195,23 +202,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       console.log('%c=== DO HIGHLIGHT SEARCH ===', 'background: #3b82f6; color: white; padding: 4px;');
       console.log('Pending Highlight:', pendingHighlight);
       console.log('Total orders:', orders.length);
-      console.log('Selected Year:', selectedYear);
-      console.log('Selected Months:', selectedMonths);
+      console.log('Selected Periods:', selectedPeriods);
       
-      // Find in filtered orders (after month/year filter applied)
+      // Find in filtered orders (after period filter applied)
       const filteredList = orders.filter(order => {
-        // Apply year filter
-        const orderDate = new Date(order.date);
-        const orderYear = orderDate.getFullYear();
-        if (orderYear !== selectedYear) return false;
-        
-        // Apply month filter
-        const orderMonth = orderDate.getMonth() + 1;
-        if (selectedMonths.length > 0 && selectedMonths.length < 12) {
-          if (!selectedMonths.includes(orderMonth)) return false;
-        }
-        
-        return true;
+        if (selectedPeriods.length === 0) return true;
+        const orderYear = parseDateYearSafe(order.date);
+        const orderMonth = getMonthFromDate(order.date);
+        return selectedPeriods.some(p => p.year === orderYear && p.month === orderMonth);
       });
       
       console.log('Filtered orders count:', filteredList.length);
@@ -235,7 +233,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         clearDOHighlight();
       }
     }
-  }, [pendingHighlight, orders, selectedYear, selectedMonths, itemsPerPage, currentPage]);
+  }, [pendingHighlight, orders, selectedPeriods, itemsPerPage, currentPage]);
   
   // Helper function to scroll and highlight
   const scrollToAndHighlightDO = (doNumber: string) => {
@@ -445,6 +443,27 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     }
   };
 
+  // Merge years derived from the loaded orders into availableYears.
+  // This ensures that imported DOs (which have no workbook) still appear in the year dropdown.
+  useEffect(() => {
+    if (orders.length === 0) return;
+    const yearsFromData = [...new Set(
+      orders.map(o => {
+        const iso = o.date?.match(/^(\d{4})-\d{2}-\d{2}/);
+        if (iso) return parseInt(iso[1]);
+        const dmy = o.date?.match(/^\d{1,2}[\-\/\s][A-Za-z]+[\-\/\s](\d{4})$/);
+        if (dmy) return parseInt(dmy[1]);
+        const d = new Date(o.date ?? '');
+        return isNaN(d.getTime()) ? null : d.getFullYear();
+      }).filter((y): y is number => y !== null)
+    )].sort((a, b) => b - a);
+    if (yearsFromData.length === 0) return;
+    setAvailableYears(prev => {
+      const merged = [...new Set([...prev, ...yearsFromData])].sort((a, b) => b - a);
+      return merged.join(',') === prev.join(',') ? prev : merged;
+    });
+  }, [orders]);
+
   const handleExportWorkbook = async (year: number, workbookType?: string) => {
     try {
       setExportingYear(year);
@@ -517,72 +536,96 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     fetchWorkbooks(); // Refresh workbooks list
   };
 
-  // Helper to get month from date string (YYYY-MM-DD format)
+  // Helper: parse year from a date string in any of our stored formats
+  const parseDateYearSafe = (dateStr: string): number | null => {
+    if (!dateStr) return null;
+    // ISO "YYYY-MM-DD"
+    const iso = dateStr.match(/^(\d{4})-\d{2}-\d{2}/);
+    if (iso) return parseInt(iso[1]);
+    // "DD-Mon-YYYY" e.g. "15-Jan-2025"
+    const dmy = dateStr.match(/^\d{1,2}[\-\/\s][A-Za-z]+[\-\/\s](\d{4})$/);
+    if (dmy) return parseInt(dmy[1]);
+    // Native JS fallback
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d.getFullYear();
+  };
+
+  // Helper to get month from date string (supports YYYY-MM-DD, DD-Mon-YYYY, D-Mon formats)
   const getMonthFromDate = (dateStr: string): number | null => {
     if (!dateStr) return null;
-    
     try {
-      const date = new Date(dateStr);
-      if (!isNaN(date.getTime())) {
-        return date.getMonth() + 1; // 1-indexed
+      // ISO "YYYY-MM-DD"
+      const iso = dateStr.match(/^\d{4}-(\d{2})-\d{2}/);
+      if (iso) return parseInt(iso[1], 10);
+      // "DD-Mon-YYYY" or "D-Mon-YYYY"  e.g. "15-Jan-2025"
+      const dmy = dateStr.match(/^\d{1,2}[\-\/\s]([A-Za-z]{3})[\-\/\s]\d{4}$/i);
+      if (dmy) {
+        const MON: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+        return MON[dmy[1].toLowerCase()] ?? null;
       }
-    } catch (error) {
-      console.error('Error parsing date:', error);
-    }
-    
+      // Native fallback
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) return date.getMonth() + 1;
+    } catch { /* ignore */ }
     return null;
   };
 
-  // Get months that have data
-  const availableMonths = useMemo(() => {
-    const months = new Set<number>();
+  // Build the list of year-month pairs that actually have data, newest first
+  const availablePeriods = useMemo(() => {
+    const seen = new Map<string, { year: number; month: number }>();
     orders.forEach(order => {
-      if (order.date) {
-        const month = getMonthFromDate(order.date);
-        if (month !== null) {
-          months.add(month);
-        }
+      if (!order.date) return;
+      const year = parseDateYearSafe(order.date);
+      const month = getMonthFromDate(order.date);
+      if (year !== null && month !== null) {
+        const key = `${year}-${month}`;
+        if (!seen.has(key)) seen.set(key, { year, month });
       }
     });
-    return Array.from(months).sort((a, b) => a - b);
+    return Array.from(seen.values()).sort((a, b) =>
+      b.year !== a.year ? b.year - a.year : a.month - b.month
+    );
   }, [orders]);
 
-  // Auto-fallback to previous month if current month has no data
+  // Auto-fallback: if the default current-month has no data, step back one month
   useEffect(() => {
     if (loading || orders.length === 0) return;
-    const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
-    // Only auto-fallback when on the default current-month/year selection
-    if (selectedMonths.length !== 1 || selectedMonths[0] !== currentMonth || selectedYear !== currentYear) return;
-    const hasCurrentMonthData = orders.some(order => {
-      const year = new Date(order.date).getFullYear();
-      return year === selectedYear && getMonthFromDate(order.date) === currentMonth;
-    });
-    if (!hasCurrentMonthData) {
-      const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-      setSelectedMonths([prevMonth]);
+    const currentMonth = new Date().getMonth() + 1;
+    // Only auto-fallback when still on the initial default selection
+    if (selectedPeriods.length !== 1 ||
+        selectedPeriods[0].year !== currentYear ||
+        selectedPeriods[0].month !== currentMonth) return;
+    const hasData = availablePeriods.some(p => p.year === currentYear && p.month === currentMonth);
+    if (!hasData && availablePeriods.length > 0) {
+      // Pick the most recent period that exists
+      setSelectedPeriods([availablePeriods[0]]);
     }
-  }, [orders, loading]);
+  }, [availablePeriods, loading]);
 
-  // Toggle month selection
-  const toggleMonth = (month: number) => {
-    setSelectedMonths(prev => {
-      if (prev.includes(month)) {
-        // Don't allow deselecting all months
-        if (prev.length === 1) return prev;
-        return prev.filter(m => m !== month);
-      } else {
-        return [...prev, month].sort((a, b) => a - b);
+  // Toggle a year-month period on/off
+  const togglePeriod = (year: number, month: number) => {
+    setSelectedPeriods(prev => {
+      const exists = prev.some(p => p.year === year && p.month === month);
+      if (exists) {
+        if (prev.length === 1) return prev; // keep at least one selected
+        return prev.filter(p => !(p.year === year && p.month === month));
       }
+      return [...prev, { year, month }].sort((a, b) =>
+        b.year !== a.year ? b.year - a.year : a.month - b.month
+      );
     });
   };
 
-  // Get display text for selected months
+  // Display text for the period picker button
   const getMonthsDisplayText = (): string => {
-    if (selectedMonths.length === 0) return 'Select Month';
-    if (selectedMonths.length === 1) return MONTH_NAMES[selectedMonths[0] - 1];
-    if (selectedMonths.length === availableMonths.length && availableMonths.length > 0) return 'All Months';
-    return `${selectedMonths.length} months`;
+    if (selectedPeriods.length === 0) return 'Select Period';
+    if (selectedPeriods.length === 1) {
+      const p = selectedPeriods[0];
+      return `${MONTH_NAMES[p.month - 1]} ${p.year}`;
+    }
+    if (selectedPeriods.length === availablePeriods.length && availablePeriods.length > 0) return 'All Periods';
+    return `${selectedPeriods.length} periods`;
   };
 
   // Filter orders by search term, status, and months
@@ -597,19 +640,15 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       (filterStatus === 'active' && !order.isCancelled) ||
       (filterStatus === 'cancelled' && order.isCancelled);
     
-    // Year filter - filter by selected year using date field
-    const orderDate = new Date(order.date);
-    const orderYear = orderDate.getFullYear();
-    const matchesYear = orderYear === selectedYear;
-    
-    // Month filter
-    let matchesMonth = true;
-    if (selectedMonths.length > 0 && selectedMonths.length < 12) {
+    // Period filter — match any selected year-month pair
+    let matchesPeriod = true;
+    if (selectedPeriods.length > 0 && selectedPeriods.length < availablePeriods.length) {
+      const orderYear = parseDateYearSafe(order.date);
       const orderMonth = getMonthFromDate(order.date);
-      matchesMonth = orderMonth !== null && selectedMonths.includes(orderMonth);
+      matchesPeriod = selectedPeriods.some(p => p.year === orderYear && p.month === orderMonth);
     }
     
-    return matchesSearch && matchesStatus && matchesYear && matchesMonth;
+    return matchesSearch && matchesStatus && matchesPeriod;
   }) : [];
 
   // Pagination calculations
@@ -1636,51 +1675,64 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-y-auto left-0 right-0">
                     {/* Quick Select Options */}
                     <div className="p-2 border-b border-gray-200 dark:border-gray-600">
-                      {availableMonths.includes(new Date().getMonth() + 1) && (
+                      {availablePeriods.some(p => p.year === new Date().getFullYear() && p.month === new Date().getMonth() + 1) && (
                         <button
                           onClick={() => {
-                            setSelectedMonths([new Date().getMonth() + 1]);
+                            setSelectedPeriods([{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
                             setCurrentPage(1);
                             setShowMonthDropdown(false);
                           }}
                           className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
                         >
-                          Current Month ({MONTH_NAMES[new Date().getMonth()]})
+                          Current Month ({MONTH_NAMES[new Date().getMonth()]} {new Date().getFullYear()})
                         </button>
                       )}
                       <button
                         onClick={() => {
-                          setSelectedMonths(availableMonths.length > 0 ? [...availableMonths] : [new Date().getMonth() + 1]);
+                          setSelectedPeriods(availablePeriods.length > 0 ? [...availablePeriods] : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
                           setCurrentPage(1);
                           setShowMonthDropdown(false);
                         }}
                         className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
                       >
-                        All Months ({availableMonths.length})
+                        All Periods ({availablePeriods.length})
                       </button>
                     </div>
                     
-                    {/* Month Checkboxes - Only show months that have data */}
+                    {/* Period checkboxes — grouped by year */}
                     <div className="p-2">
-                      {availableMonths.length > 0 ? (
-                        availableMonths.map((monthNum) => (
-                          <label
-                            key={monthNum}
-                            className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedMonths.includes(monthNum)}
-                              onChange={() => {
-                                toggleMonth(monthNum);
-                                setCurrentPage(1);
-                              }}
-                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{MONTH_NAMES[monthNum - 1]}</span>
-                          </label>
-                        ))
-                      ) : (
+                      {availablePeriods.length > 0 ? (() => {
+                        // Group periods by year for visual clarity
+                        const byYear = availablePeriods.reduce<Record<number, number[]>>((acc, p) => {
+                          if (!acc[p.year]) acc[p.year] = [];
+                          acc[p.year].push(p.month);
+                          return acc;
+                        }, {});
+                        return Object.entries(byYear)
+                          .sort(([a], [b]) => Number(b) - Number(a))
+                          .map(([yearStr, months]) => (
+                            <div key={yearStr}>
+                              <div className="px-2 pt-2 pb-0.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{yearStr}</div>
+                              {months.map(monthNum => (
+                                <label
+                                  key={`${yearStr}-${monthNum}`}
+                                  className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPeriods.some(p => p.year === Number(yearStr) && p.month === monthNum)}
+                                    onChange={() => {
+                                      togglePeriod(Number(yearStr), monthNum);
+                                      setCurrentPage(1);
+                                    }}
+                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{MONTH_NAMES[monthNum - 1]}</span>
+                                </label>
+                              ))}
+                            </div>
+                          ));
+                      })() : (
                         <div className="px-2 py-1.5 text-sm text-gray-500 dark:text-gray-400">
                           No data available
                         </div>
@@ -1889,9 +1941,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           </p>
                         </div>
                         <div>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">Tonnage:</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Tonnage / Rate:</span>
                           <p className={`font-medium ${order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                            {order.tonnages} tons
+                            {order.rateType === 'fixed_total'
+                              ? <span className="px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">Fixed ${(order.totalAmount ?? order.ratePerTon ?? 0).toLocaleString()}</span>
+                              : `${order.tonnages ?? 0} tons`}
                           </p>
                         </div>
                       </div>
@@ -1945,7 +1999,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Dest.</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tons</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tons / Rate</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
@@ -2015,7 +2069,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                           }`}>
-                            {order.tonnages} tons
+                            {order.rateType === 'fixed_total'
+                              ? <span className="px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">Fixed ${(order.totalAmount ?? order.ratePerTon ?? 0).toLocaleString()}</span>
+                              : `${order.tonnages ?? 0} tons`}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs font-medium">
                             {!order.isCancelled && (

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { DeliveryOrder } from '../types';
 import { cleanDriverName } from '../utils/dataCleanup';
 import { formatDateOnly } from '../utils/timezone';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DOSheetViewProps {
   order: DeliveryOrder;
