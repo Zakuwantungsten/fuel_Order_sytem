@@ -1646,8 +1646,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         <>
           {/* Filters */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-3 mb-6 transition-colors">
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-              <div className="relative">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="relative col-span-2 md:col-span-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
                 <input
                   type="text"
@@ -1847,7 +1847,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   setSelectedMonths([new Date().getMonth() + 1]); // Reset to current month
                   setCurrentPage(1);
                 }}
-                className="w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Clear Filters
               </button>
