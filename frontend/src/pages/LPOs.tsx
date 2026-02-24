@@ -13,6 +13,7 @@ import { PermissionGuard } from '../components/ProtectedRoute';
 import { RESOURCES, ACTIONS } from '../utils/permissions';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
+import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
 
@@ -520,13 +521,28 @@ const LPOs = () => {
     closeAllDropdowns();
     const lpoKey = lpo.id || lpo.lpoNo;
     setDownloadingPdf(lpoKey);
+    const toastId = toast.loading(`Preparing PDF — LPO ${lpo.lpoNo}...`, {
+      style: { background: '#0284c7', color: '#fff' },
+    });
     try {
       const lpoSummary = convertToLPOSummary(lpo);
       await downloadLPOPDF(lpoSummary, undefined, user?.username);
-      alert('✓ LPO PDF downloaded successfully!');
-    } catch (error) {
+      toast.update(toastId, {
+        render: `PDF downloaded: LPO ${lpo.lpoNo}`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 4000,
+        style: undefined,
+      });
+    } catch (error: any) {
       console.error('Error downloading PDF:', error);
-      alert('Failed to download LPO as PDF. Please try again.');
+      toast.update(toastId, {
+        render: `PDF download failed: ${error?.message || 'Unknown error'}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 6000,
+        style: undefined,
+      });
     } finally {
       setDownloadingPdf(null);
     }
@@ -537,13 +553,28 @@ const LPOs = () => {
     closeAllDropdowns();
     const lpoKey = lpo.id || lpo.lpoNo;
     setDownloadingImage(lpoKey);
+    const toastId = toast.loading(`Preparing image — LPO ${lpo.lpoNo}...`, {
+      style: { background: '#0284c7', color: '#fff' },
+    });
     try {
       const lpoSummary = convertToLPOSummary(lpo);
       await downloadLPOImage(lpoSummary, undefined, user?.username);
-      alert('✓ LPO image downloaded successfully!');
-    } catch (error) {
+      toast.update(toastId, {
+        render: `Image downloaded: LPO ${lpo.lpoNo}`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 4000,
+        style: undefined,
+      });
+    } catch (error: any) {
       console.error('Error downloading image:', error);
-      alert('Failed to download LPO as image. Please try again.');
+      toast.update(toastId, {
+        render: `Image download failed: ${error?.message || 'Unknown error'}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 6000,
+        style: undefined,
+      });
     } finally {
       setDownloadingImage(null);
     }

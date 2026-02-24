@@ -4,6 +4,7 @@ import { DeliveryOrder } from '../types';
 import DeliveryNotePrint from './DeliveryNotePrint';
 import { useState } from 'react';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 
 interface DODetailModalProps {
   order: DeliveryOrder;
@@ -18,15 +19,25 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
   if (!isOpen) return null;
 
   const handleDownloadPDF = async () => {
+    if (isDownloading) return;
+    const toastId = toast.loading('Preparing PDF download...', {
+      style: { background: '#0284c7', color: '#fff' },
+    });
+    setIsDownloading(true);
+    onClose();
     try {
-      setIsDownloading(true);
-      
       // Get API base URL and auth token
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
       const token = sessionStorage.getItem('fuel_order_token');
       
       if (!token) {
-        alert('Authentication required. Please log in again.');
+        toast.update(toastId, {
+          render: 'Authentication required. Please log in again.',
+          type: 'error',
+          isLoading: false,
+          autoClose: 5000,
+        });
+        setIsDownloading(false);
         return;
       }
       
@@ -59,10 +70,22 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
       // Cleanup
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
+
+      toast.update(toastId, {
+        render: `PDF downloaded: ${doType}-${order.doNumber}`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 4000,
+      });
     } catch (error: any) {
       console.error('Error downloading PDF:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Failed to download PDF: ${errorMessage}`);
+      toast.update(toastId, {
+        render: `PDF download failed: ${errorMessage}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 6000,
+      });
     } finally {
       setIsDownloading(false);
     }
@@ -83,10 +106,13 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
           <div className={`${order.isCancelled ? 'bg-red-600 dark:bg-red-700' : 'bg-primary-600 dark:bg-primary-700'} px-6 py-4 flex items-center justify-between no-print`}>
             <div className="flex items-center">
               {order.isCancelled && <Ban className="w-5 h-5 text-white mr-2" />}
-              <h3 className="text-lg font-semibold text-white">
-                {order.doType || 'DO'}-{order.doNumber}
-                {order.isCancelled && ' (CANCELLED)'}
-              </h3>
+              <div>
+                <h3 className="text-lg font-semibold text-white">
+                  {order.doType || 'DO'}-{order.doNumber}
+                  {order.isCancelled && ' (CANCELLED)'}
+                </h3>
+
+              </div>
             </div>
             <div className="flex items-center space-x-2">
               <button
