@@ -130,13 +130,13 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
 
   const getTypeColor = (type: string) => {
     const colors: { [key: string]: string } = {
-      missing_config: 'bg-red-100 text-red-700 border-red-300',
-      unlinked_do: 'bg-orange-100 text-orange-700 border-orange-300',
-      yard_fuel_recorded: 'bg-blue-100 text-blue-700 border-blue-300',
-      truck_pending_linking: 'bg-yellow-100 text-yellow-700 border-yellow-300',
-      truck_entry_rejected: 'bg-red-100 text-red-700 border-red-300',
+      missing_config: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700',
+      unlinked_do: 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700',
+      yard_fuel_recorded: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700',
+      truck_pending_linking: 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-700',
+      truck_entry_rejected: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700',
     };
-    return colors[type] || 'bg-gray-100 text-gray-700 border-gray-300';
+    return colors[type] || 'bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600';
   };
 
   const formatDate = (dateString: string) => {
@@ -169,75 +169,75 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 overflow-y-auto pt-10 pb-10">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 overflow-y-auto pt-6 pb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center space-x-3">
-            <Bell className="w-7 h-7 text-blue-600" />
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-700 rounded-t-lg">
+          <div className="flex items-center space-x-2">
+            <Bell className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             <div>
-              <h2 className="text-2xl font-bold text-gray-800">All Notifications</h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">All Notifications</h2>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
                 {stats.unread > 0 ? `${stats.unread} unread` : 'All caught up!'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 transition-colors"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Stats Bar */}
-        <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 border-b border-gray-200">
+        <div className="grid grid-cols-4 gap-2 p-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
           <div className="text-center">
-            <div className="text-2xl font-bold text-gray-800">{stats.total}</div>
-            <div className="text-xs text-gray-600">Total</div>
+            <div className="text-xl font-bold text-gray-800 dark:text-gray-100">{stats.total}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-            <div className="text-xs text-gray-600">Pending</div>
+            <div className="text-xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pending}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Pending</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">{stats.resolved}</div>
-            <div className="text-xs text-gray-600">Resolved</div>
+            <div className="text-xl font-bold text-green-600 dark:text-green-400">{stats.resolved}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Resolved</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">{stats.unread}</div>
-            <div className="text-xs text-gray-600">Unread</div>
+            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{stats.unread}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Unread</div>
           </div>
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex space-x-2 p-4 bg-white border-b border-gray-200">
+        <div className="flex space-x-2 p-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <button
             onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               filter === 'all'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             All ({stats.total})
           </button>
           <button
             onClick={() => setFilter('pending')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               filter === 'pending'
                 ? 'bg-yellow-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             Pending ({stats.pending})
           </button>
           <button
             onClick={() => setFilter('resolved')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               filter === 'resolved'
                 ? 'bg-green-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             Resolved ({stats.resolved})
@@ -245,20 +245,20 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
         </div>
 
         {/* Notifications List */}
-        <div className="max-h-[500px] overflow-y-auto">
+        <div className="max-h-[55vh] overflow-y-auto">
           {loading ? (
-            <div className="p-8 text-center text-gray-500">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2">Loading notifications...</p>
+            <div className="p-6 text-center text-gray-500 dark:text-gray-400">
+              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-sm">Loading notifications...</p>
             </div>
           ) : filteredNotifications.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              <Bell className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p className="text-lg font-medium">No notifications</p>
-              <p className="text-sm mt-1">You're all caught up!</p>
+            <div className="p-6 text-center text-gray-500 dark:text-gray-400">
+              <Bell className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="text-base font-medium">No notifications</p>
+              <p className="text-xs mt-1">You're all caught up!</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
               {filteredNotifications.map((notification) => (
                 <div
                   key={notification._id}
@@ -269,8 +269,8 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
                       onNotificationClick(notification);
                     }
                   }}
-                  className={`p-4 hover:bg-gray-50 transition-colors ${
-                    !notification.isRead ? 'bg-blue-50' : ''
+                  className={`p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                    !notification.isRead ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                   } ${(notification.type === 'missing_total_liters' || notification.type === 'missing_extra_fuel' || notification.type === 'both') && notification.metadata?.fuelRecordId ? 'cursor-pointer' : ''}`}
                 >
                   <div className="flex items-start space-x-3">
@@ -294,14 +294,14 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
                             )}
                           </div>
 
-                          <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
                             {notification.title}
                           </h4>
-                          <p className="text-sm text-gray-700 mb-2">
+                          <p className="text-xs text-gray-700 dark:text-gray-300 mb-2">
                             {getTailoredMessage(notification)}
                           </p>
 
-                          <div className="flex items-center space-x-4 text-xs text-gray-500">
+                          <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                             <span>{formatDate(notification.createdAt)}</span>
                             {notification.metadata?.truckNo && (
                               <span>Truck: {notification.metadata.truckNo}</span>
@@ -316,7 +316,7 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
                           {!notification.isRead && (
                             <button
                               onClick={() => markAsRead(notification._id)}
-                              className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                              className="p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
                               title="Mark as read"
                             >
                               <Eye className="w-4 h-4" />
@@ -325,7 +325,7 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
                           {notification.status === 'pending' && (
                             <button
                               onClick={() => resolveNotification(notification._id)}
-                              className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
+                              className="p-1 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors"
                               title="Resolve"
                             >
                               <CheckCircle className="w-4 h-4" />
@@ -333,7 +333,7 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
                           )}
                           <button
                             onClick={() => dismissNotification(notification._id)}
-                            className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                            className="p-1 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
                             title="Dismiss"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -349,10 +349,10 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+        <div className="p-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-end rounded-b-lg">
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+            className="px-4 py-1.5 text-sm bg-gray-600 dark:bg-gray-600 text-white rounded-lg hover:bg-gray-700 dark:hover:bg-gray-500 transition-colors font-medium"
           >
             Close
           </button>
