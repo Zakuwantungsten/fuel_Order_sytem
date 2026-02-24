@@ -248,7 +248,8 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
 
   return (
     <div ref={ref} className="bg-white lpo-print-container" style={{ 
-      width: '210mm', 
+      width: '794px', 
+      minWidth: '794px',
       fontFamily: 'Arial, sans-serif',
       position: 'relative',
       boxSizing: 'border-box'

@@ -16,6 +16,14 @@ const createLPOElement = (data: LPOSummary, preparedBy?: string, approvedBy?: st
     container.style.position = 'absolute';
     container.style.left = '-9999px';
     container.style.top = '-9999px';
+    // Force desktop-equivalent rendering on all devices:
+    // disable mobile browser text auto-scaling so the captured output
+    // is always identical regardless of device screen size
+    container.style.width = '794px'; // ~210mm at 96dpi
+    container.style.minWidth = '794px';
+    (container.style as any)['-webkit-text-size-adjust'] = '100%';
+    (container.style as any)['text-size-adjust'] = '100%';
+    container.style.zoom = '1';
     document.body.appendChild(container);
 
     // Create a React root and render the component
@@ -62,8 +70,10 @@ export const generateLPOImage = async (data: LPOSummary, preparedBy?: string, ap
       useCORS: true,
       backgroundColor: '#ffffff',
       logging: false,
-      width: elementWidth,
+      width: 794,
       height: elementHeight,
+      windowWidth: 794,
+      windowHeight: elementHeight,
     });
 
     return new Promise((resolve, reject) => {
@@ -139,8 +149,9 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string, prepar
       useCORS: true,
       backgroundColor: '#ffffff',
       logging: false,
-      width: elementWidth,
+      width: 794,
       height: elementHeight,
+      windowWidth: 794,
       windowHeight: elementHeight,
       onclone: (clonedDoc) => {
         // Ensure proper rendering of the cloned document
