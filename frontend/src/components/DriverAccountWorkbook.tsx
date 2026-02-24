@@ -30,7 +30,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const [openEntryDropdown, setOpenEntryDropdown] = useState<string | number | null>(null);
-  const [entryDropdownPosition, setEntryDropdownPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [entryDropdownPosition, setEntryDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({ left: 0 });
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
   const [availableYears, setAvailableYears] = useState<number[]>([new Date().getFullYear()]);
   
@@ -78,15 +78,20 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     loadWorkbook();
   }, [selectedYear]);
 
-  // Close entry dropdown when clicking outside
+  // Close entry dropdown when clicking outside or scrolling
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (openEntryDropdown !== null && !(event.target as Element).closest('.relative')) {
         setOpenEntryDropdown(null);
       }
     };
+    const handleScroll = () => setOpenEntryDropdown(null);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, [openEntryDropdown]);
 
   const loadWorkbook = async () => {
@@ -410,11 +415,11 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800">
       {/* Header */}
-      <div className="border-b dark:border-gray-700 px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="border-b dark:border-gray-700 px-4 sm:px-6 py-3 sm:py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center space-x-3">
-            <User className="w-6 h-6 text-red-600" />
-            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+            <User className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">
               Driver's Account
             </h1>
             {/* Year Filter */}
@@ -453,12 +458,12 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
             </span>
           </div>
           
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Copy/Download Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowCopyDropdown(!showCopyDropdown)}
-                className="flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                className="flex items-center px-2.5 py-1.5 sm:px-3 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
               >
                 <Copy className="w-4 h-4 mr-2" />
                 Export
@@ -495,21 +500,13 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
 
             <button
               onClick={() => setShowAddForm(true)}
-              className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="flex items-center px-2.5 py-1.5 sm:px-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
             >
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="w-4 h-4 mr-1.5" />
               Add Entry
             </button>
 
-            {selectedEntries.size > 0 && (
-              <button
-                onClick={deleteSelectedEntries}
-                className="flex items-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete ({selectedEntries.size})
-              </button>
-            )}
+
 
             {onClose && (
               <button
@@ -523,39 +520,39 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
         </div>
 
         {/* Filters */}
-        <div className="mt-4 flex items-center space-x-4">
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by truck, driver, LPO, reason..."
+              placeholder="Search truck, driver, LPO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full pl-9 pr-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs"
             />
           </div>
           
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <input
               type="date"
               value={dateFilter.from}
               onChange={(e) => setDateFilter(prev => ({ ...prev, from: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="flex-1 sm:flex-none px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-[10px]"
             />
-            <span className="text-gray-500">to</span>
+            <span className="text-gray-500 text-xs flex-shrink-0">to</span>
             <input
               type="date"
               value={dateFilter.to}
               onChange={(e) => setDateFilter(prev => ({ ...prev, to: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="flex-1 sm:flex-none px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-[10px]"
             />
           </div>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
-        <div className="grid grid-cols-4 gap-4">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
           <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -616,188 +613,191 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
-          {/* Table Header */}
-          <div className="bg-red-50 dark:bg-red-900/20 border-b border-gray-300 dark:border-gray-600">
-            <div className="grid grid-cols-12 gap-0">
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">
-                <input
-                  type="checkbox"
-                  checked={selectedEntries.size === filteredEntries.length && filteredEntries.length > 0}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedEntries(new Set(filteredEntries.map(e => e.id!)));
-                    } else {
-                      setSelectedEntries(new Set());
-                    }
-                  }}
-                  className="w-4 h-4"
-                />
-              </div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">Date</div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 col-span-2">Truck No</div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">DO (Ref)</div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Liters</div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Rate</div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Amount</div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">Station</div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 col-span-2">Reason</div>
-              <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 text-center">Actions</div>
-            </div>
-          </div>
+      {/* Entries List */}
+      <div className="flex-1 overflow-auto p-3 sm:p-6">
 
-          {/* Table Body */}
-          {filteredEntries.length === 0 ? (
-            <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-              <User className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <p className="text-lg font-medium">No driver account entries</p>
-              <p className="text-sm mt-1">Add entries for fuel given due to misuse or theft</p>
-            </div>
-          ) : (
-            filteredEntries.map((entry, index) => (
-              <div 
-                key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`} 
-                className={`border-b border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                  selectedEntries.has(entry.id!) ? 'bg-red-50 dark:bg-red-900/10' : ''
-                }`}
-              >
-                <div className="grid grid-cols-12 gap-0">
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600">
-                    <input
-                      type="checkbox"
-                      checked={selectedEntries.has(entry.id!)}
-                      onChange={(e) => {
-                        setSelectedEntries(prev => {
-                          const next = new Set(prev);
-                          if (e.target.checked) {
-                            next.add(entry.id!);
-                          } else {
-                            next.delete(entry.id!);
-                          }
-                          return next;
-                        });
-                      }}
-                      className="w-4 h-4"
-                    />
-                  </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300">
-                    {entry.date}
-                  </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 col-span-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {entry.truckNo}
-                    {entry.driverName && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">{entry.driverName}</span>
-                    )}
-                  </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-orange-600 dark:text-orange-400">
-                    NIL
-                    <span className="text-xs text-gray-400 dark:text-gray-500 block">({entry.originalDoNo || entry.doNo || 'N/A'})</span>
-                  </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right text-gray-900 dark:text-gray-100">
-                    {entry.liters}
-                  </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right text-gray-700 dark:text-gray-300">
-                    {entry.rate}
-                  </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
-                    {formatCurrency(entry.amount)}
-                  </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300">
-                    {entry.station}
-                  </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 col-span-2 text-sm">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      entry.status === 'settled' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
-                      entry.status === 'disputed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
-                      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                    }`}>
-                      {entry.status?.toUpperCase() || 'PENDING'}
-                    </span>
-                    {entry.notes && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block mt-1">{entry.notes}</span>
-                    )}
-                  </div>
-                  <div className="px-3 py-2 text-center relative">
-                    <div className="flex items-center justify-center space-x-1">
+        {filteredEntries.length === 0 ? (
+          <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+            <User className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+            <p className="text-lg font-medium">No driver account entries</p>
+            <p className="text-sm mt-1">Add entries for fuel given due to misuse or theft</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile card view (< md) */}
+            <div className="md:hidden space-y-2">
+
+
+              {filteredEntries.map((entry, index) => (
+                <div
+                  key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`}
+                  className="border rounded-lg p-3 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800"
+                >
+                  {/* Card header: SN + truck + status + action */}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 text-[10px] font-bold text-red-700 dark:text-red-300">{index + 1}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{entry.truckNo}</p>
+                        {entry.driverName && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{entry.driverName}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                        entry.status === 'settled' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                        entry.status === 'disputed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+                      }`}>
+                        {entry.status?.toUpperCase() || 'PENDING'}
+                      </span>
                       {/* Actions dropdown */}
                       <div className="relative">
                         <button
                           onClick={(e) => {
                             const rect = e.currentTarget.getBoundingClientRect();
-                            setEntryDropdownPosition({
-                              top: rect.bottom + 4,
-                              left: rect.right - 192 // 192px = w-48
-                            });
+                            const DROPDOWN_HEIGHT = 200;
+                            const spaceBelow = window.innerHeight - rect.bottom;
+                            const dropLeft = Math.max(8, Math.min(rect.right - 192, window.innerWidth - 200));
+                            setEntryDropdownPosition(
+                              spaceBelow >= DROPDOWN_HEIGHT
+                                ? { top: rect.bottom + 4, left: dropLeft }
+                                : { bottom: window.innerHeight - rect.top + 4, left: dropLeft }
+                            );
                             setOpenEntryDropdown(openEntryDropdown === entry.id ? null : entry.id!);
                           }}
-                          className="p-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                          title="More actions"
+                          className="p-1 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
                         >
                           <ChevronDown className="w-4 h-4" />
                         </button>
-                        
                         {openEntryDropdown === entry.id && (
-                          <div 
-                            className="fixed w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 max-h-[60vh] overflow-y-auto"
-                            style={{ 
-                              top: Math.min(entryDropdownPosition.top, window.innerHeight - 300), 
-                              left: Math.min(entryDropdownPosition.left, window.innerWidth - 200),
-                              maxWidth: 'calc(100vw - 20px)'
-                            }}
+                          <div
+                            className="fixed w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50"
+                            style={{ top: entryDropdownPosition.top !== undefined ? `${entryDropdownPosition.top}px` : 'auto', bottom: entryDropdownPosition.bottom !== undefined ? `${entryDropdownPosition.bottom}px` : 'auto', left: `${entryDropdownPosition.left}px`, maxWidth: 'calc(100vw - 20px)' }}
                           >
-                            <button
-                              onClick={() => {
-                                handleCopyEntryAsImage(entry);
-                                setOpenEntryDropdown(null);
-                              }}
-                              className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                            >
-                              <Image className="w-4 h-4 mr-2 text-green-600" />
-                              Copy as Image
+                            <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                              <Image className="w-4 h-4 mr-2 text-green-600" />Copy as Image
                             </button>
-                            <button
-                              onClick={() => {
-                                handleDownloadEntryPDF(entry);
-                                setOpenEntryDropdown(null);
-                              }}
-                              className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                            >
-                              <Download className="w-4 h-4 mr-2 text-blue-600" />
-                              Download PDF
+                            <button onClick={() => { handleDownloadEntryPDF(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                              <Download className="w-4 h-4 mr-2 text-blue-600" />Download PDF
                             </button>
-                            <button
-                              onClick={() => {
-                                handleDownloadEntryImage(entry);
-                                setOpenEntryDropdown(null);
-                              }}
-                              className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                            >
-                              <FileDown className="w-4 h-4 mr-2 text-purple-600" />
-                              Download Image
+                            <button onClick={() => { handleDownloadEntryImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                              <FileDown className="w-4 h-4 mr-2 text-purple-600" />Download Image
                             </button>
-                            <div className="border-t border-gray-200 dark:border-gray-600"></div>
-                            <button
-                              onClick={() => {
-                                deleteEntry(entry.id!);
-                                setOpenEntryDropdown(null);
-                              }}
-                              className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete Entry
+                            <div className="border-t border-gray-200 dark:border-gray-600" />
+                            <button onClick={() => { deleteEntry(entry.id!); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                              <Trash2 className="w-4 h-4 mr-2" />Delete Entry
                             </button>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
+
+                  {/* Metadata row */}
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <div><span className="text-gray-400 dark:text-gray-500">Date: </span><span className="text-gray-700 dark:text-gray-300">{entry.date}</span></div>
+                    <div><span className="text-gray-400 dark:text-gray-500">Station: </span><span className="text-gray-700 dark:text-gray-300">{entry.station}</span></div>
+                    <div><span className="text-gray-400 dark:text-gray-500">DO: </span><span className="text-orange-600 dark:text-orange-400">NIL <span className="text-gray-400">({entry.originalDoNo || entry.doNo || 'N/A'})</span></span></div>
+                    <div><span className="text-gray-400 dark:text-gray-500">LPO: </span><span className="text-gray-700 dark:text-gray-300">{entry.lpoNo || '—'}</span></div>
+                  </div>
+
+                  {/* Amounts row */}
+                  <div className="mt-2 flex items-center gap-3 text-xs border-t border-gray-100 dark:border-gray-700 pt-2">
+                    <div><span className="text-gray-400 dark:text-gray-500">Ltrs: </span><span className="font-semibold text-gray-900 dark:text-gray-100">{entry.liters}</span></div>
+                    <div><span className="text-gray-400 dark:text-gray-500">Rate: </span><span className="text-gray-700 dark:text-gray-300">{entry.rate}</span></div>
+                    <div className="ml-auto"><span className="text-gray-400 dark:text-gray-500">Amt: </span><span className="font-bold text-gray-900 dark:text-gray-100">{formatCurrency(entry.amount)}</span></div>
+                  </div>
+
+                  {entry.notes && <p className="mt-1.5 text-[10px] text-gray-500 dark:text-gray-400 italic">{entry.notes}</p>}
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop grid view (md+) */}
+            <div className="hidden md:block border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+              {/* Table Header */}
+              <div className="bg-red-50 dark:bg-red-900/20 border-b border-gray-300 dark:border-gray-600">
+                <div className="grid grid-cols-12 gap-0">
+                  <div className="px-3 py-2 font-medium text-gray-500 dark:text-gray-400 border-r border-gray-300 dark:border-gray-600 text-center text-xs">#</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">Date</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 col-span-2">Truck No</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">DO (Ref)</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Liters</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Rate</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Amount</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">Station</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 col-span-2">Reason</div>
+                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 text-center">Actions</div>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+              {/* Table Body */}
+              {filteredEntries.map((entry, index) => (
+                <div
+                  key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`}
+                  className="border-b border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  <div className="grid grid-cols-12 gap-0">
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-center text-sm text-gray-500 dark:text-gray-400">{index + 1}</div>
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300">{entry.date}</div>
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 col-span-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {entry.truckNo}
+                      {entry.driverName && <span className="text-xs text-gray-500 dark:text-gray-400 block">{entry.driverName}</span>}
+                    </div>
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-orange-600 dark:text-orange-400">
+                      NIL
+                      <span className="text-xs text-gray-400 dark:text-gray-500 block">({entry.originalDoNo || entry.doNo || 'N/A'})</span>
+                    </div>
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right text-gray-900 dark:text-gray-100">{entry.liters}</div>
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right text-gray-700 dark:text-gray-300">{entry.rate}</div>
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right font-medium text-gray-900 dark:text-gray-100">{formatCurrency(entry.amount)}</div>
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300">{entry.station}</div>
+                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 col-span-2 text-sm">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        entry.status === 'settled' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                        entry.status === 'disputed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+                      }`}>{entry.status?.toUpperCase() || 'PENDING'}</span>
+                      {entry.notes && <span className="text-xs text-gray-500 dark:text-gray-400 block mt-1">{entry.notes}</span>}
+                    </div>
+                    <div className="px-3 py-2 text-center">
+                      <div className="relative inline-block">
+                        <button
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const DROPDOWN_HEIGHT = 200;
+                            const spaceBelow = window.innerHeight - rect.bottom;
+                            const dropLeft = Math.max(8, Math.min(rect.right - 192, window.innerWidth - 200));
+                            setEntryDropdownPosition(
+                              spaceBelow >= DROPDOWN_HEIGHT
+                                ? { top: rect.bottom + 4, left: dropLeft }
+                                : { bottom: window.innerHeight - rect.top + 4, left: dropLeft }
+                            );
+                            setOpenEntryDropdown(openEntryDropdown === entry.id ? null : entry.id!);
+                          }}
+                          className="p-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+                        {openEntryDropdown === entry.id && (
+                          <div
+                            className="fixed w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50"
+                            style={{ top: entryDropdownPosition.top !== undefined ? `${entryDropdownPosition.top}px` : 'auto', bottom: entryDropdownPosition.bottom !== undefined ? `${entryDropdownPosition.bottom}px` : 'auto', left: `${entryDropdownPosition.left}px`, maxWidth: 'calc(100vw - 20px)' }}
+                          >
+                            <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"><Image className="w-4 h-4 mr-2 text-green-600" />Copy as Image</button>
+                            <button onClick={() => { handleDownloadEntryPDF(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"><Download className="w-4 h-4 mr-2 text-blue-600" />Download PDF</button>
+                            <button onClick={() => { handleDownloadEntryImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"><FileDown className="w-4 h-4 mr-2 text-purple-600" />Download Image</button>
+                            <div className="border-t border-gray-200 dark:border-gray-600" />
+                            <button onClick={() => { deleteEntry(entry.id!); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4 mr-2" />Delete Entry</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Add Entry Modal */}
