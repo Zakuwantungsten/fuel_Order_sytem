@@ -489,22 +489,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           })}
         </nav>
 
-        <div className="p-3 border-t dark:border-gray-700 flex-shrink-0 mt-auto">
-          {sidebarOpen && (
-            <div className="mb-3">
-              <div className="text-xs text-gray-500 dark:text-gray-400">Logged in as</div>
-              <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{user.firstName} {user.lastName}</div>
-              <div className="text-xs text-gray-400 dark:text-gray-500 capitalize">{user.role?.replace('_', ' ')}</div>
-            </div>
-          )}
-          <button
-            onClick={logout}
-            className="w-full flex items-center px-2 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-            {sidebarOpen && <span className="ml-2 text-sm">Logout</span>}
-          </button>
-        </div>
+
       </div>
 
       {/* Main Content */}
@@ -560,10 +545,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               {showProfileMenu && (
                 <>
                   <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
-                  <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
-                    <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Signed in as</p>
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.firstName} {user.lastName}</p>
+                    <div className="absolute right-0 mt-2 w-56 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
+                      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Logged in as</div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.firstName} {user.lastName}</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500 capitalize">{user.role?.replace('_', ' ')}</div>
                     </div>
                     <button
                       onClick={() => {
@@ -656,7 +642,12 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                 {showProfileMenu && (
                   <>
                     <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
-                    <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
+                    <div className="absolute right-0 mt-2 w-56 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
+                      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Logged in as</div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.firstName} {user.lastName}</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500 capitalize">{user.role?.replace('_', ' ')}</div>
+                      </div>
                       <button
                         onClick={() => {
                           setShowProfileMenu(false);
