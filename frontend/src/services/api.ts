@@ -542,10 +542,6 @@ export const lposAPI = {
     const response = await apiClient.put(`/lpo-entries/${id}`, data);
     return response.data.data;
   },
-  
-  delete: async (id: string | number): Promise<void> => {
-    await apiClient.delete(`/lpo-entries/${id}`);
-  },
 };
 
 // LPO Workbook API (Excel-like workbook management - one workbook per year)

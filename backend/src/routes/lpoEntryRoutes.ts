@@ -35,13 +35,4 @@ router.put(
   asyncHandler(lpoEntryController.updateLPOEntry)
 );
 
-// Delete route
-router.delete(
-  '/:id',
-  commonValidation.mongoId,
-  authorize('super_admin', 'admin'),
-  validate,
-  asyncHandler(lpoEntryController.deleteLPOEntry)
-);
-
 export default router;

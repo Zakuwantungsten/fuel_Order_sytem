@@ -224,44 +224,6 @@ export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<v
 };
 
 /**
- * Soft delete LPO entry
- */
-export const deleteLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-
-    const lpoEntry = await LPOEntry.findByIdAndUpdate(
-      id,
-      { isDeleted: true, deletedAt: new Date() },
-      { new: true }
-    );
-
-    if (!lpoEntry) {
-      throw new ApiError(404, 'LPO entry not found');
-    }
-
-    logger.info(`LPO entry deleted: ${lpoEntry.lpoNo} by ${req.user?.username}`);
-
-    // Log audit trail
-    await AuditService.logDelete(
-      req.user?.userId || 'system',
-      req.user?.username || 'system',
-      'LPOEntry',
-      lpoEntry._id.toString(),
-      { lpoNo: lpoEntry.lpoNo, truckNo: lpoEntry.truckNo },
-      req.ip
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'LPO entry deleted successfully',
-    });
-  } catch (error: any) {
-    throw error;
-  }
-};
-
-/**
  * Get LPO entries by LPO number
  */
 export const getLPOEntriesByLPONo = async (req: AuthRequest, res: Response): Promise<void> => {

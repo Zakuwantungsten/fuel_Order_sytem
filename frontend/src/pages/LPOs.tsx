@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Download, Trash2, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2 } from 'lucide-react';
+import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2 } from 'lucide-react';
 import XLSX from 'xlsx-js-style';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
 import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
@@ -748,16 +748,7 @@ const LPOs = () => {
     setIsDetailFormOpen(true);
   };
 
-  const handleDelete = async (id: string | number) => {
-    if (window.confirm('Are you sure you want to delete this LPO entry?')) {
-      try {
-        await lposAPI.delete(id);
-        fetchLpos();
-      } catch (error) {
-        console.error('Error deleting LPO:', error);
-      }
-    }
-  };
+
 
   const handleDetailSubmit = async (data: Partial<LPOSummaryType>) => {
     try {
@@ -1559,15 +1550,7 @@ const LPOs = () => {
                         )}
                       </div>
                       
-                      <PermissionGuard resource={RESOURCES.LPOS} action={ACTIONS.DELETE}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); lpo.id && handleDelete(lpo.id); }}
-                          className="px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 inline-flex items-center justify-center"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </PermissionGuard>
+
                     </div>
                   </div>
                 );
@@ -1726,15 +1709,7 @@ const LPOs = () => {
                               )}
                             </div>
                             
-                            <PermissionGuard resource={RESOURCES.LPOS} action={ACTIONS.DELETE}>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); lpo.id && handleDelete(lpo.id); }}
-                                className="text-red-600 hover:text-red-900"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </PermissionGuard>
+
                           </div>
                         </td>
                       </tr>
