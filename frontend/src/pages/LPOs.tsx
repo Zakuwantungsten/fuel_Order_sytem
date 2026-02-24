@@ -81,7 +81,7 @@ const LPOs = () => {
     dateTo: ''
   });
   const [openDropdowns, setOpenDropdowns] = useState<{[key: string | number]: boolean}>({});
-  const [dropdownPosition, setDropdownPosition] = useState<{top: number, left: number}>({top: 0, left: 0});
+  const [dropdownPosition, setDropdownPosition] = useState<{top?: number, bottom?: number, left: number}>({top: 0, left: 0});
   const [exportingYear, setExportingYear] = useState<number | null>(null);
   const [selectedLpoNo, setSelectedLpoNo] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | number | null>(null);
@@ -621,11 +621,17 @@ const LPOs = () => {
     if (event) {
       const button = event.currentTarget;
       const rect = button.getBoundingClientRect();
-      // Position dropdown below button, aligned to right edge
-      setDropdownPosition({
-        top: rect.bottom + 4,
-        left: Math.max(10, rect.right - 224) // 224 = dropdown width (w-56 = 14rem = 224px)
-      });
+      const DROPDOWN_HEIGHT = 300;
+      const DROPDOWN_WIDTH = 224;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const left = Math.max(10, Math.min(rect.right - DROPDOWN_WIDTH, window.innerWidth - DROPDOWN_WIDTH - 10));
+      if (spaceBelow >= DROPDOWN_HEIGHT) {
+        // enough room below — open downward
+        setDropdownPosition({ top: rect.bottom + 4, bottom: undefined, left });
+      } else {
+        // not enough room — open upward by anchoring bottom to button top
+        setDropdownPosition({ top: undefined, bottom: window.innerHeight - rect.top + 4, left });
+      }
     }
     setOpenDropdowns(prev => ({
       ...prev,
@@ -633,10 +639,17 @@ const LPOs = () => {
     }));
   };
 
-  // Close all dropdowns when clicking outside
+  // Close all dropdowns when clicking outside or scrolling
   const closeAllDropdowns = () => {
     setOpenDropdowns({});
   };
+
+  // Close dropdowns on scroll so they don't float away from their buttons
+  useEffect(() => {
+    const handleScroll = () => setOpenDropdowns({});
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, []);
 
   // Toggle a year+month period on/off (at least one must remain selected)
   const togglePeriod = (year: number, month: number) => {
@@ -1517,7 +1530,8 @@ const LPOs = () => {
                           <div 
                             className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
                             style={{
-                              top: `${dropdownPosition.top}px`,
+                              top: dropdownPosition.top !== undefined ? `${dropdownPosition.top}px` : 'auto',
+                              bottom: dropdownPosition.bottom !== undefined ? `${dropdownPosition.bottom}px` : 'auto',
                               left: `${dropdownPosition.left}px`
                             }}
                           >
@@ -1683,10 +1697,11 @@ const LPOs = () => {
                               
                               {openDropdowns[rowKey] && (
                                 <div 
-                                  className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999] max-h-[80vh] overflow-y-auto"
+                                  className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
                                   style={{
-                                    top: `${Math.min(dropdownPosition.top, window.innerHeight - 400)}px`,
-                                    left: `${Math.min(dropdownPosition.left, window.innerWidth - 240)}px`,
+                                    top: dropdownPosition.top !== undefined ? `${dropdownPosition.top}px` : 'auto',
+                                    bottom: dropdownPosition.bottom !== undefined ? `${dropdownPosition.bottom}px` : 'auto',
+                                    left: `${dropdownPosition.left}px`,
                                     maxWidth: 'calc(100vw - 20px)'
                                   }}
                                 >
