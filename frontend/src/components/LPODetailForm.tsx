@@ -2257,8 +2257,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={handleCancel}>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto transition-colors" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4" onClick={handleCancel}>
+      <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-lg shadow-xl max-w-6xl w-full h-full sm:h-auto max-h-screen sm:max-h-[90vh] overflow-y-auto transition-colors" onClick={(e) => e.stopPropagation()}>
         {/* Forwarding mode banner */}
         {isForwardingMode && forwardedFromInfo && (
           <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 px-6 py-3">
@@ -2988,7 +2988,152 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               )}
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Card View (< md) */}
+            <div className="md:hidden space-y-1.5">
+              {formData.entries && formData.entries.length > 0 ? formData.entries.filter(entry => entry != null).map((entry, index) => {
+                const autoFill = entryAutoFillData[index] || { direction: 'going', loading: false, fetched: false };
+                const duplicateInfo = duplicateWarnings.get(entry?.truckNo || '');
+                const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
+                const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
+                const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
+                const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5;
+                return (
+                  <div key={index} className={`border rounded-lg p-2 transition-colors ${
+                    autoFill.fetched && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10'
+                    : hasNoRecordWarning ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10'
+                    : isExactDuplicate ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
+                    : isDifferentAmount ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
+                  }`}>
+                    {/* Header row: # + Truck + DO + Direction + Actions all on one line */}
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 w-4 flex-shrink-0">#{index + 1}</span>
+                      {/* Truck */}
+                      <div className="relative flex-1 min-w-0">
+                        <input type="text" value={entry?.truckNo || ''} onChange={(e) => handleTruckNoChange(index, e.target.value)} onPaste={(e) => handleTruckPaste(index, e)}
+                          placeholder="Truck" title="Paste multiple trucks (one per line) to auto-fill multiple rows"
+                          className={`w-full pr-4 px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                            isExactDuplicate ? 'border-red-500 dark:border-red-400' : isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : hasNoRecordWarning ? 'border-amber-500 dark:border-amber-400' : 'border-gray-300 dark:border-gray-600'
+                          }`} />
+                        {autoFill.loading && <Loader2 className="absolute right-1 top-1 w-3 h-3 text-primary-500 animate-spin" />}
+                        {autoFill.fetched && !autoFill.loading && !hasDuplicate && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-green-500" />}
+                        {hasNoRecordWarning && !autoFill.loading && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-amber-500" />}
+                        {isExactDuplicate && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-red-500" />}
+                        {isDifferentAmount && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-blue-500" />}
+                      </div>
+                      {/* DO */}
+                      <div className="relative flex-1 min-w-0">
+                        <input type="text" value={entry?.doNo || ''} onChange={(e) => handleDONoChange(index, e.target.value)}
+                          onBlur={(e) => { if (!e.target.value.trim()) handleEntryChange(index, 'doNo', 'NIL'); }}
+                          placeholder="DO#" title="Enter DO number to auto-fill"
+                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                      </div>
+                      {/* Direction toggle */}
+                      <button type="button" onClick={() => toggleDirection(index)}
+                        className={`flex-shrink-0 inline-flex items-center px-1.5 py-1 rounded text-[10px] font-medium ${
+                          autoFill.direction === 'going'
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                            : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
+                        }`}>
+                        {autoFill.direction === 'going' ? <><ArrowRight className="w-3 h-3" /></> : <><ArrowLeft className="w-3 h-3" /></>}
+                      </button>
+                      {/* Actions */}
+                      {autoFill.fuelRecord && (
+                        <button type="button" onClick={() => handleInspectRecord(index)}
+                          className="flex-shrink-0 p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Inspect fuel record">
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button type="button" onClick={() => handleRemoveEntry(index)}
+                        className="flex-shrink-0 p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Remove entry">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Warnings (only show when needed) */}
+                    {(hasNoRecordWarning || isExactDuplicate || isDifferentAmount) && (
+                      <div className="mb-1.5 text-[10px] leading-tight">
+                        {hasNoRecordWarning && (autoFill.warningMessage?.includes('DUPLICATE')
+                          ? <span className="text-red-600 dark:text-red-400 font-semibold">⚠️ Duplicate — use different truck</span>
+                          : <span className="text-amber-600 dark:text-amber-400">
+                              {autoFill.warningType === 'not_found' && '⚠️ No record — manual entry allowed'}
+                              {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
+                              {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
+                            </span>
+                        )}
+                        {isExactDuplicate && duplicateInfo && <span className="text-red-600 dark:text-red-400">⛔ Dup LPO #{duplicateInfo.lpoNo} ({duplicateInfo.liters}L)</span>}
+                        {isDifferentAmount && duplicateInfo && <span className="text-blue-600 dark:text-blue-400">➕ Top-up +{duplicateInfo.newLiters}L (existing {duplicateInfo.liters}L)</span>}
+                      </div>
+                    )}
+
+                    {/* Journey navigation (only when applicable) */}
+                    {autoFill.allJourneys && (autoFill.allJourneys.active || autoFill.allJourneys.queued.length > 1) && (
+                      <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+                        {autoFill.allJourneys.active && (
+                          <button type="button" onClick={() => handleJourneyNavigation(index, 'active')}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${autoFill.selectedJourneyType === 'active' ? 'bg-green-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                            🚛 Active
+                          </button>
+                        )}
+                        {autoFill.allJourneys.queued.map((qJ, qIdx) => (
+                          <button key={qIdx} type="button" onClick={() => handleJourneyNavigation(index, 'queued', qIdx)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${autoFill.selectedJourneyType === 'queued' && autoFill.selectedJourneyIndex === qIdx ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                            ⏳ Q{qJ.queueOrder || qIdx + 1}
+                          </button>
+                        ))}
+                        {autoFill.fetched && (
+                          <span className={`text-[10px] ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : autoFill.selectedJourneyType === 'queued' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
+                            {(autoFill.fuelRecord as any)?.isLocked ? '🔒 Locked' : autoFill.selectedJourneyType === 'queued' ? '⏳ Queued' : '🚛 Active'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Liters + Rate + Amount + Dest in one compact row */}
+                    <div className="grid grid-cols-4 gap-1">
+                      <div>
+                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Ltrs</label>
+                        <input type="number" value={entry?.liters || 0} onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
+                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Rate</label>
+                        <input type="number" value={entry?.rate || 0} step="0.01" onChange={(e) => handleEntryChange(index, 'rate', parseFloat(e.target.value) || 0)}
+                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Amt</label>
+                        <input type="number" value={(entry?.amount || 0).toFixed(2)} readOnly
+                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-gray-100" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Dest</label>
+                        <input type="text" value={entry?.dest || 'NIL'} onChange={(e) => handleEntryChange(index, 'dest', e.target.value)} placeholder="NIL"
+                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                      </div>
+                    </div>
+                    {/* Balance hint (rare — only for Infinity return) */}
+                    {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && (
+                      <div className={`mt-1 text-[10px] ${autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                        <Fuel className="w-3 h-3 inline mr-0.5" />
+                        {autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation ? `${autoFill.balanceInfo.suggestedLiters}L (reduced)` : `${autoFill.balanceInfo.suggestedLiters}L`}
+                      </div>
+                    )}
+                    {/* Return DO missing hint */}
+                    {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched && (
+                      <div className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">⚠️ No Return DO</div>
+                    )}
+                  </div>
+                );
+              }) : (
+                <div className="text-center py-6 text-xs text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+                  No entries. Tap "Add Entry" to begin.
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Table View (md+) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border dark:border-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
@@ -3313,11 +3458,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           </div>
 
           {/* Form Actions */}
-          <div className="flex justify-end space-x-3 pt-4 border-t dark:border-gray-700">
+          <div className="flex items-center justify-end gap-2 pt-4 border-t dark:border-gray-700">
             <button
               type="button"
               onClick={handleCancel}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+              className="flex-shrink-0 px-2 py-1.5 sm:px-4 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
             >
               Cancel
             </button>
@@ -3327,11 +3472,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               <button
                 type="button"
                 onClick={handleOpenForwardModal}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 flex items-center gap-2"
+                className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
                 title="Forward this LPO to another station"
               >
-                <ArrowRight className="w-4 h-4" />
-                Forward LPO
+                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="whitespace-nowrap">Forward LPO</span>
               </button>
             )}
             
@@ -3341,18 +3486,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 type="button"
                 onClick={handleCreateAndForward}
                 disabled={isCreatingAndForwarding}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Create this LPO and forward trucks to another station"
               >
                 {isCreatingAndForwarding ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Creating...
+                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin flex-shrink-0" />
+                    <span className="whitespace-nowrap">Creating...</span>
                   </>
                 ) : (
                   <>
-                    <ArrowRight className="w-4 h-4" />
-                    Create & Forward
+                    <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                    <span className="whitespace-nowrap">Create & Forward</span>
                   </>
                 )}
               </button>
@@ -3361,7 +3506,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             <button
               type="submit"
               disabled={!formData.entries || formData.entries.length === 0}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
+              className="flex-shrink-0 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed whitespace-nowrap"
             >
               {initialData ? 'Update' : 'Create'} LPO Document
             </button>
