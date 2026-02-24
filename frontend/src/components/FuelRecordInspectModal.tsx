@@ -344,8 +344,8 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                 </div>
               )}
 
-              {/* Checkpoint Table - THE MAIN FEATURE */}
-              <div>
+              {/* Checkpoint Table — desktop only */}
+              <div className="hidden md:block">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                   <Fuel className="h-5 w-5" />
                   Fuel at Each Checkpoint
@@ -415,10 +415,10 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                 </div>
               </div>
 
-              {/* Full Checkpoint Details - Expanded View */}
+              {/* Checkpoint Details Cards — mobile: always visible, desktop: always visible too */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-                  Checkpoint Details (Full Names)
+                  Checkpoint Details
                 </h3>
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
