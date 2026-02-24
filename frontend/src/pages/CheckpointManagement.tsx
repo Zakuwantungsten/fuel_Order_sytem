@@ -181,16 +181,16 @@ const CheckpointManagement = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
+      <div className="mb-4 sm:mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <MapPin className="w-7 h-7" />
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <MapPin className="w-6 h-6 sm:w-7 sm:h-7" />
               Checkpoint Management
             </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm">
               Manage route checkpoints for fleet tracking
             </p>
           </div>
@@ -199,9 +199,9 @@ const CheckpointManagement = () => {
               resetForm();
               setShowAddForm(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
             Add Checkpoint
           </button>
         </div>
@@ -440,7 +440,71 @@ const CheckpointManagement = () => {
 
       {/* Checkpoints Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-        <div className="overflow-x-auto">
+
+        {/* Mobile card view */}
+        <div className="sm:hidden">
+          {checkpoints.length === 0 ? (
+            <div className="text-center py-12">
+              <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 dark:text-gray-400">No checkpoints found</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {checkpoints.map((checkpoint) => (
+                <div key={checkpoint._id} className="p-4 space-y-2">
+                  {/* Name + status + actions */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{checkpoint.displayName}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{checkpoint.name}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        checkpoint.isActive
+                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+                      }`}>{checkpoint.isActive ? 'Active' : 'Inactive'}</span>
+                      <button
+                        onClick={() => { setEditingId(checkpoint._id); setFormData(checkpoint); setShowAddForm(true); }}
+                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                      ><Edit2 className="w-4 h-4" /></button>
+                      <button
+                        onClick={() => handleDelete(checkpoint._id)}
+                        className="text-red-600 hover:text-red-800 dark:text-red-400"
+                      ><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+
+                  {/* Details grid */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div><span className="text-gray-400 dark:text-gray-500">Region: </span><span className="text-gray-700 dark:text-gray-300">{checkpoint.region.replace(/_/g, ' ')}</span></div>
+                    <div><span className="text-gray-400 dark:text-gray-500">Country: </span><span className="text-gray-700 dark:text-gray-300">{checkpoint.country}</span></div>
+                    <div><span className="text-gray-400 dark:text-gray-500">Distance: </span><span className="text-gray-700 dark:text-gray-300">{checkpoint.estimatedDistanceFromStart.toLocaleString()} km</span></div>
+                    {checkpoint.coordinates && (
+                      <div><span className="text-gray-400 dark:text-gray-500">Coords: </span><span className="font-mono text-gray-700 dark:text-gray-300">{checkpoint.coordinates.latitude.toFixed(4)}, {checkpoint.coordinates.longitude.toFixed(4)}</span></div>
+                    )}
+                  </div>
+
+                  {/* Tags */}
+                  {(checkpoint.isMajor || checkpoint.fuelAvailable || checkpoint.borderCrossing) && (
+                    <div className="flex flex-wrap gap-1">
+                      {checkpoint.isMajor && <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">Major</span>}
+                      {checkpoint.fuelAvailable && <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Fuel</span>}
+                      {checkpoint.borderCrossing && <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200">Border</span>}
+                    </div>
+                  )}
+
+                  {checkpoint.alternativeNames.length > 0 && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">Also: {checkpoint.alternativeNames.slice(0, 2).join(', ')}{checkpoint.alternativeNames.length > 2 && ` +${checkpoint.alternativeNames.length - 2} more`}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop table view */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
               <tr>
@@ -562,7 +626,7 @@ const CheckpointManagement = () => {
         </div>
 
         {checkpoints.length === 0 && (
-          <div className="text-center py-12">
+          <div className="hidden sm:block text-center py-12">
             <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500 dark:text-gray-400">No checkpoints found</p>
           </div>
