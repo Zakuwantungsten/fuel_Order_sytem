@@ -169,8 +169,8 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 overflow-y-auto pt-6 pb-6">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl mx-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 overflow-y-auto pt-2 pb-2 sm:pt-6 sm:pb-6 px-2 sm:px-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-700 rounded-t-lg">
           <div className="flex items-center space-x-2">
@@ -245,7 +245,7 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
         </div>
 
         {/* Notifications List */}
-        <div className="max-h-[55vh] overflow-y-auto">
+        <div className="max-h-[52vh] sm:max-h-[55vh] overflow-y-auto">
           {loading ? (
             <div className="p-6 text-center text-gray-500 dark:text-gray-400">
               <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600 mx-auto"></div>
@@ -279,44 +279,28 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <span
-                              className={`inline-block px-2 py-1 rounded text-xs font-medium border ${getTypeColor(
-                                notification.type
-                              )}`}
-                            >
-                              {notification.type.replace(/_/g, ' ').toUpperCase()}
-                            </span>
-                            {!notification.isRead && (
-                              <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
-                            )}
-                          </div>
-
-                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                            {notification.title}
-                          </h4>
-                          <p className="text-xs text-gray-700 dark:text-gray-300 mb-2">
-                            {getTailoredMessage(notification)}
-                          </p>
-
-                          <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
-                            <span>{formatDate(notification.createdAt)}</span>
-                            {notification.metadata?.truckNo && (
-                              <span>Truck: {notification.metadata.truckNo}</span>
-                            )}
-                            {notification.metadata?.doNumber && (
-                              <span>DO: {notification.metadata.doNumber}</span>
-                            )}
-                          </div>
+                      {/* Top row: badge + unread dot + actions (stacks on mobile) */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span
+                            className={`inline-block px-2 py-1 rounded text-xs font-medium border max-w-[180px] sm:max-w-none truncate ${getTypeColor(
+                              notification.type
+                            )}`}
+                            title={notification.type.replace(/_/g, ' ').toUpperCase()}
+                          >
+                            {notification.type.replace(/_/g, ' ').toUpperCase()}
+                          </span>
+                          {!notification.isRead && (
+                            <span className="w-2 h-2 flex-shrink-0 bg-blue-600 rounded-full"></span>
+                          )}
                         </div>
 
-                        <div className="flex items-center space-x-1 ml-3">
+                        {/* Action buttons */}
+                        <div className="flex items-center space-x-1 flex-shrink-0">
                           {!notification.isRead && (
                             <button
-                              onClick={() => markAsRead(notification._id)}
-                              className="p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+                              onClick={(e) => { e.stopPropagation(); markAsRead(notification._id); }}
+                              className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
                               title="Mark as read"
                             >
                               <Eye className="w-4 h-4" />
@@ -324,21 +308,38 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onClose, onNotifi
                           )}
                           {notification.status === 'pending' && (
                             <button
-                              onClick={() => resolveNotification(notification._id)}
-                              className="p-1 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors"
+                              onClick={(e) => { e.stopPropagation(); resolveNotification(notification._id); }}
+                              className="p-1.5 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors"
                               title="Resolve"
                             >
                               <CheckCircle className="w-4 h-4" />
                             </button>
                           )}
                           <button
-                            onClick={() => dismissNotification(notification._id)}
-                            className="p-1 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+                            onClick={(e) => { e.stopPropagation(); dismissNotification(notification._id); }}
+                            className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
                             title="Dismiss"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
+                      </div>
+
+                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1 mb-1">
+                        {notification.title}
+                      </h4>
+                      <p className="text-xs text-gray-700 dark:text-gray-300 mb-2 break-words">
+                        {getTailoredMessage(notification)}
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                        <span>{formatDate(notification.createdAt)}</span>
+                        {notification.metadata?.truckNo && (
+                          <span>Truck: {notification.metadata.truckNo}</span>
+                        )}
+                        {notification.metadata?.doNumber && (
+                          <span>DO: {notification.metadata.doNumber}</span>
+                        )}
                       </div>
                     </div>
                   </div>

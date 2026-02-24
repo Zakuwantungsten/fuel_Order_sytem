@@ -386,7 +386,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
             className="fixed inset-0 z-[100] pointer-events-auto"
             onClick={() => setShowDropdown(false)}
           />
-          <div className="absolute right-0 mt-2 w-96 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 z-[110] max-h-[80vh] overflow-hidden flex flex-col pointer-events-auto">
+          <div className="fixed top-16 left-2 right-2 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:mt-2 sm:w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 z-[110] max-h-[calc(100vh-80px)] sm:max-h-[80vh] overflow-hidden flex flex-col pointer-events-auto">
             {/* Header */}
             <div className="px-4 py-3 border-b dark:border-gray-700 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -447,10 +447,10 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                       <div className="flex items-start gap-3">
                         {getNotificationIcon(notification.type)}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 break-words">
                             {notification.title}
                           </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 break-words">
                             {getTailoredMessage(notification)}
                           </p>
                           {notification.metadata && (
