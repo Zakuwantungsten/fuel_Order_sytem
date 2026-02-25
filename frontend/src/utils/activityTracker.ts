@@ -11,6 +11,7 @@ class ActivityTracker {
   private timeout: NodeJS.Timeout | null = null;
   private onInactivityCallback: ActivityCallback | null = null;
   private isTracking = false;
+  private timeoutMs: number = INACTIVITY_TIMEOUT;
 
   // Events that indicate user activity
   private activityEvents = [
@@ -24,14 +25,17 @@ class ActivityTracker {
 
   /**
    * Start tracking user activity
+   * @param onInactivity  Callback fired after the inactivity period elapses.
+   * @param timeoutMs     Optional override in milliseconds (defaults to INACTIVITY_TIMEOUT).
    */
-  start(onInactivity: ActivityCallback): void {
+  start(onInactivity: ActivityCallback, timeoutMs?: number): void {
     if (this.isTracking) {
       this.stop(); // Clean up existing listeners
     }
 
     this.onInactivityCallback = onInactivity;
     this.isTracking = true;
+    this.timeoutMs = timeoutMs ?? INACTIVITY_TIMEOUT;
 
     // Add event listeners for user activity
     this.activityEvents.forEach((event) => {
@@ -85,7 +89,7 @@ class ActivityTracker {
       if (this.onInactivityCallback && this.isTracking) {
         this.onInactivityCallback();
       }
-    }, INACTIVITY_TIMEOUT);
+    }, this.timeoutMs);
   }
 
   /**

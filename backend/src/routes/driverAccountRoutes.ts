@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { driverAccountController } from '../controllers';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
+import { exportRateLimiter } from '../middleware/rateLimiters';
 import { commonValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
 
@@ -25,7 +26,8 @@ router.get('/year/:year', asyncHandler(driverAccountController.getDriverAccountE
 // Export workbook to Excel
 router.get(
   '/year/:year/export',
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'boss'),
+  exportRateLimiter,
+  authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss'),
   asyncHandler(driverAccountController.exportDriverAccountWorkbook)
 );
 
@@ -48,14 +50,14 @@ router.get(
 // Create entry
 router.post(
   '/',
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'station_manager'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
   asyncHandler(driverAccountController.createDriverAccountEntry)
 );
 
 // Create batch entries
 router.post(
   '/batch',
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
   asyncHandler(driverAccountController.createBatchDriverAccountEntries)
 );
 
@@ -63,7 +65,7 @@ router.post(
 router.put(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'),
   validate,
   asyncHandler(driverAccountController.updateDriverAccountEntry)
 );
@@ -81,7 +83,7 @@ router.patch(
 router.delete(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager'),
+  authorize('super_admin', 'admin', 'boss'),
   validate,
   asyncHandler(driverAccountController.deleteDriverAccountEntry)
 );

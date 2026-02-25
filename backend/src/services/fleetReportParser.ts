@@ -44,7 +44,7 @@ export class FleetReportParser {
    */
   async parseExcelFile(fileBuffer: Buffer, fileName: string): Promise<ParsedReport> {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(fileBuffer);
+    await workbook.xlsx.load(fileBuffer as any);
 
     // Determine report type from filename or content
     const reportType = fileName.toUpperCase().includes('NO_ORDER') || fileName.toUpperCase().includes('NO ORDER')

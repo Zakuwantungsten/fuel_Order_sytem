@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { matchedData } from 'express-validator';
 import { Checkpoint } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
@@ -12,7 +13,7 @@ import { AuditService } from '../utils/auditService';
  */
 export const getAllCheckpoints = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { includeInactive } = req.query;
+    const { includeInactive } = matchedData(req, { locations: ['query'] }) as { includeInactive?: boolean };
 
     const query: any = { isDeleted: false };
     if (!includeInactive) {
@@ -81,7 +82,7 @@ export const createCheckpoint = async (req: AuthRequest, res: Response): Promise
       borderCrossing = false,
       estimatedDistanceFromStart = 0,
       insertAfter, // Optional: insert after specific checkpoint
-    } = req.body;
+    } = matchedData(req, { locations: ['body'] }) as any;
 
     // Validate required fields
     if (!name || !displayName || !region || !country) {
@@ -143,14 +144,14 @@ export const createCheckpoint = async (req: AuthRequest, res: Response): Promise
     // Audit log
     await AuditService.log({
       action: 'CREATE_CHECKPOINT',
-      userId: user.id,
+      userId: user.userId,
       username: user.username,
-      role: user.role,
-      details: {
+      resourceType: 'checkpoint',
+      details: JSON.stringify({
         checkpointId: checkpoint._id,
         name: checkpoint.name,
         order: checkpoint.order,
-      },
+      }),
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -180,7 +181,7 @@ export const updateCheckpoint = async (req: AuthRequest, res: Response): Promise
     }
 
     const { id } = req.params;
-    const updates = req.body;
+    const updates = matchedData(req, { locations: ['body'] }) as any;
 
     const checkpoint = await Checkpoint.findOne({ _id: id, isDeleted: false });
     if (!checkpoint) {
@@ -199,14 +200,14 @@ export const updateCheckpoint = async (req: AuthRequest, res: Response): Promise
     // Audit log
     await AuditService.log({
       action: 'UPDATE_CHECKPOINT',
-      userId: user.id,
+      userId: user.userId,
       username: user.username,
-      role: user.role,
-      details: {
+      resourceType: 'checkpoint',
+      details: JSON.stringify({
         checkpointId: checkpoint._id,
         name: checkpoint.name,
         updates,
-      },
+      }),
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -256,14 +257,14 @@ export const deleteCheckpoint = async (req: AuthRequest, res: Response): Promise
     // Audit log
     await AuditService.log({
       action: 'DELETE_CHECKPOINT',
-      userId: user.id,
+      userId: user.userId,
       username: user.username,
-      role: user.role,
-      details: {
+      resourceType: 'checkpoint',
+      details: JSON.stringify({
         checkpointId: checkpoint._id,
         name: checkpoint.name,
         order: checkpoint.order,
-      },
+      }),
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -291,7 +292,7 @@ export const reorderCheckpoints = async (req: AuthRequest, res: Response): Promi
       throw new ApiError(403, 'Only administrators and fuel order makers can reorder checkpoints');
     }
 
-    const { checkpoints } = req.body;
+    const { checkpoints } = matchedData(req, { locations: ['body'] }) as { checkpoints?: Array<{ id: string; order: number }> };
 
     if (!Array.isArray(checkpoints) || checkpoints.length === 0) {
       throw new ApiError(400, 'Checkpoints array is required');
@@ -318,13 +319,13 @@ export const reorderCheckpoints = async (req: AuthRequest, res: Response): Promi
     // Audit log
     await AuditService.log({
       action: 'REORDER_CHECKPOINTS',
-      userId: user.id,
+      userId: user.userId,
       username: user.username,
-      role: user.role,
-      details: {
+      resourceType: 'checkpoint',
+      details: JSON.stringify({
         checkpointCount: checkpoints.length,
         reordering: checkpoints,
-      },
+      }),
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -447,12 +448,12 @@ export const seedCheckpoints = async (req: AuthRequest, res: Response): Promise<
     // Audit log
     await AuditService.log({
       action: 'SEED_CHECKPOINTS',
-      userId: user.id,
+      userId: user.userId,
       username: user.username,
-      role: user.role,
-      details: {
+      resourceType: 'checkpoint',
+      details: JSON.stringify({
         checkpointCount: created.length,
-      },
+      }),
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });

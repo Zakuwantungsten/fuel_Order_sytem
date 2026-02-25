@@ -2,6 +2,7 @@ import winston from 'winston';
 import { config } from '../config';
 import path from 'path';
 import fs from 'fs';
+import { createSanitizeFormat } from './loggerSanitizer';
 
 // Create logs directory if it doesn't exist
 const logsDir = path.dirname(config.logFile);
@@ -9,9 +10,13 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
-// Define log format
+// Create sanitizer format
+const sanitizeFormat = createSanitizeFormat();
+
+// Define log format with sanitization
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  sanitizeFormat,
   winston.format.errors({ stack: true }),
   winston.format.splat(),
   winston.format.json()
@@ -21,6 +26,7 @@ const logFormat = winston.format.combine(
 const consoleFormat = winston.format.combine(
   winston.format.colorize(),
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  sanitizeFormat,
   winston.format.printf(({ timestamp, level, message, ...meta }) => {
     let msg = `${timestamp} [${level}]: ${message}`;
     if (Object.keys(meta).length > 0) {

@@ -16,20 +16,20 @@ router.get('/next-lpo-number', asyncHandler(lpoEntryController.getNextLPONumber)
 router.get('/lpo/:lpoNo', asyncHandler(lpoEntryController.getLPOEntriesByLPONo));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(lpoEntryController.getLPOEntryById));
 
-// Create route - managers don't have write access, only read
+// Create route - station_manager has read/update/approve only, not create
 router.post(
   '/',
-  authorize('super_admin', 'admin', 'fuel_order_maker', 'station_manager'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
   lpoEntryValidation.create,
   validate,
   asyncHandler(lpoEntryController.createLPOEntry)
 );
 
-// Update route - managers don't have write access, only read
+// Update route - full LPO UPDATE roles per frontend permissions
 router.put(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'fuel_order_maker', 'station_manager'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'),
   lpoEntryValidation.update,
   validate,
   asyncHandler(lpoEntryController.updateLPOEntry)

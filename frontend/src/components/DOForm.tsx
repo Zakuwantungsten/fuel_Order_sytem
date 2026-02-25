@@ -208,7 +208,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const handleDownload = async (targetOrder: DeliveryOrder) => {
     setIsDownloading(true);
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
       const token = sessionStorage.getItem('fuel_order_token');
 
       if (!token) {

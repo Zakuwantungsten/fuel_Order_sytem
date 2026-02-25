@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { checkMaintenanceMode } from '../middleware/maintenance';
+import { apiRateLimiter } from '../middleware/rateLimiters';
 import authRoutes from './authRoutes';
 import deliveryOrderRoutes from './deliveryOrderRoutes';
 import lpoEntryRoutes from './lpoEntryRoutes';
@@ -27,6 +28,10 @@ const router = Router();
 
 // Mount routes
 router.use('/auth', authRoutes);
+
+// Standard data endpoints rate limiter (excludes auth routes)
+router.use(apiRateLimiter);
+
 router.use('/config', publicConfigRoutes); // Public read-only config for all authenticated users
 
 // --- Maintenance mode gate: blocks all routes below for non-allowed roles ---

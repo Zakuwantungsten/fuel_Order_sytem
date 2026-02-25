@@ -356,6 +356,11 @@ export class AuditService {
       EXPORT: 'low',
       ENABLE_MAINTENANCE: 'critical',
       DISABLE_MAINTENANCE: 'critical',
+      CREATE_CHECKPOINT: 'low',
+      UPDATE_CHECKPOINT: 'low',
+      DELETE_CHECKPOINT: 'medium',
+      REORDER_CHECKPOINTS: 'low',
+      SEED_CHECKPOINTS: 'medium',
     };
     return severityMap[action] || 'low';
   }

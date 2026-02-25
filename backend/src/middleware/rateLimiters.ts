@@ -6,9 +6,9 @@ import { config } from '../config';
  * Prevents brute force attacks on login
  */
 export const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 5 : 100, // 5 in prod, 100 in dev
-  message: 'Too many authentication attempts. Please try again after 15 minutes.',
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 per minute
+  message: 'Too many login attempts. Please try again after 1 minute.',
   standardHeaders: true,
   legacyHeaders: false,
   // Skip successful requests to allow legitimate users
@@ -58,6 +58,28 @@ export const generalRateLimiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMaxRequests,
   message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * Data endpoints rate limiter (standard traffic)
+ */
+export const apiRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 req/min
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * Export/download rate limiter
+ */
+export const exportRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 req/min
+  message: 'Too many export requests. Please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
 });

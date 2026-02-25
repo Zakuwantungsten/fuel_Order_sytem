@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { matchedData } from 'express-validator';
 import { LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
@@ -15,6 +16,11 @@ export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise
 
     // Build filter
     const filter: any = { isDeleted: false };
+
+    // Restrict drivers to their own truck's records (least-privilege)
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
 
     // Use actualDate for date filtering (actual LPO date) instead of createdAt
     // Falls back to createdAt for legacy records that don't have actualDate
@@ -150,7 +156,8 @@ export const getLPOEntryById = async (req: AuthRequest, res: Response): Promise<
  */
 export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const lpoEntry = await LPOEntry.create(req.body);
+    const payload = matchedData(req, { locations: ['body'] }) as any;
+    const lpoEntry = await LPOEntry.create(payload);
 
     logger.info(`LPO entry created: ${lpoEntry.lpoNo} by ${req.user?.username}`);
 
@@ -189,10 +196,11 @@ export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<v
 export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const updates = matchedData(req, { locations: ['body'] }) as any;
 
     const lpoEntry = await LPOEntry.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      req.body,
+      updates,
       { new: true, runValidators: true }
     );
 

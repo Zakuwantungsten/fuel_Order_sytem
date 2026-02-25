@@ -89,6 +89,7 @@ export const errorHandler = (
       stack: err.stack,
       url: req.url,
       method: req.method,
+      requestId: (req as any).requestId,
     });
   } else {
     logger.warn('Operational error:', {
@@ -96,6 +97,7 @@ export const errorHandler = (
       statusCode,
       url: req.url,
       method: req.method,
+      requestId: (req as any).requestId,
     });
   }
 
@@ -103,6 +105,7 @@ export const errorHandler = (
   res.status(statusCode).json({
     success: false,
     message,
+    requestId: (req as any).requestId,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };

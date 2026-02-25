@@ -4,6 +4,9 @@ import logger from '../utils/logger';
 
 export const connectDatabase = async (): Promise<void> => {
   try {
+    mongoose.set('strictQuery', true);
+    mongoose.set('sanitizeFilter', true);
+
     const options: mongoose.ConnectOptions = {
       maxPoolSize: 10,
       minPoolSize: 5,

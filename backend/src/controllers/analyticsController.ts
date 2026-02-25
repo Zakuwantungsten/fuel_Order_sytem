@@ -9,6 +9,8 @@ import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { logger } from '../utils';
 import unifiedExportService from '../services/unifiedExportService';
+import { AuditService } from '../utils/auditService';
+import AnomalyDetectionService from '../utils/anomalyDetectionService';
 
 /**
  * Get comprehensive analytics dashboard data
@@ -734,6 +736,29 @@ async function exportRevenueToExcel(req: AuthRequest, res: Response, start: Date
   const filename = `revenue_report_${new Date().toISOString().split('T')[0]}.xlsx`;
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
+  // Log export to audit trail
+  try {
+    await AuditService.logExport(
+      req.user?.userId || 'unknown',
+      req.user?.username || 'system',
+      'analytics_revenue',
+      'xlsx',
+      orders.length,
+      req.ip || 'unknown'
+    );
+
+    // Detect export anomalies
+    await AnomalyDetectionService.detectExportAnomaly(
+      req.user?.username || 'system',
+      orders.length,
+      'xlsx',
+      req.ip || 'unknown',
+      req.get('user-agent') || 'unknown'
+    );
+  } catch (logError: any) {
+    logger.error(`Error logging analytics export: ${logError.message}`);
+  }
+
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(buffer);
@@ -768,6 +793,29 @@ async function exportFuelToExcel(req: AuthRequest, res: Response, start: Date, e
   const filename = `fuel_report_${new Date().toISOString().split('T')[0]}.xlsx`;
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
+  // Log export to audit trail
+  try {
+    await AuditService.logExport(
+      req.user?.userId || 'unknown',
+      req.user?.username || 'system',
+      'analytics_fuel',
+      'xlsx',
+      records.length,
+      req.ip || 'unknown'
+    );
+
+    // Detect export anomalies
+    await AnomalyDetectionService.detectExportAnomaly(
+      req.user?.username || 'system',
+      records.length,
+      'xlsx',
+      req.ip || 'unknown',
+      req.get('user-agent') || 'unknown'
+    );
+  } catch (logError: any) {
+    logger.error(`Error logging analytics export: ${logError.message}`);
+  }
+
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(buffer);
@@ -795,6 +843,29 @@ async function exportUserActivityToExcel(req: AuthRequest, res: Response, start:
 
   const filename = `user_activity_report_${new Date().toISOString().split('T')[0]}.xlsx`;
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  // Log export to audit trail
+  try {
+    await AuditService.logExport(
+      req.user?.userId || 'unknown',
+      req.user?.username || 'system',
+      'analytics_user_activity',
+      'xlsx',
+      logs.length,
+      req.ip || 'unknown'
+    );
+
+    // Detect export anomalies
+    await AnomalyDetectionService.detectExportAnomaly(
+      req.user?.username || 'system',
+      logs.length,
+      'xlsx',
+      req.ip || 'unknown',
+      req.get('user-agent') || 'unknown'
+    );
+  } catch (logError: any) {
+    logger.error(`Error logging analytics export: ${logError.message}`);
+  }
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -883,6 +954,32 @@ async function exportComprehensiveToExcel(req: AuthRequest, res: Response, start
 
   const filename = `comprehensive_report_${new Date().toISOString().split('T')[0]}.xlsx`;
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  // Calculate total records exported
+  const totalRecords = orders.length + fuelRecords.length + activityLogs.length;
+
+  // Log export to audit trail
+  try {
+    await AuditService.logExport(
+      req.user?.userId || 'unknown',
+      req.user?.username || 'system',
+      'analytics_comprehensive',
+      'xlsx',
+      totalRecords,
+      req.ip || 'unknown'
+    );
+
+    // Detect export anomalies
+    await AnomalyDetectionService.detectExportAnomaly(
+      req.user?.username || 'system',
+      totalRecords,
+      'xlsx',
+      req.ip || 'unknown',
+      req.get('user-agent') || 'unknown'
+    );
+  } catch (logError: any) {
+    logger.error(`Error logging analytics export: ${logError.message}`);
+  }
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

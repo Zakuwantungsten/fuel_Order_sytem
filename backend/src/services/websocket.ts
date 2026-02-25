@@ -15,6 +15,20 @@ interface AuthSocket extends Socket {
   role?: string;
 }
 
+interface ClientEventGuard {
+  roles: string[];
+  validate?: (payload: unknown) => boolean;
+}
+
+const clientEventGuards: Record<string, ClientEventGuard> = {
+  // Add client-emitted events here with role and payload validation.
+  // Example:
+  // 'truck:position:update': {
+  //   roles: ['driver', 'admin'],
+  //   validate: (payload) => typeof payload === 'object' && payload !== null,
+  // },
+};
+
 /**
  * Initialize WebSocket server
  */
@@ -51,6 +65,41 @@ export const initializeWebSocket = (server: HTTPServer): SocketIOServer => {
   // Connection handler
   io.on('connection', (socket: AuthSocket) => {
     logger.info(`WebSocket client connected: ${socket.username} (${socket.role}) - Socket ID: ${socket.id}`);
+
+    socket.use((packet, next) => {
+      const eventName = packet[0];
+      const payload = packet[1];
+
+      const guard = clientEventGuards[eventName];
+      if (!guard) {
+        logger.warn(`Blocked unregistered socket event: ${eventName}`, {
+          user: socket.username,
+          role: socket.role,
+          socketId: socket.id,
+        });
+        return next(new Error('Event not allowed'));
+      }
+
+      if (guard.roles.length > 0 && (!socket.role || !guard.roles.includes(socket.role))) {
+        logger.warn(`Blocked unauthorized socket event: ${eventName}`, {
+          user: socket.username,
+          role: socket.role,
+          socketId: socket.id,
+        });
+        return next(new Error('Not authorized'));
+      }
+
+      if (guard.validate && !guard.validate(payload)) {
+        logger.warn(`Blocked invalid socket payload: ${eventName}`, {
+          user: socket.username,
+          role: socket.role,
+          socketId: socket.id,
+        });
+        return next(new Error('Invalid payload'));
+      }
+
+      return next();
+    });
 
     // Track connected user
     if (socket.userId) {

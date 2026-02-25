@@ -1,13 +1,16 @@
 import { Response } from 'express';
+import bcrypt from 'bcryptjs';
 import { User, DriverCredential, SystemConfig } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger, createDriverUserId } from '../utils';
 import { AuditService } from '../utils/auditService';
+import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { AuthRequest } from '../middleware/auth';
 import { LoginRequest, RegisterRequest, AuthResponse, JWTPayload } from '../types';
 import * as crypto from 'crypto';
 import emailService from '../services/emailService';
 import { emitToUser } from '../services/websocket';
+import { getPasswordPolicy, enforcePasswordPolicy } from '../utils/passwordPolicy';
 
 
 /**
@@ -17,10 +20,18 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
   try {
     const { username, email, password, firstName, lastName, role } = req.body as RegisterRequest;
 
+    // Enforce admin-configured password policy
+    const policy = await getPasswordPolicy();
+    const policyError = enforcePasswordPolicy(password, policy);
+    if (policyError) {
+      throw new ApiError(400, policyError);
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ username }, { email }],
-    });
+      isDeleted: false,
+    }).select('-password -refreshToken -passwordHistory -resetPasswordToken');
 
     if (existingUser) {
       if (existingUser.username === username) {
@@ -52,8 +63,8 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
 
     const { accessToken, refreshToken } = generateTokens(payload);
 
-    // Save refresh token
-    user.refreshToken = refreshToken;
+    // Hash refresh token before storage (Gap 2)
+    user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
     await user.save();
 
     logger.info(`New user registered: ${username}`);
@@ -86,6 +97,15 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     // Pattern: Starts with T followed by digits and letters (e.g., T123-DNH, T456-ABC)
     const truckPattern = /^T\d{3,4}[-\s]?[A-Z]{3}$/i;
     const isDriverLogin = truckPattern.test(username);
+
+    // Read session config once — shared by both driver and regular-user paths.
+    // jwtExpiry (hours) and refreshTokenExpiry (days) let the super-admin control
+    // token lifetimes from the Security tab without restarting the server.
+    const sessionConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+    const jwtExpiryHours = sessionConfig?.systemSettings?.session?.jwtExpiry;
+    const refreshExpiryDays = sessionConfig?.systemSettings?.session?.refreshTokenExpiry;
+    const accessExpiry = jwtExpiryHours ? `${jwtExpiryHours}h` : undefined;
+    const refreshExpiry = refreshExpiryDays ? `${refreshExpiryDays}d` : undefined;
 
     if (isDriverLogin) {
       // Secure driver authentication using DriverCredential model
@@ -132,6 +152,14 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
           req.ip,
           req.get('user-agent')
         );
+        
+        // Detect anomalies
+        await AnomalyDetectionService.detectFailedLoginAnomaly(
+          username,
+          req.ip || 'unknown',
+          req.get('user-agent')
+        );
+        
         throw new ApiError(401, 'Invalid PIN. Please check your credentials and try again.');
       }
 
@@ -165,9 +193,19 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         role: driverUser.role as any,
       };
 
-      const { accessToken, refreshToken } = generateTokens(payload);
+      const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
+
+      // Hash and persist the driver's refresh token (Gap 8)
+      driverCredential.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+      await driverCredential.save();
 
       logger.info(`Driver logged in: ${actualTruckNo}`);
+
+      // Clear failed login attempts on successful login
+      AnomalyDetectionService.clearFailedLoginAttempts(
+        actualTruckNo,
+        req.ip || 'unknown'
+      );
 
       // Log successful driver login
       await AuditService.logLogin(
@@ -187,7 +225,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       res.status(200).json({
         success: true,
         message: 'Login successful',
-        data: response,
+        data: {
+          ...response,
+          sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
+        },
       });
       return;
     }
@@ -204,6 +245,14 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         req.ip,
         req.get('user-agent')
       );
+      
+      // Detect anomalies
+      await AnomalyDetectionService.detectFailedLoginAnomaly(
+        username,
+        req.ip || 'unknown',
+        req.get('user-agent')
+      );
+      
       throw new ApiError(401, 'Invalid username. Please check your credentials and try again.');
     }
 
@@ -224,10 +273,29 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       throw new ApiError(403, 'Your account has been deactivated. Please contact administrator.');
     }
 
+    // Session config already loaded above — extract lockout and single-session settings
+    const maxAttempts = sessionConfig?.systemSettings?.session?.maxLoginAttempts ?? 5;
+    const lockoutMinutes = sessionConfig?.systemSettings?.session?.lockoutDuration ?? 15;
+    const allowMultipleSessions = sessionConfig?.systemSettings?.session?.allowMultipleSessions ?? true;
+
+    // Check if account is temporarily locked out (Gap 4)
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      throw new ApiError(403, `Account temporarily locked due to too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'}.`);
+    }
+
     // Verify password
     const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
+      // Increment failed attempt counter; lock if threshold reached (Gap 4)
+      user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
+      if (user.failedLoginAttempts >= maxAttempts) {
+        user.lockedUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
+        user.failedLoginAttempts = 0;
+      }
+      await user.save();
+      
       // Log failed login attempt
       await AuditService.logLogin(
         username,
@@ -235,12 +303,29 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         req.ip,
         req.get('user-agent')
       );
+      
+      // Detect anomalies
+      await AnomalyDetectionService.detectFailedLoginAnomaly(
+        username,
+        req.ip || 'unknown',
+        req.get('user-agent')
+      );
+      
+      if (user.lockedUntil && user.lockedUntil > new Date()) {
+        throw new ApiError(403, `Too many failed login attempts. Account locked for ${lockoutMinutes} minutes.`);
+      }
       throw new ApiError(401, 'Invalid password. Please check your credentials and try again.');
     }
 
-    // Enforce single-session policy if configured
-    const systemConfig = await SystemConfig.findOne({ configType: 'system_settings' });
-    const allowMultipleSessions = systemConfig?.systemSettings?.session?.allowMultipleSessions ?? true;
+    // Reset failed login tracking on successful authentication (Gap 4)
+    user.failedLoginAttempts = 0;
+    user.lockedUntil = undefined;
+    
+    // Clear failed login attempts in anomaly detection cache
+    AnomalyDetectionService.clearFailedLoginAttempts(
+      username,
+      req.ip || 'unknown'
+    );
 
     if (!allowMultipleSessions) {
       // Single-session policy: kick any existing session for this user.
@@ -260,10 +345,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       role: user.role,
     };
 
-    const { accessToken, refreshToken } = generateTokens(payload);
+    const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
 
-    // Update refresh token and last login
-    user.refreshToken = refreshToken;
+    // Hash refresh token before storage, update last login (Gap 2)
+    user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
     user.lastLogin = new Date();
     await user.save();
 
@@ -287,7 +372,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(200).json({
       success: true,
       message: 'Login successful',
-      data: response,
+      data: {
+        ...response,
+        sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
+      },
     });
   } catch (error: any) {
     throw error;
@@ -305,13 +393,71 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
       throw new ApiError(400, 'Refresh token is required');
     }
 
-    // Verify refresh token
+    // Verify refresh token signature and expiry
     const decoded = verifyRefreshToken(token);
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-    // Find user and verify refresh token matches
+    // Read DB session config so the refreshed tokens honour any TTL changes made
+    // by the super-admin in the Security tab without a server restart.
+    const sessionSysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+    const rtJwtExpiryHours = sessionSysConfig?.systemSettings?.session?.jwtExpiry;
+    const rtRefreshExpiryDays = sessionSysConfig?.systemSettings?.session?.refreshTokenExpiry;
+    const rtAccessExpiry = rtJwtExpiryHours ? `${rtJwtExpiryHours}h` : undefined;
+    const rtRefreshExpiry = rtRefreshExpiryDays ? `${rtRefreshExpiryDays}d` : undefined;
+
+    // Driver refresh token path (Gap 8)
+    if (decoded.userId.startsWith('driver_')) {
+      const rawTruck = decoded.userId.replace(/^driver_/, '').replace(/_/g, '-');
+      const driverCredential = await DriverCredential.findOne({
+        $or: [{ truckNo: rawTruck }, { truckNo: rawTruck.replace(/-/g, ' ') }],
+        isActive: true,
+      }).select('+refreshToken');
+
+      if (!driverCredential) {
+        throw new ApiError(401, 'Invalid refresh token');
+      }
+
+      if (driverCredential.refreshToken !== hashedToken) {
+        // Token reuse detected — revoke driver session (Gap 3)
+        driverCredential.refreshToken = undefined;
+        await driverCredential.save();
+        logger.warn(`Refresh token reuse detected for driver: ${driverCredential.truckNo}`);
+        throw new ApiError(401, 'Invalid refresh token');
+      }
+
+      const payload: JWTPayload = {
+        userId: decoded.userId,
+        username: driverCredential.truckNo,
+        role: 'driver' as any,
+      };
+      const tokens = generateTokens(payload, rtAccessExpiry, rtRefreshExpiry);
+      driverCredential.refreshToken = crypto.createHash('sha256').update(tokens.refreshToken).digest('hex');
+      await driverCredential.save();
+
+      res.status(200).json({
+        success: true,
+        message: 'Token refreshed successfully',
+        data: tokens,
+      });
+      return;
+    }
+
+    // Regular user refresh token path
     const user = await User.findById(decoded.userId).select('+refreshToken');
 
-    if (!user || user.refreshToken !== token || user.isDeleted || !user.isActive) {
+    if (!user) {
+      throw new ApiError(401, 'Invalid refresh token');
+    }
+
+    if (user.isDeleted || !user.isActive) {
+      throw new ApiError(401, 'Invalid refresh token');
+    }
+
+    if (user.refreshToken !== hashedToken) {
+      // Token reuse detected — revoke all sessions for this user (Gap 3)
+      user.refreshToken = undefined;
+      await user.save();
+      logger.warn(`Refresh token reuse detected for user: ${user.username}`);
       throw new ApiError(401, 'Invalid refresh token');
     }
 
@@ -322,10 +468,10 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
       role: user.role,
     };
 
-    const tokens = generateTokens(payload);
+    const tokens = generateTokens(payload, rtAccessExpiry, rtRefreshExpiry);
 
-    // Update refresh token
-    user.refreshToken = tokens.refreshToken;
+    // Hash and store the new refresh token (Gap 2)
+    user.refreshToken = crypto.createHash('sha256').update(tokens.refreshToken).digest('hex');
     await user.save();
 
     res.status(200).json({
@@ -380,7 +526,8 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
       throw new ApiError(401, 'Not authenticated');
     }
 
-    const user = await User.findById(req.user.userId);
+    // ✅ SECURITY: Explicitly exclude sensitive fields from response
+    const user = await User.findById(req.user.userId).select('-password -refreshToken -passwordHistory -resetPasswordToken -resetPasswordExpires -failedLoginAttempts -lockedUntil');
 
     if (!user) {
       throw new ApiError(404, 'User not found');
@@ -449,7 +596,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
       throw new ApiError(400, 'Current password and new password are required');
     }
 
-    const user = await User.findById(req.user.userId).select('+password');
+    const user = await User.findById(req.user.userId).select('+password +passwordHistory');
 
     if (!user) {
       throw new ApiError(404, 'User not found');
@@ -460,6 +607,28 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
     if (!isPasswordValid) {
       throw new ApiError(401, 'Current password is incorrect');
+    }
+
+    // Enforce admin-configured password policy
+    const policy = await getPasswordPolicy();
+    const policyError = enforcePasswordPolicy(newPassword, policy);
+    if (policyError) {
+      throw new ApiError(400, policyError);
+    }
+
+    // Enforce password history: new password must not match recent previous passwords
+    if (policy.historyCount > 0) {
+      const historyToCheck = [user.password!, ...(user.passwordHistory ?? [])].slice(0, policy.historyCount);
+      for (const oldHash of historyToCheck) {
+        if (await bcrypt.compare(newPassword, oldHash)) {
+          throw new ApiError(400, `Password was recently used. Choose a password not used in the last ${policy.historyCount} change${policy.historyCount === 1 ? '' : 's'}.`);
+        }
+      }
+    }
+
+    // Archive current hash before overwriting
+    if (policy.historyCount > 0 && user.password) {
+      user.passwordHistory = [user.password, ...(user.passwordHistory ?? [])].slice(0, policy.historyCount);
     }
 
     // Update password and clear any forced-change flag
@@ -494,11 +663,11 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
 
     const { newPassword } = req.body;
 
-    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
-      throw new ApiError(400, 'New password must be at least 8 characters');
+    if (!newPassword || typeof newPassword !== 'string') {
+      throw new ApiError(400, 'New password is required');
     }
 
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user.userId).select('+password +passwordHistory');
 
     if (!user) {
       throw new ApiError(404, 'User not found');
@@ -506,6 +675,28 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
 
     if (!user.mustChangePassword) {
       throw new ApiError(403, 'Password change is not required for this account');
+    }
+
+    // Enforce admin-configured password policy
+    const fl_policy = await getPasswordPolicy();
+    const fl_policyError = enforcePasswordPolicy(newPassword, fl_policy);
+    if (fl_policyError) {
+      throw new ApiError(400, fl_policyError);
+    }
+
+    // Enforce password history
+    if (fl_policy.historyCount > 0) {
+      const historyToCheck = [user.password!, ...(user.passwordHistory ?? [])].slice(0, fl_policy.historyCount);
+      for (const oldHash of historyToCheck) {
+        if (oldHash && await bcrypt.compare(newPassword, oldHash)) {
+          throw new ApiError(400, `Password was recently used. Choose a different password.`);
+        }
+      }
+    }
+
+    // Archive current hash before overwriting
+    if (fl_policy.historyCount > 0 && user.password) {
+      user.passwordHistory = [user.password, ...(user.passwordHistory ?? [])].slice(0, fl_policy.historyCount);
     }
 
     user.password = newPassword;
@@ -542,8 +733,8 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
       throw new ApiError(400, 'Email is required');
     }
 
-    // Find user by email
-    const user = await User.findOne({ email: email.toLowerCase(), isDeleted: false });
+    // Find user by email (with field selection to prevent PII leakage)
+    const user = await User.findOne({ email: email.toLowerCase(), isDeleted: false }).select('-password -refreshToken -passwordHistory -resetPasswordToken -resetPasswordExpires');
 
     // Always return success message for security (don't reveal if email exists)
     const successMessage = 'If an account with that email exists, a password reset link has been sent.';
@@ -661,11 +852,6 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
       throw new ApiError(400, 'Email, token, and new password are required');
     }
 
-    // Validate password length
-    if (newPassword.length < 6) {
-      throw new ApiError(400, 'Password must be at least 6 characters long');
-    }
-
     // Hash the token to compare with stored hash
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
@@ -675,10 +861,32 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
       resetPasswordToken: hashedToken,
       resetPasswordExpires: { $gt: new Date() }, // Token not expired
       isDeleted: false,
-    }).select('+password +resetPasswordToken +resetPasswordExpires');
+    }).select('+password +resetPasswordToken +resetPasswordExpires +passwordHistory');
 
     if (!user) {
       throw new ApiError(400, 'Invalid or expired password reset token');
+    }
+
+    // Enforce admin-configured password policy
+    const rp_policy = await getPasswordPolicy();
+    const rp_policyError = enforcePasswordPolicy(newPassword, rp_policy);
+    if (rp_policyError) {
+      throw new ApiError(400, rp_policyError);
+    }
+
+    // Enforce password history
+    if (rp_policy.historyCount > 0) {
+      const historyToCheck = [user.password!, ...(user.passwordHistory ?? [])].slice(0, rp_policy.historyCount);
+      for (const oldHash of historyToCheck) {
+        if (oldHash && await bcrypt.compare(newPassword, oldHash)) {
+          throw new ApiError(400, `Password was recently used. Choose a different password.`);
+        }
+      }
+    }
+
+    // Archive current hash before overwriting
+    if (rp_policy.historyCount > 0 && user.password) {
+      user.passwordHistory = [user.password, ...(user.passwordHistory ?? [])].slice(0, rp_policy.historyCount);
     }
 
     // Update password

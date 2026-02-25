@@ -1,11 +1,18 @@
-// Set environment variables for testing FIRST (before any imports that might use them)
-process.env.JWT_SECRET = 'test-jwt-secret-key-for-testing';
-process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-key-for-testing';
-process.env.JWT_EXPIRES_IN = '15m';
-process.env.JWT_REFRESH_EXPIRES_IN = '7d';
-process.env.NODE_ENV = 'test';
-process.env.LOG_FILE = '/tmp/test-app.log';
-process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+// Load test environment variables from .env.test before any imports
+import dotenv from 'dotenv';
+import path from 'path';
+
+const envPath = path.resolve(__dirname, '../../.env.test');
+dotenv.config({ path: envPath });
+
+// ✅ SECURITY: Test secrets now loaded from .env.test, not hardcoded
+// Fallback values only if .env.test is not found
+if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = 'test-jwt-secret-key-for-testing-generated-fallback';
+}
+if (!process.env.JWT_REFRESH_SECRET) {
+  process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-key-for-testing-generated-fallback';
+}
 
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';

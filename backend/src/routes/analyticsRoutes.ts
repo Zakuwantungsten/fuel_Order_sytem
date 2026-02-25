@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import * as analyticsController from '../controllers/analyticsController';
+import { exportRateLimiter } from '../middleware/rateLimiters';
 
 const router = express.Router();
 
@@ -17,6 +18,6 @@ router.get('/user-activity', analyticsController.getUserActivityReport);
 router.get('/system-performance', analyticsController.getSystemPerformance);
 
 // Export
-router.post('/export', analyticsController.exportAnalyticsReport);
+router.post('/export', exportRateLimiter, analyticsController.exportAnalyticsReport);
 
 export default router;

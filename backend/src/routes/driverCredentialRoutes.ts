@@ -10,6 +10,7 @@ import {
   getDriverCredentialsStats,
 } from '../controllers/driverCredentialController';
 import { authenticate, authorize } from '../middleware/auth';
+import { exportRateLimiter } from '../middleware/rateLimiters';
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ router.use(authorize('super_admin', 'admin'));
 router.get('/stats', getDriverCredentialsStats);
 
 // Export
-router.get('/export', exportDriverCredentials);
+router.get('/export', exportRateLimiter, exportDriverCredentials);
 
 // Scan for new trucks
 router.post('/scan', scanAndGenerateCredentials);

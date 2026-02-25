@@ -76,10 +76,15 @@ export const markAsRead = async (req: AuthRequest, res: Response): Promise<void>
   try {
     const { id } = req.params;
     const userId = req.user?.userId;
+    const userRole = req.user?.role;
 
-    const notification = await Notification.findById(id);
+    const notification = await Notification.findOne({
+      _id: id,
+      recipients: { $in: [userRole, userId] },
+      isDeleted: false,
+    });
     if (!notification) {
-      throw new ApiError(404, 'Notification not found');
+      throw new ApiError(404, 'Notification not found or you do not have permission to access it');
     }
 
     // Add user to readBy array if not already there

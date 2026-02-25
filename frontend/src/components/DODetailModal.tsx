@@ -27,7 +27,7 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
     onClose();
     try {
       // Get API base URL and auth token
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
       const token = sessionStorage.getItem('fuel_order_token');
       
       if (!token) {

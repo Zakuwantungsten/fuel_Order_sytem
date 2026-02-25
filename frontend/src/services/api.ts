@@ -16,9 +16,9 @@ import {
   YardFuelDispense
 } from '../types';
 
-// Use relative URL to leverage Vite proxy (/api -> http://localhost:5000/api)
+// Use relative URL to leverage Vite proxy (/api/v1 -> http://localhost:5000/api/v1)
 // This makes requests same-origin, allowing cookies to work properly
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 // Create axios instance with default config
 const apiClient = axios.create({
@@ -35,22 +35,14 @@ const getCsrfToken = (): string | null => {
   const decodedCookie = decodeURIComponent(document.cookie);
   const cookieArray = decodedCookie.split(';');
   
-  console.log('[CSRF] Checking cookies:', {
-    allCookies: document.cookie,
-    decoded: decodedCookie,
-    cookieCount: cookieArray.length
-  });
-  
   for (let i = 0; i < cookieArray.length; i++) {
     let cookie = cookieArray[i].trim();
     if (cookie.indexOf(name) === 0) {
       const token = cookie.substring(name.length, cookie.length);
-      console.log('[CSRF] Found token in cookie:', token.substring(0, 10) + '...');
       return token;
     }
   }
   
-  console.warn('[CSRF] No XSRF-TOKEN cookie found!');
   return null;
 };
 
@@ -58,9 +50,6 @@ const getCsrfToken = (): string | null => {
 const fetchCsrfToken = async (): Promise<void> => {
   try {
     const response = await apiClient.get('/csrf-token');
-    console.log('[CSRF] Token fetched successfully', { 
-      cookie: getCsrfToken() ? 'present' : 'missing' 
-    });
     return response.data;
   } catch (error) {
     console.error('[CSRF] Failed to fetch CSRF token:', error);
@@ -88,11 +77,9 @@ apiClient.interceptors.request.use(
       
       // If no CSRF token exists, fetch it first (but not for csrf-token endpoint itself)
       if (!csrfToken && !config.url?.includes('/csrf-token')) {
-        console.log('[CSRF] No token found, fetching...', { url: config.url, method: config.method });
         try {
           await fetchCsrfToken();
           csrfToken = getCsrfToken();
-          console.log('[CSRF] Token after fetch:', csrfToken ? 'present' : 'still missing');
         } catch (error) {
           console.error('[CSRF] Failed to fetch CSRF token in interceptor:', error);
         }
@@ -100,7 +87,6 @@ apiClient.interceptors.request.use(
       
       if (csrfToken) {
         config.headers['X-XSRF-TOKEN'] = csrfToken;
-        console.log('[CSRF] Added token to request', { url: config.url, method: config.method });
       } else {
         console.warn('[CSRF] No token available for request!', { url: config.url, method: config.method });
       }

@@ -43,6 +43,7 @@ class R2Service {
 
   /**
    * Upload a file to R2
+   * ✅ SECURITY: Enforces private ACL to prevent public file exposure
    */
   async uploadFile(key: string, body: Buffer | Readable, contentType?: string): Promise<string> {
     if (!this.isEnabled()) {
@@ -57,6 +58,7 @@ class R2Service {
           Key: key,
           Body: body,
           ContentType: contentType || 'application/gzip',
+          ACL: 'private', // ✅ SECURITY: Ensure files are private by default
         },
       });
 

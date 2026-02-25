@@ -7,6 +7,7 @@ import AuditService from '../utils/auditService';
 import { config } from '../config';
 import { emitMaintenanceEvent, emitGeneralSettingsEvent, emitSecuritySettingsEvent } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
+import { isSafeUrl } from '../utils/ssrfGuard';
 
 /**
  * Get all system settings
@@ -571,6 +572,19 @@ export const updateEmailConfiguration = async (req: AuthRequest, res: Response):
       throw new ApiError(400, 'Host, user, and from address are required');
     }
 
+    // ✅ SSRF PROTECTION: Validate SMTP host against SSRF vulnerabilities
+    // Prevent configuration of private IPs or AWS metadata endpoints
+    const smtpUrl = `https://${host}:${port || 587}`;
+    const isSafeHost = await isSafeUrl(smtpUrl);
+    
+    if (!isSafeHost) {
+      logger.warn(`[SSRF] Blocked attempt to configure unsafe SMTP host: ${host} by user ${req.user?.username}`);
+      throw new ApiError(
+        400,
+        'SMTP host must be a public domain. Private IPs, localhost, and AWS metadata endpoints are not allowed.'
+      );
+    }
+
     let systemConfig = await SystemConfig.findOne({
       configType: 'system',
       isDeleted: false,
@@ -633,7 +647,12 @@ export const updateEmailConfiguration = async (req: AuthRequest, res: Response):
       },
     });
   } catch (error: any) {
-    logger.error('Error updating email configuration:', error);
+    // ✅ SECURITY: Log error without sensitive config details
+    logger.error('Error updating email configuration:', { 
+      code: error.code, 
+      message: error.message,
+      username: req.user?.username 
+    });
     throw error;
   }
 };

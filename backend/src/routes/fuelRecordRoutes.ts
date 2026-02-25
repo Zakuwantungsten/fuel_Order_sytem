@@ -21,7 +21,7 @@ router.get('/:id', commonValidation.mongoId, validate, asyncHandler(fuelRecordCo
 // Create route
 router.post(
   '/',
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'clerk', 'import_officer', 'export_officer'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'yard_personnel', 'station_manager', 'dar_yard', 'tanga_yard', 'mmsa_yard'),
   fuelRecordValidation.create,
   validate,
   asyncHandler(fuelRecordController.createFuelRecord)
@@ -31,7 +31,8 @@ router.post(
 router.put(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'clerk', 'import_officer', 'export_officer'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'driver', 'fuel_order_maker', 'boss', 'yard_personnel', 'fuel_attendant', 'station_manager', 'payment_manager'),
+  fuelRecordValidation.update,
   validate,
   asyncHandler(fuelRecordController.updateFuelRecord)
 );
@@ -40,7 +41,7 @@ router.put(
 router.delete(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'boss'),
   validate,
   asyncHandler(fuelRecordController.deleteFuelRecord)
 );

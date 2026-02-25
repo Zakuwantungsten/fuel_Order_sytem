@@ -8,6 +8,7 @@ import {
   exportUnifiedData,
 } from '../controllers/archivalController';
 import { authenticate, authorize } from '../middleware/auth';
+import { exportRateLimiter } from '../middleware/rateLimiters';
 
 const router = express.Router();
 
@@ -56,6 +57,6 @@ router.get('/history', authenticate, authorize('admin', 'super_admin'), getArchi
  * @desc Export unified data (active + archived) to Excel
  * @access Super Admin only
  */
-router.post('/export', authenticate, authorize('super_admin'), exportUnifiedData);
+router.post('/export', exportRateLimiter, authenticate, authorize('super_admin'), exportUnifiedData);
 
 export default router;

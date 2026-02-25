@@ -7,26 +7,21 @@ import { AuditService } from '../utils/auditService';
 import { fleetReportParser } from '../services/fleetReportParser';
 import multer from 'multer';
 import path from 'path';
+import { validateFileUpload, fileSizeLimit } from '../middleware/fileUploadValidator';
 
 // Configure multer for file upload
+// ✅ SECURITY: Max 15MB (consistent with import routes)
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-  fileFilter: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only Excel (.xlsx, .xls) and CSV files are allowed'));
-    }
-  },
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max
 }).single('file');
 
 /**
  * Upload and parse fleet report
  * POST /api/fleet-tracking/upload
  * Access: fuel_order_maker, admin, super_admin
+ * ✅ SECURITY: File validated with magic bytes + UUID rename + size limit
  */
 export const uploadFleetReport = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -43,19 +38,33 @@ export const uploadFleetReport = async (req: AuthRequest, res: Response): Promis
       });
     });
 
+    // Apply file size limit
+    if (req.file && req.file.size > 15 * 1024 * 1024) {
+      throw new ApiError(413, 'File too large. Maximum size is 15MB');
+    }
+
+    // Validate file (magic bytes, structure, etc.)
+    await new Promise<void>((resolve, reject) => {
+      validateFileUpload(['xlsx', 'xls', 'csv'])(req, res, (err?: any) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
     const file = req.file;
     if (!file) {
       throw new ApiError(400, 'No file uploaded');
     }
 
-    logger.info(`Processing fleet report: ${file.originalname} (${file.size} bytes)`);
+    // ✅ Use safe filename instead of original
+    const safeFilename = (file as any).safeFilename || file.originalname;
 
     // Initialize parser (loads checkpoints)
     await fleetReportParser.initialize();
 
     // Parse the file
-    logger.info(`Parsing ${file.originalname} as Excel/CSV file...`);
-    const parsedData = await fleetReportParser.parseExcelFile(file.buffer, file.originalname);
+    logger.info(`Parsing ${safeFilename} as Excel/CSV file...`);
+    const parsedData = await fleetReportParser.parseExcelFile(file.buffer, safeFilename);
     logger.info(`Parse complete: Type=${parsedData.reportType}, Groups=${parsedData.fleetGroups.length}, Trucks=${parsedData.totalTrucks}`);
 
     // Create snapshot
@@ -64,7 +73,7 @@ export const uploadFleetReport = async (req: AuthRequest, res: Response): Promis
       reportDate: parsedData.reportDate,
       reportType: parsedData.reportType,
       uploadedBy: user.username,
-      fileName: file.originalname,
+      fileName: safeFilename, // ✅ Use safe filename
       fileSize: file.size,
       processedAt: new Date(),
       fleetGroups: parsedData.fleetGroups,

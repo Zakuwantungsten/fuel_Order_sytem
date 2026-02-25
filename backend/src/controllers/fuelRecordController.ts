@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { matchedData } from 'express-validator';
 import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
@@ -120,7 +121,12 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
 
     // Build filter
     const filter: any = { isDeleted: false };
-    
+
+    // Restrict drivers to their own truck's records (least-privilege)
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
+
     // Include cancelled records by default (frontend has display logic)
     // Only exclude if explicitly requested
     if (excludeCancelled === 'true') {
@@ -375,14 +381,16 @@ export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): P
  */
 export const createFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const payload = matchedData(req, { locations: ['body'] }) as any;
+
     // Format truck number to standard format
-    if (req.body.truckNo) {
-      req.body.truckNo = formatTruckNumber(req.body.truckNo);
+    if (payload.truckNo) {
+      payload.truckNo = formatTruckNumber(payload.truckNo);
     }
     
     // Check if truck already has an active fuel record
     const activeRecord = await FuelRecord.findOne({
-      truckNo: req.body.truckNo,
+      truckNo: payload.truckNo,
       journeyStatus: 'active',
       isDeleted: false,
     });
@@ -390,35 +398,35 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
     if (activeRecord) {
       // Create as QUEUED journey instead of blocking
       const queuedRecords = await FuelRecord.countDocuments({
-        truckNo: req.body.truckNo,
+        truckNo: payload.truckNo,
         journeyStatus: 'queued',
         isDeleted: false,
       });
       
-      req.body.journeyStatus = 'queued';
-      req.body.queueOrder = queuedRecords + 1;
-      req.body.previousJourneyId = activeRecord._id.toString();
+      payload.journeyStatus = 'queued';
+      payload.queueOrder = queuedRecords + 1;
+      payload.previousJourneyId = activeRecord._id.toString();
       
       logger.info(
-        `Creating queued journey for truck ${req.body.truckNo} (position: ${queuedRecords + 1}, waiting for: ${activeRecord.goingDo})`
+        `Creating queued journey for truck ${payload.truckNo} (position: ${queuedRecords + 1}, waiting for: ${activeRecord.goingDo})`
       );
     } else {
       // No active journey - create as active
-      req.body.journeyStatus = 'active';
-      req.body.activatedAt = new Date();
+      payload.journeyStatus = 'active';
+      payload.activatedAt = new Date();
       
-      logger.info(`Creating active journey for truck ${req.body.truckNo}`);
+      logger.info(`Creating active journey for truck ${payload.truckNo}`);
     }
 
     // Auto-populate month from date if date is provided
-    if (req.body.date && !req.body.month) {
-      const date = new Date(req.body.date);
+    if (payload.date && !payload.month) {
+      const date = new Date(payload.date);
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                           'July', 'August', 'September', 'October', 'November', 'December'];
-      req.body.month = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+      payload.month = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
     }
 
-    const fuelRecord = await FuelRecord.create(req.body);
+    const fuelRecord = await FuelRecord.create(payload);
 
     logger.info(`Fuel record created for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
 
@@ -510,13 +518,14 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
 export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const updates = matchedData(req, { locations: ['body'] }) as any;
 
     // Auto-populate month from date if date is provided
-    if (req.body.date && !req.body.month) {
-      const date = new Date(req.body.date);
+    if (updates.date && !updates.month) {
+      const date = new Date(updates.date);
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                           'July', 'August', 'September', 'October', 'November', 'December'];
-      req.body.month = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+      updates.month = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
     }
 
     // Check if we're filling in missing configuration
@@ -526,8 +535,8 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     }
 
     const wasLocked = existingRecord.isLocked;
-    const fillingTotalLiters = existingRecord.totalLts === null && req.body.totalLts !== null && req.body.totalLts !== undefined;
-    const fillingExtraFuel = existingRecord.extra === null && req.body.extra !== null && req.body.extra !== undefined;
+    const fillingTotalLiters = existingRecord.totalLts === null && updates.totalLts !== null && updates.totalLts !== undefined;
+    const fillingExtraFuel = existingRecord.extra === null && updates.extra !== null && updates.extra !== undefined;
 
     // Check if any balance-affecting fields are being updated
     const checkpointFields = [
@@ -537,20 +546,20 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     ];
     
     const balanceFieldsUpdated = (
-      req.body.totalLts !== undefined ||
-      req.body.extra !== undefined ||
-      checkpointFields.some(field => req.body[field] !== undefined)
+      updates.totalLts !== undefined ||
+      updates.extra !== undefined ||
+      checkpointFields.some(field => updates[field] !== undefined)
     );
 
     // Auto-unlock if all required fields are now provided
     if (wasLocked && (fillingTotalLiters || fillingExtraFuel)) {
-      const willHaveTotalLts = fillingTotalLiters ? req.body.totalLts : existingRecord.totalLts;
-      const willHaveExtra = fillingExtraFuel ? req.body.extra : existingRecord.extra;
+      const willHaveTotalLts = fillingTotalLiters ? updates.totalLts : existingRecord.totalLts;
+      const willHaveExtra = fillingExtraFuel ? updates.extra : existingRecord.extra;
 
       // Unlock if both values are now filled (not null)
       if (willHaveTotalLts !== null && willHaveExtra !== null) {
-        req.body.isLocked = false;
-        req.body.pendingConfigReason = null;
+        updates.isLocked = false;
+        updates.pendingConfigReason = null;
         logger.info(`Unlocking fuel record ${id} - all required fields now provided`);
       }
     }
@@ -559,12 +568,12 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     // This ensures balance is correct whether record is locked or unlocked
     if (balanceFieldsUpdated) {
       // Get the final values (use updated values if provided, otherwise existing)
-      const finalTotalLts = req.body.totalLts !== undefined ? req.body.totalLts : existingRecord.totalLts;
-      const finalExtra = req.body.extra !== undefined ? req.body.extra : existingRecord.extra;
+      const finalTotalLts = updates.totalLts !== undefined ? updates.totalLts : existingRecord.totalLts;
+      const finalExtra = updates.extra !== undefined ? updates.extra : existingRecord.extra;
       
       // Get all checkpoint values (updated or existing)
       const getFinalValue = (field: string) => {
-        return req.body[field] !== undefined ? req.body[field] : (existingRecord as any)[field];
+        return updates[field] !== undefined ? updates[field] : (existingRecord as any)[field];
       };
       
       // Calculate total fuel (handle null values for locked records)
@@ -576,14 +585,14 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       }, 0);
       
       // Apply formula: Balance = (Total + Extra) - (All Checkpoints)
-      req.body.balance = totalFuel - totalCheckpoints;
+      updates.balance = totalFuel - totalCheckpoints;
       
-      logger.info(`Recalculating balance for fuel record ${id}: (${finalTotalLts || 0} + ${finalExtra || 0}) - ${totalCheckpoints} = ${req.body.balance}L`);
+      logger.info(`Recalculating balance for fuel record ${id}: (${finalTotalLts || 0} + ${finalExtra || 0}) - ${totalCheckpoints} = ${updates.balance}L`);
     }
 
     const fuelRecord = await FuelRecord.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      req.body,
+      updates,
       { new: true, runValidators: true }
     );
 
@@ -673,7 +682,10 @@ export const getMonthlyFuelSummary = async (req: AuthRequest, res: Response): Pr
     const filter: any = { isDeleted: false };
     
     if (month) {
-      filter.month = { $regex: month, $options: 'i' };
+      const sanitized = sanitizeRegexInput(month as string);
+      if (sanitized) {
+        filter.month = { $regex: sanitized, $options: 'i' };
+      }
     }
 
     const fuelRecords = await FuelRecord.find(filter).lean();

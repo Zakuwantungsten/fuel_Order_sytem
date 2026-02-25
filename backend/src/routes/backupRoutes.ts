@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import * as backupController from '../controllers/backupController';
+import { exportRateLimiter } from '../middleware/rateLimiters';
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ router.post('/backups', backupController.createBackup);
 router.get('/backups', backupController.getBackups);
 router.get('/backups/stats', backupController.getBackupStats);
 router.get('/backups/:id', backupController.getBackupById);
-router.get('/backups/:id/download', backupController.downloadBackup);
+router.get('/backups/:id/download', exportRateLimiter, backupController.downloadBackup);
 router.post('/backups/:id/restore', backupController.restoreBackup);
 router.delete('/backups/:id', backupController.deleteBackup);
 router.post('/backups/cleanup', backupController.cleanupBackups);

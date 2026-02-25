@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { deliveryOrderController } from '../controllers';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
+import { exportRateLimiter } from '../middleware/rateLimiters';
 import { deliveryOrderValidation, commonValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
 
@@ -14,31 +15,33 @@ router.use(authenticate);
 router.get('/sdo/workbooks', asyncHandler(deliveryOrderController.getAllSDOWorkbooks));
 router.get('/sdo/workbooks/years', asyncHandler(deliveryOrderController.getAvailableSDOYears));
 router.get('/sdo/workbooks/:year', asyncHandler(deliveryOrderController.getSDOWorkbookByYear));
-router.get('/sdo/workbooks/:year/export', asyncHandler(deliveryOrderController.exportSDOWorkbook));
-router.get('/sdo/workbooks/:year/monthly-summaries/export', asyncHandler(deliveryOrderController.exportSDOYearlyMonthlySummaries));
-router.get('/sdo/workbooks/:year/month/:month/export', asyncHandler(deliveryOrderController.exportSDOMonth));
+router.get('/sdo/workbooks/:year/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'), asyncHandler(deliveryOrderController.exportSDOWorkbook));
+router.get('/sdo/workbooks/:year/monthly-summaries/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'), asyncHandler(deliveryOrderController.exportSDOYearlyMonthlySummaries));
+router.get('/sdo/workbooks/:year/month/:month/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'), asyncHandler(deliveryOrderController.exportSDOMonth));
 
 // DO Workbook routes (must be before /:id routes to avoid conflicts)
 router.get('/workbooks', asyncHandler(deliveryOrderController.getAllWorkbooks));
 router.get('/workbooks/years', asyncHandler(deliveryOrderController.getAvailableYears));
 router.get('/workbooks/:year', asyncHandler(deliveryOrderController.getWorkbookByYear));
-router.get('/workbooks/:year/export', asyncHandler(deliveryOrderController.exportWorkbook));
-router.get('/workbooks/:year/monthly-summaries/export', asyncHandler(deliveryOrderController.exportYearlyMonthlySummaries));
-router.get('/workbooks/:year/month/:month/export', asyncHandler(deliveryOrderController.exportMonth));
+router.get('/workbooks/:year/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'), asyncHandler(deliveryOrderController.exportWorkbook));
+router.get('/workbooks/:year/monthly-summaries/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'), asyncHandler(deliveryOrderController.exportYearlyMonthlySummaries));
+router.get('/workbooks/:year/month/:month/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'), asyncHandler(deliveryOrderController.exportMonth));
 
 // Amended DOs routes (must be before /:id routes)
 router.get('/amended', asyncHandler(deliveryOrderController.getAmendedDOs));
 router.get('/amended/summary', asyncHandler(deliveryOrderController.getAmendmentsSummary));
 router.post(
   '/amended/download-pdf',
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker'),
+  exportRateLimiter,
+  authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'),
   asyncHandler(deliveryOrderController.downloadAmendedDOsPDF)
 );
 
 // Bulk DOs PDF download route (must be before /:id routes)
 router.post(
   '/bulk/download-pdf',
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker', 'import_officer', 'export_officer'),
+  exportRateLimiter,
+  authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'),
   asyncHandler(deliveryOrderController.downloadBulkDOsPDF)
 );
 
@@ -54,7 +57,8 @@ router.get('/journey/:doNumber', asyncHandler(deliveryOrderController.getJourney
 router.get(
   '/:id/pdf',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker', 'import_officer', 'export_officer'),
+  exportRateLimiter,
+  authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'),
   validate,
   asyncHandler(deliveryOrderController.downloadSingleDOPDF)
 );
@@ -64,7 +68,7 @@ router.get('/:id', commonValidation.mongoId, validate, asyncHandler(deliveryOrde
 // Create route (requires appropriate role)
 router.post(
   '/',
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker', 'import_officer', 'export_officer'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'),
   deliveryOrderValidation.create,
   validate,
   asyncHandler(deliveryOrderController.createDeliveryOrder)
@@ -74,7 +78,7 @@ router.post(
 router.put(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker', 'import_officer', 'export_officer'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'),
   deliveryOrderValidation.update,
   validate,
   asyncHandler(deliveryOrderController.updateDeliveryOrder)
@@ -84,7 +88,7 @@ router.put(
 router.put(
   '/:id/cancel',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'import_officer', 'export_officer'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'),
   validate,
   asyncHandler(deliveryOrderController.cancelDeliveryOrder)
 );
@@ -93,7 +97,7 @@ router.put(
 router.post(
   '/:id/relink-to-fuel-record',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'import_officer', 'export_officer'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'),
   validate,
   asyncHandler(deliveryOrderController.relinkExportDOToFuelRecord)
 );
@@ -101,14 +105,14 @@ router.post(
 // Create notification for unlinked EXPORT DO
 router.post(
   '/notify-unlinked-export',
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
   asyncHandler(deliveryOrderController.createUnlinkedExportNotification)
 );
 
 // Create notification for bulk DO creation failures
 router.post(
   '/notify-bulk-failures',
-  authorize('super_admin', 'admin', 'manager', 'clerk', 'fuel_order_maker'),
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
   asyncHandler(deliveryOrderController.createBulkDOFailureNotification)
 );
 
@@ -116,7 +120,7 @@ router.post(
 router.delete(
   '/:id',
   commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'manager'),
+  authorize('super_admin', 'admin', 'boss'),
   validate,
   asyncHandler(deliveryOrderController.deleteDeliveryOrder)
 );

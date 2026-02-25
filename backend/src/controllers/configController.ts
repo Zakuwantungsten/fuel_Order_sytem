@@ -78,49 +78,54 @@ export const createFuelStation = async (req: AuthRequest, res: Response): Promis
 
     // Validate required fields
     if (!stationName || defaultRate == null) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Station name and rate are required',
       });
+      return;
     }
 
     // At least one default liter value should be provided
     if ((defaultLitersGoing == null || defaultLitersGoing === 0) && 
         (defaultLitersReturning == null || defaultLitersReturning === 0)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'At least one of defaultLitersGoing or defaultLitersReturning must be greater than 0',
       });
+      return;
     }
 
     // Validate formulas if provided
     if (formulaGoing && formulaGoing.trim() !== '') {
       const validation = validateFormula(formulaGoing);
       if (!validation.valid) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: `Invalid going formula: ${validation.error}`,
         });
+        return;
       }
     }
 
     if (formulaReturning && formulaReturning.trim() !== '') {
       const validation = validateFormula(formulaReturning);
       if (!validation.valid) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: `Invalid returning formula: ${validation.error}`,
         });
+        return;
       }
     }
 
     // Check if station already exists
     const existing = await FuelStationConfig.findOne({ stationName });
     if (existing) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Station with this name already exists',
       });
+      return;
     }
 
     const station = await FuelStationConfig.create({
@@ -193,36 +198,40 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
     if (updates.formulaGoing && typeof updates.formulaGoing === 'string' && updates.formulaGoing.trim()) {
       const validation = validateFormula(updates.formulaGoing);
       if (!validation.valid) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: `Invalid going formula: ${validation.error}`,
         });
+        return;
       }
     }
 
     if (updates.formulaReturning && typeof updates.formulaReturning === 'string' && updates.formulaReturning.trim()) {
       const validation = validateFormula(updates.formulaReturning);
       if (!validation.valid) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: `Invalid returning formula: ${validation.error}`,
         });
+        return;
       }
     }
 
     // Validate required fields
     if (updates.stationName !== undefined && !updates.stationName) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Station name is required',
       });
+      return;
     }
 
     if (updates.defaultRate !== undefined && (isNaN(updates.defaultRate) || updates.defaultRate < 0)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Valid default rate is required',
       });
+      return;
     }
 
     updates.updatedBy = req.user?.username || 'system';
@@ -240,10 +249,11 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
     );
 
     if (!station) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Fuel station not found',
       });
+      return;
     }
 
     // Audit log
@@ -285,10 +295,11 @@ export const deleteFuelStation = async (req: AuthRequest, res: Response): Promis
     const station = await FuelStationConfig.findByIdAndDelete(id);
 
     if (!station) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Fuel station not found',
       });
+      return;
     }
     // Audit log
     await AuditLog.create({
@@ -399,19 +410,21 @@ export const createRoute = async (req: AuthRequest, res: Response): Promise<void
 
     // Validate required fields
     if (!routeName || !destination || defaultTotalLiters == null) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Route name, destination, and default total liters are required',
       });
+      return;
     }
 
     // Check if route already exists
     const existing = await RouteConfig.findOne({ routeName });
     if (existing) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Route with this name already exists',
       });
+      return;
     }
 
     const route = await RouteConfig.create({
@@ -469,10 +482,11 @@ export const updateRoute = async (req: AuthRequest, res: Response): Promise<void
     );
 
     if (!route) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Route not found',
       });
+      return;
     }
 
     // Audit log
@@ -512,10 +526,11 @@ export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void
     const route = await RouteConfig.findByIdAndDelete(id);
 
     if (!route) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: 'Route not found',
       });
+      return;
     }
 
     // Audit log

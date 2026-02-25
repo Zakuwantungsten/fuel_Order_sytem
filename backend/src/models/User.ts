@@ -27,8 +27,13 @@ const userSchema = new Schema<IUserDocument>(
     password: {
       type: String,
       required: [true, 'Password is required'],
-      minlength: [6, 'Password must be at least 6 characters'],
+      minlength: [1, 'Password cannot be empty'],
       select: false,
+    },
+    passwordHistory: {
+      type: [String],
+      select: false,
+      default: [],
     },
     firstName: {
       type: String,
@@ -138,6 +143,14 @@ const userSchema = new Schema<IUserDocument>(
       enum: ['light', 'dark'],
       default: 'light',
     },
+    failedLoginAttempts: {
+      type: Number,
+      default: 0,
+    },
+    lockedUntil: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -156,7 +169,7 @@ userSchema.pre('save', async function (next) {
   }
 
   try {
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error: any) {

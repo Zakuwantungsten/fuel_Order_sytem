@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { config } from '../config';
 import logger from '../utils/logger';
+import SecurityEventLogger from '../utils/securityEventLogger';
 
 /**
  * Custom CSRF Protection using Double Submit Cookie Pattern
@@ -93,6 +94,17 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction):
         cookies: Object.keys(req.cookies),
         headers: Object.keys(req.headers).filter(h => h.toLowerCase().includes('xsrf') || h.toLowerCase().includes('csrf'))
       });
+      
+      // Log CSRF failure to audit trail
+      SecurityEventLogger.logCSRFFailure({
+        username: (req as any).user?.username || 'unknown',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        endpoint: req.path,
+        method: req.method,
+        errorReason: 'Missing CSRF token',
+      }).catch(() => {});
+      
       res.status(403).json({
         success: false,
         message: 'CSRF token missing. Please refresh the page and try again.',
@@ -109,6 +121,17 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction):
     
     if (!isValid) {
       logger.warn(`CSRF validation failed: Token mismatch for ${req.method} ${req.path} from IP ${req.ip}`);
+      
+      // Log CSRF failure to audit trail
+      SecurityEventLogger.logCSRFFailure({
+        username: (req as any).user?.username || 'unknown',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        endpoint: req.path,
+        method: req.method,
+        errorReason: 'Token mismatch',
+      }).catch(() => {});
+      
       res.status(403).json({
         success: false,
         message: 'Invalid CSRF token. Please refresh the page and try again.',

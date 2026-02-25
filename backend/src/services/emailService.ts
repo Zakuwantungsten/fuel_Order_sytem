@@ -122,6 +122,18 @@ class EmailService {
       return;
     }
 
+    // Honour the admin-configured criticalAlerts toggle
+    try {
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      const criticalAlertsEnabled = sysConfig?.systemSettings?.notifications?.criticalAlerts;
+      if (criticalAlertsEnabled === false) {
+        logger.info('Critical alerts disabled by system settings — skipping critical email');
+        return;
+      }
+    } catch {
+      // DB unavailable — fall through and send anyway to avoid silently dropping alerts
+    }
+
     try {
       // Get all super admin emails
       const superAdmins = await User.find({
@@ -212,6 +224,15 @@ class EmailService {
       throw new Error('Email service is not configured');
     }
 
+    // Honour the admin-configured emailNotifications toggle
+    try {
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      if (sysConfig?.systemSettings?.notifications?.emailNotifications === false) {
+        logger.info('Email notifications disabled by system settings — skipping password reset email');
+        return;
+      }
+    } catch { /* DB unavailable — send anyway */ }
+
     try {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
@@ -291,6 +312,15 @@ class EmailService {
       return; // Don't throw - this is just a confirmation
     }
 
+    // Honour the admin-configured emailNotifications toggle
+    try {
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      if (sysConfig?.systemSettings?.notifications?.emailNotifications === false) {
+        logger.info('Email notifications disabled by system settings — skipping password changed email');
+        return;
+      }
+    } catch { /* DB unavailable — send anyway */ }
+
     try {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
@@ -356,6 +386,15 @@ class EmailService {
       return;
     }
 
+    // Honour admin dailySummary toggle
+    try {
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      if (sysConfig?.systemSettings?.notifications?.dailySummary === false) {
+        logger.info('Daily summary emails disabled by system settings — skipping');
+        return;
+      }
+    } catch { /* DB unavailable — send anyway */ }
+
     try {
       // Get statistics for the day
       const stats = await this.collectDailyStats();
@@ -390,6 +429,15 @@ class EmailService {
     if (!this.isConfigured || !this.transporter) {
       return;
     }
+
+    // Honour admin weeklyReport toggle
+    try {
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      if (sysConfig?.systemSettings?.notifications?.weeklyReport === false) {
+        logger.info('Weekly report emails disabled by system settings — skipping');
+        return;
+      }
+    } catch { /* DB unavailable — send anyway */ }
 
     try {
       const stats = await this.collectWeeklyStats();
@@ -542,6 +590,15 @@ class EmailService {
       throw new Error('Email service is not configured');
     }
 
+    // Honour the admin-configured emailNotifications toggle
+    try {
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      if (sysConfig?.systemSettings?.notifications?.emailNotifications === false) {
+        logger.info('Email notifications disabled by system settings — skipping admin-reset email');
+        return;
+      }
+    } catch { /* DB unavailable — send anyway */ }
+
     try {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
@@ -621,6 +678,15 @@ class EmailService {
       logger.warn('Email service not configured - cannot send welcome email');
       throw new Error('Email service is not configured');
     }
+
+    // Honour the admin-configured emailNotifications toggle
+    try {
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      if (sysConfig?.systemSettings?.notifications?.emailNotifications === false) {
+        logger.info('Email notifications disabled by system settings — skipping welcome email');
+        return;
+      }
+    } catch { /* DB unavailable — send anyway */ }
 
     try {
       const emailContent = `

@@ -14,6 +14,8 @@ import * as XLSX from 'xlsx';
 import { FuelRecord, DeliveryOrder, LPOEntry, LPOSummary, LPOWorkbook } from '../models';
 import { AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
+import { AuditService } from '../utils/auditService';
+import AnomalyDetectionService from '../utils/anomalyDetectionService';
 
 // Multer augments Express.Request with `file`; combine types for our handlers
 type ImportRequest = AuthRequest & { file?: Express.Multer.File };
@@ -855,7 +857,7 @@ export const previewExcel = async (req: ImportRequest, res: Response): Promise<v
 
     res.json({
       success: true,
-      fileName: req.file.originalname,
+      fileName: (req.file as any).safeFilename || req.file.originalname, // ✅ Use safe filename
       fileSize: req.file.size,
       totalSheets: sheets.length,
       sheets,
@@ -925,6 +927,34 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
       `inserted=${totalInserted} updated=${totalUpdated} skipped=${totalSkipped} errors=${totalErrors}`,
     );
 
+    // Log bulk import operation to audit trail
+    if (!dryRun && totalInserted > 0) {
+      const username = req.user?.username || 'system';
+      const userId = req.user?.userId;
+      const totalRecords = totalInserted + totalUpdated;
+      
+      // Log the bulk operation
+      await AuditService.logBulkOperation(
+        userId || 'unknown',
+        username,
+        'import',
+        `import ${totalRecords} records`,
+        totalRecords,
+        req.ip
+      );
+      
+      logger.info(`[ImportCtrl] Logged bulk import operation: ${totalRecords} records by ${username}`);
+      
+      // Detect anomalies (off-hours, large volume, etc)
+      await AnomalyDetectionService.detectBulkOperationAnomaly(
+        username,
+        'excel_import',
+        totalRecords,
+        req.ip,
+        req.get('user-agent')
+      );
+    }
+
     // After every real import, backfill any LPOEntry records that have no matching
     // LPOSummary document. This makes imported data appear in the workbook view
     // exactly as if the LPOs had been created through the UI.
@@ -940,7 +970,7 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
     res.json({
       success: true,
       dryRun,
-      fileName: req.file.originalname,
+      fileName: (req.file as any).safeFilename || req.file.originalname, // ✅ Use safe filename
       summary: {
         totalInserted,
         totalUpdated,

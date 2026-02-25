@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import archivalService from '../services/archivalService';
+import { SystemConfig } from '../models';
 import logger from '../utils/logger';
 
 /**
@@ -26,10 +27,15 @@ export function startArchivalScheduler() {
     logger.info('=== SCHEDULED ARCHIVAL PROCESS STARTED ===');
     
     try {
+      // Read admin-configured retention settings from DB (falls back to safe defaults)
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      const adminArchivalMonths = sysConfig?.systemSettings?.data?.archivalMonths ?? 6;
+      const adminAuditLogMonths = sysConfig?.systemSettings?.data?.auditLogRetention ?? 12;
+
       const result = await archivalService.archiveOldData(
         {
-          monthsToKeep: 6, // Keep last 6 months
-          auditLogMonthsToKeep: 12, // Keep audit logs for 12 months
+          monthsToKeep: adminArchivalMonths,
+          auditLogMonthsToKeep: adminAuditLogMonths,
           dryRun: false,
           batchSize: 1000,
         },
@@ -75,10 +81,15 @@ export async function runArchivalNow(dryRun: boolean = false) {
   logger.info(`=== MANUAL ARCHIVAL PROCESS STARTED (DRY RUN: ${dryRun}) ===`);
   
   try {
+    // Read admin-configured retention settings from DB (falls back to safe defaults)
+    const manualSysConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+    const manualArchivalMonths = manualSysConfig?.systemSettings?.data?.archivalMonths ?? 6;
+    const manualAuditLogMonths = manualSysConfig?.systemSettings?.data?.auditLogRetention ?? 12;
+
     const result = await archivalService.archiveOldData(
       {
-        monthsToKeep: 6,
-        auditLogMonthsToKeep: 12,
+        monthsToKeep: manualArchivalMonths,
+        auditLogMonthsToKeep: manualAuditLogMonths,
         dryRun,
         batchSize: 1000,
       },

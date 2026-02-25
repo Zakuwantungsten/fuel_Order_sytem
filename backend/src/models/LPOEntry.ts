@@ -112,7 +112,7 @@ lpoEntrySchema.index({ dieselAt: 1, date: -1 });
 lpoEntrySchema.index({ truckNo: 1, referenceDo: 1 }); // For fetching NIL entries by journey
 
 // Pre-save hook to populate actualDate from date field
-lpoEntrySchema.pre('save', function (next) {
+lpoEntrySchema.pre('save', function (this: ILPOEntryDocument, next) {
   // If actualDate is not set, try to parse from date field
   if (!this.actualDate && this.date) {
     try {

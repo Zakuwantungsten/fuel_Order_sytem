@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { matchedData } from 'express-validator';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../models';
 import { RouteConfig } from '../models/RouteConfig';
 import { ArchivedDeliveryOrder } from '../models/ArchivedData';
@@ -6,6 +7,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
+import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
@@ -473,7 +475,12 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
 
     // Build filter
     const filter: any = { isDeleted: false };
-    
+
+    // Restrict drivers to their own truck's records (least-privilege)
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
+
     // Filter by doType if specified (DO or SDO), otherwise return all
     if (doType && (doType === 'DO' || doType === 'SDO')) {
       filter.doType = doType;
@@ -633,33 +640,35 @@ export const getDeliveryOrderById = async (req: AuthRequest, res: Response): Pro
  */
 export const createDeliveryOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const payload = matchedData(req, { locations: ['body'] }) as any;
+
     // If sn is not provided, derive it from doNumber
-    if (!req.body.sn && req.body.doNumber) {
-      req.body.sn = parseInt(req.body.doNumber.replace(/^0+/, '')) || 1;
+    if (!payload.sn && payload.doNumber) {
+      payload.sn = parseInt(payload.doNumber.replace(/^0+/, '')) || 1;
     }
     
     // Set defaults for new fields if not provided
-    if (!req.body.rateType) {
-      req.body.rateType = 'per_ton';
+    if (!payload.rateType) {
+      payload.rateType = 'per_ton';
     }
-    if (!req.body.cargoType && req.body.containerNo) {
-      req.body.cargoType = req.body.containerNo?.toLowerCase().includes('container') 
+    if (!payload.cargoType && payload.containerNo) {
+      payload.cargoType = payload.containerNo?.toLowerCase().includes('container') 
         ? 'container' 
         : 'loosecargo';
-    } else if (!req.body.cargoType) {
-      req.body.cargoType = 'loosecargo';
+    } else if (!payload.cargoType) {
+      payload.cargoType = 'loosecargo';
     }
     
     // Calculate totalAmount if not provided
-    if (!req.body.totalAmount) {
-      if (req.body.rateType === 'per_ton') {
-        req.body.totalAmount = (req.body.tonnages || 0) * (req.body.ratePerTon || 0);
-      } else if (req.body.rateType === 'fixed_total') {
-        req.body.totalAmount = req.body.ratePerTon || 0;
+    if (!payload.totalAmount) {
+      if (payload.rateType === 'per_ton') {
+        payload.totalAmount = (payload.tonnages || 0) * (payload.ratePerTon || 0);
+      } else if (payload.rateType === 'fixed_total') {
+        payload.totalAmount = payload.ratePerTon || 0;
       }
     }
     
-    const deliveryOrder = await DeliveryOrder.create(req.body);
+    const deliveryOrder = await DeliveryOrder.create(payload);
 
     logger.info(`Delivery order created: ${deliveryOrder.doNumber} by ${req.user?.username}`);
 
@@ -691,6 +700,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     const { id } = req.params;
     const username = req.user?.username || 'system';
     const userRole = req.user?.role || 'user';
+    const payload = matchedData(req, { locations: ['body'] }) as any;
 
     // Get the original DO first to track changes
     const originalDO = await DeliveryOrder.findOne({ _id: id, isDeleted: false }).lean();
@@ -709,17 +719,17 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     const changes: { field: string; oldValue: any; newValue: any }[] = [];
 
     for (const field of trackableFields) {
-      if (req.body[field] !== undefined && req.body[field] !== (originalDO as any)[field]) {
+      if (payload[field] !== undefined && payload[field] !== (originalDO as any)[field]) {
         changes.push({
           field,
           oldValue: (originalDO as any)[field],
-          newValue: req.body[field],
+          newValue: payload[field],
         });
       }
     }
 
     // Prepare the update data - exclude fields that shouldn't be directly set
-    const { editHistory, editReason, _id, __v, createdAt, ...fieldsToUpdate } = req.body;
+    const { editHistory, editReason, _id, __v, createdAt, ...fieldsToUpdate } = payload;
     
     // Build the update object
     const updateData: any = {
@@ -769,7 +779,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     // Cascade to fuel records if relevant fields changed
     if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
       // Pass user role and userId in body for notification logic
-      const bodyWithRole = { ...req.body, userRole, userId: req.user?.userId };
+      const bodyWithRole = { ...payload, userRole, userId: req.user?.userId };
       const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username);
       cascadeResults.fuelRecordUpdated = fuelResult.updated;
       cascadeResults.fuelRecordChanges = fuelResult.changes || [];
@@ -784,8 +794,8 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     // Cascade to LPO entries if truck or destination changed
     if (changes.some(c => ['truckNo', 'destination'].includes(c.field))) {
       const lpoResult = await cascadeToLPOEntries(originalDO.doNumber, 'update', {
-        truckNo: req.body.truckNo,
-        destination: req.body.destination,
+        truckNo: payload.truckNo,
+        destination: payload.destination,
       });
       cascadeResults.lpoEntriesUpdated = lpoResult.count;
     }
@@ -1884,6 +1894,30 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     );
 
     await excelWorkbook.xlsx.write(res);
+
+    // Log export to audit trail
+    try {
+      await AuditService.logExport(
+        req.user?.userId || 'unknown',
+        req.user?.username || 'system',
+        'delivery_orders',
+        'xlsx',
+        deliveryOrders.length,
+        req.ip || 'unknown'
+      );
+
+      // Detect export anomalies (large exports or off-hours)
+      await AnomalyDetectionService.detectExportAnomaly(
+        req.user?.username || 'system',
+        deliveryOrders.length,
+        'xlsx',
+        req.ip || 'unknown',
+        req.get('user-agent') || 'unknown'
+      );
+    } catch (logError: any) {
+      logger.error(`Error logging export: ${logError.message}`);
+    }
+
     res.end();
 
     logger.info(`DO Workbook exported for year ${year} by ${req.user?.username}`);
@@ -2093,6 +2127,30 @@ export const exportMonth = async (req: AuthRequest, res: Response): Promise<void
     );
 
     await excelWorkbook.xlsx.write(res);
+
+    // Log export to audit trail
+    try {
+      await AuditService.logExport(
+        req.user?.userId || 'unknown',
+        req.user?.username || 'system',
+        'delivery_orders',
+        'xlsx',
+        deliveryOrders.length,
+        req.ip || 'unknown'
+      );
+
+      // Detect export anomalies (large exports or off-hours)
+      await AnomalyDetectionService.detectExportAnomaly(
+        req.user?.username || 'system',
+        deliveryOrders.length,
+        'xlsx',
+        req.ip || 'unknown',
+        req.get('user-agent') || 'unknown'
+      );
+    } catch (logError: any) {
+      logger.error(`Error logging export: ${logError.message}`);
+    }
+
     res.end();
 
     logger.info(`DO Month export for ${monthName} ${year} by ${req.user?.username}`);
@@ -2829,6 +2887,30 @@ export const exportSDOWorkbook = async (req: AuthRequest, res: Response): Promis
 
     // Write to response
     await excelWorkbook.xlsx.write(res);
+
+    // Log export to audit trail
+    try {
+      await AuditService.logExport(
+        req.user?.userId || 'unknown',
+        req.user?.username || 'system',
+        'store_delivery_orders',
+        'xlsx',
+        sdoOrders.length,
+        req.ip || 'unknown'
+      );
+
+      // Detect export anomalies (large exports or off-hours)
+      await AnomalyDetectionService.detectExportAnomaly(
+        req.user?.username || 'system',
+        sdoOrders.length,
+        'xlsx',
+        req.ip || 'unknown',
+        req.get('user-agent') || 'unknown'
+      );
+    } catch (logError: any) {
+      logger.error(`Error logging export: ${logError.message}`);
+    }
+
     res.end();
 
     logger.info(`SDO workbook exported for year ${year} by ${req.user?.username}`);
@@ -2967,6 +3049,30 @@ export const exportSDOMonth = async (req: AuthRequest, res: Response): Promise<v
 
     // Write to response
     await excelWorkbook.xlsx.write(res);
+
+    // Log export to audit trail
+    try {
+      await AuditService.logExport(
+        req.user?.userId || 'unknown',
+        req.user?.username || 'system',
+        'store_delivery_orders',
+        'xlsx',
+        sdoOrders.length,
+        req.ip || 'unknown'
+      );
+
+      // Detect export anomalies (large exports or off-hours)
+      await AnomalyDetectionService.detectExportAnomaly(
+        req.user?.username || 'system',
+        sdoOrders.length,
+        'xlsx',
+        req.ip || 'unknown',
+        req.get('user-agent') || 'unknown'
+      );
+    } catch (logError: any) {
+      logger.error(`Error logging export: ${logError.message}`);
+    }
+
     res.end();
 
     logger.info(`SDO month ${MONTH_NAMES[month - 1]} ${year} exported by ${req.user?.username}`);
@@ -3029,6 +3135,30 @@ export const exportYearlyMonthlySummaries = async (req: AuthRequest, res: Respon
     );
 
     await excelWorkbook.xlsx.write(res);
+
+    // Log export to audit trail
+    try {
+      await AuditService.logExport(
+        req.user?.userId || 'unknown',
+        req.user?.username || 'system',
+        'delivery_orders',
+        'xlsx',
+        deliveryOrders.length,
+        req.ip || 'unknown'
+      );
+
+      // Detect export anomalies (large exports or off-hours)
+      await AnomalyDetectionService.detectExportAnomaly(
+        req.user?.username || 'system',
+        deliveryOrders.length,
+        'xlsx',
+        req.ip || 'unknown',
+        req.get('user-agent') || 'unknown'
+      );
+    } catch (logError: any) {
+      logger.error(`Error logging export: ${logError.message}`);
+    }
+
     res.end();
 
     logger.info(`DO monthly summaries ${year} exported by ${req.user?.username}`);
@@ -3097,6 +3227,30 @@ export const exportSDOYearlyMonthlySummaries = async (req: AuthRequest, res: Res
     );
 
     await excelWorkbook.xlsx.write(res);
+
+    // Log export to audit trail
+    try {
+      await AuditService.logExport(
+        req.user?.userId || 'unknown',
+        req.user?.username || 'system',
+        'store_delivery_orders',
+        'xlsx',
+        sdoOrders.length,
+        req.ip || 'unknown'
+      );
+
+      // Detect export anomalies (large exports or off-hours)
+      await AnomalyDetectionService.detectExportAnomaly(
+        req.user?.username || 'system',
+        sdoOrders.length,
+        'xlsx',
+        req.ip || 'unknown',
+        req.get('user-agent') || 'unknown'
+      );
+    } catch (logError: any) {
+      logger.error(`Error logging export: ${logError.message}`);
+    }
+
     res.end();
 
     logger.info(`SDO monthly summaries ${year} exported by ${req.user?.username}`);

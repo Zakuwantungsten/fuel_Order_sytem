@@ -198,7 +198,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       // Call real backend API
       const authResponse: AuthResponse = await authAPI.login(credentials);
-      const { user, accessToken } = authResponse;
+      const { user, accessToken, sessionTimeoutMinutes } = authResponse;
 
       // Save token to sessionStorage (cleared when tab/browser is closed)
       sessionStorage.setItem('fuel_order_token', accessToken);
@@ -241,6 +241,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         theme: userTheme,
+        sessionTimeoutMinutes: sessionTimeoutMinutes ?? 30,
       }));
 
       // Clear active tab on login to force role default tab
@@ -388,13 +389,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Activity tracking for auto-logout on inactivity
   useEffect(() => {
     if (state.isAuthenticated && state.user) {
+      // Read the configurable session timeout stored at login time (minutes → ms)
+      let sessionTimeoutMs = 30 * 60 * 1000; // fallback: 30 minutes
+      try {
+        const stored = sessionStorage.getItem('fuel_order_auth');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (typeof parsed.sessionTimeoutMinutes === 'number' && parsed.sessionTimeoutMinutes > 0) {
+            sessionTimeoutMs = parsed.sessionTimeoutMinutes * 60 * 1000;
+          }
+        }
+      } catch {
+        // Silently use default
+      }
+
       // Start tracking activity when user is authenticated
       activityTracker.start(() => {
-        console.log('User inactive for 30 minutes, logging out...');
+        console.log(`User inactive for ${sessionTimeoutMs / 60000} minutes, logging out...`);
         logout();
         // Redirect to login with a message
         window.location.href = '/login?reason=inactivity';
-      });
+      }, sessionTimeoutMs);
     } else {
       // Stop tracking when user is not authenticated
       activityTracker.stop();

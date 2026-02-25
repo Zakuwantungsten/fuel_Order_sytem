@@ -89,6 +89,11 @@ export const getAllDriverAccountEntries = async (req: AuthRequest, res: Response
 
   const query: any = { isDeleted: false };
 
+  // Restrict drivers to their own truck's records (least-privilege)
+  if (req.user?.role === 'driver') {
+    query.truckNo = req.user.username;
+  }
+
   // Apply filters
   if (year) {
     query.year = parseInt(year as string);
@@ -220,6 +225,11 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
     approvedBy,
     notes,
   } = req.body;
+
+  // Prevent self-approval fraud
+  if (approvedBy && approvedBy.trim().toLowerCase() === (req.user?.username || '').toLowerCase()) {
+    throw new ApiError(403, 'You cannot approve your own entry.');
+  }
 
   // Parse date to extract month and year
   const dateObj = new Date(date);
@@ -411,6 +421,11 @@ export const updateDriverAccountEntry = async (req: AuthRequest, res: Response) 
 
   if (!entry) {
     throw new ApiError(404, 'Driver account entry not found');
+  }
+
+  // Prevent self-approval fraud on update
+  if (updates.approvedBy && updates.approvedBy.trim().toLowerCase() === (req.user?.username || '').toLowerCase()) {
+    throw new ApiError(403, 'You cannot approve your own entry.');
   }
 
   // If liters or rate changed, recalculate amount

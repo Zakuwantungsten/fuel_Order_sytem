@@ -5,14 +5,16 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
-import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
 import { config, validateEnv } from './config';
 import connectDatabase from './config/database';
 import routes from './routes';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { csrfProtection, provideCsrfToken, csrfErrorHandler } from './middleware/csrf';
+import { responseSanitizationMiddleware, requestLoggingMiddleware } from './middleware/responseSanitization';
 import logger from './utils/logger';
 import { initializeWebSocket } from './services/websocket';
+import { requestId } from './middleware/requestId';
 
 // Validate environment variables
 validateEnv();
@@ -20,11 +22,27 @@ validateEnv();
 // Create Express app
 const app: Application = express();
 
+app.set('trust proxy', 1);
+
 // Create HTTP server
 const httpServer = createServer(app);
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  dnsPrefetchControl: {
+    allow: false, // ✅ Prevent browser DNS prefetch for user-supplied URLs (SSRF defense)
+  },
+}));
+
+if (config.nodeEnv === 'production') {
+  app.use(
+    helmet.hsts({
+      maxAge: 31536000, // 1 year
+      includeSubDomains: true,
+      preload: true,
+    })
+  );
+}
 
 // CORS configuration
 app.use(
@@ -38,65 +56,104 @@ app.use(
 // Cookie parser (required for CSRF)
 app.use(cookieParser());
 
+// Request ID for traceability
+app.use(requestId);
+
 // Body parser middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Remove MongoDB operator characters from inputs
+app.use(
+  mongoSanitize({
+    replaceWith: '_',
+  })
+);
+
 // Compression middleware
 app.use(compression());
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.rateLimitWindowMs,
-  max: config.rateLimitMaxRequests,
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Apply rate limiting to all routes
-app.use('/api/', limiter);
+const apiBasePath = '/api/v1';
+const legacyApiBasePath = '/api';
 
 // Import archival scheduler
 import { startArchivalScheduler } from './jobs/archivalScheduler';
 
-// Logging middleware
-if (config.nodeEnv === 'development') {
-  app.use(morgan('dev'));
-} else {
-  app.use(
-    morgan('combined', {
-      stream: {
-        write: (message: string) => logger.info(message.trim()),
-      },
-    })
-  );
+// Enforce HTTPS only in production
+if (config.nodeEnv === 'production') {
+  app.use((req, res, next) => {
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    if (req.secure || forwardedProto === 'https') {
+      return next();
+    }
+
+    res.status(403).json({
+      success: false,
+      message: 'HTTPS required',
+    });
+  });
 }
+
+// ✅ SECURITY: Response sanitization - prevents sensitive data leakage in responses
+app.use(responseSanitizationMiddleware);
+
+// ✅ SECURITY: Request logging - avoids logging sensitive request bodies
+app.use(requestLoggingMiddleware);
+
+// Logging middleware (always through Winston)
+morgan.token('reqId', (req) => (req as any).requestId || 'unknown');
+const morganFormat =
+  config.nodeEnv === 'development'
+    ? ':reqId :method :url :status :response-time ms'
+    : ':reqId :remote-addr :method :url :status :res[content-length] - :response-time ms';
+
+app.use(
+  morgan(morganFormat, {
+    stream: {
+      write: (message: string) => logger.info(message.trim()),
+    },
+  })
+);
 
 // CSRF Protection - Apply to state-changing routes
 // GET requests to provide CSRF token to frontend
-app.get('/api/csrf-token', provideCsrfToken, (_req, res) => {
+app.get(`${apiBasePath}/csrf-token`, provideCsrfToken, (_req, res) => {
   res.json({ success: true, message: 'CSRF token set' });
 });
 
-// Apply CSRF protection to all POST, PUT, DELETE, PATCH requests
-app.use('/api/', (req, res, next) => {
-  // Skip CSRF for GET, HEAD, OPTIONS
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-    // Provide CSRF token for GET requests
-    provideCsrfToken(req, res, () => next());
-    return;
-  }
-  // Skip CSRF for login/register routes (initial auth)
-  if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/refresh') {
-    return next();
-  }
-  // Apply CSRF protection
-  csrfProtection(req, res, next);
+app.get(`${legacyApiBasePath}/csrf-token`, provideCsrfToken, (_req, res) => {
+  res.setHeader('Deprecation', 'true');
+  res.setHeader('Sunset', 'Wed, 30 Sep 2026 23:59:59 GMT');
+  res.json({ success: true, message: 'CSRF token set' });
 });
 
+const applyCsrfProtection = (basePath: string) => {
+  app.use(basePath, (req, res, next) => {
+    // Skip CSRF for GET, HEAD, OPTIONS
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      // Provide CSRF token for GET requests
+      provideCsrfToken(req, res, () => next());
+      return;
+    }
+    // Skip CSRF for login/register routes (initial auth)
+    if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/refresh') {
+      return next();
+    }
+    // Apply CSRF protection
+    csrfProtection(req, res, next);
+  });
+};
+
+applyCsrfProtection(apiBasePath);
+applyCsrfProtection(legacyApiBasePath);
+
 // API routes
-app.use('/api', routes);
+app.use(apiBasePath, routes);
+app.use(legacyApiBasePath, (req, res, next) => {
+  res.setHeader('Deprecation', 'true');
+  res.setHeader('Sunset', 'Wed, 30 Sep 2026 23:59:59 GMT');
+  next();
+}, routes);
 
 // Welcome route
 app.get('/', (_req, res) => {

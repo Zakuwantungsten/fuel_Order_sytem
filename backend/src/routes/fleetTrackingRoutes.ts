@@ -1,6 +1,6 @@
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
 import * as fleetTrackingController from '../controllers/fleetTrackingController';
 
 const router = express.Router();
@@ -8,8 +8,8 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
-// Upload fleet report (Excel/CSV)
-router.post('/upload', asyncHandler(fleetTrackingController.uploadFleetReport));
+// Upload fleet report (Excel/CSV) — CREATE on fleet_tracking: super_admin, admin, fuel_order_maker
+router.post('/upload', authorize('super_admin', 'admin', 'fuel_order_maker'), asyncHandler(fleetTrackingController.uploadFleetReport));
 
 // Get all snapshots
 router.get('/snapshots', asyncHandler(fleetTrackingController.getAllSnapshots));
@@ -30,6 +30,6 @@ router.get('/checkpoint/:name', asyncHandler(fleetTrackingController.getTrucksAt
 router.get('/checkpoint/:name/copy', asyncHandler(fleetTrackingController.getCopyableTruckList));
 
 // Delete snapshot (Admin only)
-router.delete('/snapshots/:id', asyncHandler(fleetTrackingController.deleteSnapshot));
+router.delete('/snapshots/:id', authorize('super_admin', 'admin'), asyncHandler(fleetTrackingController.deleteSnapshot));
 
 export default router;

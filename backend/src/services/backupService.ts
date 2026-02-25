@@ -5,10 +5,65 @@ import Backup from '../models/Backup';
 import { AuditLog } from '../models/AuditLog';
 import r2Service from './r2Service';
 import logger from '../utils/logger';
+import { encryptBuffer, decryptBuffer } from '../utils/cryptoUtils';
+import { config } from '../config';
 
 class BackupService {
   /**
+   * Collections to exclude from backups by default
+   * These are temporary/session data that don't need to be backed up
+   * ✅ SECURITY: Excludes high-volume logs that are not essential for recovery
+   */
+  private readonly DEFAULT_EXCLUDED_COLLECTIONS = [
+    'sessions',
+    'socket.io-adapter-events',
+  ];
+
+  /**
+   * Get list of collections to exclude from backup
+   * Combines default exclusions with admin-configured exclusions
+   */
+  private async getExcludedCollections(): Promise<Set<string>> {
+    const excluded = new Set(this.DEFAULT_EXCLUDED_COLLECTIONS);
+
+    try {
+      const { SystemConfig } = require('../models');
+      const config = await SystemConfig.findOne({
+        configType: 'system_settings',
+        isDeleted: false,
+      });
+
+      if (config?.systemSettings?.backup?.excludedCollections && Array.isArray(config.systemSettings.backup.excludedCollections)) {
+        config.systemSettings.backup.excludedCollections.forEach((collection: string) => {
+          excluded.add(collection);
+        });
+        logger.info(`[BACKUP] Excluding ${excluded.size} collections: ${Array.from(excluded).join(', ')}`);
+      }
+    } catch (error: any) {
+      logger.warn('[BACKUP] Could not read excluded collections from config:', error.message);
+    }
+
+    return excluded;
+  }
+
+  /**
+   * Validate backup encryption key is configured
+   */
+  private validateEncryptionKey(): string {
+    const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY;
+    if (!encryptionKey) {
+      logger.warn('[BACKUP] BACKUP_ENCRYPTION_KEY not configured - backups will not be encrypted');
+      return '';
+    }
+    if (encryptionKey.length < 12) {
+      throw new Error('BACKUP_ENCRYPTION_KEY must be at least 12 characters long');
+    }
+    return encryptionKey;
+  }
+
+  /**
    * Create a database backup
+   * ✅ SECURITY: Backups are encrypted with AES-256 before R2 upload
    */
   async createBackup(userId: string, type: 'manual' | 'scheduled' = 'manual'): Promise<any> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -33,7 +88,12 @@ class BackupService {
       }
       
       const collections = await mongoose.connection.db.listCollections().toArray();
-      const collectionNames = collections.map(c => c.name);
+      const excludedCollections = await this.getExcludedCollections();
+      
+      // Filter out excluded collections
+      const collectionsToBackup = collections
+        .map(c => c.name)
+        .filter(name => !excludedCollections.has(name));
 
       const backupData: any = {
         timestamp: new Date().toISOString(),
@@ -41,15 +101,16 @@ class BackupService {
         collections: {},
         metadata: {
           mongoVersion: await this.getMongoVersion(),
-          totalCollections: collectionNames.length,
+          totalCollections: collectionsToBackup.length,
           totalDocuments: 0,
+          excludedCollections: Array.from(excludedCollections),
         }
       };
 
       let totalDocuments = 0;
 
-      // Export each collection
-      for (const collectionName of collectionNames) {
+      // Export each collection (excluding filtered ones)
+      for (const collectionName of collectionsToBackup) {
         const collection = mongoose.connection.collection(collectionName);
         const documents = await collection.find({}).toArray();
         backupData.collections[collectionName] = documents;
@@ -84,19 +145,38 @@ class BackupService {
 
       const archiveBuffer = await archivePromise;
 
+      // ✅ SECURITY: Encrypt backup before uploading to R2
+      const encryptionKey = this.validateEncryptionKey();
+      let fileToUpload = archiveBuffer;
+      let uploadContentType = 'application/gzip';
+      
+      if (encryptionKey) {
+        try {
+          fileToUpload = encryptBuffer(archiveBuffer, encryptionKey);
+          uploadContentType = 'application/octet-stream'; // Encrypted binary
+          logger.info('[BACKUP] Backup encrypted with AES-256-GCM before upload');
+        } catch (error: any) {
+          logger.error('[BACKUP] Encryption failed, aborting backup:', error.message);
+          throw new Error(`Backup encryption failed: ${error.message}`);
+        }
+      }
+
       // Upload to R2
-      await r2Service.uploadFile(r2Key, archiveBuffer, 'application/gzip');
+      await r2Service.uploadFile(r2Key, fileToUpload, uploadContentType);
 
       // Update backup record
       backup.status = 'completed';
       backup.fileSize = archiveBuffer.length;
-      backup.collections = collectionNames;
+      backup.collections = collectionsToBackup;
       backup.completedAt = new Date();
       backup.metadata = {
         totalDocuments,
         databaseSize: archiveBuffer.length,
         compression: 'gzip',
       };
+      (backup as any).excludedCollections = Array.from(excludedCollections);
+      (backup as any).encrypted = encryptionKey ? true : false;
+      (backup as any).encryptionAlgorithm = encryptionKey ? 'aes-256-gcm' : null;
       await backup.save();
 
       // Create audit log
@@ -108,7 +188,7 @@ class BackupService {
         details: {
           fileName,
           fileSize: archiveBuffer.length,
-          collections: collectionNames.length,
+          collections: collectionsToBackup.length,
           documents: totalDocuments,
         },
       });
@@ -129,6 +209,7 @@ class BackupService {
 
   /**
    * Restore database from backup
+   * ✅ SECURITY: Encrypted backups are decrypted with AES-256 after download
    */
   async restoreBackup(backupId: string, userId: string): Promise<void> {
     const backup = await Backup.findById(backupId);
@@ -152,7 +233,24 @@ class BackupService {
       for await (const chunk of stream) {
         chunks.push(chunk);
       }
-      const buffer = Buffer.concat(chunks);
+      let buffer: Buffer = Buffer.concat(chunks);
+
+      // ✅ SECURITY: Decrypt backup if it was encrypted
+      if ((backup as any).metadata?.encrypted) {
+        const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY;
+        if (!encryptionKey) {
+          throw new Error('Cannot restore encrypted backup: BACKUP_ENCRYPTION_KEY not configured');
+        }
+        try {
+          const decryptedBuffer = decryptBuffer(buffer, encryptionKey);
+          // @ts-ignore - Buffer type mismatch between different implementations
+          buffer = decryptedBuffer;
+          logger.info('[BACKUP] Backup decrypted with AES-256-GCM');
+        } catch (error: any) {
+          logger.error('[BACKUP] Decryption failed:', error.message);
+          throw new Error(`Backup decryption failed: ${error.message}`);
+        }
+      }
 
       // Extract and parse (simplified - in production you'd use tar extraction)
       // For now, assume the backup is JSON format

@@ -221,7 +221,7 @@ lpoSummarySchema.index({ year: 1, lpoNo: 1 });
 lpoSummarySchema.index({ year: 1, isDeleted: 1 });
 
 // Pre-save hook to calculate total and extract year from date
-lpoSummarySchema.pre('save', function (next) {
+lpoSummarySchema.pre('save', function (this: ILPOSummaryDocument, next) {
   if (this.isModified('entries')) {
     this.total = this.entries.reduce((sum, entry) => sum + entry.amount, 0);
   }

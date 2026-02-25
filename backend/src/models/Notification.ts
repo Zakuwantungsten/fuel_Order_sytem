@@ -36,6 +36,8 @@ export interface INotification extends Document {
   createdBy: string;
   isDeleted: boolean;
   deletedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const notificationSchema = new Schema<INotification>(

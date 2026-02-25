@@ -445,6 +445,7 @@ export interface AuthResponse {
   user: User;
   accessToken: string;
   refreshToken: string;
+  sessionTimeoutMinutes?: number;
 }
 
 export interface AuthState {

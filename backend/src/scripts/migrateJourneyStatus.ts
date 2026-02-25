@@ -37,7 +37,7 @@ function isJourneyComplete(record: any): boolean {
 async function migrateJourneyStatus() {
   try {
     // Connect to database
-    await mongoose.connect(config.mongoUri);
+    await mongoose.connect(config.mongodbUri);
     logger.info('Connected to MongoDB');
 
     // Get all non-deleted fuel records

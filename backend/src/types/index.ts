@@ -35,7 +35,12 @@ export type AuditAction =
   | 'BULK_OPERATION'
   | 'EXPORT'
   | 'ENABLE_MAINTENANCE'
-  | 'DISABLE_MAINTENANCE';
+  | 'DISABLE_MAINTENANCE'
+  | 'CREATE_CHECKPOINT'
+  | 'UPDATE_CHECKPOINT'
+  | 'DELETE_CHECKPOINT'
+  | 'REORDER_CHECKPOINTS'
+  | 'SEED_CHECKPOINTS';
 
 export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
 
@@ -156,9 +161,13 @@ export interface IUser {
   lastLogin?: Date;
   mustChangePassword?: boolean;
   passwordResetAt?: Date;
+  theme?: 'light' | 'dark';
   refreshToken?: string;
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
+  failedLoginAttempts?: number;
+  lockedUntil?: Date;
+  passwordHistory?: string[];
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -240,6 +249,7 @@ export interface ILPOEntry {
   isDriverAccount?: boolean;  // True for driver's account (misuse/theft) or cash entries
   referenceDo?: string;       // Reference DO for NIL entries to link to a journey
   paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';  // Payment method
+  currency?: string;          // Currency for this entry (USD or TZS)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -359,6 +369,7 @@ export interface ILPOSummary {
     lpoNo: string;
     station: string;
   };
+  currency?: string;   // Currency for this LPO (USD or TZS)
   createdBy?: string;  // Username of who created this LPO
   approvedBy?: string;  // Name of approver (optional - for any LPO that needs approval signature)
   isDeleted: boolean;
