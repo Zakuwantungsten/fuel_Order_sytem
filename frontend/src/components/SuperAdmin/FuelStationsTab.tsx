@@ -218,16 +218,16 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Fuel className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+        <div className="flex items-center gap-1.5">
+          <Fuel className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
             Fuel Stations Management
           </h2>
         </div>
-        <button onClick={() => openStationModal()} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
-          <Plus className="w-4 h-4" />Add Station
+        <button onClick={() => openStationModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700">
+          <Plus className="w-3.5 h-3.5" />Add Station
         </button>
       </div>
 
@@ -292,32 +292,32 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
 
       {/* Desktop Table */}
       <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
-        <table className="w-full">
+        <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Station</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Rate</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Going (L)</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Returning (L)</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Fills Column</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-gray-600 dark:text-gray-400">Actions</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Station</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Rate</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Going (L)</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Returning (L)</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Fills Column</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-400">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y dark:divide-gray-700">
             {stations.map((station) => (
               <tr key={String(station._id)} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{station.stationName}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mr-1 ${
+                <td className="px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100">{station.stationName}</td>
+                <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium mr-0.5 ${
                     (station.currency || 'TZS') === 'USD'
                       ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                       : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
                   }`}>{station.currency || 'TZS'}</span>
                   {station.defaultRate}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersGoing}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersReturning}</td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersGoing}</td>
+                <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersReturning}</td>
+                <td className="px-3 py-2.5 text-xs">
                   {station.fuelRecordFieldGoing && (
                     <div className="text-green-600 dark:text-green-400">↑ {station.fuelRecordFieldGoing}</div>
                   )}
@@ -328,18 +328,18 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                     <span className="text-gray-400">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-right">
-                  <button onClick={() => openStationModal(station)} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 mr-3">
-                    <Edit2 className="w-4 h-4" />
+                <td className="px-3 py-2.5 text-sm text-right">
+                  <button onClick={() => openStationModal(station)} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 mr-2">
+                    <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button onClick={() => handleDeleteStation(station._id)} className="text-red-600 dark:text-red-400 hover:text-red-800">
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </td>
               </tr>
             ))}
             {stations.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No fuel stations configured. Add existing stations like Lake Kapiri, Infinity, etc.</td></tr>
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No fuel stations configured. Add existing stations like Lake Kapiri, Infinity, etc.</td></tr>
             )}
           </tbody>
         </table>
