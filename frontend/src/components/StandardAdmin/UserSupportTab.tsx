@@ -6,12 +6,11 @@ import {
   ToggleLeft,
   ToggleRight,
   Search,
-  AlertTriangle,
 } from 'lucide-react';
 import { usersAPI } from '../../services/api';
 import { User } from '../../types';
 import Pagination from '../Pagination';
-import CreateUserModal from '../CreateUserModal';
+import { SuperAdminCreateUserModal } from '../SuperAdmin/UserManagementTab';
 
 interface UserSupportTabProps {
   user: any;
@@ -92,23 +91,9 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
   const uniqueRoles = [...new Set(users.map(u => u.role))].sort();
 
   return (
-    <div className="space-y-6">
-      {/* Info Banner */}
-      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">Limited User Management</h4>
-            <p className="text-sm text-yellow-800 dark:text-yellow-200">
-              You can manage non-admin users only (drivers, clerks, fuel attendants, etc.). 
-              You cannot create or modify admin, boss, or super admin accounts.
-            </p>
-          </div>
-        </div>
-      </div>
-
+    <div className="p-4 md:p-5 bg-gray-50 dark:bg-gray-900 min-h-screen">
       {/* Action Buttons */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 mb-4">
         <button
           onClick={() => setShowCreateUser(true)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
@@ -119,22 +104,20 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search users..."
-                value={filter}
-                onChange={e => {
-                  setFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full pl-10 pr-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 mb-4">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={filter}
+              onChange={e => {
+                setFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
           </div>
           <select
             value={roleFilter}
@@ -142,7 +125,7 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
               setRoleFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
+            className="w-full sm:w-40 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           >
             <option value="">All Roles</option>
             {uniqueRoles.map(role => (
@@ -155,7 +138,7 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
             <p className="text-gray-500 dark:text-gray-400">Loading users...</p>
@@ -168,46 +151,45 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase">User</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase">Role</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase">Department</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase">Actions</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">User</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Email</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Department</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {paginatedUsers.map(u => (
-                    <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
-                            <span className="text-indigo-600 dark:text-indigo-400 font-medium text-sm">
+                    <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
+                            <span className="text-indigo-600 dark:text-indigo-400 font-medium text-xs">
                               {u.firstName?.[0]}{u.lastName?.[0]}
                             </span>
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900 dark:text-gray-100">
-                              {u.firstName} {u.lastName}
-                            </p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{u.email}</p>
-                          </div>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">
+                            {u.firstName} {u.lastName}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs capitalize">
+                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                        {u.email}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs capitalize">
                           {u.role?.replace(/_/g, ' ')}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {u.department || 'N/A'}
-                        </span>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                        {u.department || 'N/A'}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs ${
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded text-xs ${
                           u.isActive
                             ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                             : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
@@ -215,21 +197,21 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
                           {u.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleToggleStatus(String(u.id))}
                             className="p-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
                             title={u.isActive ? 'Deactivate' : 'Activate'}
                           >
-                            {u.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                            {u.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
                           </button>
                           <button
                             onClick={() => handleResetPassword(String(u.id))}
                             className="p-1 text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 dark:hover:text-yellow-300"
                             title="Reset Password"
                           >
-                            <Key className="w-5 h-5" />
+                            <Key className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -259,14 +241,14 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
 
       {/* Create User Modal */}
       {showCreateUser && (
-        <CreateUserModal
-          isOpen={showCreateUser}
+        <SuperAdminCreateUserModal
           onClose={() => setShowCreateUser(false)}
-          onUserCreated={() => {
+          onSuccess={() => {
             loadUsers();
             setShowCreateUser(false);
+            showMessage('success', 'User created successfully');
           }}
-          restrictedRoles={['super_admin', 'admin', 'boss']}
+          onError={(msg) => showMessage('error', msg)}
         />
       )}
     </div>

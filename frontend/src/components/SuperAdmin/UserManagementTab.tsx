@@ -584,7 +584,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
 
       {/* Modals */}
       {showCreateModal && (
-        <CreateUserModal
+        <SuperAdminCreateUserModal
           onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
             setShowCreateModal(false);
@@ -749,7 +749,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
 }
 
 // Create User Modal Component
-function CreateUserModal({ 
+export function SuperAdminCreateUserModal({ 
   onClose, 
   onSuccess, 
   onError 
@@ -836,7 +836,7 @@ function CreateUserModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700 transform scale-[0.9] origin-center">
         {/* Header */}
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
