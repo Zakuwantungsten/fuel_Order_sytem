@@ -15,8 +15,10 @@ import {
   ChevronDown,
   Shield,
   Moon,
-  Sun
+  Sun,
+  Download
 } from 'lucide-react';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo, RESOURCES, ACTIONS } from '../utils/permissions';
@@ -36,6 +38,7 @@ const Layout = ({ children }: LayoutProps) => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   
   const { user, hasPermission, logout, toggleTheme, isDark } = useAuth();
+  const { canInstall, install } = usePWAInstall();
 
   // Close user menu when clicking outside
   useEffect(() => {
@@ -242,6 +245,18 @@ const Layout = ({ children }: LayoutProps) => {
           </div>
           
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* PWA Install Button */}
+            {canInstall && (
+              <button
+                onClick={install}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0"
+                aria-label="Install app"
+                title="Install app"
+              >
+                <Download className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              </button>
+            )}
+
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
@@ -353,6 +368,19 @@ const Layout = ({ children }: LayoutProps) => {
             </h2>
           </div>
           <div className="flex items-center space-x-4 relative z-[60]">
+            {/* PWA Install Button */}
+            {canInstall && (
+              <button
+                onClick={install}
+                className="flex items-center space-x-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors text-sm font-medium"
+                aria-label="Install app"
+                title="Install app"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Install</span>
+              </button>
+            )}
+
             {/* Notification Bell */}
             <div className="relative z-[60]">
               <NotificationBell 
