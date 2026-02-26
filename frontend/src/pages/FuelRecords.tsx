@@ -79,7 +79,6 @@ const FuelRecords = () => {
 
     if (yearParam && monthParam) {
       const targetMonth = `${yearParam}-${String(monthParam).padStart(2, '0')}`;
-      console.log('Initializing selectedMonth from URL params:', targetMonth);
       return targetMonth;
     }
 
@@ -160,13 +159,6 @@ const FuelRecords = () => {
     // fetchRoutes will be called when monthInitialized becomes true
   }, []);
   
-  // Fetch routes once month is initialized
-  useEffect(() => {
-    if (monthInitialized) {
-      fetchRoutes();
-    }
-  }, [monthInitialized]);
-  
   // Handle highlight from URL parameter
   useEffect(() => {
     const handleUrlChange = () => {
@@ -177,7 +169,6 @@ const FuelRecords = () => {
       const monthParam = url.searchParams.get('month');
       
       if (actionParam === 'create-fuel') {
-        console.log('Quick Action: Opening Fuel Record creation form');
         setSelectedRecord(undefined);
         setIsFormOpen(true);
         // Clear the action param
@@ -186,12 +177,9 @@ const FuelRecords = () => {
         setMonthInitialized(true);
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
-        console.log('Processing highlight for Fuel Record (Truck):', highlightId, 'Year:', yearParam, 'Month:', monthParam);
-        
         // If year and month are provided, construct the YYYY-MM format
         if (yearParam && monthParam) {
           const targetMonth = `${yearParam}-${String(monthParam).padStart(2, '0')}`;
-          console.log('Setting month filter to:', targetMonth);
           setSelectedMonth(targetMonth);
           // Set flag to allow data fetching with the correct month
           setMonthInitialized(true);
@@ -216,10 +204,6 @@ const FuelRecords = () => {
   // Separate effect to handle highlight - fetch ALL records to find position
   useEffect(() => {
     if (pendingHighlight && selectedMonth) {
-      console.log('%c=== FUEL RECORD HIGHLIGHT FLOW START ===', 'background: #22c55e; color: white; padding: 4px;');
-      console.log('pendingHighlight:', pendingHighlight);
-      console.log('selectedMonth:', selectedMonth);
-      
       // Fetch ALL records for the selected month to find the record's position
       const findRecordPosition = async () => {
         try {
@@ -227,8 +211,6 @@ const FuelRecords = () => {
           const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
                              'July', 'August', 'September', 'October', 'November', 'December'];
           const monthName = monthNames[parseInt(monthNum) - 1];
-          
-          console.log('Fetching all records for:', `${monthName} ${year}`);
           
           // Fetch ALL records for this month
           const response = await fuelRecordsAPI.getAll({
@@ -239,39 +221,27 @@ const FuelRecords = () => {
           });
           
           const allMonthRecords = response.data;
-          console.log('Fetched records count:', allMonthRecords.length);
-          console.log('All truck numbers:', allMonthRecords.map(r => r.truckNo));
           
           // Find the record by truck number
           const recordIndex = allMonthRecords.findIndex(r => r.truckNo === pendingHighlight);
           
           if (recordIndex >= 0) {
-            console.log('✅ Found record at absolute index:', recordIndex);
-            console.log('Record details:', allMonthRecords[recordIndex]);
-            
             // Calculate which page this record is on
             const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
-            console.log('Target page:', targetPage, '| Current page:', currentPage, '| Items per page:', itemsPerPage);
-            
             // Navigate to the correct page if needed
             if (targetPage !== currentPage) {
-              console.log('Navigating to page:', targetPage);
               setCurrentPage(targetPage);
               // Wait for page change to complete and DOM to update
               setTimeout(() => {
-                console.log('Calling scrollToAndHighlight after page change...');
                 scrollToAndHighlight(pendingHighlight);
-              }, 1200); // Increased delay
+              }, 1200);
             } else {
               // Already on correct page
-              console.log('Already on correct page, highlighting now...');
               setTimeout(() => {
-                console.log('Calling scrollToAndHighlight...');
                 scrollToAndHighlight(pendingHighlight);
-              }, 600); // Increased delay
+              }, 600);
             }
           } else {
-            console.warn('❌ Record not found with truck number:', pendingHighlight, 'in month:', selectedMonth);
             clearHighlight();
           }
         } catch (error) {
@@ -286,27 +256,17 @@ const FuelRecords = () => {
   
   // Helper function to scroll to and highlight a record
   const scrollToAndHighlight = (truckNo: string) => {
-    console.log('%c=== HIGHLIGHT ATTEMPT ===' , 'background: #ef4444; color: white; font-size: 16px; padding: 8px;');
-    console.log('Truck Number:', truckNo);
-    
     // Find all elements with this truck number
     const allElements = document.querySelectorAll(`[data-truck-number="${truckNo}"]`);
-    console.log('Total elements found:', allElements.length);
-    
     // Find visible element (mobile or desktop depending on screen size)
     const visibleElements = Array.from(allElements).filter(el => {
       return (el as HTMLElement).offsetParent !== null; // offsetParent is null for hidden elements
     });
-    console.log('Visible elements:', visibleElements.length);
-    
     // Prefer visible element, fall back to first element
     let element = visibleElements[0] as HTMLElement;
     if (!element && allElements.length > 0) {
       element = allElements[0] as HTMLElement;
     }
-    
-    console.log('Element found:', !!element);
-    console.log('Element is visible:', element?.offsetParent !== null);
     
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -329,7 +289,7 @@ const FuelRecords = () => {
       element.style.setProperty('z-index', '9999', 'important');
       element.style.setProperty('position', 'relative', 'important');
       
-      console.log('✅ Applied Fuel Record highlight');
+
       
       setTimeout(() => {
         element.style.boxShadow = originalStyles.boxShadow;
@@ -339,11 +299,9 @@ const FuelRecords = () => {
         element.style.transition = originalStyles.transition;
         element.style.position = '';
         element.style.zIndex = '';
-        console.log('❌ Removed Fuel Record highlight');
         clearHighlight();
       }, 3000);
     } else {
-      console.error('❌ Fuel Record Element not found:', truckNo);
       clearHighlight();
     }
   };
@@ -446,12 +404,6 @@ const FuelRecords = () => {
       
       const response = await fuelRecordsAPI.getAll(filters);
       
-      console.log('Fetched fuel records:', {
-        recordCount: response.data.length,
-        pagination: response.pagination,
-        filters
-      });
-      
       // Store all records for export purposes (we still need them)
       setRecords(response.data);
       
@@ -506,11 +458,6 @@ const FuelRecords = () => {
       const response = await fuelRecordsAPI.getAll(filters);
       const allRecords = response.data;
       
-      console.log(`Fetching ${routeTypeFilter} routes from ${selectedMonth}:`, {
-        totalRecords: allRecords.length,
-        sampleRecord: allRecords[0]
-      });
-      
       // Extract unique routes with both from and to fields
       const routesMap = new Map<string, { from: string; to: string }>();
       
@@ -523,17 +470,6 @@ const FuelRecords = () => {
             const goingTo = record.originalGoingTo || record.to;
             if (goingFrom && goingTo) {
               const routeKey = `${goingFrom}-${goingTo}`;
-              console.log('Adding IMPORT route:', { 
-                goingDo: record.goingDo, 
-                returnDo: record.returnDo,
-                originalFrom: record.originalGoingFrom,
-                originalTo: record.originalGoingTo,
-                currentFrom: record.from, 
-                currentTo: record.to, 
-                usingFrom: goingFrom,
-                usingTo: goingTo,
-                routeKey 
-              });
               routesMap.set(routeKey, { from: goingFrom, to: goingTo });
             }
           }
@@ -543,14 +479,6 @@ const FuelRecords = () => {
           // DO NOT reverse - the from/to fields already represent the return journey direction
           if (record.returnDo && record.returnDo.trim() !== '' && record.from && record.to) {
             const routeKey = `${record.from}-${record.to}`;
-            console.log('Adding EXPORT route:', { 
-              returnDo: record.returnDo, 
-              originalFrom: record.originalGoingFrom,
-              originalTo: record.originalGoingTo,
-              currentFrom: record.from, 
-              currentTo: record.to, 
-              routeKey: `${record.from}-${record.to}` 
-            });
             routesMap.set(routeKey, { from: record.from, to: record.to });
           }
         }
@@ -564,7 +492,6 @@ const FuelRecords = () => {
           return routeA.localeCompare(routeB);
         });
       
-      console.log(`Extracted ${routeTypeFilter} routes from ${selectedMonth}:`, routes);
       setAvailableRoutes(routes);
     } catch (error) {
       console.error('Error fetching routes:', error);
@@ -773,9 +700,6 @@ const FuelRecords = () => {
       
       const sortedMonths = Array.from(months).sort();
       const sortedYears = Array.from(years).sort().reverse(); // Most recent first
-      
-      console.log('Available months:', sortedMonths);
-      console.log('Available years:', sortedYears);
       
       setAvailableMonths(sortedMonths);
       setAvailableYears(sortedYears);
