@@ -202,7 +202,6 @@ const MFASchema = new Schema<IMFA>(
 );
 
 // Indexes
-MFASchema.index({ userId: 1 }, { unique: true });
 MFASchema.index({ 'trustedDevices.deviceId': 1 });
 MFASchema.index({ 'trustedDevices.expiresAt': 1 });
 

@@ -58,7 +58,6 @@ const UserMFASchema = new Schema<IUserMFA>(
       ref: 'User',
       required: true,
       unique: true,
-      index: true,
     },
     
     isEnabled: {
@@ -196,7 +195,6 @@ const UserMFASchema = new Schema<IUserMFA>(
 );
 
 // Indexes for performance
-UserMFASchema.index({ userId: 1 });
 UserMFASchema.index({ 'trustedDevices.deviceFingerprint': 1 });
 
 // Method to encrypt sensitive fields
