@@ -872,6 +872,35 @@ const syncLPOEntriesOnUpdate = async (
 };
 
 /**
+ * Sync DriverAccountEntry records when an LPO summary with driver account entries is updated.
+ * This ensures edits made through the workbook sheet view reflect in the driver account table.
+ */
+const syncDriverAccountEntriesOnUpdate = async (lpoSummary: any): Promise<void> => {
+  try {
+    const driverEntries = lpoSummary.entries.filter((e: any) => e.isDriverAccount && !e.isCancelled);
+    
+    for (const entry of driverEntries) {
+      // Find matching DriverAccountEntry by lpoNo and truckNo
+      const existing = await DriverAccountEntry.findOne({
+        lpoNo: lpoSummary.lpoNo,
+        truckNo: entry.truckNo,
+      });
+      
+      if (existing) {
+        existing.liters = entry.liters;
+        existing.rate = entry.rate;
+        existing.amount = entry.liters * entry.rate;
+        existing.station = lpoSummary.station;
+        await existing.save();
+        logger.info(`Synced DriverAccountEntry for ${lpoSummary.lpoNo} / ${entry.truckNo}: ${entry.liters}L @ ${entry.rate}`);
+      }
+    }
+  } catch (error: any) {
+    logger.error(`Error syncing DriverAccountEntry for LPO ${lpoSummary.lpoNo}: ${error.message}`);
+  }
+};
+
+/**
  * Helper function to delete LPOEntry records when LPOSummary is deleted
  */
 const syncLPOEntriesOnDelete = async (lpoNo: string): Promise<void> => {
@@ -1344,6 +1373,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       lpoSummary.date
     );
 
+    // Sync DriverAccountEntry records if this LPO has driver account entries
+    const hasDriverAccountEntries = lpoSummary.entries.some((e: any) => e.isDriverAccount);
+    if (hasDriverAccountEntries) {
+      await syncDriverAccountEntriesOnUpdate(lpoSummary);
+    }
+
     logger.info(`LPO document updated: ${lpoSummary?.lpoNo} by ${req.user?.username}`);
 
     // Return with id field for frontend compatibility
@@ -1357,6 +1392,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     emitDataChange('lpo_summaries', 'update');
     emitDataChange('fuel_records', 'update');
     emitDataChange('lpo_entries', 'update');
+    emitDataChange('driver_accounts', 'update');
   } catch (error: any) {
     throw error;
   }

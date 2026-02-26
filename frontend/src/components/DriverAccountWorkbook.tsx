@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Plus, X, FileSpreadsheet, Trash2, 
   Copy, User, AlertTriangle, FileDown, Search,
-  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download, Check
+  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download, Check, MessageSquare
 } from 'lucide-react';
 import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary, FuelStationConfig } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,17 +11,20 @@ import { configService } from '../services/configService';
 import { useActiveFuelStations, getActiveStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface DriverAccountWorkbookProps {
   initialYear?: number;
   onClose?: () => void;
+  onNavigateToSheet?: (lpoNo: string, year: number) => void;
 }
 
 const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({ 
   initialYear = new Date().getFullYear(),
-  onClose 
+  onClose,
+  onNavigateToSheet 
 }) => {
   const { user } = useAuth();
   const [workbook, setWorkbook] = useState<DriverAccountWorkbook | null>(null);
@@ -31,6 +34,12 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const [selectedEntries, setSelectedEntries] = useState<Set<string | number>>(new Set());
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
+  const [stationFilter, setStationFilter] = useState('');
+  const [selectedPeriods, setSelectedPeriods] = useState<Array<{year: number; month: number}>>([
+    { year: new Date().getFullYear(), month: new Date().getMonth() + 1 }
+  ]);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [showStationDropdown, setShowStationDropdown] = useState(false);
   const [openEntryDropdown, setOpenEntryDropdown] = useState<string | number | null>(null);
   const [entryDropdownPosition, setEntryDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({ left: 0 });
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
@@ -41,15 +50,23 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   
   // Dropdown refs for main component
   const yearDropdownRef = useRef<HTMLDivElement>(null);
+  const stationDropdownRef = useRef<HTMLDivElement>(null);
+  const monthDropdownRef = useRef<HTMLDivElement>(null);
 
   // Current year for reference
   const currentYear = new Date().getFullYear();
 
-  // Click outside detection for year dropdown
+  // Click outside detection for dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target as Node)) {
         setShowYearDropdown(false);
+      }
+      if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
+        setShowStationDropdown(false);
+      }
+      if (monthDropdownRef.current && !monthDropdownRef.current.contains(event.target as Node)) {
+        setShowMonthDropdown(false);
       }
     };
 
@@ -133,7 +150,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     }
   };
 
-  useRealtimeSync(['lpo_entries', 'delivery_orders', 'fuel_records'], loadWorkbook);
+  useRealtimeSync(['lpo_entries', 'delivery_orders', 'fuel_records', 'driver_accounts'], loadWorkbook);
 
   const addEntry = async (entry: Omit<DriverAccountEntry, 'id' | 'createdAt' | 'createdBy'>) => {
     if (!workbook) return;
@@ -204,20 +221,103 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     }
   };
 
+  // Month names for display
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  // Get unique stations from entries
+  const availableStations = React.useMemo(() => {
+    const stations = new Set<string>();
+    (workbook?.entries || []).forEach(entry => {
+      if (entry.station && entry.station.trim()) {
+        stations.add(entry.station.trim().toUpperCase());
+      }
+    });
+    return Array.from(stations).sort();
+  }, [workbook?.entries]);
+
+  // Available periods from entries
+  const availablePeriods = React.useMemo(() => {
+    const seen = new Map<string, { year: number; month: number }>();
+    (workbook?.entries || []).forEach(entry => {
+      if (!entry.date) return;
+      const d = new Date(entry.date);
+      if (isNaN(d.getTime())) return;
+      const year = d.getFullYear();
+      const month = d.getMonth() + 1;
+      const key = `${year}-${month}`;
+      if (!seen.has(key)) seen.set(key, { year, month });
+    });
+    return Array.from(seen.values()).sort((a, b) =>
+      b.year !== a.year ? b.year - a.year : b.month - a.month
+    );
+  }, [workbook?.entries]);
+
+  const togglePeriod = (year: number, month: number) => {
+    setSelectedPeriods(prev => {
+      const exists = prev.some(p => p.year === year && p.month === month);
+      if (exists) {
+        if (prev.length === 1) return prev;
+        return prev.filter(p => !(p.year === year && p.month === month));
+      }
+      return [...prev, { year, month }].sort((a, b) =>
+        b.year !== a.year ? b.year - a.year : b.month - a.month
+      );
+    });
+  };
+
+  const getPeriodsDisplayText = (): string => {
+    if (selectedPeriods.length === 0) return 'Select Period';
+    if (selectedPeriods.length === 1) {
+      const p = selectedPeriods[0];
+      return `${MONTH_NAMES[p.month - 1]} ${p.year}`;
+    }
+    if (selectedPeriods.length === availablePeriods.length && availablePeriods.length > 0) return 'All Periods';
+    return `${selectedPeriods.length} periods`;
+  };
+
   // Filter entries
   const filteredEntries = workbook?.entries.filter(entry => {
     const matchesSearch = !searchTerm || 
       entry.truckNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       entry.driverName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       entry.lpoNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.station?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       entry.notes?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // Normalize dates for comparison (entry.date should be in ISO format from backend)
+    // Station filter
+    const matchesStation = !stationFilter || entry.station?.toUpperCase() === stationFilter;
+
+    // Period filter
+    let matchesPeriod = true;
+    if (selectedPeriods.length > 0 && entry.date) {
+      const d = new Date(entry.date);
+      if (!isNaN(d.getTime())) {
+        const entryYear = d.getFullYear();
+        const entryMonth = d.getMonth() + 1;
+        matchesPeriod = selectedPeriods.some(p => p.year === entryYear && p.month === entryMonth);
+      }
+    }
+
+    // Date range filter
     const matchesDateFrom = !dateFilter.from || entry.date >= dateFilter.from;
     const matchesDateTo = !dateFilter.to || entry.date <= dateFilter.to;
 
-    return matchesSearch && matchesDateFrom && matchesDateTo;
+    return matchesSearch && matchesStation && matchesPeriod && matchesDateFrom && matchesDateTo;
   }) || [];
+
+  // Auto-fallback: if the default current period has no data, switch to most recent period
+  useEffect(() => {
+    if (loading || !workbook || workbook.entries.length === 0) return;
+    const now = new Date();
+    const defYear = now.getFullYear(), defMonth = now.getMonth() + 1;
+    if (selectedPeriods.length !== 1 || selectedPeriods[0].year !== defYear || selectedPeriods[0].month !== defMonth) return;
+    if (filteredEntries.length === 0 && availablePeriods.length > 0) {
+      setSelectedPeriods([availablePeriods[0]]);
+    }
+  }, [filteredEntries, loading, availablePeriods, workbook]);
 
   // Helper function to apply borders and center alignment to worksheet
   const applyExcelStyles = (ws: XLSX.WorkSheet) => {
@@ -465,24 +565,24 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
               )}
             </div>
             <span className="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm rounded-full">
-              {workbook?.entries.length || 0} entries
+              {filteredEntries.length} entries
             </span>
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
-            {/* Copy/Download Dropdown */}
+            {/* Export Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowCopyDropdown(!showCopyDropdown)}
-                className="flex items-center px-2.5 py-1.5 sm:px-3 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
-                <Copy className="w-4 h-4 mr-2" />
+                <Download className="w-4 h-4 mr-2" />
                 Export
-                <ChevronDown className="w-4 h-4 ml-1" />
+                <ChevronDown className="w-3 h-3 ml-1" />
               </button>
               
               {showCopyDropdown && (
-                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 max-h-[80vh] overflow-y-auto">
+                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50">
                   <button
                     onClick={() => copyToClipboard('text')}
                     className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
@@ -511,13 +611,11 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
 
             <button
               onClick={() => setShowAddForm(true)}
-              className="flex items-center px-2.5 py-1.5 sm:px-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
             >
-              <Plus className="w-4 h-4 mr-1.5" />
+              <Plus className="w-4 h-4 mr-2" />
               Add Entry
             </button>
-
-
 
             {onClose && (
               <button
@@ -529,103 +627,179 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
             )}
           </div>
         </div>
+      </div>
 
-        {/* Filters */}
-        <div className="mt-3 flex flex-col sm:flex-row gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search truck, driver, LPO..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs"
-            />
+      {/* Summary Stats */}
+      <div className="px-4 sm:px-6 py-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
+            <div className="text-xs text-gray-600 dark:text-gray-400">Total Entries</div>
+            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{filteredEntries.length}</div>
           </div>
-          
-          <div className="flex items-center gap-2">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
+            <div className="text-xs text-gray-600 dark:text-gray-400">Total Liters</div>
+            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(filteredEntries.reduce((sum, e) => sum + e.liters, 0))}</div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
+            <div className="text-xs text-gray-600 dark:text-gray-400">Total Amount</div>
+            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(filteredEntries.reduce((sum, e) => sum + e.amount, 0))}</div>
+          </div>
+        </div>
+
+        {/* Filters - matching LPO management layout */}
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 mb-3 transition-colors">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+              <input
+                type="text"
+                placeholder="Search LPO#, Truck, Driver..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              />
+            </div>
+            
+            {/* Month Multi-Select Dropdown */}
+            <div className="relative" ref={monthDropdownRef}>
+              <button
+                onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
+              >
+                <span className="flex items-center">
+                  <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                  {getPeriodsDisplayText()}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {showMonthDropdown && (
+                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-y-auto left-0 right-0">
+                  <div className="p-2 border-b border-gray-200 dark:border-gray-600">
+                    {availablePeriods.some(p => p.year === new Date().getFullYear() && p.month === new Date().getMonth() + 1) && (
+                      <button
+                        onClick={() => {
+                          setSelectedPeriods([{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
+                          setShowMonthDropdown(false);
+                        }}
+                        className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                      >
+                        Current Month ({MONTH_NAMES[new Date().getMonth()]} {new Date().getFullYear()})
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setSelectedPeriods(availablePeriods.length > 0 ? [...availablePeriods] : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
+                        setShowMonthDropdown(false);
+                      }}
+                      className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                    >
+                      All Periods ({availablePeriods.length})
+                    </button>
+                  </div>
+
+                  <div className="p-2">
+                    {availablePeriods.length > 0 ? (() => {
+                      const byYear = availablePeriods.reduce<Record<number, number[]>>((acc, p) => {
+                        if (!acc[p.year]) acc[p.year] = [];
+                        acc[p.year].push(p.month);
+                        return acc;
+                      }, {});
+                      return Object.entries(byYear)
+                        .sort(([a], [b]) => Number(b) - Number(a))
+                        .map(([yearStr, months]) => (
+                          <div key={yearStr}>
+                            <div className="px-2 pt-2 pb-0.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{yearStr}</div>
+                            {months.map(monthNum => (
+                              <label
+                                key={`${yearStr}-${monthNum}`}
+                                className="flex items-center px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPeriods.some(p => p.year === Number(yearStr) && p.month === monthNum)}
+                                  onChange={() => togglePeriod(Number(yearStr), monthNum)}
+                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{MONTH_NAMES[monthNum - 1]}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ));
+                    })() : (
+                      <div className="px-2 py-1.5 text-sm text-gray-500 dark:text-gray-400">
+                        No data available
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Station Dropdown */}
+            <div className="relative" ref={stationDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowStationDropdown(!showStationDropdown)}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+              >
+                <span>{stationFilter || 'All Stations'}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+              {showStationDropdown && (
+                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+                  <button
+                    type="button"
+                    onClick={() => { setStationFilter(''); setShowStationDropdown(false); }}
+                    className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                  >
+                    <span>All Stations</span>
+                    {stationFilter === '' && <Check className="w-4 h-4 text-blue-600" />}
+                  </button>
+                  {availableStations.map((station) => (
+                    <button
+                      key={station}
+                      type="button"
+                      onClick={() => { setStationFilter(station); setShowStationDropdown(false); }}
+                      className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                    >
+                      <span>{station}</span>
+                      {stationFilter === station && <Check className="w-4 h-4 text-blue-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Date Filter */}
             <input
               type="date"
               value={dateFilter.from}
               onChange={(e) => setDateFilter(prev => ({ ...prev, from: e.target.value }))}
-              className="flex-1 sm:flex-none px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-[10px]"
+              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
-            <span className="text-gray-500 text-xs flex-shrink-0">to</span>
-            <input
-              type="date"
-              value={dateFilter.to}
-              onChange={(e) => setDateFilter(prev => ({ ...prev, to: e.target.value }))}
-              className="flex-1 sm:flex-none px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-[10px]"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <FileSpreadsheet className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Entries</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {filteredEntries.length}
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <Fuel className="w-5 h-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Liters</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {formatCurrency(filteredEntries.reduce((sum, e) => sum + e.liters, 0))}
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                <DollarSign className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Amount</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {formatCurrency(filteredEntries.reduce((sum, e) => sum + e.amount, 0))}
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Avg per Entry</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {filteredEntries.length > 0 
-                    ? formatCurrency(filteredEntries.reduce((sum, e) => sum + e.liters, 0) / filteredEntries.length)
-                    : 0}L
-                </p>
-              </div>
-            </div>
+            
+            {/* Clear Filters */}
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setStationFilter('');
+                setDateFilter({ from: '', to: '' });
+                setSelectedPeriods(
+                  availablePeriods.length > 0
+                    ? [availablePeriods[0]]
+                    : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]
+                );
+              }}
+              className="inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Clear Filters
+            </button>
           </div>
         </div>
       </div>
 
       {/* Entries List */}
-      <div className="flex-1 overflow-auto p-3 sm:p-6">
+      <div className="flex-1 overflow-auto px-4 sm:px-6 py-2">
 
         {filteredEntries.length === 0 ? (
           <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
@@ -642,7 +816,14 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
               {filteredEntries.map((entry, index) => (
                 <div
                   key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`}
-                  className="border rounded-lg p-3 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800"
+                  className="border rounded-lg p-3 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 cursor-pointer"
+                  onClick={() => {
+                    if (onNavigateToSheet && entry.lpoNo) {
+                      const entryDate = new Date(entry.date);
+                      const year = !isNaN(entryDate.getTime()) ? entryDate.getFullYear() : selectedYear;
+                      onNavigateToSheet(entry.lpoNo, year);
+                    }
+                  }}
                 >
                   {/* Card header: SN + truck + status + action */}
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -725,87 +906,94 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
             </div>
 
             {/* Desktop grid view (md+) */}
-            <div className="hidden md:block border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
-              {/* Table Header */}
-              <div className="bg-red-50 dark:bg-red-900/20 border-b border-gray-300 dark:border-gray-600">
-                <div className="grid grid-cols-12 gap-0">
-                  <div className="px-3 py-2 font-medium text-gray-500 dark:text-gray-400 border-r border-gray-300 dark:border-gray-600 text-center text-xs">#</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">Date</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 col-span-2">Truck No</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">DO (Ref)</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Liters</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Rate</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 text-right">Amount</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600">Station</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-600 col-span-2">Reason</div>
-                  <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 text-center">Actions</div>
-                </div>
-              </div>
-              {/* Table Body */}
-              {filteredEntries.map((entry, index) => (
-                <div
-                  key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`}
-                  className="border-b border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  <div className="grid grid-cols-12 gap-0">
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-center text-sm text-gray-500 dark:text-gray-400">{index + 1}</div>
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300">{entry.date}</div>
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 col-span-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {entry.truckNo}
-                      {entry.driverName && <span className="text-xs text-gray-500 dark:text-gray-400 block">{entry.driverName}</span>}
-                    </div>
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-orange-600 dark:text-orange-400">
-                      NIL
-                      <span className="text-xs text-gray-400 dark:text-gray-500 block">({entry.originalDoNo || entry.doNo || 'N/A'})</span>
-                    </div>
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right text-gray-900 dark:text-gray-100">{entry.liters}</div>
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right text-gray-700 dark:text-gray-300">{entry.rate}</div>
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-right font-medium text-gray-900 dark:text-gray-100">{formatCurrency(entry.amount)}</div>
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300">{entry.station}</div>
-                    <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-600 col-span-2 text-sm">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        entry.status === 'settled' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
-                        entry.status === 'disputed' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
-                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                      }`}>{entry.status?.toUpperCase() || 'PENDING'}</span>
-                      {entry.notes && <span className="text-xs text-gray-500 dark:text-gray-400 block mt-1">{entry.notes}</span>}
-                    </div>
-                    <div className="px-3 py-2 text-center">
-                      <div className="relative inline-block">
-                        <button
-                          onClick={(e) => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const DROPDOWN_HEIGHT = 200;
-                            const spaceBelow = window.innerHeight - rect.bottom;
-                            const dropLeft = Math.max(8, Math.min(rect.right - 192, window.innerWidth - 200));
-                            setEntryDropdownPosition(
-                              spaceBelow >= DROPDOWN_HEIGHT
-                                ? { top: rect.bottom + 4, left: dropLeft }
-                                : { bottom: window.innerHeight - rect.top + 4, left: dropLeft }
-                            );
-                            setOpenEntryDropdown(openEntryDropdown === entry.id ? null : entry.id!);
-                          }}
-                          className="p-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </button>
-                        {openEntryDropdown === entry.id && (
-                          <div
-                            className="fixed w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50"
-                            style={{ top: entryDropdownPosition.top !== undefined ? `${entryDropdownPosition.top}px` : 'auto', bottom: entryDropdownPosition.bottom !== undefined ? `${entryDropdownPosition.bottom}px` : 'auto', left: `${entryDropdownPosition.left}px`, maxWidth: 'calc(100vw - 20px)' }}
-                          >
-                            <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"><Image className="w-4 h-4 mr-2 text-green-600" />Copy as Image</button>
-                            <button onClick={() => { handleDownloadEntryPDF(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"><Download className="w-4 h-4 mr-2 text-blue-600" />Download PDF</button>
-                            <button onClick={() => { handleDownloadEntryImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"><FileDown className="w-4 h-4 mr-2 text-purple-600" />Download Image</button>
-                            <div className="border-t border-gray-200 dark:border-gray-600" />
-                            <button onClick={() => { deleteEntry(entry.id!); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4 mr-2" />Delete Entry</button>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-red-50 dark:bg-red-900/20">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">S/N</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">LPO#</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Station</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">DO/SDO</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Liters</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">$/L</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Destination</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Amount</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredEntries.map((entry, index) => (
+                    <tr
+                      key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        if (onNavigateToSheet && entry.lpoNo) {
+                          const entryDate = new Date(entry.date);
+                          const year = !isNaN(entryDate.getTime()) ? entryDate.getFullYear() : selectedYear;
+                          onNavigateToSheet(entry.lpoNo, year);
+                        }
+                      }}
+                    >
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900 dark:text-gray-100">{index + 1}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.date}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400">{entry.lpoNo}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.station}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">NIL</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.truckNo}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.liters.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.rate.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">NIL</td>
+                      <td className="px-3 py-2 text-xs font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(entry.amount)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                        <div className="flex space-x-2 relative">
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const DROPDOWN_HEIGHT = 280;
+                                const spaceBelow = window.innerHeight - rect.bottom;
+                                const dropLeft = Math.max(8, Math.min(rect.right - 224, window.innerWidth - 232));
+                                setEntryDropdownPosition(
+                                  spaceBelow >= DROPDOWN_HEIGHT
+                                    ? { top: rect.bottom + 4, left: dropLeft }
+                                    : { bottom: window.innerHeight - rect.top + 4, left: dropLeft }
+                                );
+                                setOpenEntryDropdown(openEntryDropdown === entry.id ? null : entry.id!);
+                              }}
+                              className="flex items-center px-2 py-1 text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                              title="Copy/Download LPO"
+                            >
+                              <Copy className="w-4 h-4 mr-1" />
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                            {openEntryDropdown === entry.id && (
+                              <div
+                                className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
+                                style={{ top: entryDropdownPosition.top !== undefined ? `${entryDropdownPosition.top}px` : 'auto', bottom: entryDropdownPosition.bottom !== undefined ? `${entryDropdownPosition.bottom}px` : 'auto', left: `${entryDropdownPosition.left}px`, maxWidth: 'calc(100vw - 20px)' }}
+                              >
+                                <div className="py-1">
+                                  <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Copy Options</div>
+                                  <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><Image className="w-4 h-4 mr-2" />Copy as Image</button>
+                                  <button onClick={() => { const lpoSummary = convertToLPOSummary(entry); copyLPOForWhatsApp(lpoSummary); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><MessageSquare className="w-4 h-4 mr-2" />Copy for WhatsApp</button>
+                                  <button onClick={() => { const lpoSummary = convertToLPOSummary(entry); copyLPOTextToClipboard(lpoSummary); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><FileSpreadsheet className="w-4 h-4 mr-2" />Copy as CSV Text</button>
+                                  <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
+                                  <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Download Options</div>
+                                  <button onClick={() => { handleDownloadEntryPDF(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><FileDown className="w-4 h-4 mr-2 text-red-600" />Download as PDF</button>
+                                  <button onClick={() => { handleDownloadEntryImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><Download className="w-4 h-4 mr-2 text-green-600" />Download as Image</button>
+                                  <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
+                                  <button onClick={() => { deleteEntry(entry.id!); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4 mr-2" />Delete Entry</button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </>
         )}

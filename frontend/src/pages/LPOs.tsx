@@ -5,7 +5,7 @@ import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSq
 import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
-import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
+import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI, driverAccountAPI } from '../services/api';
 import LPODetailForm from '../components/LPODetailForm';
 import LPOWorkbook from '../components/LPOWorkbook';
 import LPOSummaryComponent from '../components/LPOSummary';
@@ -386,11 +386,36 @@ const LPOs = () => {
   const fetchLpos = async () => {
     try {
       setLoading(true);
-      const response = await lposAPI.getAll({ limit: 10000 }); // Fetch all for client-side filtering
+      const [response, driverEntries] = await Promise.all([
+        lposAPI.getAll({ limit: 10000 }),
+        driverAccountAPI.getAll().catch(() => [] as any[])
+      ]);
       // Extract data from new API response format
       const lposData = Array.isArray(response.data) ? response.data : [];
-      setLpos(lposData);
-      setFilteredLpos(lposData);
+      
+      // Convert driver account entries to LPOEntry format and merge
+      const driverLpos: LPOEntry[] = (driverEntries || []).map((entry: any, idx: number) => {
+        // Extract numeric portion of lpoNo for proper sequential sorting
+        const numMatch = String(entry.lpoNo || '').match(/(\d+)/);
+        const numericSn = numMatch ? parseInt(numMatch[1], 10) : idx + 1;
+        return {
+          id: `da-${entry.id || entry._id}`,
+          sn: numericSn,
+          date: entry.date,
+          lpoNo: entry.lpoNo,
+          dieselAt: entry.station,
+          doSdo: 'NIL',
+          truckNo: entry.truckNo,
+          ltrs: entry.liters,
+          pricePerLtr: entry.rate,
+          destinations: 'NIL',
+          createdAt: entry.createdAt,
+        };
+      });
+      
+      const mergedData = [...lposData, ...driverLpos];
+      setLpos(mergedData);
+      setFilteredLpos(mergedData);
     } catch (error) {
       console.error('Error fetching LPOs:', error);
       setLpos([]);
@@ -754,8 +779,16 @@ const LPOs = () => {
     const lposWithSN: LPOEntry[] = [];
     Object.keys(groupedByMonth).forEach(monthKey => {
       const monthLpos = groupedByMonth[monthKey];
-      // Sort by the original sn or createdAt to maintain order
-      monthLpos.sort((a, b) => (a.sn || 0) - (b.sn || 0));
+      // Sort by original sn (includes numeric lpoNo for driver account entries)
+      monthLpos.sort((a, b) => {
+        const aSn = a.sn || 0;
+        const bSn = b.sn || 0;
+        if (aSn !== bSn) return aSn - bSn;
+        // Fallback: sort by lpoNo numeric part
+        const aNum = parseInt((String(a.lpoNo).match(/(\d+)/) || ['0','0'])[1]);
+        const bNum = parseInt((String(b.lpoNo).match(/(\d+)/) || ['0','0'])[1]);
+        return aNum - bNum;
+      });
       
       monthLpos.forEach((lpo, index) => {
         lposWithSN.push({
@@ -841,6 +874,20 @@ const LPOs = () => {
 
   // Handle row click to open LPO sheet
   const handleRowClick = async (lpo: LPOEntry) => {
+    // Driver account entries have id starting with 'da-'
+    const isDriverAccount = typeof lpo.id === 'string' && lpo.id.startsWith('da-');
+    
+    if (isDriverAccount) {
+      // For driver account entries, derive year from the entry date
+      const entryDate = new Date(lpo.date);
+      const year = !isNaN(entryDate.getTime()) ? entryDate.getFullYear() : new Date().getFullYear();
+      setSelectedLpoNo(lpo.lpoNo);
+      setSelectedYear(year);
+      setSelectedWorkbookId(year);
+      setViewMode('workbook');
+      return;
+    }
+    
     try {
       // Fetch the LPO document to get its year
       const lpoDoc = await lpoDocumentsAPI.getByLpoNo(lpo.lpoNo);
@@ -866,7 +913,15 @@ const LPOs = () => {
     setSelectedLpoNo(null);
     setViewMode('list');
     fetchWorkbooks(); // Refresh workbooks list
-    fetchLpos(); // Refresh LPO entries to show updated values
+    fetchLpos(); // Refresh LPO entries (includes driver account) to show updated values
+  };
+
+  // Navigate to workbook sheet view from driver account tab
+  const handleNavigateToSheet = (lpoNo: string, year: number) => {
+    setSelectedLpoNo(lpoNo);
+    setSelectedYear(year);
+    setSelectedWorkbookId(year);
+    setViewMode('workbook');
   };
 
   const handleExport = () => {
@@ -1018,7 +1073,7 @@ const LPOs = () => {
             </div>
           </div>
         </div>
-        <DriverAccountWorkbook />
+        <DriverAccountWorkbook onNavigateToSheet={handleNavigateToSheet} />
       </div>
     );
   }
