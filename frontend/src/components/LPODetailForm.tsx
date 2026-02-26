@@ -419,6 +419,33 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   }, [queryClient]);
   useRealtimeSync('fuel_stations', invalidateStations);
 
+  // When station rates refresh (admin changed rate), update all existing entry rates
+  useEffect(() => {
+    if (!formData.station || formData.station === 'CASH' || formData.station === 'CUSTOM') return;
+    if (!formData.entries || formData.entries.length === 0) return;
+
+    const currentStation = availableStations.find(
+      s => s.stationName.toUpperCase() === formData.station!.toUpperCase()
+    );
+    if (!currentStation) return;
+
+    const newRate = currentStation.defaultRate;
+    // Only update if any entry has a different rate
+    const needsUpdate = formData.entries.some(entry => entry.rate !== newRate);
+    if (!needsUpdate) return;
+
+    const updatedEntries = formData.entries.map((entry, idx) => {
+      const liters = entry.liters || 0;
+      return {
+        ...entry,
+        rate: newRate,
+        amount: liters * newRate,
+      };
+    });
+    const total = updatedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
+  }, [availableStations]);
+
   // Check for existing draft on mount and when modal opens
   useEffect(() => {
     if (isOpen && !initialData) {
