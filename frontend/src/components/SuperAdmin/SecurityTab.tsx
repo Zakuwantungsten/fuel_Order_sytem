@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Shield, Key, Lock, AlertTriangle, Mail, Send, CheckCircle, XCircle, Loader, Save } from 'lucide-react';
+import { Shield, Key, Lock, AlertTriangle, Mail, Send, CheckCircle, XCircle, Loader, Save, Fingerprint } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
 import { subscribeToSecurityEvents, unsubscribeFromSecurityEvents } from '../../services/websocket';
 
@@ -25,19 +25,49 @@ const DEFAULT_PASSWORD = {
   historyCount: 5,
 };
 
+const DEFAULT_MFA = {
+  globalEnabled: false,
+  requiredRoles: [] as string[],
+};
+
+const ALL_ROLES = [
+  { value: 'super_admin', label: 'Super Admin' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'manager', label: 'Manager' },
+  { value: 'super_manager', label: 'Super Manager' },
+  { value: 'supervisor', label: 'Supervisor' },
+  { value: 'clerk', label: 'Clerk' },
+  { value: 'driver', label: 'Driver' },
+  { value: 'viewer', label: 'Viewer' },
+  { value: 'fuel_order_maker', label: 'Fuel Order Maker' },
+  { value: 'boss', label: 'Boss' },
+  { value: 'yard_personnel', label: 'Yard Personnel' },
+  { value: 'fuel_attendant', label: 'Fuel Attendant' },
+  { value: 'station_manager', label: 'Station Manager' },
+  { value: 'payment_manager', label: 'Payment Manager' },
+  { value: 'dar_yard', label: 'Dar Yard' },
+  { value: 'tanga_yard', label: 'Tanga Yard' },
+  { value: 'mmsa_yard', label: 'MMSA Yard' },
+  { value: 'import_officer', label: 'Import Officer' },
+  { value: 'export_officer', label: 'Export Officer' },
+];
+
 export default function SecurityTab({ onMessage }: SecurityTabProps) {
   const [loading, setLoading] = useState(true);
   const [savingSession, setSavingSession] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [savingMFA, setSavingMFA] = useState(false);
   const [emailStatus, setEmailStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
   const [testingEmail, setTestingEmail] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [sessionSettings, setSessionSettings] = useState(DEFAULT_SESSION);
   const [passwordPolicy, setPasswordPolicy] = useState(DEFAULT_PASSWORD);
+  const [mfaSettings, setMfaSettings] = useState(DEFAULT_MFA);
 
-  const applySettings = useCallback((data: { session?: any; password?: any }) => {
+  const applySettings = useCallback((data: { session?: any; password?: any; mfa?: any }) => {
     if (data.session) setSessionSettings((prev) => ({ ...prev, ...data.session }));
     if (data.password) setPasswordPolicy((prev) => ({ ...prev, ...data.password }));
+    if (data.mfa) setMfaSettings((prev) => ({ ...prev, ...data.mfa }));
   }, []);
 
   useEffect(() => {
@@ -81,6 +111,27 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
     } finally {
       setSavingPassword(false);
     }
+  };
+
+  const saveMFASettings = async () => {
+    setSavingMFA(true);
+    try {
+      await systemAdminAPI.updateSecuritySettings('mfa', mfaSettings);
+      onMessage('success', 'MFA settings saved successfully');
+    } catch (err: any) {
+      onMessage('error', err.response?.data?.message || 'Failed to save MFA settings');
+    } finally {
+      setSavingMFA(false);
+    }
+  };
+
+  const toggleMFARole = (role: string) => {
+    setMfaSettings((prev) => ({
+      ...prev,
+      requiredRoles: prev.requiredRoles.includes(role)
+        ? prev.requiredRoles.filter((r) => r !== role)
+        : [...prev.requiredRoles, role],
+    }));
   };
 
   const testEmailConnection = async () => {
@@ -243,6 +294,89 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 transition-colors">
               {savingPassword ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Save Password Policy
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- MFA Enforcement ---- */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+          <Fingerprint className="w-5 h-5" />
+          Multi-Factor Authentication (MFA)
+        </h3>
+
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-5 flex items-start gap-2">
+          <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            When enabled, users in the selected roles will be <strong>required</strong> to set up MFA (authenticator app) before they can access the system. Users not in the selected roles can still optionally enable MFA from their profile.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          {/* Global toggle */}
+          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+            <div>
+              <p className="font-medium text-gray-900 dark:text-gray-100">Enable MFA Enforcement</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {mfaSettings.globalEnabled
+                  ? `MFA is enforced for ${mfaSettings.requiredRoles.length} role(s)`
+                  : 'MFA is currently optional for all users'}
+              </p>
+            </div>
+            <button
+              onClick={() => setMfaSettings((prev) => ({ ...prev, globalEnabled: !prev.globalEnabled }))}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                mfaSettings.globalEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                  mfaSettings.globalEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Role selection — only shown when enabled */}
+          {mfaSettings.globalEnabled && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Require MFA for these roles:
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {ALL_ROLES.map(({ value, label }) => (
+                  <label
+                    key={value}
+                    className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${
+                      mfaSettings.requiredRoles.includes(value)
+                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={mfaSettings.requiredRoles.includes(value)}
+                      onChange={() => toggleMFARole(value)}
+                      className="w-4 h-4 rounded text-indigo-600"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+                  </label>
+                ))}
+              </div>
+              {mfaSettings.requiredRoles.length === 0 && (
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                  ⚠ MFA is enabled but no roles are selected — select at least one role to enforce MFA.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button onClick={saveMFASettings} disabled={savingMFA}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50 transition-colors">
+              {savingMFA ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save MFA Settings
             </button>
           </div>
         </div>

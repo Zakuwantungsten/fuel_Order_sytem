@@ -283,6 +283,10 @@ export const emitSecuritySettingsEvent = (settings: {
     requireSpecialChars: boolean;
     historyCount: number;
   };
+  mfa?: {
+    globalEnabled: boolean;
+    requiredRoles: string[];
+  };
 }): void => {
   if (!io) {
     logger.warn('WebSocket server not initialized – cannot emit security settings event');

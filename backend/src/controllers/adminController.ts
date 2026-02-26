@@ -1968,10 +1968,15 @@ export const getSecuritySettings = async (req: AuthRequest, res: Response): Prom
       historyCount: 5,
     };
 
+    const mfa = config?.securitySettings?.mfa || {
+      globalEnabled: false,
+      requiredRoles: [],
+    };
+
     res.status(200).json({
       success: true,
       message: 'Security settings retrieved successfully',
-      data: { session, password },
+      data: { session, password, mfa },
     });
   } catch (error: any) {
     logger.error('Error getting security settings:', error);
@@ -1990,7 +1995,7 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       throw new ApiError(400, 'Type and settings are required');
     }
 
-    const validTypes = ['password', 'session'];
+    const validTypes = ['password', 'session', 'mfa'];
     if (!validTypes.includes(type)) {
       throw new ApiError(400, 'Invalid security settings type');
     }
@@ -2019,6 +2024,12 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       if (!config.securitySettings!.password) config.securitySettings!.password = {} as any;
       Object.assign(config.securitySettings!.password!, settings);
       config.markModified('securitySettings');
+    } else if (type === 'mfa') {
+      if (!config.securitySettings) config.securitySettings = {} as any;
+      if (!config.securitySettings!.mfa) config.securitySettings!.mfa = { globalEnabled: false, requiredRoles: [] };
+      if (settings.globalEnabled !== undefined) config.securitySettings!.mfa!.globalEnabled = settings.globalEnabled;
+      if (Array.isArray(settings.requiredRoles)) config.securitySettings!.mfa!.requiredRoles = settings.requiredRoles;
+      config.markModified('securitySettings');
     }
 
     config.lastUpdatedBy = req.user?.username || 'system';
@@ -2029,6 +2040,8 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       emitSecuritySettingsEvent({ session: config.systemSettings?.session as any });
     } else if (type === 'password') {
       emitSecuritySettingsEvent({ password: config.securitySettings?.password as any });
+    } else if (type === 'mfa') {
+      emitSecuritySettingsEvent({ mfa: config.securitySettings?.mfa as any });
     }
 
     // Log the change

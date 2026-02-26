@@ -106,6 +106,12 @@ export interface ISystemSettings {
   };
 }
 
+// MFA Settings
+export interface IMFASettings {
+  globalEnabled: boolean;
+  requiredRoles: string[];
+}
+
 // Security Settings
 export interface ISecuritySettings {
   password?: {
@@ -120,6 +126,7 @@ export interface ISecuritySettings {
     timeoutMinutes: number;
     singleSession: boolean;
   };
+  mfa?: IMFASettings;
 }
 
 // System Configuration Document
@@ -270,6 +277,10 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       session: {
         timeoutMinutes: { type: Number, default: 30 },
         singleSession: { type: Boolean, default: false },
+      },
+      mfa: {
+        globalEnabled: { type: Boolean, default: false },
+        requiredRoles: { type: [String], default: [] },
       },
     },
     lastUpdatedBy: { type: String, required: true },

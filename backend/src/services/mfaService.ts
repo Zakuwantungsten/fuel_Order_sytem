@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { MFA, IMFA } from '../models/MFA';
 import { User } from '../models/User';
+import { SystemConfig } from '../models/SystemConfig';
 import emailService from '../services/emailService';
 import { sendSMS } from '../services/smsService';
 
@@ -309,10 +310,15 @@ class MFAService {
     const user = await User.findById(userId);
     if (!user) return false;
     
-    // TODO: Check system config for MFA enforcement rules
-    // Example: Require MFA for admin, super_admin, system_admin roles
-    const mfaRequiredRoles = ['super_admin', 'admin', 'system_admin'];
-    return mfaRequiredRoles.includes(user.role);
+    // Read MFA enforcement config from SystemConfig
+    const config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    const mfaSettings = config?.securitySettings?.mfa;
+    
+    // If MFA is globally disabled or not configured, not required
+    if (!mfaSettings?.globalEnabled) return false;
+    
+    // Check if user's role is in the required roles list
+    return mfaSettings.requiredRoles.includes(user.role);
   }
   
   /**
