@@ -189,10 +189,10 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
     if (station) {
       setEditingStation(station);
       setStationForm({
-        stationName: station.stationName,
-        defaultRate: station.defaultRate.toString(),
-        defaultLitersGoing: station.defaultLitersGoing.toString(),
-        defaultLitersReturning: station.defaultLitersReturning.toString(),
+        stationName: station.stationName || '',
+        defaultRate: String(station.defaultRate ?? ''),
+        defaultLitersGoing: String(station.defaultLitersGoing ?? ''),
+        defaultLitersReturning: String(station.defaultLitersReturning ?? ''),
         fuelRecordFieldGoing: station.fuelRecordFieldGoing || '',
         fuelRecordFieldReturning: station.fuelRecordFieldReturning || '',
         formulaGoing: station.formulaGoing || '',
@@ -245,7 +245,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
           </thead>
           <tbody className="divide-y dark:divide-gray-700">
             {stations.map((station) => (
-              <tr key={station._id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+              <tr key={String(station._id)} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{station.stationName}</td>
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                   <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mr-1 ${

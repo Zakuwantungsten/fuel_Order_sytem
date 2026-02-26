@@ -31,7 +31,7 @@ export const initializeWebSocket = (token: string): Socket => {
   // concurrent calls from App, NotificationBell, and ManagerView never
   // create more than one socket — which would cause duplicate notifications.
   if (socket) {
-    console.log('[WebSocket] Already initialised (connected:', socket.connected, ')');
+    // Multiple components may call init — this is expected; silently return existing socket
     return socket;
   }
 

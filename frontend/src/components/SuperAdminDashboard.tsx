@@ -381,7 +381,7 @@ function OverviewTab({
             {recentActivity.length > 0 ? (
               recentActivity.map((activity, index) => (
                 <ActivityItem 
-                  key={activity.id || index}
+                  key={String(activity.id || index)}
                   icon={activity.icon}
                   text={activity.description}
                   time={activity.timeAgo}

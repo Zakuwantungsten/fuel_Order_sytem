@@ -45,7 +45,7 @@ function validateFormula(formula: string): { valid: boolean; error?: string } {
  */
 export const getFuelStations = async (req: AuthRequest, res: Response) => {
   try {
-    const stations = await FuelStationConfig.find().sort({ stationName: 1 });
+    const stations = await FuelStationConfig.find().sort({ stationName: 1 }).lean();
     
     res.json({
       success: true,
@@ -341,7 +341,7 @@ export const getRoutes = async (req: AuthRequest, res: Response) => {
       filter.routeType = routeType;
     }
     
-    const routes = await RouteConfig.find(filter).sort({ routeName: 1 });
+    const routes = await RouteConfig.find(filter).sort({ routeName: 1 }).lean();
     
     res.json({
       success: true,
@@ -371,7 +371,7 @@ export const findRouteByDestination = async (req: AuthRequest, res: Response): P
         { destinationAliases: normalizedDest }
       ],
       isActive: true
-    });
+    }).lean();
     
     if (!route) {
       res.status(404).json({
@@ -623,7 +623,7 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
     let config = await SystemConfig.findOne({
       configType: 'truck_batches',
       isDeleted: false,
-    });
+    }).lean();
 
     if (!config) {
       // Return empty batches if not configured yet

@@ -64,6 +64,12 @@ export function sanitizeObject(obj: any, depth: number = 0, seen?: WeakSet<objec
     return obj;
   }
 
+  // Handle MongoDB/BSON types (ObjectId, Decimal128, etc.) — pass through
+  // so that JSON.stringify can call their toJSON() method correctly
+  if (obj._bsontype) {
+    return obj;
+  }
+
   // Detect circular references
   if (!seen) seen = new WeakSet();
   if (seen.has(obj)) return '[Circular]';

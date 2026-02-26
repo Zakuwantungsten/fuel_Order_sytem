@@ -1691,7 +1691,7 @@ export const getRecentActivity = async (req: AuthRequest, res: Response): Promis
       }
 
       return {
-        id: log._id,
+        id: String(log._id),
         description,
         icon,
         timestamp: log.timestamp,

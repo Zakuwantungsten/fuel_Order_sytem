@@ -176,12 +176,12 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
     if (route) {
       setEditingRoute(route);
       setRouteForm({
-        routeName: route.routeName,
+        routeName: route.routeName || '',
         origin: route.origin || '',
-        destination: route.destination,
+        destination: route.destination || '',
         destinationAliases: route.destinationAliases?.join(', ') || '',
         routeType: route.routeType || 'IMPORT',
-        defaultTotalLiters: route.defaultTotalLiters.toString(),
+        defaultTotalLiters: String(route.defaultTotalLiters ?? ''),
         description: route.description || '',
       });
     }
@@ -229,7 +229,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
           </thead>
           <tbody className="divide-y dark:divide-gray-700">
             {routes.map((route) => (
-              <tr key={route._id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+              <tr key={String(route._id)} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{route.routeName}</td>
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                   {route.origin ? (
