@@ -14,6 +14,7 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
+  const [sessionMessageTitle, setSessionMessageTitle] = useState<string>('Session Expired');
   
   // MFA Challenge State
   const [mfaChallenge, setMfaChallenge] = useState<{
@@ -39,22 +40,31 @@ const Login: React.FC = () => {
     const reason = params.get('reason');
     
     if (reason === 'expired') {
+      setSessionMessageTitle('Session Expired');
       setSessionMessage('Your session has expired. Please log in again.');
     } else if (reason === 'inactivity') {
+      setSessionMessageTitle('Session Expired');
       setSessionMessage('You were logged out due to 30 minutes of inactivity. Please log in again.');
     } else if (reason === 'unauthorized') {
+      setSessionMessageTitle('Session Expired');
       setSessionMessage('Your session is no longer valid. Please log in again.');
     } else if (reason === 'force_logout') {
+      setSessionMessageTitle('Logged Out');
       setSessionMessage('You have been logged out by an administrator.');
     } else if (reason === 'account_deactivated') {
+      setSessionMessageTitle('Account Deactivated');
       setSessionMessage('Your account has been deactivated. Please contact your administrator.');
     } else if (reason === 'account_banned') {
+      setSessionMessageTitle('Account Banned');
       setSessionMessage('Your account has been banned. Please contact your administrator.');
     } else if (reason === 'account_deleted') {
+      setSessionMessageTitle('Account Removed');
       setSessionMessage('Your account has been removed. Please contact your administrator.');
     } else if (reason === 'password_reset') {
+      setSessionMessageTitle('Password Reset');
       setSessionMessage('Your password was reset by an administrator. Please log in with your new credentials.');
     } else if (reason === 'account_updated') {
+      setSessionMessageTitle('Account Updated');
       setSessionMessage('Your account was updated by an administrator. Please log in again to apply the changes.');
     }
 
@@ -94,6 +104,12 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Clear any lingering session messages so they don't overlap with login errors
+    if (sessionMessage) {
+      setSessionMessage(null);
+      window.history.replaceState({}, '', '/login');
+    }
     
     try {
       // Get device ID for trusted device feature
@@ -193,7 +209,7 @@ const Login: React.FC = () => {
               <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start space-x-3">
                 <AlertCircle className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="text-sm font-medium text-amber-800 dark:text-amber-300">Session Expired</h4>
+                  <h4 className="text-sm font-medium text-amber-800 dark:text-amber-300">{sessionMessageTitle}</h4>
                   <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">{sessionMessage}</p>
                 </div>
               </div>
