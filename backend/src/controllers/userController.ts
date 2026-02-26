@@ -145,6 +145,8 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       isActive: true,
       isDeleted: false,
       mustChangePassword: true,
+      // Set passwordResetAt so the auto-clear in login knows this is a legitimate
+      // forced-change (not stale legacy data) and preserves the flag.
       passwordResetAt: new Date(),
     });
 

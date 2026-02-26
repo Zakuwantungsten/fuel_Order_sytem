@@ -361,6 +361,8 @@ export class AuditService {
       DELETE_CHECKPOINT: 'medium',
       REORDER_CHECKPOINTS: 'low',
       SEED_CHECKPOINTS: 'medium',
+      user_migration_executed: 'high',
+      user_flag_cleared: 'high',
     };
     return severityMap[action] || 'low';
   }

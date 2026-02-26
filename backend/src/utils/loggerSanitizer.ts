@@ -44,10 +44,12 @@ function isSensitiveKey(key: string): boolean {
 }
 
 /**
- * Recursively sanitize an object by redacting sensitive values
+ * Recursively sanitize an object by redacting sensitive values.
+ * Uses a WeakSet to detect circular references and handles special
+ * object types (Date, RegExp, Buffer, ObjectId) without iterating them.
  */
-export function sanitizeObject(obj: any, depth: number = 0): any {
-  // Prevent infinite recursion on circular references
+export function sanitizeObject(obj: any, depth: number = 0, seen?: WeakSet<object>): any {
+  // Prevent infinite recursion
   if (depth > 10 || obj === null || obj === undefined) {
     return obj;
   }
@@ -57,9 +59,19 @@ export function sanitizeObject(obj: any, depth: number = 0): any {
     return obj;
   }
 
+  // Skip special object types that should be passed through as-is
+  if (obj instanceof Date || obj instanceof RegExp || Buffer.isBuffer(obj)) {
+    return obj;
+  }
+
+  // Detect circular references
+  if (!seen) seen = new WeakSet();
+  if (seen.has(obj)) return '[Circular]';
+  seen.add(obj);
+
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => sanitizeObject(item, depth + 1));
+    return obj.map((item) => sanitizeObject(item, depth + 1, seen));
   }
 
   // Handle objects
@@ -71,7 +83,7 @@ export function sanitizeObject(obj: any, depth: number = 0): any {
         sanitized[key] = '[REDACTED]';
       } else if (typeof obj[key] === 'object' && obj[key] !== null) {
         // Recursively sanitize nested objects
-        sanitized[key] = sanitizeObject(obj[key], depth + 1);
+        sanitized[key] = sanitizeObject(obj[key], depth + 1, seen);
       } else {
         sanitized[key] = obj[key];
       }

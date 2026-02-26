@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { User, DriverCredential, SystemConfig } from '../models';
+import { MFA } from '../models/MFA';
 import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger, createDriverUserId } from '../utils';
 import { AuditService } from '../utils/auditService';
@@ -9,6 +10,7 @@ import { AuthRequest } from '../middleware/auth';
 import { LoginRequest, RegisterRequest, AuthResponse, JWTPayload } from '../types';
 import * as crypto from 'crypto';
 import emailService from '../services/emailService';
+import mfaService from '../services/mfaService';
 import { emitToUser } from '../services/websocket';
 import { getPasswordPolicy, enforcePasswordPolicy } from '../utils/passwordPolicy';
 
@@ -256,13 +258,6 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       throw new ApiError(401, 'Invalid username. Please check your credentials and try again.');
     }
 
-    // Auto-clear stale mustChangePassword for users created before this feature was deployed.
-    // A stale flag has no passwordResetAt (the new tracking field). Users with a proper
-    // forced-change requirement DO have passwordResetAt set, so they are unaffected.
-    if (user.mustChangePassword && !user.passwordResetAt) {
-      user.mustChangePassword = false;
-    }
-
     // Check if user is banned
     if (user.isBanned) {
       throw new ApiError(403, `Your account has been banned. Reason: ${user.bannedReason || 'Violation of terms'}. Please contact administrator.`);
@@ -320,12 +315,91 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     // Reset failed login tracking on successful authentication (Gap 4)
     user.failedLoginAttempts = 0;
     user.lockedUntil = undefined;
+
+    // Auto-clear stale mustChangePassword flags AFTER password validation.
+    // This prevents unauthenticated requests from clearing the flag.
+    if (user.mustChangePassword) {
+      let shouldClear = false;
+      let clearReason = '';
+
+      // Rule 1: No passwordResetAt = stale data from before the feature was deployed
+      if (!user.passwordResetAt) {
+        shouldClear = true;
+        clearReason = 'no passwordResetAt set (legacy data)';
+      }
+      // Rule 2: passwordResetAt is older than 5 minutes — admin reset happened a while ago,
+      // and the user is already logging in with working credentials, so the flag is stale.
+      else {
+        const minutesSincePwdReset = (Date.now() - new Date(user.passwordResetAt).getTime()) / (1000 * 60);
+        if (minutesSincePwdReset > 5) {
+          shouldClear = true;
+          clearReason = `passwordResetAt is ${minutesSincePwdReset.toFixed(0)} min old (stale)`;
+        }
+      }
+
+      if (shouldClear) {
+        user.mustChangePassword = false;
+        user.passwordResetAt = undefined;
+        await user.save();
+        logger.info(`[AUTO-CLEAR] Cleared stale mustChangePassword flag for user: ${username} (reason: ${clearReason})`);
+      }
+    }
     
     // Clear failed login attempts in anomaly detection cache
     AnomalyDetectionService.clearFailedLoginAttempts(
       username,
       req.ip || 'unknown'
     );
+
+    // Check if MFA is enabled for this user
+    const mfaEnabled = await mfaService.isMFAEnabled(user._id.toString());
+    const deviceId = req.body.deviceId || req.get('x-device-id');
+    
+    if (mfaEnabled) {
+      // Check if device is trusted
+      const mfaSettings = await MFA.findOne({ userId: user._id });
+      const isDeviceTrusted = deviceId && typeof (mfaSettings as any)?.isDeviceTrusted === 'function' && (mfaSettings as any).isDeviceTrusted(deviceId);
+      
+      if (!isDeviceTrusted) {
+        // MFA required - generate temporary session token
+        const tempSessionToken = crypto.randomBytes(32).toString('hex');
+        const tempSessionExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+        
+        // Store temp session token in user (or use Redis for production)
+        user.refreshToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
+        await user.save();
+        
+        logger.info(`User ${username} requires MFA verification`);
+        
+        res.status(200).json({
+          success: true,
+          requiresMFA: true,
+          message: 'Please provide your MFA code to complete login',
+          data: {
+            userId: user._id.toString(),
+            tempSessionToken,
+            tempSessionExpiry,
+            mfaMethods: {
+              totp: mfaSettings?.totpEnabled || false,
+              sms: mfaSettings?.smsEnabled || false,
+              email: mfaSettings?.emailEnabled || false,
+            },
+            preferredMethod: mfaSettings?.preferredMethod || 'totp',
+          },
+        });
+        return;
+      } else {
+        // Device is trusted, update last used
+        if (mfaSettings && deviceId) {
+          const device = mfaSettings.trustedDevices.find(d => d.deviceId === deviceId);
+          if (device) {
+            (device as any).lastUsedAt = new Date();
+            await mfaSettings.save();
+          }
+        }
+        logger.info(`User ${username} logged in from trusted device, skipping MFA`);
+      }
+    }
 
     if (!allowMultipleSessions) {
       // Single-session policy: kick any existing session for this user.
@@ -372,6 +446,135 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(200).json({
       success: true,
       message: 'Login successful',
+      data: {
+        ...response,
+        sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Verify MFA and complete login
+ */
+export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId, tempSessionToken, code, method, trustDevice, deviceName } = req.body;
+
+    if (!userId || !tempSessionToken || !code) {
+      throw new ApiError(400, 'User ID, session token, and MFA code are required');
+    }
+
+    // Find user and verify temp session token
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    // Verify temp session token
+    const hashedTempToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
+    if (user.refreshToken !== hashedTempToken) {
+      throw new ApiError(401, 'Invalid or expired session token');
+    }
+
+    // Verify MFA code
+    const verificationResult = await mfaService.verifyMFACode(userId, code, method);
+
+    if (!verificationResult.success) {
+      // TODO: Add mfa_verification_failed to AuditAction enum
+      // await AuditService.log({
+      //   userId,
+      //   action: 'mfa_verification_failed',
+      //   details: `Failed MFA verification attempt`,
+      //   ipAddress: req.ip,
+      // });
+      
+      throw new ApiError(401, 'Invalid MFA code');
+    }
+
+    // MFA verified successfully
+    logger.info(`User ${user.username} passed MFA verification`);
+
+    // Read session config
+    const sessionConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+    const jwtExpiryHours = sessionConfig?.systemSettings?.session?.jwtExpiry;
+    const refreshExpiryDays = sessionConfig?.systemSettings?.session?.refreshTokenExpiry;
+    const accessExpiry = jwtExpiryHours ? `${jwtExpiryHours}h` : undefined;
+    const refreshExpiry = refreshExpiryDays ? `${refreshExpiryDays}d` : undefined;
+    const allowMultipleSessions = sessionConfig?.systemSettings?.session?.allowMultipleSessions ?? true;
+
+    // Trust device if requested
+    if (trustDevice) {
+      const mfaSettings = await MFA.findOne({ userId });
+      if (mfaSettings) {
+        const deviceId = req.body.deviceId || crypto.randomUUID();
+        const ipAddress = req.ip || 'unknown';
+        const userAgent = req.get('user-agent') || 'unknown';
+        
+        if (typeof (mfaSettings as any).addTrustedDevice === 'function') {
+          (mfaSettings as any).addTrustedDevice(
+            deviceId,
+            ipAddress,
+            userAgent,
+            deviceName || 'Trusted Device'
+          );
+          await mfaSettings.save();
+        }
+        
+        logger.info(`Device ${deviceId} added to trusted devices for user ${user.username}`);
+      }
+    }
+
+    if (!allowMultipleSessions) {
+      emitToUser(user.username, 'session_event', {
+        type: 'force_logout',
+        message: 'You have been logged out because a new session was started from another location.',
+      });
+      logger.info(`Single-session policy: existing session(s) for '${user.username}' were force-logged out`);
+    }
+
+    // Generate final tokens
+    const payload: JWTPayload = {
+      userId: user._id.toString(),
+      username: user.username,
+      role: user.role,
+    };
+
+    const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
+
+    // Hash refresh token before storage, update last login
+    user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Log successful login
+    await AuditService.logLogin(
+      user.username,
+      true,
+      req.ip,
+      req.get('user-agent'),
+      user._id.toString()
+    );
+
+    // TODO: Add mfa_verification_success to AuditAction enum
+    // await AuditService.log({
+    //   userId: user._id.toString(),
+    //   action: 'mfa_verification_success',
+    //   details: `User completed MFA verification using ${verificationResult.methodUsed}`,
+    //   ipAddress: req.ip,
+    // });
+
+    const response: AuthResponse = {
+      user: user.toJSON(),
+      accessToken,
+      refreshToken,
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'MFA verification successful. Login complete.',
       data: {
         ...response,
         sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
@@ -674,7 +877,35 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
     }
 
     if (!user.mustChangePassword) {
-      throw new ApiError(403, 'Password change is not required for this account');
+      // Flag was already cleared (e.g. by auto-clear during login).
+      // Instead of blocking with 403, return fresh tokens so the frontend
+      // can clear its local state and proceed to the dashboard.
+      const sessionConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+      const jwtExpiryHours = sessionConfig?.systemSettings?.session?.jwtExpiry;
+      const refreshExpiryDays = sessionConfig?.systemSettings?.session?.refreshTokenExpiry;
+      const accessExpiry = jwtExpiryHours ? `${jwtExpiryHours}h` : undefined;
+      const refreshExpiry = refreshExpiryDays ? `${refreshExpiryDays}d` : undefined;
+
+      const payload: JWTPayload = {
+        userId: user._id.toString(),
+        username: user.username,
+        role: user.role,
+      };
+      const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
+      user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+      await user.save();
+
+      logger.info(`[FIRST-LOGIN] mustChangePassword already false for ${user.username}, returning fresh tokens`);
+      res.status(200).json({
+        success: true,
+        message: 'Password change is not required. Proceeding to dashboard.',
+        data: {
+          accessToken,
+          refreshToken,
+          user: user.toJSON(),
+        },
+      });
+      return;
     }
 
     // Enforce admin-configured password policy
@@ -702,20 +933,40 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
     user.password = newPassword;
     user.mustChangePassword = false;
     user.passwordResetAt = undefined;
-    await user.save();
 
     logger.info(`First-login password set for user: ${user.username}`);
 
-    // Send confirmation email
-    try {
-      await emailService.sendPasswordChangedEmail(user.email, `${user.firstName} ${user.lastName}`);
-    } catch (emailError) {
-      logger.error('Failed to send password-changed email:', emailError);
-    }
+    // Send confirmation email (non-blocking)
+    emailService.sendPasswordChangedEmail(user.email, `${user.firstName} ${user.lastName}`)
+      .catch((emailError: any) => logger.error('Failed to send password-changed email:', emailError));
+
+    // Generate fresh tokens after password change
+    const sessionConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+    const jwtExpiryHours = sessionConfig?.systemSettings?.session?.jwtExpiry;
+    const refreshExpiryDays = sessionConfig?.systemSettings?.session?.refreshTokenExpiry;
+    const accessExpiry = jwtExpiryHours ? `${jwtExpiryHours}h` : undefined;
+    const refreshExpiry = refreshExpiryDays ? `${refreshExpiryDays}d` : undefined;
+
+    const payload: JWTPayload = {
+      userId: user._id.toString(),
+      username: user.username,
+      role: user.role,
+    };
+
+    const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
+
+    // Store hashed refresh token and save everything in a single DB write
+    user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    await user.save();
 
     res.status(200).json({
       success: true,
       message: 'Password set successfully. Welcome!',
+      data: {
+        accessToken,
+        refreshToken,
+        user: user.toJSON(),
+      },
     });
   } catch (error: any) {
     throw error;

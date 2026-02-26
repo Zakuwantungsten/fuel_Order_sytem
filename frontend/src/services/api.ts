@@ -121,10 +121,11 @@ apiClient.interceptors.response.use(
     
     // Handle auth errors
     if (error.response?.status === 401) {
-      // Don't redirect if this is a login attempt - let the login component handle it
+      // Don't redirect if this is a login attempt or first-login-password - let the component handle it
       const isLoginRequest = error.config?.url?.includes('/auth/login');
+      const isFirstLoginPassword = error.config?.url?.includes('/auth/first-login-password');
       
-      if (!isLoginRequest) {
+      if (!isLoginRequest && !isFirstLoginPassword) {
         // Clear auth data
         sessionStorage.removeItem('fuel_order_auth');
         sessionStorage.removeItem('fuel_order_token');
@@ -884,7 +885,9 @@ export const dashboardAPI = {
 // Authentication API
 export const authAPI = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
-    const response = await apiClient.post('/auth/login', credentials);
+    const deviceId = sessionStorage.getItem('deviceId');
+    const loginPayload = { ...credentials, ...(deviceId && { deviceId }) };
+    const response = await apiClient.post('/auth/login', loginPayload);
     return response.data.data;
   },
 
@@ -925,8 +928,9 @@ export const authAPI = {
     await apiClient.patch('/auth/preferences', preferences);
   },
 
-  firstLoginPassword: async (data: { newPassword: string }): Promise<void> => {
-    await apiClient.post('/auth/first-login-password', data);
+  firstLoginPassword: async (data: { newPassword: string }): Promise<any> => {
+    const response = await apiClient.post('/auth/first-login-password', data);
+    return response.data.data; // Extract the inner data object with tokens
   },
 };
 

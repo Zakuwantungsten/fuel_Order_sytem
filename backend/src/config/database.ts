@@ -5,7 +5,10 @@ import logger from '../utils/logger';
 export const connectDatabase = async (): Promise<void> => {
   try {
     mongoose.set('strictQuery', true);
-    mongoose.set('sanitizeFilter', true);
+    // NOTE: Do NOT enable sanitizeFilter globally — it recursively wraps $-prefixed
+    // query operators ($in, $gte, $lte, $ne, etc.) inside $eq, which breaks all
+    // queries using standard MongoDB operators. NoSQL injection prevention is
+    // already handled by express-mongo-sanitize middleware.
 
     const options: mongoose.ConnectOptions = {
       maxPoolSize: 10,

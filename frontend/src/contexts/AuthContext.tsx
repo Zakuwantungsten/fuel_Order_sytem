@@ -138,11 +138,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Check for existing session on mount
   useEffect(() => {
-    const checkExistingSession = () => {
+    const checkExistingSession = async () => {
       try {
         const stored = sessionStorage.getItem('fuel_order_auth');
         if (stored) {
           const authData = JSON.parse(stored);
+
+          // If the stored session says the user must change their password,
+          // validate the token is still alive before trusting the stale data.
+          // This prevents the infinite ForcePasswordChange loop caused by an
+          // expired token left in sessionStorage.
+          if (authData.mustChangePassword) {
+            try {
+              await authAPI.getCurrentUser();
+            } catch {
+              // Token is invalid/expired — clear everything and show login.
+              sessionStorage.removeItem('fuel_order_auth');
+              sessionStorage.removeItem('fuel_order_token');
+              return; // stay on login screen
+            }
+          }
+
           const permissions = getRolePermissions(authData.role);
           
           // Load user-specific theme preference
@@ -192,13 +208,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   // Login function
-  const login = async (credentials: LoginCredentials): Promise<void> => {
+  const login = async (credentials: LoginCredentials): Promise<any> => {
     dispatch({ type: 'AUTH_START' });
 
     try {
       // Call real backend API
-      const authResponse: AuthResponse = await authAPI.login(credentials);
-      const { user, accessToken, sessionTimeoutMinutes } = authResponse;
+      const authResponse = await authAPI.login(credentials);
+      
+      // Check if MFA is required instead of normal auth response
+      if ((authResponse as any).requiresMFA) {
+        // Clear the loading state before returning
+        dispatch({ type: 'AUTH_ERROR', payload: '' });
+        // Return MFA response so Login component can handle it
+        return authResponse;
+      }
+      
+      const { user, accessToken, sessionTimeoutMinutes } = authResponse as AuthResponse;
 
       // Save token to sessionStorage (cleared when tab/browser is closed)
       sessionStorage.setItem('fuel_order_token', accessToken);
@@ -265,6 +290,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Silently fail - timezone already set to default
         console.log('Could not load system settings after login');
       }
+      
+      return authResponse;
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Login failed';
       dispatch({ type: 'AUTH_ERROR', payload: errorMessage });

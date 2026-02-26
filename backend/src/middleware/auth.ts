@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 import { JWTPayload, UserRole } from '../types';
@@ -99,7 +100,31 @@ export const authenticate = async (
       return;
     }
 
-    // Regular user - verify existence in database
+    // Regular user - validate userId format before DB lookup
+    if (!mongoose.Types.ObjectId.isValid(decoded.userId)) {
+      const ip =
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+        req.socket?.remoteAddress ||
+        'unknown';
+
+      SecurityEventLogger.logUnauthorized({
+        userId: decoded.userId,
+        username: decoded.username,
+        ipAddress: ip,
+        userAgent: req.get('user-agent'),
+        endpoint: req.path,
+        method: req.method,
+        errorReason: 'Invalid userId format in token',
+      }).catch(() => {});
+
+      res.status(401).json({
+        success: false,
+        message: 'Invalid token.',
+      });
+      return;
+    }
+
+    // Verify existence in database
     const user = await User.findById(decoded.userId);
     
     if (!user || !user.isActive || user.isDeleted) {
@@ -179,6 +204,14 @@ export const authenticate = async (
       res.status(401).json({
         success: false,
         message: 'Token expired.',
+      });
+      return;
+    }
+
+    if (error.name === 'CastError') {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid token.',
       });
       return;
     }

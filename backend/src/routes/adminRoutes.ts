@@ -264,4 +264,10 @@ router.post('/maintenance-mode/toggle', authorize('super_admin'), asyncHandler(a
 router.get('/security-settings', authorize('super_admin'), asyncHandler(adminController.getSecuritySettings));
 router.put('/security-settings', authorize('super_admin'), asyncHandler(adminController.updateSecuritySettings));
 
+// User Authentication Migration — Fix old users with stale password change flags
+router.get('/migration/stats', authorize('super_admin'), asyncHandler(adminController.getMigrationStatistics));
+router.get('/migration/affected-users', authorize('super_admin'), asyncHandler(adminController.getAffectedUsers));
+router.post('/migration/run', authorize('super_admin'), asyncHandler(adminController.runUserMigration));
+router.put('/migration/clear-user/:userId', authorize('super_admin'), asyncHandler(adminController.clearUserPasswordChangeFlag));
+
 export default router;

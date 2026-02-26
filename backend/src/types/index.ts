@@ -40,7 +40,9 @@ export type AuditAction =
   | 'UPDATE_CHECKPOINT'
   | 'DELETE_CHECKPOINT'
   | 'REORDER_CHECKPOINTS'
-  | 'SEED_CHECKPOINTS';
+  | 'SEED_CHECKPOINTS'
+  | 'user_migration_executed'
+  | 'user_flag_cleared';
 
 export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
 

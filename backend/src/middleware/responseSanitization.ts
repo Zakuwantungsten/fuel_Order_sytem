@@ -20,9 +20,27 @@ export const responseSanitizationMiddleware = (
   // Store original json method
   const originalJson = res.json.bind(res);
 
+  // Auth endpoints MUST return tokens (accessToken, refreshToken) to the client.
+  // The sanitizer redacts any key containing "token", which corrupts JWTs and
+  // breaks authentication.  Skip body sanitization for these routes.
+  const AUTH_TOKEN_ROUTES = [
+    '/auth/login',
+    '/auth/register',
+    '/auth/refresh',
+    '/auth/verify-mfa',
+    '/auth/first-login-password',
+  ];
+
+  const isTokenRoute = AUTH_TOKEN_ROUTES.some((route) => req.path.endsWith(route));
+
   // Override json method to sanitize response
   res.json = function (body: any): Response {
     try {
+      // Skip sanitization for routes that intentionally return tokens to the client
+      if (isTokenRoute) {
+        return originalJson.call(this, body);
+      }
+
       // Sanitize the response body
       const sanitized = sanitizeObject(body);
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { MFAVerification } from './MFAVerification';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
 import { useLocation, Link } from 'react-router-dom';
@@ -13,6 +14,13 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
+  
+  // MFA Challenge State
+  const [mfaChallenge, setMfaChallenge] = useState<{
+    userId: string;
+    tempSessionToken: string;
+    preferredMethod: 'totp' | 'sms' | 'email';
+  } | null>(null);
 
   const { login, isLoading, error, clearError } = useAuth();
   const location = useLocation();
@@ -87,20 +95,78 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!credentials.username || !credentials.password) {
-      return;
-    }
-
     try {
-      // Save username for next login
-      localStorage.setItem('fuel_order_last_username', credentials.username);
-      await login(credentials);
-      // Login success will be handled by the auth context
+      // Get device ID for trusted device feature
+      const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
+      localStorage.setItem('device_id', deviceId);
+      
+      // Store deviceId in sessionStorage to pass to backend after login response
+      sessionStorage.setItem('deviceId', deviceId);
+      
+      // Send only username and password to login endpoint
+      const result = await login(credentials);
+      
+      // Check if MFA is required
+      if (result && (result as any).requiresMFA) {
+        setMfaChallenge({
+          userId: (result as any).data.userId,
+          tempSessionToken: (result as any).data.tempSessionToken,
+          preferredMethod: (result as any).data.preferredMethod || 'totp',
+        });
+      }
+      // If no MFA required, login success will be handled by the auth context
     } catch (error) {
       // Error will be handled by the auth context
       console.error('Login failed:', error);
     }
   };
+  
+  const handleMFASuccess = async (tokens: { accessToken: string; refreshToken: string; user: any }) => {
+    // Store tokens and user data
+    sessionStorage.setItem('fuel_order_token', tokens.accessToken);
+    sessionStorage.setItem('fuel_order_auth', JSON.stringify({
+      id: tokens.user._id || tokens.user.id,
+      username: tokens.user.username,
+      email: tokens.user.email,
+      firstName: tokens.user.firstName,
+      lastName: tokens.user.lastName,
+      role: tokens.user.role,
+      department: tokens.user.department,
+      station: (tokens.user as any).station,
+      truckNo: (tokens.user as any).truckNo,
+      currentDO: (tokens.user as any).currentDO,
+      isActive: tokens.user.isActive,
+      mustChangePassword: tokens.user.mustChangePassword ?? false, // Ensure this is set
+      token: tokens.accessToken,
+      lastLogin: tokens.user.lastLogin,
+      createdAt: tokens.user.createdAt,
+      updatedAt: tokens.user.updatedAt,
+      theme: tokens.user.theme || 'light',
+    }));
+    
+    // Reload to trigger auth context update
+    window.location.href = '/';
+  };
+  
+  const handleMFACancel = () => {
+    setMfaChallenge(null);
+    setCredentials({ ...credentials, password: '' });
+  };
+
+  // If MFA challenge is active, show MFA verification component
+  if (mfaChallenge) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-3 sm:p-6 transition-all duration-500">
+        <MFAVerification
+          userId={mfaChallenge.userId}
+          tempSessionToken={mfaChallenge.tempSessionToken}
+          preferredMethod={mfaChallenge.preferredMethod}
+          onSuccess={handleMFASuccess}
+          onCancel={handleMFACancel}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-3 sm:p-6 transition-all duration-500">

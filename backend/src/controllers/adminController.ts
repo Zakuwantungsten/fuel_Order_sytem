@@ -8,6 +8,12 @@ import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
 import { emitToUser, emitMaintenanceEvent, emitSecuritySettingsEvent } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
+import {
+  findAffectedUsers,
+  getMigrationStats,
+  clearStaleMustChangePasswordFlags,
+  clearUserMustChangePassword,
+} from '../utils/userMigration';
 
 /**
  * Add cache-busting headers to force immediate frontend refresh
@@ -2047,6 +2053,139 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
     });
   } catch (error: any) {
     logger.error('Error updating security settings:', error);
+    throw error;
+  }
+};
+
+// =============================================
+// User Authentication Migration (Fix old users)
+// =============================================
+
+/**
+ * Get migration statistics for old users with stale password change flags
+ * Super admin only - shows how many users are affected by the mustChangePassword bug
+ */
+export const getMigrationStatistics = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const stats = await getMigrationStats();
+
+    res.status(200).json({
+      success: true,
+      message: 'Migration statistics retrieved successfully',
+      data: stats,
+    });
+  } catch (error: any) {
+    logger.error('Error getting migration statistics:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get list of affected users with stale password change flags
+ * Super admin only - returns detailed info about affected users
+ */
+export const getAffectedUsers = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const affectedUsers = await findAffectedUsers();
+
+    res.status(200).json({
+      success: true,
+      message: `Found ${affectedUsers.length} affected users`,
+      data: {
+        count: affectedUsers.length,
+        users: affectedUsers,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error getting affected users:', error);
+    throw error;
+  }
+};
+
+/**
+ * Run migration to fix stale password change flags
+ * Super admin only - clears flags for users older than 30 days with no passwordResetAt
+ */
+export const runUserMigration = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { daysOld = 30 } = req.body;
+
+    if (daysOld < 1 || daysOld > 365) {
+      throw new ApiError(400, 'daysOld must be between 1 and 365');
+    }
+
+    logger.info(`Starting user migration (threshold: ${daysOld} days) initiated by ${req.user?.username}`);
+
+    const result = await clearStaleMustChangePasswordFlags(daysOld);
+
+    // Log to audit trail
+    if (result.success && result.affectedUsers > 0) {
+      await AuditService.log({
+        userId: req.user?.userId?.toString() || 'system',
+        username: req.user?.username || 'system',
+        action: 'user_migration_executed',
+        resourceType: 'User',
+        details: `Cleared stale mustChangePassword flags for ${result.affectedUsers} users (threshold: ${daysOld} days)`,
+        ipAddress: req.ip,
+      });
+    }
+
+    res.status(200).json({
+      success: result.success,
+      message: result.success
+        ? `Migration completed: ${result.affectedUsers} users fixed`
+        : 'Migration failed',
+      data: {
+        affectedUsers: result.affectedUsers,
+        details: result.details,
+        errors: result.errors,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error running user migration:', error);
+    throw error;
+  }
+};
+
+/**
+ * Clear mustChangePassword flag for a specific user
+ * Super admin only - use with caution
+ */
+export const clearUserPasswordChangeFlag = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      throw new ApiError(400, 'User ID is required');
+    }
+
+    const result = await clearUserMustChangePassword(userId);
+
+    if (!result.success) {
+      throw new ApiError(400, result.message);
+    }
+
+    // Log to audit trail
+    await AuditService.log({
+      userId: req.user?.userId?.toString() || 'system',
+      username: req.user?.username || 'system',
+      action: 'user_flag_cleared',
+      resourceType: 'User',
+      resourceId: userId,
+      details: `Cleared mustChangePassword flag: ${result.message}`,
+      ipAddress: req.ip,
+    });
+
+    logger.info(
+      `User password change flag cleared by ${req.user?.username} for user ${userId}`
+    );
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error: any) {
+    logger.error('Error clearing user password change flag:', error);
     throw error;
   }
 };

@@ -76,14 +76,46 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
 
     setIsLoading(true);
     try {
-      await authAPI.firstLoginPassword({ newPassword });
+      const response = await authAPI.firstLoginPassword({ newPassword });
+      
+      // Update tokens if returned from backend
+      if (response?.accessToken) {
+        sessionStorage.setItem('fuel_order_token', response.accessToken);
+        
+        // Update auth context with new user data
+        const authData = JSON.parse(sessionStorage.getItem('fuel_order_auth') || '{}');
+        authData.mustChangePassword = false;
+        authData.token = response.accessToken;
+        sessionStorage.setItem('fuel_order_auth', JSON.stringify(authData));
+      }
+      
       setSuccess(true);
       // Give the user a moment to read the success message, then continue
       setTimeout(() => {
         onSuccess();
       }, 1800);
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to update password. Please try again.');
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || '';
+
+      // If the backend says password change is not required (flag already cleared),
+      // treat it as success — clear the local flag and proceed to dashboard.
+      if (status === 403 && message.toLowerCase().includes('not required')) {
+        const authData = JSON.parse(sessionStorage.getItem('fuel_order_auth') || '{}');
+        authData.mustChangePassword = false;
+        sessionStorage.setItem('fuel_order_auth', JSON.stringify(authData));
+        onSuccess();
+        return;
+      }
+
+      // If the session/token is invalid (expired, revoked, etc.), log out
+      // so the user gets a fresh login with up-to-date DB state.
+      if (status === 401) {
+        logout();
+        return;
+      }
+
+      setError(message || 'Failed to update password. Please try again.');
     } finally {
       setIsLoading(false);
     }

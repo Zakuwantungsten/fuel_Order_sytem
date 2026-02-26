@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { checkMaintenanceMode } from '../middleware/maintenance';
 import { apiRateLimiter } from '../middleware/rateLimiters';
 import authRoutes from './authRoutes';
+import mfaRoutes from './mfaRoutes';
 import deliveryOrderRoutes from './deliveryOrderRoutes';
 import lpoEntryRoutes from './lpoEntryRoutes';
 import lpoSummaryRoutes from './lpoSummaryRoutes';
@@ -28,6 +29,7 @@ const router = Router();
 
 // Mount routes
 router.use('/auth', authRoutes);
+router.use('/mfa', mfaRoutes);
 
 // Standard data endpoints rate limiter (excludes auth routes)
 router.use(apiRateLimiter);

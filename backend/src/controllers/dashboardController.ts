@@ -3,6 +3,17 @@ import { DeliveryOrder, LPOEntry, FuelRecord, YardFuelDispense } from '../models
 import { AuthRequest } from '../middleware/auth';
 
 /**
+ * Convert a Date to "YYYY-MM-DD" string for querying String-typed date fields.
+ * DeliveryOrder.date, FuelRecord.date, and LPOEntry.date are all stored as String.
+ */
+function toDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
  * Get dashboard statistics
  */
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -16,17 +27,17 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
     if (dateFrom || dateTo) {
       dateFilter.date = {};
       if (dateFrom) {
-        dateFilter.date.$gte = new Date(dateFrom as string);
+        dateFilter.date.$gte = dateFrom as string;
       }
       if (dateTo) {
-        dateFilter.date.$lte = new Date(dateTo as string);
+        dateFilter.date.$lte = dateTo as string;
       }
     } else {
       // Default to current month
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-      dateFilter.date = { $gte: firstDayOfMonth, $lte: lastDayOfMonth };
+      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      dateFilter.date = { $gte: toDateStr(firstDayOfMonth), $lte: toDateStr(lastDayOfMonth) };
     }
 
     // Build filter for all-time data (for total counts)
@@ -178,7 +189,7 @@ export const getMonthlyStats = async (req: AuthRequest, res: Response): Promise<
     
     const filter: any = { 
       isDeleted: false,
-      date: { $gte: startDate, $lte: now }
+      date: { $gte: toDateStr(startDate), $lte: toDateStr(now) }
     };
 
     // If specific month/year requested
@@ -186,8 +197,8 @@ export const getMonthlyStats = async (req: AuthRequest, res: Response): Promise<
       const yearNum = parseInt(year as string, 10);
       const monthNum = parseInt(month as string, 10) - 1; // JS months are 0-indexed
       const monthStart = new Date(yearNum, monthNum, 1);
-      const monthEnd = new Date(yearNum, monthNum + 1, 0, 23, 59, 59);
-      filter.date = { $gte: monthStart, $lte: monthEnd };
+      const monthEnd = new Date(yearNum, monthNum + 1, 0);
+      filter.date = { $gte: toDateStr(monthStart), $lte: toDateStr(monthEnd) };
     }
 
     const [fuelRecords, deliveryOrders, lpoEntries] = await Promise.all([
@@ -335,29 +346,29 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // Use actual date fields so imported historical data shows in the correct period.
-    // DeliveryOrder.date and FuelRecord.date are proper Date fields.
-    // LPOEntry uses actualDate (set by import pipeline) with createdAt as fallback
-    // for any legacy records that pre-date the actualDate field.
-    const dateFilter = { $gte: startDate, $lte: endDate };
+    // DeliveryOrder.date and FuelRecord.date are String fields — use string comparison.
+    // LPOEntry uses actualDate (Date type) with createdAt as fallback for legacy records.
+    const dateFilterStr = { $gte: toDateStr(startDate), $lte: toDateStr(endDate) };
+    const dateFilterDate = { $gte: startDate, $lte: endDate };
 
     // Fetch all necessary data
     const [deliveryOrders, fuelRecords, lpoEntries, yardFuelDispenses] = await Promise.all([
-      DeliveryOrder.find({ isDeleted: false, date: dateFilter })
+      DeliveryOrder.find({ isDeleted: false, date: dateFilterStr })
         .select('date tonnages ratePerTon truckNo from to importOrExport')
         .lean(),
-      FuelRecord.find({ isDeleted: false, isCancelled: { $ne: true }, date: dateFilter })
+      FuelRecord.find({ isDeleted: false, isCancelled: { $ne: true }, date: dateFilterStr })
         .select('date totalLts mmsaYard tangaYard darYard truckNo journeyStatus balance')
         .lean(),
       LPOEntry.find({
         isDeleted: false,
         $or: [
-          { actualDate: dateFilter },
-          { actualDate: { $exists: false }, createdAt: dateFilter },
+          { actualDate: dateFilterDate },
+          { actualDate: { $exists: false }, createdAt: dateFilterDate },
         ],
       })
         .select('date actualDate ltrs pricePerLtr dieselAt truckNo')
         .lean(),
-      YardFuelDispense.find({ isDeleted: false, createdAt: dateFilter })
+      YardFuelDispense.find({ isDeleted: false, createdAt: dateFilterDate })
         .select('date liters yard status')
         .lean(),
     ]);
@@ -602,19 +613,19 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     fuelStartDate.setMonth(now.getMonth() - 12);
 
     // Use actual date fields for correct historical bucketing.
-    // FuelRecord.date and DeliveryOrder.date are proper Date fields.
-    // LPOEntry uses actualDate (set inline by import) with createdAt fallback for legacy records.
+    // FuelRecord.date and DeliveryOrder.date are String fields — use string comparison.
+    // LPOEntry uses actualDate (Date type) with createdAt fallback for legacy records.
     const [fuelRecords, deliveryOrders, lpoEntries] = await Promise.all([
       FuelRecord.find({
         isDeleted: false,
         isCancelled: { $ne: true },
-        date: { $gte: fuelStartDate, $lte: now },
+        date: { $gte: toDateStr(fuelStartDate), $lte: toDateStr(now) },
       })
         .select('date totalLts journeyStatus')
         .lean(),
       DeliveryOrder.find({
         isDeleted: false,
-        date: { $gte: doStartDate, $lte: doEndDate },
+        date: { $gte: toDateStr(doStartDate), $lte: toDateStr(doEndDate) },
       })
         .select('date doNumber')
         .lean(),

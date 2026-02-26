@@ -29,6 +29,13 @@ router.post(
   asyncHandler(authController.login)
 );
 
+// MFA verification (after initial login)
+router.post(
+  '/verify-mfa',
+  authRateLimiter,
+  asyncHandler(authController.verifyMFA)
+);
+
 router.post('/refresh', asyncHandler(authController.refreshToken));
 
 router.post(
