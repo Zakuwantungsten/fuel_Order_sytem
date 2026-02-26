@@ -201,16 +201,16 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Route className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+        <div className="flex items-center gap-1.5">
+          <Route className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+          <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
             Routes Management
           </h2>
         </div>
-        <button onClick={() => openRouteModal()} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
-          <Plus className="w-4 h-4" />Add Route
+        <button onClick={() => openRouteModal()} className="flex items-center gap-1 px-2.5 py-1 text-xs bg-purple-600 text-white rounded-md hover:bg-purple-700">
+          <Plus className="w-3 h-3" />Add Route
         </button>
       </div>
 
@@ -279,23 +279,23 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
 
       {/* Desktop Table */}
       <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
-        <table className="w-full">
+        <table className="w-full text-xs">
           <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Route</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">From → To</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Type</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Default Liters</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Aliases</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-400">Description</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-gray-600 dark:text-gray-400">Actions</th>
+              <th className="px-2.5 py-1.5 text-left text-[11px] font-medium text-gray-600 dark:text-gray-400">Route</th>
+              <th className="px-2.5 py-1.5 text-left text-[11px] font-medium text-gray-600 dark:text-gray-400">From → To</th>
+              <th className="px-2.5 py-1.5 text-left text-[11px] font-medium text-gray-600 dark:text-gray-400">Type</th>
+              <th className="px-2.5 py-1.5 text-left text-[11px] font-medium text-gray-600 dark:text-gray-400">Default Liters</th>
+              <th className="px-2.5 py-1.5 text-left text-[11px] font-medium text-gray-600 dark:text-gray-400">Aliases</th>
+              <th className="px-2.5 py-1.5 text-left text-[11px] font-medium text-gray-600 dark:text-gray-400">Description</th>
+              <th className="px-2.5 py-1.5 text-right text-[11px] font-medium text-gray-600 dark:text-gray-400">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y dark:divide-gray-700">
             {routes.map((route) => (
               <tr key={String(route._id)} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{route.routeName}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                <td className="px-2.5 py-2 text-xs font-medium text-gray-900 dark:text-gray-100">{route.routeName}</td>
+                <td className="px-2.5 py-2 text-xs text-gray-600 dark:text-gray-400">
                   {route.origin ? (
                     <span className="flex items-center gap-1">
                       <span className="font-medium text-green-600 dark:text-green-400">{route.origin}</span>
@@ -306,13 +306,13 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                     <span className="font-medium text-blue-600 dark:text-blue-400">{route.destination}</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{route.routeType || 'IMPORT'}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{route.defaultTotalLiters} L</td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-2.5 py-2 text-xs text-gray-600 dark:text-gray-400">{route.routeType || 'IMPORT'}</td>
+                <td className="px-2.5 py-2 text-xs text-gray-600 dark:text-gray-400">{route.defaultTotalLiters} L</td>
+                <td className="px-2.5 py-2 text-[11px]">
                   {route.destinationAliases && route.destinationAliases.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-0.5">
                       {route.destinationAliases.map((alias, idx) => (
-                        <span key={idx} className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded">
+                        <span key={idx} className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-1 py-px rounded text-[10px]">
                           {alias}
                         </span>
                       ))}
@@ -321,19 +321,19 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                     <span className="text-gray-400">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{route.description || '—'}</td>
-                <td className="px-4 py-3 text-sm text-right">
-                  <button onClick={() => openRouteModal(route)} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 mr-3">
-                    <Edit2 className="w-4 h-4" />
+                <td className="px-2.5 py-2 text-xs text-gray-500 dark:text-gray-400">{route.description || '—'}</td>
+                <td className="px-2.5 py-2 text-xs text-right">
+                  <button onClick={() => openRouteModal(route)} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 mr-1.5">
+                    <Edit2 className="w-3 h-3" />
                   </button>
                   <button onClick={() => handleDeleteRoute(route._id)} className="text-red-600 dark:text-red-400 hover:text-red-800">
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3 h-3" />
                   </button>
                 </td>
               </tr>
             ))}
             {routes.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No routes configured.</td></tr>
+              <tr><td colSpan={7} className="px-2.5 py-5 text-center text-xs text-gray-500 dark:text-gray-400">No routes configured.</td></tr>
             )}
           </tbody>
         </table>

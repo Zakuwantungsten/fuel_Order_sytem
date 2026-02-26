@@ -227,51 +227,51 @@ const DriverCredentialsManager: React.FC = () => {
   };
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div className="p-4 md:p-5 bg-gray-50 dark:bg-gray-900 min-h-screen">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div className="flex items-center space-x-3">
-          <Key className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600 dark:text-indigo-400" />
-          <h1 className="text-xl sm:text-3xl font-bold text-gray-800 dark:text-gray-100">Driver Credentials Manager</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+        <div className="flex items-center space-x-2">
+          <Key className="w-6 h-6 md:w-5 md:h-5 text-indigo-600 dark:text-indigo-400" />
+          <h1 className="text-xl md:text-xl font-bold text-gray-800 dark:text-gray-100">Driver Credentials Manager</h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => handleExport('csv')}
-            className="px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+            className="px-3 py-1.5 text-xs md:text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-1.5"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
           </button>
           <button
             onClick={() => handleExport('json')}
-            className="px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+            className="px-3 py-1.5 text-xs md:text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-1.5"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-3.5 h-3.5" />
             <span>Export JSON</span>
           </button>
           <button
             onClick={handleScanTrucks}
             disabled={scanning}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-xs md:text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {scanning ? <Loader className="w-4 h-4 animate-spin" /> : <ScanIcon className="w-4 h-4" />}
+            {scanning ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <ScanIcon className="w-3.5 h-3.5" />}
             <span>Scan for New Trucks</span>
           </button>
           <button
             onClick={fetchCredentials}
             disabled={loading}
-            className="p-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="p-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 mb-4">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search by truck number..."
@@ -280,7 +280,7 @@ const DriverCredentialsManager: React.FC = () => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
             />
           </div>
           
@@ -290,7 +290,7 @@ const DriverCredentialsManager: React.FC = () => {
               setStatusFilter(e.target.value as 'all' | 'active' | 'inactive');
               setCurrentPage(1);
             }}
-            className="w-full sm:w-48 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
+            className="w-full sm:w-40 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
           >
             <option value="all">All Status</option>
             <option value="active">Active Only</option>
@@ -301,46 +301,46 @@ const DriverCredentialsManager: React.FC = () => {
 
       {/* Statistics Cards */}
       {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">Total Drivers</p>
-            <p className="text-3xl font-bold text-gray-800 dark:text-gray-100">{stats.totalDrivers}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-4">
+            <p className="text-gray-500 dark:text-gray-400 text-xs mb-0.5">Total Drivers</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-800 dark:text-gray-100">{stats.totalDrivers}</p>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">Active</p>
-            <p className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.activeDrivers}</p>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-4">
+            <p className="text-gray-500 dark:text-gray-400 text-xs mb-0.5">Active</p>
+            <p className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">{stats.activeDrivers}</p>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">Inactive</p>
-            <p className="text-3xl font-bold text-red-600 dark:text-red-400">{stats.inactiveDrivers}</p>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-4">
+            <p className="text-gray-500 dark:text-gray-400 text-xs mb-0.5">Inactive</p>
+            <p className="text-xl md:text-2xl font-bold text-red-600 dark:text-red-400">{stats.inactiveDrivers}</p>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">Login Rate (7d)</p>
-            <p className="text-3xl font-bold text-gray-800 dark:text-gray-100">{stats.loginRate}%</p>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-4">
+            <p className="text-gray-500 dark:text-gray-400 text-xs mb-0.5">Login Rate (7d)</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-800 dark:text-gray-100">{stats.loginRate}%</p>
           </div>
         </div>
       )}
 
       {/* Alerts */}
       {error && (
-        <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg flex items-start justify-between">
+        <div className="mb-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 text-sm rounded-md flex items-start justify-between">
           <div className="flex items-start space-x-2">
-            <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <span>{error}</span>
           </div>
           <button onClick={() => setError(null)} className="text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
       {success && (
-        <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg flex items-start justify-between">
+        <div className="mb-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-3 py-2 text-sm rounded-md flex items-start justify-between">
           <div className="flex items-start space-x-2">
-            <CheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <span>{success}</span>
           </div>
           <button onClick={() => setSuccess(null)} className="text-green-700 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300">
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -416,42 +416,42 @@ const DriverCredentialsManager: React.FC = () => {
       {/* Credentials - Desktop Table */}
       <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Truck Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Driver Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Created</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Last Login</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Created By</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Truck Number</th>
+                <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Driver Name</th>
+                <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Created</th>
+                <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Last Login</th>
+                <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Created By</th>
+                <th className="px-3 py-2 text-right text-[11px] font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {loading && credentials.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
-                    <Loader className="w-8 h-8 animate-spin mx-auto text-indigo-600" />
+                  <td colSpan={7} className="px-3 py-8 text-center">
+                    <Loader className="w-6 h-6 animate-spin mx-auto text-indigo-600" />
                   </td>
                 </tr>
               ) : credentials.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                     No driver credentials found. Click "Scan for New Trucks" to get started.
                   </td>
                 </tr>
               ) : (
                 credentials.map((credential) => (
                   <tr key={credential._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="font-bold text-gray-900 dark:text-gray-100">{credential.truckNo}</span>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">{credential.truckNo}</span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                    <td className="px-3 py-2.5 whitespace-nowrap text-gray-700 dark:text-gray-300">
                       {credential.driverName || 'Not set'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={`px-1.5 py-0.5 text-[11px] font-semibold rounded-full ${
                         credential.isActive 
                           ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
                           : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
@@ -459,33 +459,33 @@ const DriverCredentialsManager: React.FC = () => {
                         {credential.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                    <td className="px-3 py-2.5 whitespace-nowrap text-gray-700 dark:text-gray-300">
                       {formatDateOnly(credential.createdAt)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                    <td className="px-3 py-2.5 whitespace-nowrap text-gray-700 dark:text-gray-300">
                       {credential.lastLogin ? formatDateOnly(credential.lastLogin) : 'Never'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                    <td className="px-3 py-2.5 whitespace-nowrap text-gray-700 dark:text-gray-300">
                       {credential.createdBy || 'System'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
+                    <td className="px-3 py-2.5 whitespace-nowrap text-right space-x-1">
                       <button
                         onClick={() => setResetDialog({ open: true, credential })}
-                        className="inline-flex items-center p-2 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition-colors"
+                        className="inline-flex items-center p-1.5 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-md transition-colors"
                         title="Reset PIN"
                       >
-                        <RotateCcw className="w-4 h-4" />
+                        <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleToggleStatus(credential)}
-                        className={`inline-flex items-center p-2 rounded-lg transition-colors ${
+                        className={`inline-flex items-center p-1.5 rounded-md transition-colors ${
                           credential.isActive
                             ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
                             : 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20'
                         }`}
                         title={credential.isActive ? 'Deactivate' : 'Reactivate'}
                       >
-                        {credential.isActive ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                        {credential.isActive ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                       </button>
                     </td>
                   </tr>
@@ -498,7 +498,7 @@ const DriverCredentialsManager: React.FC = () => {
 
       {/* Pagination */}
       {credentials.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow mt-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow mt-3">
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
