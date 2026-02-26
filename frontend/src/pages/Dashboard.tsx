@@ -20,6 +20,7 @@ import {
 import { BarChart, Bar, PieChart as RePieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
 import { DashboardStats, FuelRecord } from '../types';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 // Colors for charts
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -120,6 +121,11 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       });
     }
   };
+
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_entries', 'yard_fuel'], () => {
+    fetchStats();
+    fetchChartData();
+  });
 
   // Unified search functionality
   const performUnifiedSearch = async () => {

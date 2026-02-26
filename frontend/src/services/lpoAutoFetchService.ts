@@ -1,5 +1,5 @@
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../types';
-import { deliveryOrdersAPI, fuelRecordsAPI } from './api';
+import { deliveryOrdersAPI, fuelRecordsAPI, configAPI } from './api';
 import FuelConfigService from './fuelConfigService';
 
 /**
@@ -42,8 +42,9 @@ const STATION_CHECKPOINT_MAP: Record<string, { checkpoint: string; direction: 'g
 /**
  * Get station fuel defaults based on station name and DO type
  */
-export function getStationFuelDefaults(station: string, doType: 'going' | 'returning'): StationFuelDefaults | null {
+export function getStationFuelDefaults(station: string, doType: 'going' | 'returning', stationRate?: number): StationFuelDefaults | null {
   const config = FuelConfigService.loadConfig();
+  const rate = stationRate || config.defaultFuelPrice;
   
   // Zambia Going stations (used by both going and returning, but different amounts)
   if (['LAKE CHILABOMBWE', 'CASH', 'TCC', 'ZHANFEI', 'KAMOA', 'COMIKA'].includes(station)) {
@@ -51,14 +52,14 @@ export function getStationFuelDefaults(station: string, doType: 'going' | 'retur
       return {
         station,
         goingFuel: 260, // Default for standard going truck
-        rate: config.defaultFuelPrice,
+        rate,
         checkpoint: 'zambiaGoing'
       };
     } else {
       return {
         station,
         returningFuel: 0, // Returning trucks don't typically fill at these stations
-        rate: config.defaultFuelPrice,
+        rate,
         checkpoint: 'zambiaReturn'
       };
     }
@@ -69,7 +70,7 @@ export function getStationFuelDefaults(station: string, doType: 'going' | 'retur
     return {
       station,
       returningFuel: config.zambiaReturnStations.lakeNdola.liters,
-      rate: config.defaultFuelPrice,
+      rate,
       checkpoint: 'zambiaReturn'
     };
   }
@@ -78,7 +79,7 @@ export function getStationFuelDefaults(station: string, doType: 'going' | 'retur
     return {
       station,
       returningFuel: config.zambiaReturnStations.lakeKapiri.liters,
-      rate: config.defaultFuelPrice,
+      rate,
       checkpoint: 'zambiaReturn'
     };
   }
@@ -88,7 +89,7 @@ export function getStationFuelDefaults(station: string, doType: 'going' | 'retur
     return {
       station,
       goingFuel: config.standardAllocations.mbeyaGoing,
-      rate: config.defaultFuelPrice,
+      rate,
       checkpoint: 'mbeyaGoing'
     };
   }
@@ -98,7 +99,7 @@ export function getStationFuelDefaults(station: string, doType: 'going' | 'retur
     return {
       station,
       returningFuel: config.standardAllocations.tundumaReturn,
-      rate: config.defaultFuelPrice,
+      rate,
       checkpoint: 'tundumaReturn'
     };
   }
@@ -342,8 +343,19 @@ export async function getAutoFillDataForLPO(
       return null;
     }
     
-    // Get station fuel defaults
-    const defaults = getStationFuelDefaults(station, doResult.doType);
+    // Get station fuel defaults with actual rate from database
+    let stationRate: number | undefined;
+    try {
+      const stations = await configAPI.getStations();
+      const dbStation = stations.find((s: any) => s.stationName === station);
+      if (dbStation?.defaultRate) {
+        stationRate = dbStation.defaultRate;
+      }
+    } catch {
+      // Fall back to config default if API fails
+    }
+
+    const defaults = getStationFuelDefaults(station, doResult.doType, stationRate);
     
     if (!defaults) {
       return null;

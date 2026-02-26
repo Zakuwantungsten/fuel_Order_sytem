@@ -3,6 +3,7 @@ import { formatDate as formatSystemDate } from '../utils/timezone';
 import { useAuth } from '../contexts/AuthContext';
 import { yardFuelService } from '../services/yardFuelService';
 import { toast } from 'react-toastify';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useNavigate } from 'react-router-dom';
 import { formatTruckNumber } from '../utils/dataCleanup';
 
@@ -51,6 +52,8 @@ const YardFuel: React.FC = () => {
     }
   };
 
+  useRealtimeSync('yard_fuel', fetchRecentEntries);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -77,6 +80,7 @@ const YardFuel: React.FC = () => {
       await yardFuelService.create({
         ...formData,
         truckNo: formatTruckNumber(formData.truckNo),
+        ...(user?.yard ? { yard: user.yard } : {}),
       });
       
       toast.success('Fuel dispense recorded successfully!');

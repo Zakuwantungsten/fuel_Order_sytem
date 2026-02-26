@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Route, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-react';
 import { configAPI } from '../../services/api';
 import { RouteConfig } from '../../types';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface RoutesTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -31,7 +32,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
   useEffect(() => {
     loadData();
   }, []);
-  
+
   // Click outside detection
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -52,6 +53,8 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
       onMessage('error', error.response?.data?.message || 'Failed to load routes');
     }
   };
+
+  useRealtimeSync('routes', loadData);
 
   const handleCreateRoute = async () => {
     try {

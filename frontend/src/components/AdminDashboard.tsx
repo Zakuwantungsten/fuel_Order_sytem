@@ -35,6 +35,7 @@ import CreateUserModal, { BatchTruckCreation } from './CreateUserModal';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import Pagination from './Pagination';
 import PendingConfigurations from '../pages/PendingConfigurations';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface AdminDashboardProps {
   user: any;
@@ -110,6 +111,11 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
       setLoading(false);
     }
   };
+
+  useRealtimeSync(
+    ['fuel_records', 'delivery_orders', 'lpo_entries', 'users', 'yard_fuel', 'checkpoints'],
+    loadData
+  );
 
   const showMessage = (type: 'success' | 'error', message: string) => {
     if (type === 'success') {

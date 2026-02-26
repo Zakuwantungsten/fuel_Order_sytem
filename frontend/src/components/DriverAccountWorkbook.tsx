@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Plus, X, FileSpreadsheet, Trash2, 
   Copy, User, AlertTriangle, FileDown, Search,
@@ -8,9 +8,11 @@ import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary
 import { useAuth } from '../contexts/AuthContext';
 import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
 import { configService } from '../services/configService';
-import { useActiveFuelStations, getActiveStations } from '../hooks/useFuelStations';
+import { useActiveFuelStations, getActiveStations, fuelStationKeys } from '../hooks/useFuelStations';
+import { useQueryClient } from '@tanstack/react-query';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import XLSX from 'xlsx-js-style';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface DriverAccountWorkbookProps {
   initialYear?: number;
@@ -130,6 +132,8 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       setLoading(false);
     }
   };
+
+  useRealtimeSync(['lpo_entries', 'delivery_orders', 'fuel_records'], loadWorkbook);
 
   const addEntry = async (entry: Omit<DriverAccountEntry, 'id' | 'createdAt' | 'createdBy'>) => {
     if (!workbook) return;
@@ -831,7 +835,7 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
     date: new Date().toISOString().split('T')[0],
     station: '',
     lpoNo: '',
-    rate: 1.2,
+    rate: 0,
     journeyDirection: 'going' as 'going' | 'returning',
     paymentMode: 'CASH' as PaymentMode,
     paybillOrMobile: '',
@@ -872,8 +876,26 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
   }, []);
 
   // Load stations from database using React Query
+  const queryClient = useQueryClient();
   const { data: fuelStations, isLoading: loadingStations } = useActiveFuelStations();
   const availableStations = fuelStations || [];
+
+  // Real-time sync: invalidate React Query cache when stations change
+  const invalidateStations = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: fuelStationKeys.all });
+    queryClient.invalidateQueries({ queryKey: fuelStationKeys.active });
+  }, [queryClient]);
+  useRealtimeSync('fuel_stations', invalidateStations, 'rt-driver-acct-modal');
+
+  // Auto-update rate when station data refreshes (live sync)
+  useEffect(() => {
+    if (formData.station && formData.station !== 'CASH') {
+      const selectedStation = availableStations.find(s => s.stationName === formData.station);
+      if (selectedStation && selectedStation.defaultRate) {
+        setFormData(prev => ({ ...prev, rate: selectedStation.defaultRate }));
+      }
+    }
+  }, [availableStations, formData.station]);
 
   // Fetch next LPO number on mount
   useEffect(() => {
@@ -1102,7 +1124,9 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
                       key={s}
                       type="button"
                       onClick={() => {
-                        setFormData(prev => ({ ...prev, station: s }));
+                        const stationConfig = availableStations.find(st => st.stationName === s);
+                        const newRate = (s !== 'CASH' && stationConfig?.defaultRate) ? stationConfig.defaultRate : 0;
+                        setFormData(prev => ({ ...prev, station: s, rate: newRate }));
                         setShowStationDropdown(false);
                       }}
                       className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
@@ -1115,6 +1139,18 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
                   ))}
                 </div>
               )}
+              {formData.station && formData.station !== 'CASH' && (() => {
+                const station = availableStations.find(s => s.stationName === formData.station);
+                if (station) {
+                  const currency = station.defaultRate < 10 ? 'USD' : 'TZS';
+                  return (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      Default: Going {station.defaultLitersGoing}L, Returning {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             <div>
@@ -1128,6 +1164,9 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
                 step="0.01"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
+              {formData.station === 'CASH' && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Enter rate manually for CASH stations</p>
+              )}
             </div>
           </div>
 

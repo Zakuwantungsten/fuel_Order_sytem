@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
+import { emitDataChange } from '../services/websocket';
 
 /**
  * Get all LPO entries with pagination and filters
@@ -185,6 +186,7 @@ export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<v
       message: 'LPO entry created successfully',
       data: lpoEntry,
     });
+    emitDataChange('lpo_entries', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -226,6 +228,7 @@ export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<v
       message: 'LPO entry updated successfully',
       data: lpoEntry,
     });
+    emitDataChange('lpo_entries', 'update');
   } catch (error: any) {
     throw error;
   }

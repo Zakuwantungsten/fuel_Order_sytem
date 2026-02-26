@@ -3,6 +3,7 @@ import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, Ma
 import { LPOEntry, CancellationPoint, LPOSummary, FuelStationConfig } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
 import { lpoDocumentsAPI, configAPI } from '../services/api';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { 
   getAvailableCancellationPoints, 
@@ -119,6 +120,21 @@ const LPOForm: React.FC<LPOFormProps> = ({
       console.error('Failed to load configured stations:', error);
     }
   };
+
+  useRealtimeSync('fuel_stations', loadConfiguredStations);
+
+  // Sync price from station's actual defaultRate when stations refresh or selection changes
+  useEffect(() => {
+    if (formData.dieselAt && formData.dieselAt !== 'CASH' && formData.dieselAt !== 'CUSTOM') {
+      const selectedStation = configuredStations.find(s => s.stationName === formData.dieselAt);
+      if (selectedStation && selectedStation.defaultRate) {
+        setFormData(prev => ({
+          ...prev,
+          pricePerLtr: selectedStation.defaultRate,
+        }));
+      }
+    }
+  }, [configuredStations, formData.dieselAt]);
 
   // Auto-fetch when truck number and station are both filled
   useEffect(() => {

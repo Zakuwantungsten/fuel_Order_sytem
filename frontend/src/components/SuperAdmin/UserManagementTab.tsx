@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { usersAPI, systemAdminAPI } from '../../services/api';
 import type { User, UserRole } from '../../types';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface UserManagementTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -110,6 +111,8 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
       setLoading(false);
     }
   };
+
+  useRealtimeSync('users', loadUsers);
 
   const handleCreateUser = () => {
     setShowCreateModal(true);

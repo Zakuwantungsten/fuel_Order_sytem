@@ -13,6 +13,7 @@ import UserSupportTab from './StandardAdmin/UserSupportTab';
 import BasicReportsTab from './StandardAdmin/BasicReportsTab';
 import FuelStationsTab from './SuperAdmin/FuelStationsTab';
 import RoutesTab from './SuperAdmin/RoutesTab';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface StandardAdminDashboardProps {
   user: any;
@@ -43,6 +44,11 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
       setLoading(false);
     }
   };
+
+  useRealtimeSync(
+    ['fuel_records', 'delivery_orders', 'lpo_entries', 'users'],
+    loadData
+  );
 
   const showMessage = (type: 'success' | 'error', message: string) => {
     if (type === 'success') {

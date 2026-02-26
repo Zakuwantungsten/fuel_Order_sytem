@@ -11,6 +11,7 @@ import {
 } from '../models';
 import { AuditService } from '../utils/auditService';
 import logger from '../utils/logger';
+import { emitDataChange } from '../services/websocket';
 
 // Model map for dynamic access
 const MODELS_MAP: Record<string, any> = {
@@ -152,6 +153,7 @@ export const restoreItem = async (req: AuthRequest, res: Response): Promise<void
       message: 'Item restored successfully',
       data: item,
     });
+    emitDataChange(type, 'update');
   } catch (error: any) {
     logger.error('Error restoring item:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -205,6 +207,7 @@ export const bulkRestore = async (req: AuthRequest, res: Response): Promise<void
       message: `${result.modifiedCount} items restored`,
       data: { restoredCount: result.modifiedCount },
     });
+    emitDataChange(type, 'update');
   } catch (error: any) {
     logger.error('Error bulk restoring items:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -260,6 +263,7 @@ export const permanentDelete = async (req: AuthRequest, res: Response): Promise<
       success: true,
       message: 'Item permanently deleted',
     });
+    emitDataChange(type, 'delete');
   } catch (error: any) {
     logger.error('Error permanently deleting item:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -306,6 +310,7 @@ export const bulkPermanentDelete = async (req: AuthRequest, res: Response): Prom
       message: `${result.deletedCount} items permanently deleted`,
       data: { deletedCount: result.deletedCount },
     });
+    emitDataChange(type, 'delete');
   } catch (error: any) {
     logger.error('Error bulk permanent deleting items:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -351,6 +356,7 @@ export const emptyTrash = async (req: AuthRequest, res: Response): Promise<void>
       message: `Trash emptied. ${result.deletedCount} items permanently deleted.`,
       data: { deletedCount: result.deletedCount },
     });
+    emitDataChange(type, 'delete');
   } catch (error: any) {
     logger.error('Error emptying trash:', error);
     res.status(500).json({ success: false, message: error.message });

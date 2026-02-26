@@ -4,6 +4,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
 import { AuditService } from '../utils/auditService';
+import { emitDataChange } from '../services/websocket';
 
 /**
  * Get all driver credentials
@@ -167,6 +168,7 @@ export const scanAndGenerateCredentials = async (req: AuthRequest, res: Response
         newCount: newCredentials.length,
       },
     });
+    emitDataChange('driver_credentials', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -218,6 +220,7 @@ export const resetDriverPIN = async (req: AuthRequest, res: Response): Promise<v
         resetBy: req.user?.username,
       },
     });
+    emitDataChange('driver_credentials', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -257,6 +260,7 @@ export const deactivateDriverCredential = async (req: AuthRequest, res: Response
       message: 'Driver credential deactivated successfully',
       data: credential,
     });
+    emitDataChange('driver_credentials', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -294,6 +298,7 @@ export const reactivateDriverCredential = async (req: AuthRequest, res: Response
       message: 'Driver credential reactivated successfully',
       data: credential,
     });
+    emitDataChange('driver_credentials', 'update');
   } catch (error: any) {
     throw error;
   }

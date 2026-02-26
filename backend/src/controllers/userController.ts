@@ -6,7 +6,7 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, fo
 import { AuditService } from '../utils/auditService';
 import { emailService } from '../services/emailService';
 import crypto from 'crypto';
-import { emitToUser } from '../services/websocket';
+import { emitToUser, emitDataChange } from '../services/websocket';
 
 /**
  * Get all users with pagination and filters
@@ -185,6 +185,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       data: userResponse,
       emailSent: true,
     });
+    emitDataChange('users', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -256,6 +257,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
       message: 'User updated successfully',
       data: user,
     });
+    emitDataChange('users', 'update');
   } catch (error: any) {
     // Handle MongoDB duplicate key error
     if (error.code === 11000) {
@@ -311,6 +313,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
       message: 'User deleted successfully',
       data: user,
     });
+    emitDataChange('users', 'delete');
   } catch (error: any) {
     throw error;
   }
@@ -385,6 +388,7 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
         emailSent 
       },
     });
+    emitDataChange('users', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -427,6 +431,7 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response): Promise
       message: `User ${user.isActive ? 'activated' : 'deactivated'} successfully`,
       data: user,
     });
+    emitDataChange('users', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -477,6 +482,7 @@ export const banUser = async (req: AuthRequest, res: Response): Promise<void> =>
       message: 'User banned successfully',
       data: user,
     });
+    emitDataChange('users', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -514,6 +520,7 @@ export const unbanUser = async (req: AuthRequest, res: Response): Promise<void> 
       message: 'User unbanned successfully',
       data: user,
     });
+    emitDataChange('users', 'update');
   } catch (error: any) {
     throw error;
   }

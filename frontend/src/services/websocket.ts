@@ -18,6 +18,7 @@ let _sessionEventCallback: ((event: any) => void) | null = null;
 let _maintenanceEventCallback: ((event: any) => void) | null = null;
 let _settingsEventCallback: ((event: any) => void) | null = null;
 let _securityEventCallback: ((event: any) => void) | null = null;
+const _dataChangedCallbacks = new Map<string, (event: { collection: string; action: string; timestamp: number }) => void>();
 
 /**
  * Initialize WebSocket connection
@@ -68,6 +69,9 @@ export const initializeWebSocket = (token: string): Socket => {
   socket.on('security_event', (event) => {
     console.log('[WebSocket] Received security event:', event);
     if (_securityEventCallback) _securityEventCallback(event);
+  });
+  socket.on('data_changed', (event) => {
+    _dataChangedCallbacks.forEach((cb) => cb(event));
   });
 
   socket.on('connect', () => {
@@ -192,6 +196,14 @@ export const unsubscribeFromSecurityEvents = (): void => {
   _securityEventCallback = null;
 };
 
+export const subscribeToDataChanges = (callback: (event: { collection: string; action: string; timestamp: number }) => void, id: string): void => {
+  _dataChangedCallbacks.set(id, callback);
+};
+
+export const unsubscribeFromDataChanges = (id: string): void => {
+  _dataChangedCallbacks.delete(id);
+};
+
 /**
  * Disconnect WebSocket
  */
@@ -229,6 +241,8 @@ export default {
   unsubscribeFromSettingsEvents,
   subscribeToSecurityEvents,
   unsubscribeFromSecurityEvents,
+  subscribeToDataChanges,
+  unsubscribeFromDataChanges,
   disconnectWebSocket,
   isConnected,
   getSocket,

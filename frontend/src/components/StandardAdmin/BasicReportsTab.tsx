@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { dashboardAPI, doWorkbookAPI, lpoWorkbookAPI, fuelRecordsAPI } from '../../services/api';
 import XLSXStyle from 'xlsx-js-style';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 // ── Styling helpers ────────────────────────────────────────────────────────────
 
@@ -278,6 +279,8 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
       loadReportData();
     }
   }, [activeReport, loadReportData]);
+
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_entries'], loadReportData);
 
   // ── Export helpers ─────────────────────────────────────────────────────────
 

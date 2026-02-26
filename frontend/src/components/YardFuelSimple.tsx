@@ -3,6 +3,7 @@ import { yardFuelService } from '../services/yardFuelService';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useAuth } from '../contexts/AuthContext';
 import { Fuel, Truck, Calendar, LogOut, RefreshCw, Sun, Moon, Wifi, WifiOff, CheckCircle, Clock, Link2 } from 'lucide-react';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 // Real-time update interval (30 seconds)
 const REALTIME_UPDATE_INTERVAL = 30000;
@@ -127,6 +128,8 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
     };
   }, [fetchRecentEntries, isOnline]);
 
+  useRealtimeSync('yard_fuel', () => fetchRecentEntries(true));
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -172,6 +175,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
       const response = await yardFuelService.create({
         ...formData,
         truckNo: formatTruckNumber(formData.truckNo),
+        ...(user.yard ? { yard: user.yard } : {}),
       });
       
       // Check if it was linked to a fuel record

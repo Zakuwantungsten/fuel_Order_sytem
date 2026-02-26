@@ -16,6 +16,7 @@ import { AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 import { AuditService } from '../utils/auditService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
+import { emitDataChange } from '../services/websocket';
 
 // Multer augments Express.Request with `file`; combine types for our handlers
 type ImportRequest = AuthRequest & { file?: Express.Multer.File };
@@ -981,6 +982,12 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
       },
       sheets: sheetResults,
     });
+    if (!dryRun) {
+      emitDataChange('fuel_records', 'create');
+      emitDataChange('delivery_orders', 'create');
+      emitDataChange('lpo_entries', 'create');
+      emitDataChange('lpo_summaries', 'create');
+    }
   } catch (err: unknown) {
     logger.error('[ImportCtrl] Import error:', err);
     res.status(500).json({ success: false, message: 'Import failed. Check server logs for details.' });

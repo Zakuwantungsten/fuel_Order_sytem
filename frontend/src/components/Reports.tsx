@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { TrendingUp, Download, Fuel, DollarSign, Truck, FileText, BarChart3 } from 'lucide-react';
 import { dashboardAPI } from '../services/api';
 import { ReportStats } from '../types';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface ReportsProps {
   user: any;
@@ -57,6 +58,8 @@ export function Reports({}: ReportsProps) {
       setLoading(false);
     }
   };
+
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_entries'], fetchReportData);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-TZ', {

@@ -17,6 +17,7 @@ import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup
 import Pagination from '../components/Pagination';
 import { useTruckBatches, getExtraFuelFromBatches } from '../hooks/useTruckBatches';
 import { useRoutes, getTotalLitersFromRoutes } from '../hooks/useRoutes';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 // Month names for display
 const MONTH_NAMES = [
@@ -368,6 +369,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       setLoading(false);
     }
   };
+
+  useRealtimeSync('delivery_orders', loadOrders);
 
   const fetchWorkbooks = async () => {
     try {

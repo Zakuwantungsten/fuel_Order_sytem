@@ -3,6 +3,7 @@ import { X, Download, FileSpreadsheet, Edit2 } from 'lucide-react';
 import type { DOWorkbook as DOWorkbookType, DeliveryOrder } from '../types';
 import { doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import DOSheetView from './DOSheetView';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface DOWorkbookProps {
   workbookId?: string | number; // Can be year number or ID
@@ -62,6 +63,10 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, workbookType = 'DO'
       setLoading(false);
     }
   };
+
+  useRealtimeSync('delivery_orders', () => {
+    fetchWorkbook(workbookId || new Date().getFullYear());
+  });
 
   const handleExportWorkbook = async () => {
     if (!workbook) return;

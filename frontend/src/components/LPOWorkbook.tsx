@@ -3,6 +3,7 @@ import { X, Download, Save, FileSpreadsheet, Edit2, ChevronLeft, ChevronRight } 
 import type { LPOWorkbook, LPOSummary } from '../types';
 import { lpoWorkbookAPI, lpoDocumentsAPI } from '../services/api';
 import LPOSheetView from './LPOSheetView';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface LPOWorkbookProps {
   workbookId?: string | number; // Can be year number or ID
@@ -64,6 +65,10 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
       setLoading(false);
     }
   };
+
+  useRealtimeSync(['lpo_entries', 'lpo_summaries'], () => {
+    fetchWorkbook(workbookId || new Date().getFullYear());
+  });
 
   useEffect(() => {
     if (!workbook?.sheets || activeSheetId === null) return;

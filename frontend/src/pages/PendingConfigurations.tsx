@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { formatDateOnly } from '../utils/timezone';
 import { Lock, Unlock, Save, X, AlertCircle, CheckCircle, Truck, MapPin } from 'lucide-react';
 import { fuelRecordsAPI } from '../services/api';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface LocalFuelRecord {
   id: string;
@@ -43,6 +44,8 @@ export default function PendingConfigurations() {
       setLoading(false);
     }
   };
+
+  useRealtimeSync('fuel_records', loadLockedRecords);
 
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });

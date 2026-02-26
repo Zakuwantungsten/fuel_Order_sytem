@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import Pagination from '../../components/Pagination';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface DriverCredential {
   _id: string;
@@ -73,6 +74,11 @@ const DriverCredentialsManager: React.FC = () => {
   useEffect(() => {
     fetchStats();
   }, []);
+
+  useRealtimeSync('driver_credentials', () => {
+    fetchCredentials();
+    fetchStats();
+  });
 
   useEffect(() => {
     fetchCredentials();

@@ -3,6 +3,7 @@ import { MapPin, Fuel, Bell, Truck, Clock, Navigation, Info, ArrowRight } from '
 import { useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../services/api';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface DriverNotification {
   id: string;
@@ -115,6 +116,10 @@ export function DriverPortal({ user }: DriverPortalProps) {
       setLoading(false);
     }
   };
+
+  useRealtimeSync(['delivery_orders', 'fuel_records'], () => {
+    if (truckNo) fetchDriverData(truckNo);
+  });
 
   const markNotificationRead = (id: string) => {
     setNotifications(prev =>

@@ -8,6 +8,7 @@ import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
+import { emitDataChange } from '../services/websocket';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
@@ -687,6 +688,8 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       message: 'Delivery order created successfully',
       data: deliveryOrder,
     });
+    emitDataChange('delivery_orders', 'create');
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -827,6 +830,9 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       data: deliveryOrder,
       cascadeResults,
     });
+    emitDataChange('delivery_orders', 'update');
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('lpo_entries', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -917,6 +923,8 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       data: deliveryOrder,
       cascadeResults,
     });
+    emitDataChange('delivery_orders', 'update');
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -955,6 +963,8 @@ export const deleteDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       success: true,
       message: 'Delivery order deleted successfully',
     });
+    emitDataChange('delivery_orders', 'delete');
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }

@@ -6,6 +6,7 @@ import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
+import { emitDataChange } from '../services/websocket';
 
 /**
  * Check if a journey is complete based on return checkpoints
@@ -507,6 +508,7 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
         : 'Fuel record created successfully',
       data: fuelRecord,
     });
+    emitDataChange('fuel_records', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -629,6 +631,7 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
         : 'Fuel record updated successfully',
       data: fuelRecord,
     });
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -667,6 +670,7 @@ export const deleteFuelRecord = async (req: AuthRequest, res: Response): Promise
       success: true,
       message: 'Fuel record deleted successfully',
     });
+    emitDataChange('fuel_records', 'delete');
   } catch (error: any) {
     throw error;
   }

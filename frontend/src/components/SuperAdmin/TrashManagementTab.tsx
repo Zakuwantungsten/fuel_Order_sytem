@@ -12,6 +12,7 @@ import {
   Check
 } from 'lucide-react';
 import { trashAPI } from '../../services/api';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface TrashManagementTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -97,6 +98,11 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
       setLoading(false);
     }
   };
+
+  useRealtimeSync(
+    ['fuel_records', 'delivery_orders', 'lpo_entries', 'lpo_summaries', 'users', 'yard_fuel'],
+    () => { loadTrashStats(); loadDeletedItems(); }
+  );
 
   const loadRetentionSettings = async () => {
     try {

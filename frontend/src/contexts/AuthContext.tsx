@@ -257,6 +257,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         role: user.role,
         department: user.department,
         station: (user as any).station,
+        yard: (user as any).yard,
         truckNo: (user as any).truckNo,
         currentDO: (user as any).currentDO,
         isActive: user.isActive,

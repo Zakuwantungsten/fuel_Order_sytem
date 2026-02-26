@@ -4,6 +4,7 @@ import { FuelStationConfig } from '../models/FuelStationConfig';
 import { RouteConfig } from '../models/RouteConfig';
 import { SystemConfig } from '../models/SystemConfig';
 import { AuditLog } from '../models/AuditLog';
+import { emitDataChange } from '../services/websocket';
 
 /**
  * Add cache-busting headers to force immediate frontend refresh
@@ -153,6 +154,8 @@ export const createFuelStation = async (req: AuthRequest, res: Response): Promis
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
+    emitDataChange('fuel_stations', 'create');
+
     res.status(201).json({
       success: true,
       data: station,
@@ -269,6 +272,8 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
+    emitDataChange('fuel_stations', 'update');
+
     res.json({
       success: true,
       data: station,
@@ -313,6 +318,8 @@ export const deleteFuelStation = async (req: AuthRequest, res: Response): Promis
 
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
+
+    emitDataChange('fuel_stations', 'delete');
 
     res.json({
       success: true,
@@ -451,6 +458,8 @@ export const createRoute = async (req: AuthRequest, res: Response): Promise<void
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
+    emitDataChange('routes', 'create');
+
     res.status(201).json({
       success: true,
       data: route,
@@ -502,6 +511,8 @@ export const updateRoute = async (req: AuthRequest, res: Response): Promise<void
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
+    emitDataChange('routes', 'update');
+
     res.json({
       success: true,
       data: route,
@@ -545,6 +556,8 @@ export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void
 
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
+
+    emitDataChange('routes', 'delete');
 
     res.json({
       success: true,

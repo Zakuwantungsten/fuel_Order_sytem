@@ -11,6 +11,7 @@ import {
   Loader2
 } from 'lucide-react';
 import apiClient from '../services/api';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface Checkpoint {
   _id: string;
@@ -90,6 +91,8 @@ const CheckpointManagement = () => {
       setLoading(false);
     }
   };
+
+  useRealtimeSync('checkpoints', fetchCheckpoints);
 
   const showMessage = (message: string, type: 'success' | 'error') => {
     if (type === 'success') {

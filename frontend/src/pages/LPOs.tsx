@@ -3,6 +3,7 @@ import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2 } from 'lucide-react';
 import XLSX from 'xlsx-js-style';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
 import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
 import LPODetailForm from '../components/LPODetailForm';
@@ -398,6 +399,8 @@ const LPOs = () => {
       setLoading(false);
     }
   };
+
+  useRealtimeSync(['lpo_entries', 'lpo_summaries'], fetchLpos);
 
   const fetchWorkbooks = async () => {
     try {

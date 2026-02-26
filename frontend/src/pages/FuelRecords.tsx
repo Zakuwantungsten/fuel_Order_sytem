@@ -10,6 +10,8 @@ import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
 import JourneyStatusBadge from '../components/JourneyStatusBadge';
 import Pagination from '../components/Pagination';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
+import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 // Standard fuel allocations - used to highlight extra fuel (fuel exceeding standard allocation)
 const STANDARD_ALLOCATIONS = {
@@ -362,6 +364,30 @@ const FuelRecords = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, routeFilter, selectedMonth, routeTypeFilter]);
+
+  // Subscribe to real-time yard fuel notifications to auto-refresh the table
+  const fetchRecordsRef = useRef<() => void>();
+  useEffect(() => {
+    fetchRecordsRef.current = fetchRecords;
+  });
+
+  useEffect(() => {
+    subscribeToNotifications((notification) => {
+      if (notification.type === 'yard_fuel_recorded' || notification.type === 'truck_pending_linking') {
+        // Yard fuel was recorded — refresh fuel records table
+        fetchRecordsRef.current?.();
+      }
+    }, 'fuel-records');
+
+    return () => {
+      unsubscribeFromNotifications('fuel-records');
+    };
+  }, []);
+
+  // Real-time sync: refresh when any user modifies fuel records or LPO entries
+  useRealtimeSync(['fuel_records', 'lpo_entries'], () => {
+    fetchRecordsRef.current?.();
+  });
 
   const fetchRecords = async () => {
     try {

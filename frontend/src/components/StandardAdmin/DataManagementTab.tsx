@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { deliveryOrdersAPI, lposAPI, fuelRecordsAPI, doWorkbookAPI, lpoWorkbookAPI } from '../../services/api';
 import { DeliveryOrder, LPOEntry, FuelRecord } from '../../types';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface DataManagementTabProps {
   user: any;
@@ -82,6 +83,8 @@ export default function DataManagementTab({ showMessage }: DataManagementTabProp
       setLoading(false);
     }
   };
+
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_entries'], loadData);
 
   const handleExport = async () => {
     try {

@@ -5,6 +5,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../styles/fleet-tracking.css';
 import apiClient from '../services/api';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface Checkpoint {
   _id: string;
@@ -105,6 +106,8 @@ const FleetTracking = () => {
       return [];
     }
   };
+
+  useRealtimeSync('checkpoints', fetchCheckpoints);
 
   const fetchSnapshots = async () => {
     try {

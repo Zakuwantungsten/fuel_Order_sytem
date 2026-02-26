@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils';
 import { AuditService } from '../utils/auditService';
+import { emitDataChange } from '../services/websocket';
 
 /**
  * Get all checkpoints (ordered by sequence)
@@ -163,6 +164,7 @@ export const createCheckpoint = async (req: AuthRequest, res: Response): Promise
       message: 'Checkpoint created successfully',
       data: checkpoint,
     });
+    emitDataChange('checkpoints', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -219,6 +221,7 @@ export const updateCheckpoint = async (req: AuthRequest, res: Response): Promise
       message: 'Checkpoint updated successfully',
       data: checkpoint,
     });
+    emitDataChange('checkpoints', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -275,6 +278,7 @@ export const deleteCheckpoint = async (req: AuthRequest, res: Response): Promise
       success: true,
       message: 'Checkpoint deleted successfully',
     });
+    emitDataChange('checkpoints', 'delete');
   } catch (error: any) {
     throw error;
   }
@@ -337,6 +341,7 @@ export const reorderCheckpoints = async (req: AuthRequest, res: Response): Promi
       message: 'Checkpoints reordered successfully',
       data: { updated: checkpoints.length },
     });
+    emitDataChange('checkpoints', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -465,6 +470,7 @@ export const seedCheckpoints = async (req: AuthRequest, res: Response): Promise<
       message: `${created.length} checkpoints seeded successfully`,
       data: { checkpoints: created },
     });
+    emitDataChange('checkpoints', 'create');
   } catch (error: any) {
     throw error;
   }

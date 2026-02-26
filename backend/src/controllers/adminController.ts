@@ -6,7 +6,7 @@ import { logger } from '../utils';
 import { databaseMonitor } from '../utils/databaseMonitor';
 import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
-import { emitToUser, emitMaintenanceEvent, emitSecuritySettingsEvent } from '../services/websocket';
+import { emitToUser, emitMaintenanceEvent, emitSecuritySettingsEvent, emitDataChange } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
 import {
   findAffectedUsers,
@@ -207,6 +207,8 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
       message: 'Fuel station updated successfully',
       data: config.fuelStations?.[stationIndex],
     });
+
+    emitDataChange('fuel_stations', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -254,6 +256,8 @@ export const addFuelStation = async (req: AuthRequest, res: Response): Promise<v
       message: 'Fuel station added successfully',
       data: newStation,
     });
+
+    emitDataChange('fuel_stations', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -298,6 +302,8 @@ export const bulkUpdateStationRates = async (req: AuthRequest, res: Response): P
       message: `${updatedCount} fuel stations updated successfully`,
       data: config.fuelStations,
     });
+
+    emitDataChange('fuel_stations', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -375,6 +381,8 @@ export const updateRoute = async (req: AuthRequest, res: Response): Promise<void
       message: 'Route updated successfully',
       data: config.routes?.[routeIndex],
     });
+
+    emitDataChange('routes', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -424,6 +432,8 @@ export const addRoute = async (req: AuthRequest, res: Response): Promise<void> =
       message: 'Route added successfully',
       data: newRoute,
     });
+
+    emitDataChange('routes', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -463,6 +473,8 @@ export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void
       success: true,
       message: 'Route deleted successfully',
     });
+
+    emitDataChange('routes', 'delete');
   } catch (error: any) {
     throw error;
   }

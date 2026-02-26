@@ -33,6 +33,7 @@ import Pagination from './Pagination';
 import ChangePasswordModal from './ChangePasswordModal';
 import NotificationBell from './NotificationBell';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 import XLSX from 'xlsx-js-style';
 
@@ -276,6 +277,8 @@ export function ManagerView({ user }: ManagerViewProps) {
       unsubscribeFromNotifications('manager');
     };
   }, [fetchLPOEntries]);
+
+  useRealtimeSync('lpo_entries', () => fetchLPOEntries(true));
 
   // Close dropdown when clicking outside
   useEffect(() => {

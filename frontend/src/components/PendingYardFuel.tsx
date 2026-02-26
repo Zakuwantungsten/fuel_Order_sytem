@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Truck, AlertTriangle, X, CheckCircle } from 'lucide-react';
 import { yardFuelService } from '../services/yardFuelService';
 import { toast } from 'react-toastify';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface PendingYardFuelProps {
   onClose: () => void;
@@ -30,6 +31,8 @@ export default function PendingYardFuel({ onClose }: PendingYardFuelProps) {
       setLoading(false);
     }
   };
+
+  useRealtimeSync('yard_fuel', loadPendingEntries);
 
   const handleReject = async () => {
     if (!selectedEntry || !rejectReason.trim()) {

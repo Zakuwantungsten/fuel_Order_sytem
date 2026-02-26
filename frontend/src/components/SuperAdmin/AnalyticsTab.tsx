@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { TrendingUp, BarChart, Download, TrendingDown, DollarSign, Fuel, Truck, Activity, RefreshCw, ChevronDown, Check } from 'lucide-react';
 import { analyticsAPI } from '../../services/api';
 import { DashboardAnalytics } from '../../types';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface AnalyticsTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -44,6 +45,11 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
       setLoading(false);
     }
   };
+
+  useRealtimeSync(
+    ['fuel_records', 'delivery_orders', 'lpo_entries', 'yard_fuel'],
+    loadAnalytics
+  );
 
   const handleExport = async (reportType: 'revenue' | 'fuel' | 'user-activity' | 'comprehensive') => {
     try {

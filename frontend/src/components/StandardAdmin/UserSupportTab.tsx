@@ -11,6 +11,7 @@ import { usersAPI } from '../../services/api';
 import { User } from '../../types';
 import Pagination from '../Pagination';
 import { SuperAdminCreateUserModal } from '../SuperAdmin/UserManagementTab';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface UserSupportTabProps {
   user: any;
@@ -45,6 +46,8 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
       setLoading(false);
     }
   };
+
+  useRealtimeSync('users', loadUsers);
 
   const handleToggleStatus = async (userId: string) => {
     try {

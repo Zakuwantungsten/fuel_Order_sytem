@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle, Clock, TrendingUp } from 'lucide-react';
 import { yardFuelService } from '../services/yardFuelService';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface PendingYardFuelAlert {
   truckNo: string;
@@ -65,6 +66,8 @@ export default function YardFuelAlertWidget({ onViewDetails }: YardFuelAlertWidg
       setLoading(false);
     }
   };
+
+  useRealtimeSync('yard_fuel', loadPendingEntries);
 
   // Don't show widget if no pending entries
   if (!loading && stats.total === 0) {

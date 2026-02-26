@@ -17,6 +17,7 @@ import {
   Download,
 } from 'lucide-react';
 import { systemAdminAPI, trashAPI } from '../services/api';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import DatabaseMonitorTab from './SuperAdmin/DatabaseMonitorTab';
 import UserManagementTab from './SuperAdmin/UserManagementTab';
 import FuelStationsTab from './SuperAdmin/FuelStationsTab';
@@ -71,6 +72,11 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
       setLoading(false);
     }
   };
+
+  useRealtimeSync(
+    ['fuel_records', 'delivery_orders', 'lpo_entries', 'users', 'yard_fuel'],
+    loadData
+  );
 
   const showMessage = (type: 'success' | 'error', message: string) => {
     if (type === 'success') {

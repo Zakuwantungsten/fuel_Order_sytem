@@ -7,6 +7,7 @@ import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
+import { emitDataChange } from '../services/websocket';
 
 // Dynamic station to fuel field mapping cache
 let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
@@ -1046,6 +1047,8 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       message: 'LPO document created successfully',
       data: { ...responseData, id: responseData._id },
     });
+    emitDataChange('lpo_summaries', 'create');
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -1351,6 +1354,9 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       message: 'LPO document updated successfully',
       data: { ...responseData, id: responseData._id },
     });
+    emitDataChange('lpo_summaries', 'update');
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('lpo_entries', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -1400,6 +1406,9 @@ export const deleteLPOSummary = async (req: AuthRequest, res: Response): Promise
       success: true,
       message: 'LPO document deleted successfully',
     });
+    emitDataChange('lpo_summaries', 'delete');
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('lpo_entries', 'update');
   } catch (error: any) {
     throw error;
   }

@@ -4,6 +4,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
 import { AuditService } from '../utils/auditService';
+import { emitDataChange } from '../services/websocket';
 
 /**
  * Get all yard fuel dispenses with pagination and filters
@@ -92,7 +93,7 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
       req.body.truckNo = formatTruckNumber(req.body.truckNo);
     }
     
-    // Auto-detect yard based on user role
+    // Auto-detect yard based on user role or user profile
     let yard = req.body.yard;
     const userRole = req.user?.role;
     
@@ -102,6 +103,13 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
       yard = 'TANGA YARD';
     } else if (userRole === 'mmsa_yard') {
       yard = 'MMSA YARD';
+    } else if (userRole === 'yard_personnel' && !yard) {
+      // Yard personnel have yard assigned on their user profile
+      const { User } = require('../models');
+      const userDoc = await User.findById(req.user?.userId).select('yard').lean();
+      if (userDoc?.yard) {
+        yard = userDoc.yard;
+      }
     }
 
     const yardFuelDispense = await YardFuelDispense.create({
@@ -266,6 +274,8 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
         linkedInfo,
       },
     });
+    emitDataChange('yard_fuel', 'create');
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -308,6 +318,7 @@ export const updateYardFuelDispense = async (req: AuthRequest, res: Response): P
       message: 'Yard fuel dispense updated successfully',
       data: yardFuelDispense,
     });
+    emitDataChange('yard_fuel', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -348,6 +359,7 @@ export const deleteYardFuelDispense = async (req: AuthRequest, res: Response): P
       success: true,
       message: 'Yard fuel dispense deleted successfully',
     });
+    emitDataChange('yard_fuel', 'delete');
   } catch (error: any) {
     throw error;
   }
@@ -590,6 +602,7 @@ export const rejectYardFuelDispense = async (req: AuthRequest, res: Response): P
         rejectionReason,
       },
     });
+    emitDataChange('yard_fuel', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -738,6 +751,8 @@ export const linkPendingYardFuelToFuelRecord = async (
         })),
       },
     });
+    emitDataChange('yard_fuel', 'update');
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }

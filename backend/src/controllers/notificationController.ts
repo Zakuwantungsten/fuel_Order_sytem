@@ -527,7 +527,7 @@ export const createYardFuelRecordedNotification = async (
       message += ` Note: ${metadata.notes}`;
     }
 
-    await Notification.create({
+    const notification = await Notification.create({
       type: 'yard_fuel_recorded',
       title,
       message,
@@ -545,6 +545,24 @@ export const createYardFuelRecordedNotification = async (
       recipients: ['fuel_order_maker'],
       createdBy,
     });
+
+    // Emit real-time WebSocket notification
+    try {
+      emitNotification(['fuel_order_maker'], {
+        id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        relatedModel: notification.relatedModel,
+        relatedId: notification.relatedId,
+        metadata: notification.metadata,
+        status: notification.status,
+        createdAt: notification.createdAt,
+        isRead: false,
+      });
+    } catch (wsError) {
+      logger.error('Failed to emit yard fuel WebSocket notification:', wsError);
+    }
 
     logger.info(`Created yard fuel recorded notification for truck ${metadata.truckNo} (${metadata.status})`);
   } catch (error) {
@@ -575,7 +593,7 @@ export const createTruckPendingLinkingNotification = async (
       message += ` Note: ${metadata.notes}`;
     }
 
-    await Notification.create({
+    const notification = await Notification.create({
       type: 'truck_pending_linking',
       title,
       message,
@@ -592,6 +610,24 @@ export const createTruckPendingLinkingNotification = async (
       recipients: ['fuel_order_maker'],
       createdBy,
     });
+
+    // Emit real-time WebSocket notification
+    try {
+      emitNotification(['fuel_order_maker'], {
+        id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        relatedModel: notification.relatedModel,
+        relatedId: notification.relatedId,
+        metadata: notification.metadata,
+        status: notification.status,
+        createdAt: notification.createdAt,
+        isRead: false,
+      });
+    } catch (wsError) {
+      logger.error('Failed to emit pending linking WebSocket notification:', wsError);
+    }
 
     logger.info(`Created truck pending linking notification for truck ${metadata.truckNo}`);
   } catch (error) {

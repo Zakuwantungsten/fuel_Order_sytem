@@ -4,6 +4,7 @@ import { Truck, Search, ArrowRight, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../services/api';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface TruckSelection {
   truckNo: string;
@@ -46,6 +47,8 @@ const TruckSelection: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useRealtimeSync('delivery_orders', fetchTrucks);
 
   const handleTruckSelect = (truckNo: string) => {
     // Store truck number in localStorage for driver session

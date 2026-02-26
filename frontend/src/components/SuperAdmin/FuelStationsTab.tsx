@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-react';
 import { configAPI } from '../../services/api';
 import { FuelStationConfig, FuelRecordFieldOption } from '../../types';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface FuelStationsTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -37,7 +38,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   useEffect(() => {
     loadData();
   }, []);
-  
+
   // Click outside detection
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -66,6 +67,8 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
       onMessage('error', error.response?.data?.message || 'Failed to load fuel stations');
     }
   };
+
+  useRealtimeSync('fuel_stations', loadData);
 
   const handleCreateStation = async () => {
     try {

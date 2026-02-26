@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import ChangePasswordModal from './ChangePasswordModal';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 // Real-time update interval (30 seconds)
 const REALTIME_UPDATE_INTERVAL = 30000;
@@ -335,6 +336,10 @@ export function DriverPortal({ user }: DriverPortalProps) {
       setLoading(false);
     }
   }, [user.truckNo, fetchDriverData, isOnline]);
+
+  useRealtimeSync(['delivery_orders', 'fuel_records', 'lpo_entries'], () => {
+    if (user.truckNo) fetchDriverData(user.truckNo, true);
+  });
 
   const handleManualRefresh = () => {
     if (user.truckNo && isOnline) {

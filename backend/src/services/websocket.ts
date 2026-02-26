@@ -296,10 +296,24 @@ export const emitSecuritySettingsEvent = (settings: {
   logger.info('Security settings event broadcasted to super_admin role');
 };
 
+/**
+ * Broadcast a data change event to all connected clients.
+ * Used for real-time cache invalidation — when any user creates/updates/deletes
+ * data, all other connected clients viewing that collection will silently re-fetch.
+ */
+export const emitDataChange = (
+  collection: string,
+  action: 'create' | 'update' | 'delete' = 'update'
+): void => {
+  if (!io) return;
+  io.emit('data_changed', { collection, action, timestamp: Date.now() });
+};
+
 export default {
   initializeWebSocket,
   emitNotification,
   emitToAll,
+  emitDataChange,
   getConnectedUsersCount,
   isUserConnected,
   emitToUser,

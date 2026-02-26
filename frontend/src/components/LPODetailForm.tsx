@@ -3,7 +3,9 @@ import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTria
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
-import { useActiveFuelStations } from '../hooks/useFuelStations';
+import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { 
   getAvailableCancellationPoints, 
   getCancellationPointDisplayName,
@@ -406,8 +408,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   };
 
   // Load stations from database using React Query
+  const queryClient = useQueryClient();
   const { data: fuelStations, isLoading: loadingStations } = useActiveFuelStations();
   const availableStations: FuelStationConfig[] = fuelStations || [];
+
+  // Real-time sync: invalidate React Query cache when stations change
+  const invalidateStations = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: fuelStationKeys.all });
+    queryClient.invalidateQueries({ queryKey: fuelStationKeys.active });
+  }, [queryClient]);
+  useRealtimeSync('fuel_stations', invalidateStations);
 
   // Check for existing draft on mount and when modal opens
   useEffect(() => {

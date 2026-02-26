@@ -3,6 +3,7 @@ import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle } 
 import { LPOEntry, DriverAccountEntry } from '../types';
 import { driverAccountAPI } from '../services/api';
 import XLSX from 'xlsx-js-style';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 // Helper to derive currency from station name
 const getCurrencyFromStation = (station: string): 'USD' | 'TZS' => {
@@ -118,6 +119,8 @@ const LPOSummary = ({
       setLoadingDriverAccounts(false);
     }
   };
+
+  useRealtimeSync('lpo_entries', fetchDriverAccountEntries);
 
   // Combined entries (regular LPOs + driver account LPOs)
   const combinedEntries: ExtendedLPOEntry[] = [
