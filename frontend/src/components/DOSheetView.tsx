@@ -193,7 +193,9 @@ const DOSheetView = ({ order, preparedBy }: DOSheetViewProps) => {
             </div>
           </div>
           <div className="text-center font-bold text-lg p-3 text-gray-800">
-            ${order.ratePerTon} PER TON
+            {order.rateType === 'fixed_total'
+              ? `$${(order.totalAmount ?? order.ratePerTon ?? 0).toLocaleString()} FIXED TOTAL`
+              : `$${order.ratePerTon} PER TON`}
           </div>
         </div>
 

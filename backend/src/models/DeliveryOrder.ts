@@ -195,8 +195,8 @@ deliveryOrderSchema.pre('save', function(next) {
     this.totalAmount = (this.tonnages || 0) * (this.ratePerTon || 0);
   } else if (this.rateType === 'fixed_total') {
     this.totalAmount = this.ratePerTon || 0;
-    // For fixed total, set tonnages to 0 if not provided
-    if (!this.tonnages) {
+    // For fixed total, keep tonnages as provided (tonnages is a physical fact)
+    if (this.tonnages == null) {
       this.tonnages = 0;
     }
   } else {
