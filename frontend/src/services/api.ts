@@ -1066,7 +1066,8 @@ export const driverAccountAPI = {
   // Get all entries with optional filters
   getAll: async (filters?: { year?: number; month?: string; truckNo?: string; status?: string }): Promise<DriverAccountEntry[]> => {
     const response = await apiClient.get('/driver-accounts', { params: filters });
-    return response.data.data?.data || response.data.data || [];
+    const entries = response.data.data?.data || response.data.data || [];
+    return entries.map((e: any) => ({ ...e, id: e.id || e._id }));
   },
 
   // Get available years
@@ -1085,7 +1086,7 @@ export const driverAccountAPI = {
       // Convert backend response to DriverAccountWorkbook format
       const allEntries: DriverAccountEntry[] = [];
       Object.values(data.entriesByMonth as Record<string, any[]>).forEach(monthEntries => {
-        allEntries.push(...monthEntries);
+        allEntries.push(...monthEntries.map((e: any) => ({ ...e, id: e.id || e._id })));
       });
       
       return {
