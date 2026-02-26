@@ -344,26 +344,33 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   };
 
   // Convert driver account entry to LPO Summary format for image/PDF generation
+  // Bundles all entries with the same LPO number together
   const convertToLPOSummary = (entry: DriverAccountEntry): LPOSummary => {
-    // Parse date for formatting
     const entryDate = new Date(entry.date);
-    const formattedDate = entryDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const formattedDate = entryDate.toISOString().split('T')[0];
+
+    // Find all entries sharing the same LPO number
+    const sameLpoEntries = (workbook?.entries || []).filter(e => e.lpoNo === entry.lpoNo);
     
+    const entries = sameLpoEntries.map(e => ({
+      doNo: 'NIL',
+      truckNo: e.truckNo,
+      liters: e.liters,
+      rate: e.rate,
+      amount: e.amount,
+      dest: 'NIL',
+      isDriverAccount: true
+    }));
+
+    const total = entries.reduce((sum, e) => sum + e.amount, 0);
+
     return {
       lpoNo: entry.lpoNo,
       date: formattedDate,
       station: entry.station,
       orderOf: 'DRIVER ACCOUNT',
-      entries: [{
-        doNo: 'NIL',
-        truckNo: entry.truckNo,
-        liters: entry.liters,
-        rate: entry.rate,
-        amount: entry.amount,
-        dest: 'NIL',
-        isDriverAccount: true
-      }],
-      total: entry.amount
+      entries,
+      total
     };
   };
 
