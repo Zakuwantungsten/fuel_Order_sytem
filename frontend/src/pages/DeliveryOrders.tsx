@@ -1941,11 +1941,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           </p>
                         </div>
                         <div>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">Tonnage / Rate:</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Tonnage:</span>
                           <p className={`font-medium ${order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                            {order.rateType === 'fixed_total'
-                              ? <><span className="px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">Fixed ${(order.totalAmount ?? order.ratePerTon ?? 0).toLocaleString()}</span>{order.tonnages ? <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">&middot; {order.tonnages} tons</span> : null}</>
-                              : `${order.tonnages ?? 0} tons`}
+                            {order.tonnages ?? 0} tons
                           </p>
                         </div>
                       </div>
@@ -2069,9 +2067,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                           }`}>
-                            {order.rateType === 'fixed_total'
-                              ? <><span className="px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">Fixed ${(order.totalAmount ?? order.ratePerTon ?? 0).toLocaleString()}</span>{order.tonnages ? <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">&middot; {order.tonnages}t</span> : null}</>
-                              : `${order.tonnages ?? 0} tons`}
+                            {order.tonnages ?? 0} tons
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs font-medium">
                             {!order.isCancelled && (
