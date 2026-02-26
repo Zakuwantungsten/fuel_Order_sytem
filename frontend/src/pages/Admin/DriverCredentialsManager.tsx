@@ -231,8 +231,8 @@ const DriverCredentialsManager: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div className="flex items-center space-x-3">
-          <Key className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Driver Credentials Manager</h1>
+          <Key className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600 dark:text-indigo-400" />
+          <h1 className="text-xl sm:text-3xl font-bold text-gray-800 dark:text-gray-100">Driver Credentials Manager</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -345,8 +345,76 @@ const DriverCredentialsManager: React.FC = () => {
         </div>
       )}
 
-      {/* Credentials Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      {/* Credentials - Mobile Cards */}
+      <div className="md:hidden space-y-3">
+        {loading && credentials.length === 0 ? (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow px-6 py-12 text-center">
+            <Loader className="w-8 h-8 animate-spin mx-auto text-indigo-600" />
+          </div>
+        ) : credentials.length === 0 ? (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+            No driver credentials found. Click "Scan for New Trucks" to get started.
+          </div>
+        ) : (
+          credentials.map((credential) => (
+            <div key={credential._id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-900 dark:text-gray-100 text-base">{credential.truckNo}</span>
+                <div className="flex items-center gap-1">
+                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                    credential.isActive
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
+                  }`}>
+                    {credential.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Driver</span>
+                  <div className="text-gray-900 dark:text-gray-100 mt-0.5">{credential.driverName || 'Not set'}</div>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Created By</span>
+                  <div className="text-gray-900 dark:text-gray-100 mt-0.5">{credential.createdBy || 'System'}</div>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Created</span>
+                  <div className="text-gray-900 dark:text-gray-100 mt-0.5">{formatDateOnly(credential.createdAt)}</div>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Last Login</span>
+                  <div className="text-gray-900 dark:text-gray-100 mt-0.5">{credential.lastLogin ? formatDateOnly(credential.lastLogin) : 'Never'}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-700">
+                <button
+                  onClick={() => setResetDialog({ open: true, credential })}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded-lg transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset PIN</span>
+                </button>
+                <button
+                  onClick={() => handleToggleStatus(credential)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-lg transition-colors ${
+                    credential.isActive
+                      ? 'text-red-600 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
+                      : 'text-green-600 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30'
+                  }`}
+                >
+                  {credential.isActive ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                  <span>{credential.isActive ? 'Deactivate' : 'Reactivate'}</span>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Credentials - Desktop Table */}
+      <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">

@@ -231,7 +231,67 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
+      {/* Mobile Cards */}
+      <div className="md:hidden space-y-3">
+        {stations.map((station) => (
+          <div key={String(station._id)} className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{station.stationName}</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => openStationModal(station)} className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => handleDeleteStation(station._id)} className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Rate</span>
+                <div className="text-gray-900 dark:text-gray-100 mt-0.5">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mr-1 ${
+                    (station.currency || 'TZS') === 'USD'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                  }`}>{station.currency || 'TZS'}</span>
+                  {station.defaultRate}
+                </div>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Fills Column</span>
+                <div className="mt-0.5 text-xs">
+                  {station.fuelRecordFieldGoing && (
+                    <div className="text-green-600 dark:text-green-400">↑ {station.fuelRecordFieldGoing}</div>
+                  )}
+                  {station.fuelRecordFieldReturning && (
+                    <div className="text-blue-600 dark:text-blue-400">↓ {station.fuelRecordFieldReturning}</div>
+                  )}
+                  {!station.fuelRecordFieldGoing && !station.fuelRecordFieldReturning && (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Going (L)</span>
+                <div className="text-gray-900 dark:text-gray-100 mt-0.5 font-medium">{station.defaultLitersGoing}</div>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Returning (L)</span>
+                <div className="text-gray-900 dark:text-gray-100 mt-0.5 font-medium">{station.defaultLitersReturning}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {stations.length === 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+            No fuel stations configured. Add existing stations like Lake Kapiri, Infinity, etc.
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Table */}
+      <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
@@ -302,7 +362,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., LAKE KAPIRI" />
                   <p className="mt-1 text-xs text-gray-500">Physical fuel station name (e.g., Lake Kapiri, Infinity, GBP Morogoro)</p>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rate (per Liter) *</label>
                     <input type="number" value={stationForm.defaultRate} onChange={(e) => setStationForm({ ...stationForm, defaultRate: e.target.value })}

@@ -214,7 +214,71 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
+      {/* Mobile Cards */}
+      <div className="md:hidden space-y-3">
+        {routes.map((route) => (
+          <div key={String(route._id)} className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{route.routeName}</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => openRouteModal(route)} className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => handleDeleteRoute(route._id)} className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="text-sm">
+              {route.origin ? (
+                <span className="flex items-center gap-1">
+                  <span className="font-medium text-green-600 dark:text-green-400">{route.origin}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="font-medium text-blue-600 dark:text-blue-400">{route.destination}</span>
+                </span>
+              ) : (
+                <span className="font-medium text-blue-600 dark:text-blue-400">{route.destination}</span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Type</span>
+                <div className="text-gray-900 dark:text-gray-100 mt-0.5 font-medium">{route.routeType || 'IMPORT'}</div>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Default Liters</span>
+                <div className="text-gray-900 dark:text-gray-100 mt-0.5 font-medium">{route.defaultTotalLiters} L</div>
+              </div>
+            </div>
+            {route.destinationAliases && route.destinationAliases.length > 0 && (
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Aliases</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {route.destinationAliases.map((alias, idx) => (
+                    <span key={idx} className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded text-xs">
+                      {alias}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {route.description && (
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">Description</span>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{route.description}</p>
+              </div>
+            )}
+          </div>
+        ))}
+        {routes.length === 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+            No routes configured.
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Table */}
+      <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
@@ -292,7 +356,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Dar to Kolwezi Route" />
                   <p className="mt-1 text-xs text-gray-500">Descriptive name for this route</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Starting Point (Origin) *</label>
                     <input type="text" value={routeForm.origin} onChange={(e) => setRouteForm({ ...routeForm, origin: e.target.value })}
@@ -312,7 +376,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., DSM, DAR (comma-separated)" />
                   <p className="mt-1 text-xs text-gray-500">Alternative names for destination (e.g., "DSM, DAR" for Dar es Salaam)</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="relative" ref={routeTypeDropdownRef}>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Route Type *</label>
                     <button
