@@ -838,6 +838,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         } else {
           console.log(`SDO ${savedOrder.doNumber} created - skipping fuel record operations`);
         }
+
+        // Reset month filter to current month so the newly created DO is visible
+        const now = new Date();
+        setSelectedPeriods([{ year: now.getFullYear(), month: now.getMonth() + 1 }]);
       }
       
       console.log('Reloading orders...');
