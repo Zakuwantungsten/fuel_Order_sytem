@@ -1,8 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, subscribeToSessionEvents, unsubscribeFromSessionEvents } from '../services/websocket';
+import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, subscribeToSessionEvents, unsubscribeFromSessionEvents, subscribeToReconnect, unsubscribeFromReconnect } from '../services/websocket';
+
+// Convert URL-safe base64 VAPID key to Uint8Array required by pushManager.subscribe
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const output = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) output[i] = rawData.charCodeAt(i);
+  return output;
+}
 
 interface Notification {
   id?: string;
@@ -61,44 +71,43 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
   const [pendingYardFuelCount, setPendingYardFuelCount] = useState(0);
   const [dismissingAll, setDismissingAll] = useState(false);
 
-  // Helper function to tailor notification message based on viewer's role
-  const getTailoredMessage = (notification: Notification): string => {
-    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-    
-    // Only tailor messages for missing configuration notifications
-    if (notification.type === 'missing_total_liters' || notification.type === 'missing_extra_fuel' || notification.type === 'both') {
-      if (isAdmin) {
-        // Admin sees action-oriented message
-        const destination = notification.metadata?.destination;
-        const truckSuffix = notification.metadata?.truckSuffix;
-        const truckNo = notification.metadata?.truckNo;
-        
-        if (notification.type === 'missing_total_liters') {
-          return `Route "${destination}" needs configuration. Add it in System Config > Routes.`;
-        } else if (notification.type === 'missing_extra_fuel') {
-          return `Truck ${truckNo} suffix "${truckSuffix}" needs batch assignment. Go to System Config > Truck Batches.`;
-        } else if (notification.type === 'both') {
-          return `Add route total liters and truck batch in System Configuration.`;
-        }
-      } else {
-        // Fuel order maker sees helpful message with action items
-        const destination = notification.metadata?.destination;
-        const truckSuffix = notification.metadata?.truckSuffix;
-        const truckNo = notification.metadata?.truckNo;
-        
-        if (notification.type === 'missing_total_liters') {
-          return `Route "${destination}" is not configured. Contact admin or click to edit manually.`;
-        } else if (notification.type === 'missing_extra_fuel') {
-          return `Truck ${truckNo} (suffix: ${truckSuffix}) needs batch assignment. Contact admin or click to edit manually.`;
-        } else if (notification.type === 'both') {
-          return `${truckNo} needs route & batch config. Contact admin or click to edit manually.`;
-        }
-      }
-    }
-    
-    // Return original message for other notification types
-    return notification.message;
-  };
+  // Pre-load the notification sound once so it's ready to play instantly
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUnlockedRef = useRef(false);
+
+  useEffect(() => {
+    const audio = new Audio('/notification.mp3');
+    audio.volume = 0.3;
+    audio.preload = 'auto';
+    audioRef.current = audio;
+
+    // Keep trying to unlock on every interaction until it succeeds.
+    // { once: true } would stop after the first attempt even if it failed.
+    const unlockAudio = () => {
+      if (audioUnlockedRef.current) return;
+      audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audioUnlockedRef.current = true;
+        // Self-remove once unlocked so we don't hold references
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('keydown', unlockAudio);
+        document.removeEventListener('touchstart', unlockAudio);
+      }).catch(() => { /* browser hasn't granted autoplay yet — try again next interaction */ });
+    };
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('keydown', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
+
+  // The backend now sends the correct message for each recipient role, so we
+  // display it directly. The helper remains for backward-compat with older DB records.
+  const getTailoredMessage = (notification: Notification): string => notification.message;
 
   useEffect(() => {
     loadNotifications();
@@ -126,8 +135,15 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
           // Play notification sound
           playNotificationSound();
           
-          // Show browser push notification
+          // Show in-tab browser notification (falls back gracefully if denied)
           showBrowserNotification(notification);
+        }, 'bell');
+
+        // Reload notifications from the DB whenever the socket reconnects.
+        // This catches any notifications that arrived while the connection was down.
+        subscribeToReconnect(() => {
+          console.log('[NotificationBell] WebSocket reconnected — reloading notifications from DB');
+          loadNotifications();
         }, 'bell');
 
         // Subscribe to session management events from the server.
@@ -165,53 +181,101 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     return () => {
       unsubscribeFromNotifications('bell');
       unsubscribeFromSessionEvents();
+      unsubscribeFromReconnect('bell');
     };
   }, []);
 
-  // Request browser notification permission on mount
+  // Request browser notification permission on mount, register/sync push subscription,
+  // and re-sync whenever the tab becomes visible (at most once every 5 minutes).
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().then(permission => {
-        console.log('[NotificationBell] Browser notification permission:', permission);
-      });
-    }
+    if (!('Notification' in window)) return;
+
+    // Tracks the last time we successfully POSTed a subscription to the backend.
+    // Prevents the visibilitychange listener from firing a sync on every tab switch.
+    let lastSyncMs = 0;
+    const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+    const registerPush = async (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastSyncMs < SYNC_INTERVAL_MS) return; // throttle
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        // Fetch VAPID public key from backend
+        const keyRes = await api.get('/notifications/vapid-public-key');
+        const vapidPublicKey: string = keyRes.data?.publicKey;
+        if (!vapidPublicKey) return;
+
+        // Reuse an existing subscription or create a new one
+        let subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+          });
+        }
+
+        // Sync to backend — the server upserts by endpoint so this is idempotent.
+        await api.post('/notifications/push-subscribe', subscription.toJSON());
+        lastSyncMs = Date.now();
+        console.log('[NotificationBell] Push subscription synced with backend');
+      } catch (err) {
+        console.log('[NotificationBell] Push subscription failed (non-critical):', err);
+      }
+    };
+
+    const tryRegister = (force = false) => {
+      if (Notification.permission === 'granted') {
+        registerPush(force);
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().then((permission) => {
+          console.log('[NotificationBell] Browser notification permission:', permission);
+          if (permission === 'granted') registerPush(true);
+        });
+      }
+    };
+
+    // Force-sync on first mount
+    tryRegister(true);
+
+    // Re-sync on tab focus, but respect the 5-minute throttle so switching
+    // tabs quickly doesn't generate a burst of API requests.
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') tryRegister();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
-  // Play notification sound
+  // Play notification sound using the pre-loaded audio element
   const playNotificationSound = () => {
     try {
-      const audio = new Audio('/notification.mp3');
-      audio.volume = 0.3;
-      audio.play().catch((error) => {
-        // Browser might block autoplay
-        console.log('[NotificationBell] Notification sound blocked:', error);
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.currentTime = 0;
+      audio.play().catch((err) => {
+        console.log('[NotificationBell] Sound autoplay blocked (user interaction needed first):', err.message);
       });
     } catch (error) {
       console.error('[NotificationBell] Error playing sound:', error);
     }
   };
 
-  // Show browser push notification
+  // Show an in-tab browser notification (shown when the tab is active or backgrounded).
+  // Off-tab push notifications are handled by the service worker independently.
   const showBrowserNotification = (notification: any) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        const browserNotification = new Notification(notification.title || 'New Notification', {
-          body: notification.message,
+        const n = new Notification(notification.title || 'New Notification', {
+          body: (notification.message || '').split('\n')[0], // Show first line as body
           icon: '/favicon.ico',
           badge: '/favicon.ico',
-          tag: notification.id,
+          tag: notification.id || notification._id,
           requireInteraction: false,
           silent: false,
         });
-
-        browserNotification.onclick = () => {
-          window.focus();
-          browserNotification.close();
-          // Optionally open notifications page or mark as read
-        };
-
-        // Auto-close after 10 seconds
-        setTimeout(() => browserNotification.close(), 10000);
+        n.onclick = () => { window.focus(); n.close(); };
+        setTimeout(() => n.close(), 10000);
       } catch (error) {
         console.error('[NotificationBell] Error showing browser notification:', error);
       }

@@ -63,14 +63,19 @@ export const generalRateLimiter = rateLimit({
 });
 
 /**
- * Data endpoints rate limiter (standard traffic)
+ * Data endpoints rate limiter (standard traffic).
+ * This SPA makes 20-40 parallel requests on every page load, so the per-IP
+ * ceiling must be high enough for a legitimate user navigating normally.
+ * 500 req/min gives comfortable headroom while still blocking automated abuse.
+ * Configurable via API_RATE_LIMIT_MAX env var (default 500).
  */
 export const apiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 req/min
+  max: parseInt(process.env.API_RATE_LIMIT_MAX || '500', 10),
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: false,
 });
 
 /**

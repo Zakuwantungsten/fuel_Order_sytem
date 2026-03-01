@@ -3,8 +3,9 @@ import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
 import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
-import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
+import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, adminAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
+import { configService } from '../services/configService';
 import DODetailModal from '../components/DODetailModal';
 import DOForm from '../components/DOForm';
 import BulkDOForm from '../components/BulkDOForm';
@@ -921,8 +922,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         }
       }
       
+      // Always fetch fresh routes and truck-batch data from the server at the
+      // moment of creation.  The React Query cache has a 5-minute stale time,
+      // so it may not reflect routes/batches added or removed since page load.
+      // A false-positive match here would create the fuel record with isLocked:false
+      // and silently skip the notification — which is exactly the reported bug.
+      const [freshRoutes, freshBatches] = await Promise.all([
+        configService.getRoutes(true), // forceRefresh=true bypasses the service cache
+        adminAPI.getTruckBatches(),    // always a live API call
+      ]);
+
       // Get total liters from API data (NOT localStorage)
-      const destinationMatch = getTotalLitersFromRoutes(routes, deliveryOrder.destination);
+      const destinationMatch = getTotalLitersFromRoutes(freshRoutes, deliveryOrder.destination);
       let totalLiters: number | null = destinationMatch.matched ? destinationMatch.liters : null;
       let missingTotalLiters = !destinationMatch.matched;
       
@@ -939,7 +950,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       // Pass destination to support destination-based fuel rules
       const truckBatchInfo = getExtraFuelFromBatches(
         deliveryOrder.truckNo,
-        truckBatches,
+        freshBatches,
         deliveryOrder.destination
       );
       let extraFuel: number | null = truckBatchInfo.matched ? truckBatchInfo.extraFuel : null;

@@ -51,6 +51,12 @@ export const config = {
 
   // System Timezone
   timezone: process.env.TZ || 'Africa/Nairobi',
+
+  // Web Push (VAPID) — used for browser push notifications
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
+  // Accept either VAPID_SUBJECT (new) or VAPID_EMAIL (legacy) from .env
+  vapidEmail: process.env.VAPID_SUBJECT || process.env.VAPID_EMAIL || 'mailto:admin@fuelorder.local',
 };
 
 // Validate required environment variables

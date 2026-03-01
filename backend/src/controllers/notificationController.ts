@@ -2,9 +2,45 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Notification } from '../models/Notification';
 import { FuelRecord } from '../models/FuelRecord';
+import { PushSubscription } from '../models/PushSubscription';
 import { ApiError } from '../middleware/errorHandler';
+import { config } from '../config';
 import logger from '../utils/logger';
 import { emitNotification } from '../services/websocket';
+import { sendPushToRecipients } from '../services/pushNotificationService';
+
+// Helper: build the clean notification message used for config-missing alerts
+function buildConfigMessage(
+  type: 'both' | 'missing_total_liters' | 'missing_extra_fuel',
+  metadata: { doNumber: string; truckNo: string; destination?: string; truckSuffix?: string }
+): string {
+  const actionLine =
+    type === 'both'
+      ? 'Add route total liters and truck batch in System Configuration.'
+      : type === 'missing_total_liters'
+      ? 'Add route total liters in System Configuration.'
+      : 'Add truck batch assignment in System Configuration.';
+
+  const now = new Date();
+  // Format: DD/MM/YYYY, HH:MM:SS
+  const timestamp = now.toLocaleString('en-GB', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+
+  const lines = [
+    actionLine,
+    '',
+    `DO: ${metadata.doNumber}`,
+    `Truck: ${metadata.truckNo}`,
+  ];
+  if (metadata.destination) lines.push(`Destination: ${metadata.destination}`);
+  if (metadata.truckSuffix) lines.push(`Suffix: ${metadata.truckSuffix}`);
+  lines.push(timestamp);
+
+  return lines.join('\n');
+}
 
 /**
  * Get all notifications for the current user
@@ -224,183 +260,86 @@ export const createMissingConfigNotification = async (
   creatorUserId?: string
 ): Promise<void> => {
   try {
-    const type =
+    const type: 'both' | 'missing_total_liters' | 'missing_extra_fuel' =
       missingFields.length === 2
         ? 'both'
         : missingFields.includes('totalLiters')
         ? 'missing_total_liters'
         : 'missing_extra_fuel';
 
-    const isAdminCreator = creatorRole === 'admin' || creatorRole === 'super_admin';
-    
-    // Create TWO notifications: one for the creator, one for admins
-    // This ensures both parties get appropriate messages
+    // Title: same clean format for both creator and admin
+    const title =
+      type === 'missing_extra_fuel'
+        ? `Add Truck Batch: ${metadata.truckSuffix || metadata.doNumber}`
+        : `New Configuration Needed: ${metadata.doNumber}`;
 
-    if (isAdminCreator) {
-      // Admin created this - send action-oriented message to admin
-      const title = type === 'both'
-        ? `Action Required: Add Configuration for ${metadata.doNumber}`
-        : type === 'missing_total_liters'
-        ? `Action Required: Add Route Configuration`
-        : `Action Required: Add Truck Batch`;
-      
-      const message = type === 'both'
-        ? `You need to add route total liters and truck batch configuration for ${metadata.truckNo}. The fuel record has been locked until configuration is complete.`
-        : type === 'missing_total_liters'
-        ? `You need to add total liters configuration for route "${metadata.destination}". Please go to System Configuration > Routes to add this route.`
-        : `You need to assign truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) to a batch. Please go to System Configuration > Truck Batches.`;
+    // Message: clean formatted block with DO details
+    const message = buildConfigMessage(type, metadata);
 
-      const adminOwnNotification = await Notification.create({
-        type,
-        title,
-        message,
+    const notifMeta = {
+      fuelRecordId,
+      doNumber: metadata.doNumber,
+      truckNo: metadata.truckNo,
+      destination: metadata.destination,
+      truckSuffix: metadata.truckSuffix,
+      missingFields,
+      creatorRole: creatorRole || 'unknown',
+    };
+
+    // ── Creator notification (fuel_order_maker or admin who created the DO) ──
+    // super_admin does NOT receive config alerts
+    const creatorRecipients = creatorUserId ? [creatorUserId] : [creatorRole || 'fuel_order_maker'];
+
+    const creatorNotif = await Notification.create({
+      type, title, message,
+      relatedModel: 'FuelRecord',
+      relatedId: fuelRecordId,
+      metadata: notifMeta,
+      recipients: creatorRecipients,
+      createdBy,
+    });
+
+    const wsPayload = (n: any) => ({
+      id: n._id,
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      relatedModel: n.relatedModel,
+      relatedId: n.relatedId,
+      metadata: n.metadata,
+      status: n.status,
+      createdAt: n.createdAt,
+      isRead: false,
+    });
+
+    emitNotification(creatorRecipients, wsPayload(creatorNotif));
+    // Also send browser push to creator
+    await sendPushToRecipients(creatorRecipients, { title, body: message.split('\n')[0] });
+    logger.info(`Config notification sent to creator: ${createdBy}`);
+
+    // ── Admin notification (only if creator is NOT admin) ──
+    // super_admin is intentionally excluded from config alerts
+    const isAdminCreator = creatorRole === 'admin';
+    if (!isAdminCreator) {
+      const adminNotif = await Notification.create({
+        type, title, message,
         relatedModel: 'FuelRecord',
         relatedId: fuelRecordId,
-        metadata: {
-          fuelRecordId,
-          doNumber: metadata.doNumber,
-          truckNo: metadata.truckNo,
-          destination: metadata.destination,
-          truckSuffix: metadata.truckSuffix,
-          missingFields,
-          creatorRole: creatorRole || 'unknown',
-        },
-        recipients: [creatorRole], // Send to the admin's role
+        metadata: { ...notifMeta, requestedBy: createdBy },
+        recipients: ['admin'],  // NOT super_admin
         createdBy,
       });
 
-      // Emit real-time notification to admin
-      try {
-        emitNotification([creatorRole], {
-          id: adminOwnNotification._id,
-          type: adminOwnNotification.type,
-          title: adminOwnNotification.title,
-          message: adminOwnNotification.message,
-          relatedModel: adminOwnNotification.relatedModel,
-          relatedId: adminOwnNotification.relatedId,
-          metadata: adminOwnNotification.metadata,
-          status: adminOwnNotification.status,
-          createdAt: adminOwnNotification.createdAt,
-          isRead: false,
-        });
-        logger.info(`Real-time notification emitted to admin: ${createdBy}`);
-      } catch (wsError) {
-        logger.error('Failed to emit WebSocket notification to admin:', wsError);
-      }
-    } else {
-      // Non-admin created this - send TWO notifications
-      
-      // 1. Notification for the creator (fuel order maker)
-      const creatorTitle = type === 'both'
-        ? `Configuration Required: ${metadata.doNumber}`
-        : type === 'missing_total_liters'
-        ? `Route Configuration Required: ${metadata.doNumber}`
-        : `Truck Batch Assignment Needed: ${metadata.doNumber}`;
-      
-      const creatorMessage = type === 'both'
-        ? `The fuel record for ${metadata.truckNo} (${metadata.destination}) needs both route total liters and truck batch configuration. Please contact admin to add these configurations, or you can manually edit the fuel record.`
-        : type === 'missing_total_liters'
-        ? `Route "${metadata.destination}" needs total liters configuration. Please contact admin to add this route, or you can manually edit the fuel record.`
-        : `Truck ${metadata.truckNo} with suffix "${metadata.truckSuffix}" needs extra fuel batch assignment. Contact admin to configure it in System Config > Truck Batches, or click here to manually edit this fuel record.`;
-
-      // Send notification to the creator's userId if available
-      const creatorRecipients = creatorUserId ? [creatorUserId] : ['fuel_order_maker'];
-      
-      const creatorNotification = await Notification.create({
-        type,
-        title: creatorTitle,
-        message: creatorMessage,
-        relatedModel: 'FuelRecord',
-        relatedId: fuelRecordId,
-        metadata: {
-          fuelRecordId,
-          doNumber: metadata.doNumber,
-          truckNo: metadata.truckNo,
-          destination: metadata.destination,
-          truckSuffix: metadata.truckSuffix,
-          missingFields,
-          creatorRole: creatorRole || 'unknown',
-        },
-        recipients: creatorRecipients,
-        createdBy,
-      });
-
-      // Emit real-time notification to creator
-      try {
-        emitNotification(creatorRecipients, {
-          id: creatorNotification._id,
-          type: creatorNotification.type,
-          title: creatorNotification.title,
-          message: creatorNotification.message,
-          relatedModel: creatorNotification.relatedModel,
-          relatedId: creatorNotification.relatedId,
-          metadata: creatorNotification.metadata,
-          status: creatorNotification.status,
-          createdAt: creatorNotification.createdAt,
-          isRead: false,
-        });
-        logger.info(`Real-time notification emitted to creator: ${createdBy}`);
-      } catch (wsError) {
-        logger.error('Failed to emit WebSocket notification to creator:', wsError);
-      }
-
-      // 2. Notification for admins
-      const adminTitle = type === 'both'
-        ? `New Configuration Needed: ${metadata.doNumber}`
-        : type === 'missing_total_liters'
-        ? `Add Route Configuration: ${metadata.doNumber}`
-        : `Add Truck Batch: ${metadata.doNumber}`;
-      
-      const adminMessage = type === 'both'
-        ? `${createdBy} needs route total liters and truck batch for ${metadata.truckNo}. Please add these in System Configuration.`
-        : type === 'missing_total_liters'
-        ? `${createdBy} needs route "${metadata.destination}" configured. Please add it in System Configuration > Routes.`
-        : `${createdBy} needs truck suffix "${metadata.truckSuffix}" (${metadata.truckNo}) assigned to a batch. Please configure in System Configuration > Truck Batches.`;
-
-      const adminNotification = await Notification.create({
-        type,
-        title: adminTitle,
-        message: adminMessage,
-        relatedModel: 'FuelRecord',
-        relatedId: fuelRecordId,
-        metadata: {
-          fuelRecordId,
-          doNumber: metadata.doNumber,
-          truckNo: metadata.truckNo,
-          destination: metadata.destination,
-          truckSuffix: metadata.truckSuffix,
-          missingFields,
-          creatorRole: creatorRole || 'unknown',
-          requestedBy: createdBy,
-        },
-        recipients: ['admin', 'super_admin'],
-        createdBy,
-      });
-
-      // Emit real-time notification to admins
-      try {
-        emitNotification(['admin', 'super_admin'], {
-          id: adminNotification._id,
-          type: adminNotification.type,
-          title: adminNotification.title,
-          message: adminNotification.message,
-          relatedModel: adminNotification.relatedModel,
-          relatedId: adminNotification.relatedId,
-          metadata: adminNotification.metadata,
-          status: adminNotification.status,
-          createdAt: adminNotification.createdAt,
-          isRead: false,
-        });
-        logger.info('Real-time notification emitted to admins');
-      } catch (wsError) {
-        logger.error('Failed to emit WebSocket notification to admins:', wsError);
-      }
+      emitNotification(['admin'], wsPayload(adminNotif));
+      // Also send browser push to all connected admins
+      await sendPushToRecipients(['admin'], { title, body: message.split('\n')[0] });
+      logger.info('Config notification sent to admin role');
     }
 
-    logger.info(`Created notifications for fuel record ${fuelRecordId} - missing: ${missingFields.join(', ')}, creator: ${createdBy}, role: ${creatorRole}`);
+    logger.info(`Notifications created for fuel record ${fuelRecordId} — missing: ${missingFields.join(', ')}`);
   } catch (error) {
-    logger.error('Failed to create notification:', error);
-    // Don't throw - notification failure shouldn't break fuel record creation
+    logger.error('Failed to create config notification:', error);
+    // Don't throw — notification failure should never break fuel record creation
   }
 };
 
@@ -968,12 +907,75 @@ export const createLPOCreatedNotification = async (
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Browser Push Subscription endpoints
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/notifications/vapid-public-key
+ * Returns the VAPID public key so the frontend can create a push subscription.
+ */
+export const getVapidPublicKey = async (req: AuthRequest, res: Response): Promise<void> => {
+  res.status(200).json({ success: true, publicKey: config.vapidPublicKey || '' });
+};
+
+/**
+ * POST /api/v1/notifications/push-subscribe
+ * Stores a browser push subscription for the authenticated user.
+ * Body: { endpoint, keys: { p256dh, auth } }  (standard PushSubscription JSON)
+ */
+export const subscribePush = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { endpoint, keys } = req.body;
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      throw new ApiError(400, 'Invalid push subscription: endpoint and keys (p256dh, auth) are required');
+    }
+
+    const userId = req.user!.userId;
+    const role   = req.user!.role || 'user';
+
+    // Upsert by endpoint so re-subscribing doesn't create duplicates
+    await PushSubscription.findOneAndUpdate(
+      { endpoint },
+      { userId, role, endpoint, keys },
+      { upsert: true, new: true }
+    );
+
+    logger.info(`Push subscription registered for user ${req.user?.username} (${role})`);
+    res.status(201).json({ success: true, message: 'Push subscription registered' });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * DELETE /api/v1/notifications/push-subscribe
+ * Removes the browser push subscription for the given endpoint.
+ * Body: { endpoint }
+ */
+export const unsubscribePush = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { endpoint } = req.body;
+    if (!endpoint) throw new ApiError(400, 'endpoint is required');
+
+    await PushSubscription.deleteOne({ endpoint, userId: req.user!.userId });
+    logger.info(`Push subscription removed for user ${req.user?.username}`);
+    res.status(200).json({ success: true, message: 'Push subscription removed' });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
 export default {
   getNotifications,
   getNotificationCount,
   markAsRead,
   dismissNotification,
+  dismissAllNotifications,
   resolveNotification,
+  getVapidPublicKey,
+  subscribePush,
+  unsubscribePush,
   createMissingConfigNotification,
   createUnlinkedExportDONotification,
   resolveUnlinkedDONotification,

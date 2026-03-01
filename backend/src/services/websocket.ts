@@ -154,8 +154,17 @@ export const initializeWebSocket = (server: HTTPServer): SocketIOServer => {
   return io;
 };
 
+// Explicit set of known role names so ObjectIds / usernames are never mis-routed
+const ROLE_NAMES = new Set([
+  'super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'boss',
+  'clerk', 'fuel_order_maker', 'driver', 'officer', 'accountant',
+  'dar_yard', 'msa_yard', 'tanga_yard',
+]);
+
 /**
- * Emit notification to specific users or roles
+ * Emit notification to specific users or roles.
+ * Recipients are either a known role name OR a userId / username (→ user room).
+ * MongoDB ObjectIds (24-char hex) and usernames always go to user rooms.
  */
 export const emitNotification = (
   recipients: string[],
@@ -168,13 +177,11 @@ export const emitNotification = (
 
   try {
     recipients.forEach((recipient) => {
-      // Check if recipient is a role (e.g., 'super_manager', 'admin', 'super_admin', 'fuel_order_maker')
-      if (recipient.includes('_') || recipient === 'admin') {
-        // It's a role
+      if (ROLE_NAMES.has(recipient)) {
         io!.to(`role:${recipient}`).emit('notification', notificationData);
         logger.info(`Notification emitted to role: ${recipient}`);
       } else {
-        // It's a specific username or userId
+        // userId (MongoDB ObjectId) or username → user room
         io!.to(`user:${recipient}`).emit('notification', notificationData);
         logger.info(`Notification emitted to user: ${recipient}`);
       }

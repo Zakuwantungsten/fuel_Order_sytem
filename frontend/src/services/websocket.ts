@@ -19,6 +19,8 @@ let _maintenanceEventCallback: ((event: any) => void) | null = null;
 let _settingsEventCallback: ((event: any) => void) | null = null;
 let _securityEventCallback: ((event: any) => void) | null = null;
 const _dataChangedCallbacks = new Map<string, (event: { collection: string; action: string; timestamp: number }) => void>();
+// Fired whenever the socket successfully reconnects so subscribers can reload stale data
+const _reconnectCallbacks = new Map<string, () => void>();
 
 /**
  * Initialize WebSocket connection
@@ -99,6 +101,8 @@ export const initializeWebSocket = (token: string): Socket => {
 
   socket.on('reconnect', (attemptNumber) => {
     console.log('[WebSocket] Reconnected after', attemptNumber, 'attempts');
+    // Notify all subscribers so they can reload any data that may have been missed
+    _reconnectCallbacks.forEach((cb) => cb());
   });
 
   socket.on('reconnect_attempt', (attemptNumber) => {
@@ -205,6 +209,19 @@ export const unsubscribeFromDataChanges = (id: string): void => {
 };
 
 /**
+ * Subscribe to socket reconnect events.
+ * Called every time the socket re-establishes a connection after a drop.
+ * Use this to reload any data that may have arrived while the socket was down.
+ */
+export const subscribeToReconnect = (callback: () => void, id: string): void => {
+  _reconnectCallbacks.set(id, callback);
+};
+
+export const unsubscribeFromReconnect = (id: string): void => {
+  _reconnectCallbacks.delete(id);
+};
+
+/**
  * Disconnect WebSocket
  */
 export const disconnectWebSocket = (): void => {
@@ -243,6 +260,8 @@ export default {
   unsubscribeFromSecurityEvents,
   subscribeToDataChanges,
   unsubscribeFromDataChanges,
+  subscribeToReconnect,
+  unsubscribeFromReconnect,
   disconnectWebSocket,
   isConnected,
   getSocket,

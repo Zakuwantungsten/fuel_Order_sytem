@@ -23,6 +23,27 @@ router.get('/', asyncHandler(notificationController.getNotifications));
 router.get('/count', asyncHandler(notificationController.getNotificationCount));
 
 /**
+ * @route   GET /api/notifications/vapid-public-key
+ * @desc    Return the VAPID public key for browser push subscriptions
+ * @access  Private
+ */
+router.get('/vapid-public-key', asyncHandler(notificationController.getVapidPublicKey));
+
+/**
+ * @route   POST /api/notifications/push-subscribe
+ * @desc    Register a browser push subscription for the current user
+ * @access  Private
+ */
+router.post('/push-subscribe', asyncHandler(notificationController.subscribePush));
+
+/**
+ * @route   DELETE /api/notifications/push-subscribe
+ * @desc    Remove the browser push subscription for the current user
+ * @access  Private
+ */
+router.delete('/push-subscribe', asyncHandler(notificationController.unsubscribePush));
+
+/**
  * @route   DELETE /api/notifications
  * @desc    Dismiss all notifications for current user
  * @access  Private

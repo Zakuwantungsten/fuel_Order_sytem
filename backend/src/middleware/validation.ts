@@ -280,6 +280,13 @@ export const fuelRecordValidation = {
       .isFloat({ min: 0 })
       .withMessage('Extra fuel must be a non-negative number'),
     body('balance').isNumeric().withMessage('Balance must be a number'),
+    // These two fields drive the missing-config notification chain.
+    // They MUST be listed here so matchedData() includes them in the payload.
+    body('isLocked').optional().isBoolean().toBoolean(),
+    body('pendingConfigReason')
+      .optional({ nullable: true })
+      .isIn(['missing_total_liters', 'missing_extra_fuel', 'both', null])
+      .withMessage('Invalid pending config reason'),
   ],
 
   update: [
