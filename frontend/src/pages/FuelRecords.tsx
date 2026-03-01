@@ -368,7 +368,8 @@ const FuelRecords = () => {
   // Subscribe to real-time yard fuel notifications to auto-refresh the table
   const fetchRecordsRef = useRef<() => void>();
   useEffect(() => {
-    fetchRecordsRef.current = fetchRecords;
+    // Use the silent version for realtime updates — no loading spinner
+    fetchRecordsRef.current = () => fetchRecords(true);
   });
 
   useEffect(() => {
@@ -389,9 +390,9 @@ const FuelRecords = () => {
     fetchRecordsRef.current?.();
   });
 
-  const fetchRecords = async () => {
+  const fetchRecords = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       
       // Build filters for backend
       const filters: any = {
@@ -452,7 +453,7 @@ const FuelRecords = () => {
       setTotalItems(0);
       setTotalPages(0);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -587,7 +588,8 @@ const FuelRecords = () => {
       } else {
         await fuelRecordsAPI.create(data);
       }
-      fetchRecords();
+      // No manual fetchRecords() needed — the backend emits a data_changed WebSocket
+      // event after every create/update, and useRealtimeSync picks it up silently.
     } catch (error) {
       console.error('Error saving fuel record:', error);
     }
