@@ -190,6 +190,13 @@ export const getAvailableFilters = async (req: AuthRequest, res: Response): Prom
       }
     }
 
+    // Always include the current month so users can filter/create entries
+    const now = new Date();
+    const curKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+    if (!seen.has(curKey)) {
+      seen.set(curKey, { year: now.getFullYear(), month: now.getMonth() + 1 });
+    }
+
     const periods = Array.from(seen.values()).sort((a, b) =>
       b.year !== a.year ? b.year - a.year : b.month - a.month
     );

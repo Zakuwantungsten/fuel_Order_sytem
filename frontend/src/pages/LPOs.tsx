@@ -71,6 +71,21 @@ const LPOs = () => {
     'lpo:selectedPeriods',
     [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]
   );
+
+  // Reset to current month when a new month starts and the persisted value
+  // still points entirely at previous months.
+  useEffect(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+    const includesCurrent = selectedPeriods.some(
+      p => p.year === curYear && p.month === curMonth
+    );
+    if (!includesCurrent && selectedPeriods.length > 0) {
+      setSelectedPeriods([{ year: curYear, month: curMonth }]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [searchParams] = useSearchParams();
   const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account'] as const;
@@ -645,7 +660,7 @@ const LPOs = () => {
   // Auto-fallback: if the default current period (today's year+month) has no data,
   // automatically switch to the most recent period that does.
   useEffect(() => {
-    if (loading || orders.length === 0 || !filtersInitialized) return;
+    if (loading || !filtersInitialized) return;
     const now = new Date();
     const defYear = now.getFullYear(), defMonth = now.getMonth() + 1;
     if (selectedPeriods.length !== 1 || selectedPeriods[0].year !== defYear || selectedPeriods[0].month !== defMonth) return;
@@ -1284,7 +1299,7 @@ const LPOs = () => {
           </div>
           
           {/* Month Multi-Select Dropdown */}
-          <div className="month-dropdown-container relative">
+          <div ref={monthDropdownRef} className="month-dropdown-container relative">
             <button
               onClick={() => setShowMonthDropdown(!showMonthDropdown)}
               className="w-full flex items-center justify-between px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
