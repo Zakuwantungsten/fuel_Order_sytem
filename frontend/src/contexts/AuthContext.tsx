@@ -309,6 +309,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     sessionStorage.removeItem('fuel_order_token');
     sessionStorage.removeItem('fuel_order_active_tab'); // Clear active tab on logout
     sessionStorage.removeItem('fuel_order_active_role'); // Clear active role on logout
+    sessionStorage.removeItem('dashboard_search_query'); // Clear dashboard search on logout
+    sessionStorage.removeItem('dashboard_search_results'); // Clear dashboard search results on logout
     
     // Reset to default theme for logged-out state
     const defaultTheme = getInitialTheme(); // No userId = uses default
