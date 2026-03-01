@@ -23,6 +23,13 @@ router.get('/', asyncHandler(notificationController.getNotifications));
 router.get('/count', asyncHandler(notificationController.getNotificationCount));
 
 /**
+ * @route   DELETE /api/notifications
+ * @desc    Dismiss all notifications for current user
+ * @access  Private
+ */
+router.delete('/', asyncHandler(notificationController.dismissAllNotifications));
+
+/**
  * @route   PATCH /api/notifications/:id/read
  * @desc    Mark notification as read
  * @access  Private

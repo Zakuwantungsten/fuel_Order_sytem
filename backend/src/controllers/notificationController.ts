@@ -145,6 +145,35 @@ export const dismissNotification = async (req: AuthRequest, res: Response): Prom
 };
 
 /**
+ * Dismiss all notifications for the current user
+ */
+export const dismissAllNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role || 'user';
+
+    const result = await Notification.updateMany(
+      {
+        recipients: { $in: [userRole, userId] },
+        isDeleted: false,
+        status: 'pending',
+      },
+      { status: 'dismissed', isRead: true }
+    );
+
+    logger.info(`User ${req.user?.username} dismissed all notifications (${result.modifiedCount} updated)`);
+
+    res.status(200).json({
+      success: true,
+      message: `Dismissed ${result.modifiedCount} notification(s)`,
+      count: result.modifiedCount,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Resolve notification (automatically when admin fixes the issue)
  */
 export const resolveNotification = async (req: AuthRequest, res: Response): Promise<void> => {

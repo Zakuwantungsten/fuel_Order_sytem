@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText } from 'lucide-react';
+import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, subscribeToSessionEvents, unsubscribeFromSessionEvents } from '../services/websocket';
@@ -59,6 +59,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
   const [loading, setLoading] = useState(false);
   const [relinkingId, setRelinkingId] = useState<string | null>(null);
   const [pendingYardFuelCount, setPendingYardFuelCount] = useState(0);
+  const [dismissingAll, setDismissingAll] = useState(false);
 
   // Helper function to tailor notification message based on viewer's role
   const getTailoredMessage = (notification: Notification): string => {
@@ -254,6 +255,18 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       loadNotifications();
     } catch (error) {
       console.error('Failed to dismiss notification:', error);
+    }
+  };
+
+  const dismissAllNotifications = async () => {
+    try {
+      setDismissingAll(true);
+      await api.delete('/notifications');
+      loadNotifications();
+    } catch (error) {
+      console.error('Failed to dismiss all notifications:', error);
+    } finally {
+      setDismissingAll(false);
     }
   };
 
@@ -524,7 +537,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
 
             {/* Footer */}
             {notifications.length > 0 && (
-              <div className="px-4 py-3 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <div className="px-4 py-3 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between gap-2">
                 <button
                   onClick={() => {
                     setShowDropdown(false);
@@ -533,6 +546,15 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
                   className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
                 >
                   View all notifications
+                </button>
+                <button
+                  onClick={dismissAllNotifications}
+                  disabled={dismissingAll}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:bg-red-400 rounded-lg transition-colors"
+                  title="Delete all notifications"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {dismissingAll ? 'Deleting...' : 'Delete All'}
                 </button>
               </div>
             )}
