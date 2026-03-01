@@ -71,6 +71,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   const loadData = async () => {
     try {
       const [stationsData, formulaData] = await Promise.all([
+        configAPI.getStations(),
         configAPI.getFormulaVariables(),
       ]);
       setStations(stationsData);
