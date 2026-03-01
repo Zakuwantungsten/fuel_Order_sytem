@@ -572,6 +572,10 @@ export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<
 
     logger.info(`Truck ${truckSuffix} added to batch ${extraLiters}L by ${req.user?.username}`);
 
+    // Auto-fill locked fuel records that were waiting for this truck's batch
+    const { autoFillFuelRecordsForBatch } = await import('./configController');
+    await autoFillFuelRecordsForBatch(suffix, extraLiters, req.user?.username || 'system');
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, subscribeToSessionEvents, unsubscribeFromSessionEvents, subscribeToReconnect, unsubscribeFromReconnect } from '../services/websocket';
+import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, subscribeToSessionEvents, unsubscribeFromSessionEvents, subscribeToReconnect, unsubscribeFromReconnect, subscribeToDataChanges, unsubscribeFromDataChanges } from '../services/websocket';
 
 // Convert URL-safe base64 VAPID key to Uint8Array required by pushManager.subscribe
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -146,6 +146,14 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
           loadNotifications();
         }, 'bell');
 
+        // Reload notifications when they are resolved/updated server-side
+        subscribeToDataChanges((event) => {
+          if (event.collection === 'notifications') {
+            console.log('[NotificationBell] Notifications updated server-side — reloading');
+            loadNotifications();
+          }
+        }, 'bell-data');
+
         // Subscribe to session management events from the server.
         // These fire immediately when an admin deactivates, bans, deletes,
         // resets the password of, or force-logs-out this user.
@@ -182,6 +190,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       unsubscribeFromNotifications('bell');
       unsubscribeFromSessionEvents();
       unsubscribeFromReconnect('bell');
+      unsubscribeFromDataChanges('bell-data');
     };
   }, []);
 

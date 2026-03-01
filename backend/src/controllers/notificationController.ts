@@ -6,7 +6,7 @@ import { PushSubscription } from '../models/PushSubscription';
 import { ApiError } from '../middleware/errorHandler';
 import { config } from '../config';
 import logger from '../utils/logger';
-import { emitNotification } from '../services/websocket';
+import { emitNotification, emitDataChange } from '../services/websocket';
 import { sendPushToRecipients } from '../services/pushNotificationService';
 
 // Helper: build the clean notification message used for config-missing alerts
@@ -459,6 +459,7 @@ export const autoResolveNotifications = async (fuelRecordId: string, resolvedBy:
       );
 
       logger.info(`Auto-resolved ${notifications.length} notifications for fuel record ${fuelRecordId}`);
+      emitDataChange('notifications', 'update');
     }
   } catch (error) {
     logger.error('Failed to auto-resolve notifications:', error);

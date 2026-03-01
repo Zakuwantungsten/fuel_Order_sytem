@@ -4,7 +4,10 @@ import { FuelStationConfig } from '../models/FuelStationConfig';
 import { RouteConfig } from '../models/RouteConfig';
 import { SystemConfig } from '../models/SystemConfig';
 import { AuditLog } from '../models/AuditLog';
+import { FuelRecord } from '../models';
 import { emitDataChange } from '../services/websocket';
+import { autoResolveNotifications } from './notificationController';
+import logger from '../utils/logger';
 
 /**
  * Add cache-busting headers to force immediate frontend refresh
@@ -38,6 +41,173 @@ function validateFormula(formula: string): { valid: boolean; error?: string } {
   if (count !== 0) return { valid: false, error: 'Unbalanced parentheses' };
   
   return { valid: true };
+}
+
+/**
+ * Auto-fill locked fuel records when a route is created/updated
+ * Finds fuel records with pendingConfigReason 'missing_total_liters' or 'both'
+ * whose destination matches the route, and fills in totalLts + recalculates balance
+ */
+async function autoFillFuelRecordsForRoute(route: any, username: string): Promise<void> {
+  try {
+    if (!route.isActive || !route.defaultTotalLiters) return;
+
+    const destination = route.destination.toUpperCase();
+
+    // Find locked fuel records waiting for this route's totalLiters
+    const lockedRecords = await FuelRecord.find({
+      isLocked: true,
+      pendingConfigReason: { $in: ['missing_total_liters', 'both'] },
+      isDeleted: false,
+      isCancelled: { $ne: true },
+    });
+
+    let updatedCount = 0;
+
+    for (const record of lockedRecords) {
+      const recordDest = (record.to || '').toUpperCase().trim();
+
+      // Match by exact destination, alias, or partial match (same logic as frontend)
+      const isMatch =
+        recordDest === destination ||
+        (route.destinationAliases || []).some((alias: string) => alias.toUpperCase() === recordDest) ||
+        destination.includes(recordDest) ||
+        recordDest.includes(destination);
+
+      if (!isMatch) continue;
+
+      // Fill in totalLts
+      const newTotalLts = route.defaultTotalLiters;
+      const extra = record.extra;
+
+      // Determine new pending state
+      const stillMissingExtra = extra === null || extra === undefined;
+      const newPendingReason = stillMissingExtra ? 'missing_extra_fuel' : null;
+      const newIsLocked = stillMissingExtra;
+
+      // Recalculate balance: (totalLts + extra) - sum of all checkpoints
+      const totalFuel = newTotalLts + (extra || 0);
+      const totalCheckpoints =
+        Math.abs(record.mmsaYard || 0) +
+        Math.abs(record.tangaYard || 0) +
+        Math.abs(record.darYard || 0) +
+        Math.abs(record.darGoing || 0) +
+        Math.abs(record.moroGoing || 0) +
+        Math.abs(record.mbeyaGoing || 0) +
+        Math.abs(record.tdmGoing || 0) +
+        Math.abs(record.zambiaGoing || 0) +
+        Math.abs(record.congoFuel || 0) +
+        Math.abs(record.zambiaReturn || 0) +
+        Math.abs(record.tundumaReturn || 0) +
+        Math.abs(record.mbeyaReturn || 0) +
+        Math.abs(record.moroReturn || 0) +
+        Math.abs(record.darReturn || 0) +
+        Math.abs(record.tangaReturn || 0);
+      const newBalance = totalFuel - totalCheckpoints;
+
+      await FuelRecord.findByIdAndUpdate(record._id, {
+        totalLts: newTotalLts,
+        balance: newBalance,
+        isLocked: newIsLocked,
+        pendingConfigReason: newPendingReason,
+      });
+
+      // Auto-resolve notifications if fully unlocked
+      if (!newIsLocked) {
+        await autoResolveNotifications(record._id.toString(), username);
+      }
+
+      updatedCount++;
+      logger.info(`Auto-filled totalLts=${newTotalLts}L for fuel record ${record._id} (truck ${record.truckNo}, DO ${record.goingDo}). Balance: ${newBalance}L. Still locked: ${newIsLocked}`);
+    }
+
+    if (updatedCount > 0) {
+      emitDataChange('fuel_records', 'update');
+      logger.info(`Route "${route.destination}" configured — auto-filled ${updatedCount} locked fuel record(s)`);
+    }
+  } catch (error) {
+    logger.error('Failed to auto-fill fuel records for route:', error);
+    // Don't throw — auto-fill failure should never break route creation
+  }
+}
+
+/**
+ * Auto-fill locked fuel records when a truck is added to a batch
+ * Finds fuel records with pendingConfigReason 'missing_extra_fuel' or 'both'
+ * whose truck suffix matches, and fills in extra + recalculates balance
+ */
+export async function autoFillFuelRecordsForBatch(truckSuffix: string, extraLiters: number, username: string): Promise<void> {
+  try {
+    const suffix = truckSuffix.toLowerCase();
+
+    // Find locked fuel records waiting for this batch's extra fuel
+    const lockedRecords = await FuelRecord.find({
+      isLocked: true,
+      pendingConfigReason: { $in: ['missing_extra_fuel', 'both'] },
+      isDeleted: false,
+      isCancelled: { $ne: true },
+    });
+
+    let updatedCount = 0;
+
+    for (const record of lockedRecords) {
+      // Match truck suffix: truckNo is like "T 1234 ABC" — suffix is "abc"
+      const recordSuffix = (record.truckNo || '').toLowerCase().split(' ').pop() || '';
+      if (recordSuffix !== suffix) continue;
+
+      // Fill in extra
+      const totalLts = record.totalLts;
+      const newExtra = extraLiters;
+
+      // Determine new pending state
+      const stillMissingTotalLts = totalLts === null || totalLts === undefined;
+      const newPendingReason = stillMissingTotalLts ? 'missing_total_liters' : null;
+      const newIsLocked = stillMissingTotalLts;
+
+      // Recalculate balance: (totalLts + extra) - sum of all checkpoints
+      const totalFuel = (totalLts || 0) + newExtra;
+      const totalCheckpoints =
+        Math.abs(record.mmsaYard || 0) +
+        Math.abs(record.tangaYard || 0) +
+        Math.abs(record.darYard || 0) +
+        Math.abs(record.darGoing || 0) +
+        Math.abs(record.moroGoing || 0) +
+        Math.abs(record.mbeyaGoing || 0) +
+        Math.abs(record.tdmGoing || 0) +
+        Math.abs(record.zambiaGoing || 0) +
+        Math.abs(record.congoFuel || 0) +
+        Math.abs(record.zambiaReturn || 0) +
+        Math.abs(record.tundumaReturn || 0) +
+        Math.abs(record.mbeyaReturn || 0) +
+        Math.abs(record.moroReturn || 0) +
+        Math.abs(record.darReturn || 0) +
+        Math.abs(record.tangaReturn || 0);
+      const newBalance = totalFuel - totalCheckpoints;
+
+      await FuelRecord.findByIdAndUpdate(record._id, {
+        extra: newExtra,
+        balance: newBalance,
+        isLocked: newIsLocked,
+        pendingConfigReason: newPendingReason,
+      });
+
+      // Auto-resolve notifications if fully unlocked
+      if (!newIsLocked) {
+        await autoResolveNotifications(record._id.toString(), username);
+      }
+
+      updatedCount++;
+      logger.info(`Auto-filled extra=${newExtra}L for fuel record ${record._id} (truck ${record.truckNo}, DO ${record.goingDo}). Balance: ${newBalance}L. Still locked: ${newIsLocked}`);
+    }
+
+    if (updatedCount > 0) {
+      emitDataChange('fuel_records', 'update');
+      logger.info(`Batch "${truckSuffix}" configured with ${extraLiters}L — auto-filled ${updatedCount} locked fuel record(s)`);
+    }
+  } catch (error) {
+    logger.error('Failed to auto-fill fuel records for batch:', error);
+    // Don't throw — auto-fill failure should never break batch creation
+  }
 }
 
 /**
@@ -455,6 +625,9 @@ export const createRoute = async (req: AuthRequest, res: Response): Promise<void
       severity: 'low',
     });
 
+    // Auto-fill locked fuel records that were waiting for this route
+    await autoFillFuelRecordsForRoute(route, req.user?.username || 'system');
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -507,6 +680,9 @@ export const updateRoute = async (req: AuthRequest, res: Response): Promise<void
       details: JSON.stringify(updates),
       severity: 'low',
     });
+
+    // Auto-fill locked fuel records that were waiting for this route
+    await autoFillFuelRecordsForRoute(route, req.user?.username || 'system');
 
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
