@@ -58,6 +58,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
   const loadData = async () => {
     try {
       const routesData = await configAPI.getRoutes();
+      setRoutes(routesData);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to load routes');
     }

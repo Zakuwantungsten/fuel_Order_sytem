@@ -392,7 +392,54 @@ const cascadeCancelFuelRecord = async (
         }
       }
       
-      // Clear all return fuel allocations
+      // Look up the EXPORT route to find how many liters were added when this DO was linked
+      let exportRouteLiters = 0;
+      const exportRoute = await RouteConfig.findOne({
+        $or: [
+          {
+            origin: { $regex: new RegExp(`^${deliveryOrder.loadingPoint}$`, 'i') },
+            destination: { $regex: new RegExp(`^${deliveryOrder.destination}$`, 'i') },
+            routeType: 'EXPORT',
+            isActive: true,
+          },
+          {
+            destination: { $regex: new RegExp(`^${deliveryOrder.destination}$`, 'i') },
+            routeType: 'EXPORT',
+            isActive: true,
+          },
+        ],
+      });
+
+      if (exportRoute) {
+        exportRouteLiters = exportRoute.defaultTotalLiters;
+      }
+
+      // Deduct the export route liters from totalLts
+      const originalTotalLts = fuelRecord.totalLts || 0;
+      const newTotalLts = Math.max(0, originalTotalLts - exportRouteLiters);
+
+      // Recalculate balance: (totalLts + extra) - sum of all checkpoint allocations
+      const totalFuel = newTotalLts + (fuelRecord.extra || 0);
+      const totalCheckpoints = (
+        Math.abs(fuelRecord.mmsaYard || 0) +
+        Math.abs(fuelRecord.tangaYard || 0) +
+        Math.abs(fuelRecord.darYard || 0) +
+        Math.abs(fuelRecord.darGoing || 0) +
+        Math.abs(fuelRecord.moroGoing || 0) +
+        Math.abs(fuelRecord.mbeyaGoing || 0) +
+        Math.abs(fuelRecord.tdmGoing || 0) +
+        Math.abs(fuelRecord.zambiaGoing || 0) +
+        Math.abs(fuelRecord.congoFuel || 0) +
+        Math.abs(fuelRecord.zambiaReturn || 0) +
+        Math.abs(fuelRecord.tundumaReturn || 0) +
+        Math.abs(fuelRecord.mbeyaReturn || 0) +
+        Math.abs(fuelRecord.moroReturn || 0) +
+        Math.abs(fuelRecord.darReturn || 0) +
+        Math.abs(fuelRecord.tangaReturn || 0)
+      );
+      const newBalance = totalFuel - totalCheckpoints;
+
+      // Clear all return fuel allocations and deduct export fuel
       const updateData: any = {
         returnDo: null, // Remove the return DO
         from: revertFrom,
@@ -400,6 +447,9 @@ const cascadeCancelFuelRecord = async (
         // Clear original going values since there's no return DO now
         originalGoingFrom: null,
         originalGoingTo: null,
+        // Deduct export route liters from totalLts and recalculate balance
+        totalLts: newTotalLts,
+        balance: newBalance,
         // Clear return fuel allocations
         zambiaReturn: 0,
         tundumaReturn: 0,
@@ -411,7 +461,7 @@ const cascadeCancelFuelRecord = async (
       
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, updateData);
       
-      logger.info(`Fuel record ${fuelRecord._id} return DO ${deliveryOrder.doNumber} removed and reverted to going-only journey. From: ${revertFrom}, To: ${revertTo}. Reason: ${cancellationReason}`);
+      logger.info(`Fuel record ${fuelRecord._id} return DO ${deliveryOrder.doNumber} removed and reverted to going-only journey. From: ${revertFrom}, To: ${revertTo}. TotalLts: ${originalTotalLts}L → ${newTotalLts}L (deducted ${exportRouteLiters}L from export route). Balance recalculated: ${newBalance}L. Reason: ${cancellationReason}`);
       
       return { cancelled: true, fuelRecordId: fuelRecord._id.toString(), action: 'return_do_removed' };
     }
@@ -3496,6 +3546,7 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
         } : null,
       },
     });
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }
