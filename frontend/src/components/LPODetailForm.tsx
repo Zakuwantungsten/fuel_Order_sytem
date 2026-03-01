@@ -3259,7 +3259,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       return (
                         <tr key={index} className={`${autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : ''} ${hasNoRecordWarning ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${!autoFill.fetched && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'dark:bg-gray-800' : ''}`}>
                           <td className="px-3 py-3">
-                            <div className="relative">
+                            <div className="flex items-center gap-1.5">
                               <input
                                 type="text"
                                 value={entry?.truckNo || ''}
@@ -3270,19 +3270,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 className={`w-28 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isExactDuplicate ? 'border-red-500 dark:border-red-400' : ''} ${isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : ''} ${hasNoRecordWarning ? 'border-amber-500 dark:border-amber-400' : ''} ${!hasDuplicate && !hasNoRecordWarning ? 'border-gray-300 dark:border-gray-600' : ''}`}
                               />
                               {autoFill.loading && (
-                                <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
+                                <Loader2 className="w-4 h-4 text-primary-500 animate-spin flex-shrink-0" />
                               )}
                               {autoFill.fetched && !autoFill.loading && !hasDuplicate && (
-                                <CheckCircle className="absolute right-1 top-1.5 w-4 h-4 text-green-500" />
+                                <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
                               )}
                               {hasNoRecordWarning && !autoFill.loading && (
-                                <AlertTriangle className="absolute right-1 top-1.5 w-4 h-4 text-amber-500" />
+                                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
                               )}
                               {isExactDuplicate && (
-                                <AlertTriangle className="absolute right-1 top-1.5 w-4 h-4 text-red-500" />
+                                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
                               )}
                               {isDifferentAmount && (
-                                <CheckCircle className="absolute right-1 top-1.5 w-4 h-4 text-blue-500" />
+                                <CheckCircle className="w-4 h-4 text-blue-500 flex-shrink-0" />
                               )}
                             </div>
                           </td>
