@@ -336,8 +336,22 @@ const FuelRecords = () => {
       }
     };
 
+    const handleScroll = () => {
+      setShowExportYearDropdown(false);
+      setShowRouteTypeDropdown(false);
+      setShowRouteDropdown(false);
+      setShowMonthDropdown(false);
+    };
+
+    const scrollEl = document.getElementById('main-scroll-container');
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    scrollEl?.addEventListener('scroll', handleScroll);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      scrollEl?.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   // Fetch records when pagination or filters change - but only after month is initialized

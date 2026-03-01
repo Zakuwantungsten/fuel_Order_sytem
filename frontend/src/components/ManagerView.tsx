@@ -236,8 +236,20 @@ export function ManagerView({ user }: ManagerViewProps) {
       }
     };
 
+    const handleScroll = () => {
+      setShowSortDropdown(false);
+      setShowStationDropdown(false);
+    };
+
+    const scrollEl = document.getElementById('main-scroll-container');
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    scrollEl?.addEventListener('scroll', handleScroll);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      scrollEl?.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   // Online/Offline status monitoring
@@ -280,17 +292,7 @@ export function ManagerView({ user }: ManagerViewProps) {
 
   useRealtimeSync('lpo_entries', () => fetchLPOEntries(true));
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
-        setShowStationDropdown(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Close dropdown when clicking outside (scroll handled in the sortDropdown effect above)
 
   // Filter and sort entries
   const filteredEntries = useMemo(() => {

@@ -72,9 +72,18 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       }
     };
 
+    const handleScroll = () => {
+      setShowCopyDropdown(false);
+    };
+
+    const scrollEl = document.getElementById('main-scroll-container');
     document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    scrollEl?.addEventListener('scroll', handleScroll);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      scrollEl?.removeEventListener('scroll', handleScroll);
     };
   }, []);
 

@@ -70,8 +70,22 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       }
     };
 
+    const handleScroll = () => {
+      setShowYearDropdown(false);
+      setShowStationDropdown(false);
+      setShowMonthDropdown(false);
+      setShowCopyDropdown(false);
+    };
+
+    const scrollEl = document.getElementById('main-scroll-container');
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    scrollEl?.addEventListener('scroll', handleScroll);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      scrollEl?.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   // Fetch available years from API

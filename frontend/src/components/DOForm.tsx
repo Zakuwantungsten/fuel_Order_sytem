@@ -72,8 +72,19 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       }
     };
 
+    const handleScroll = () => {
+      setShowRateTypeDropdown(false);
+    };
+
+    const scrollEl = document.getElementById('main-scroll-container');
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    scrollEl?.addEventListener('scroll', handleScroll);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      scrollEl?.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   // Update form data when order prop changes (for edit mode)

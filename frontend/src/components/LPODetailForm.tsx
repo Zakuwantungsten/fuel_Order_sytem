@@ -344,8 +344,23 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         setShowCustomReturnDropdown(false);
       }
     };
+    const handleScroll = () => {
+      setShowStationDropdown(false);
+      setShowGoingCheckpointDropdown(false);
+      setShowReturningCheckpointDropdown(false);
+      setShowCustomGoingDropdown(false);
+      setShowCustomReturnDropdown(false);
+    };
+
+    const scrollEl = document.getElementById('main-scroll-container');
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    scrollEl?.addEventListener('scroll', handleScroll);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      scrollEl?.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   // Handle inspect modal open - view fuel record details
