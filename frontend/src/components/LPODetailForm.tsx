@@ -85,6 +85,9 @@ interface EntryAutoFillData {
   };
   selectedJourneyIndex?: number; // -1 for active, 0+ for queued[index]
   selectedJourneyType?: 'active' | 'queued';
+  // Formula evaluation status
+  formulaStatus?: 'applied' | 'missing_data' | 'error' | null;
+  formulaMessage?: string;
 }
 
 // Inspect modal state
@@ -1200,7 +1203,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     totalLiters?: number,
     extraLiters?: number,
     balance?: number
-  ): { liters: number; rate: number } => {
+  ): { liters: number; rate: number; formulaStatus?: 'applied' | 'missing_data' | 'error' | null; formulaMessage?: string } => {
     const stationUpper = station.toUpperCase();
     
     // First try to get from dynamic stations
@@ -1208,30 +1211,63 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     if (dynamicStation) {
       const formula = direction === 'going' ? dynamicStation.formulaGoing : dynamicStation.formulaReturning;
       
-      // If formula exists and we have context, evaluate it
-      if (formula && formula.trim() && (totalLiters !== undefined || extraLiters !== undefined || balance !== undefined)) {
-        const context = {
-          totalLiters: totalLiters || 0,
-          extraLiters: extraLiters || 0,
-          balance: balance || 0
-        };
-        
-        // Only evaluate if we have valid context (not all zeros)
-        if (context.totalLiters > 0 || context.extraLiters > 0 || context.balance > 0) {
+      // If formula exists, attempt evaluation
+      if (formula && formula.trim()) {
+        // Check if we have any context passed at all
+        if (totalLiters !== undefined || extraLiters !== undefined || balance !== undefined) {
+          const context = {
+            totalLiters: totalLiters || 0,
+            extraLiters: extraLiters || 0,
+            balance: balance || 0
+          };
+          
+          // Check which variables the formula references
+          const needsTotalLiters = formula.includes('totalLiters');
+          const needsExtraLiters = formula.includes('extraLiters');
+          const needsBalance = formula.includes('balance');
+          
+          // Check if required variables are missing (null/undefined/0)
+          const missingVars: string[] = [];
+          if (needsTotalLiters && (!totalLiters || totalLiters === 0)) missingVars.push('totalLiters');
+          if (needsExtraLiters && (!extraLiters || extraLiters === 0)) missingVars.push('extraLiters');
+          if (needsBalance && (!balance || balance === 0)) missingVars.push('balance');
+          
+          // If ALL formula-referenced variables are missing, return 0 with missing_data status
+          const allRequiredMissing = missingVars.length > 0 && (
+            (needsTotalLiters && needsExtraLiters && missingVars.includes('totalLiters') && missingVars.includes('extraLiters')) ||
+            (needsTotalLiters && !needsExtraLiters && !needsBalance && missingVars.includes('totalLiters')) ||
+            (needsBalance && !needsTotalLiters && !needsExtraLiters && missingVars.includes('balance')) ||
+            (!needsTotalLiters && !needsExtraLiters && !needsBalance) // formula uses no known variables
+          );
+          
+          if (allRequiredMissing) {
+            console.warn(`⚠️ Formula for ${stationUpper} (${direction}) missing required data: ${missingVars.join(', ')}`);
+            return { 
+              liters: 0, 
+              rate: dynamicStation.defaultRate, 
+              formulaStatus: 'missing_data', 
+              formulaMessage: `Missing: ${missingVars.join(', ')} — enter liters manually` 
+            };
+          }
+          
+          // Evaluate formula with available context
           const evaluatedLiters = evaluateFormula(formula, context);
           
           if (evaluatedLiters !== null) {
             console.log(`✓ Using formula-calculated liters for ${stationUpper} (${direction}): ${evaluatedLiters}L`);
-            return { liters: evaluatedLiters, rate: dynamicStation.defaultRate };
+            return { liters: evaluatedLiters, rate: dynamicStation.defaultRate, formulaStatus: 'applied', formulaMessage: `Formula: ${formula} = ${evaluatedLiters}L` };
           } else {
-            console.warn(`⚠️ Formula evaluation failed for ${stationUpper}, falling back to default liters`);
+            console.warn(`⚠️ Formula evaluation failed for ${stationUpper}`);
+            return { liters: 0, rate: dynamicStation.defaultRate, formulaStatus: 'error', formulaMessage: `Formula error: ${formula}` };
           }
         } else {
-          console.log(`ℹ️ Formula exists but context is empty (totalLiters=${totalLiters}, extraLiters=${extraLiters}, balance=${balance}), using default liters`);
+          // Formula exists but no fuel record context passed (truck not fetched yet)
+          const liters = direction === 'going' ? dynamicStation.defaultLitersGoing : dynamicStation.defaultLitersReturning;
+          return { liters, rate: dynamicStation.defaultRate };
         }
       }
       
-      // Fall back to default liters if no formula or evaluation failed
+      // No formula — use default liters
       const liters = direction === 'going' ? dynamicStation.defaultLitersGoing : dynamicStation.defaultLitersReturning;
       return { liters, rate: dynamicStation.defaultRate };
     }
@@ -1628,6 +1664,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           warningType: result.warningType || null,
           warningMessage: result.message,
           balanceInfo,  // Store balance info for display
+          formulaStatus: defaults.formulaStatus || null,
+          formulaMessage: defaults.formulaMessage,
           // Journey navigation: store all available journeys
           allJourneys: result.allJourneys,
           selectedJourneyIndex: result.allJourneys?.active ? -1 : 0, // -1 for active, 0 for first queued
@@ -1749,6 +1787,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           warningType: result.warningType || null,
           warningMessage: result.message,
           balanceInfo,
+          formulaStatus: defaults.formulaStatus || null,
+          formulaMessage: defaults.formulaMessage,
         }
       }));
     }
@@ -1829,7 +1869,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         [index]: { 
           ...prev[index], 
           direction: newDirection,
-          balanceInfo: newDirection === 'returning' ? balanceInfo : undefined
+          balanceInfo: newDirection === 'returning' ? balanceInfo : undefined,
+          formulaStatus: defaults.formulaStatus || null,
+          formulaMessage: defaults.formulaMessage,
         }
       }));
     } else {
@@ -1926,6 +1968,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         selectedJourneyType: targetJourneyType,
         balanceInfo,
         warningType: null, // Clear warning when explicitly selecting a journey
+        formulaStatus: defaults.formulaStatus || null,
+        formulaMessage: defaults.formulaMessage,
       }
     }));
 
@@ -2342,7 +2386,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         (af.allJourneys.active && af.allJourneys.queued.length > 0) ||
         (!af.allJourneys.active && af.allJourneys.queued.length > 1)
       )) ||
-      (af.balanceInfo && af.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY')
+      (af.balanceInfo && af.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY') ||
+      (af.formulaStatus === 'missing_data' || af.formulaStatus === 'error')
     );
   });
 
@@ -3476,6 +3521,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                         ⏳ Q{queuedJourney.queueOrder || qIdx + 1}
                                       </button>
                                     ))}
+                                  </div>
+                                )}
+                                {/* Formula status */}
+                                {autoFill.formulaStatus === 'missing_data' && (
+                                  <div className="text-amber-600 dark:text-amber-400" title={autoFill.formulaMessage}>
+                                    ⚠️ {autoFill.formulaMessage}
+                                  </div>
+                                )}
+                                {autoFill.formulaStatus === 'error' && (
+                                  <div className="text-red-600 dark:text-red-400" title={autoFill.formulaMessage}>
+                                    ❌ {autoFill.formulaMessage}
+                                  </div>
+                                )}
+                                {autoFill.formulaStatus === 'applied' && (
+                                  <div className="text-green-600 dark:text-green-400" title={autoFill.formulaMessage}>
+                                    ✓ {autoFill.formulaMessage}
                                   </div>
                                 )}
                                 {/* Balance info hint (Infinity return) */}
