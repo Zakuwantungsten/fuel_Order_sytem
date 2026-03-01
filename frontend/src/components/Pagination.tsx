@@ -74,8 +74,18 @@ const Pagination: React.FC<PaginationProps> = ({
       }
     };
     
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (perPageDropdownRef.current?.contains(target)) return;
+      setShowPerPageDropdown(false);
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, []);
 
   // Generate page numbers to display

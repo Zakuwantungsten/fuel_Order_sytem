@@ -88,12 +88,22 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        roleDropdownRef.current?.contains(target) ||
+        statusDropdownRef.current?.contains(target)
+      ) return;
+      setShowRoleDropdown(false);
+      setShowStatusDropdown(false);
+    };
 
-  useEffect(() => {
-    loadUsers();
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, [filterRole, filterStatus]);
 
   const loadUsers = async () => {

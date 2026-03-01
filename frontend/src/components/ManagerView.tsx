@@ -236,7 +236,12 @@ export function ManagerView({ user }: ManagerViewProps) {
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        sortDropdownRef.current?.contains(target) ||
+        stationDropdownRef.current?.contains(target)
+      ) return;
       setShowSortDropdown(false);
       setShowStationDropdown(false);
     };

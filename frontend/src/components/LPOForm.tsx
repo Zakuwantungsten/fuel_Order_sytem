@@ -99,7 +99,9 @@ const LPOForm: React.FC<LPOFormProps> = ({
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (destinationDropdownRef.current?.contains(target)) return;
       setShowDestinationDropdown(false);
     };
 

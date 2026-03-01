@@ -117,7 +117,13 @@ const LPOs = () => {
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        monthDropdownRef.current?.contains(target) ||
+        workbookYearDropdownRef.current?.contains(target) ||
+        stationDropdownRef.current?.contains(target)
+      ) return;
       setShowMonthDropdown(false);
       setShowWorkbookYearDropdown(false);
       setShowStationDropdown(false);

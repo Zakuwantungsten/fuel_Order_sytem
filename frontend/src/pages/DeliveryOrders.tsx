@@ -111,7 +111,15 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        workbookYearDropdownRef.current?.contains(target) ||
+        doTypeDropdownRef.current?.contains(target) ||
+        filterTypeDropdownRef.current?.contains(target) ||
+        filterStatusDropdownRef.current?.contains(target) ||
+        monthDropdownRef.current?.contains(target)
+      ) return;
       setShowWorkbookYearDropdown(false);
       setShowDoTypeDropdown(false);
       setShowFilterTypeDropdown(false);

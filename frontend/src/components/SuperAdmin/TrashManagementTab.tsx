@@ -56,12 +56,22 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        resourceTypeDropdownRef.current?.contains(target) ||
+        dateFilterDropdownRef.current?.contains(target)
+      ) return;
+      setShowResourceTypeDropdown(false);
+      setShowDateFilterDropdown(false);
+    };
 
-  useEffect(() => {
-    loadTrashStats();
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
     loadRetentionSettings();
   }, []);
 

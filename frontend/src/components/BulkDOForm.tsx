@@ -140,7 +140,13 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        cargoTypeDropdownRef.current?.contains(target) ||
+        rateTypeDropdownRef.current?.contains(target) ||
+        importExportDropdownRef.current?.contains(target)
+      ) return;
       setShowCargoTypeDropdown(false);
       setShowRateTypeDropdown(false);
       setShowImportExportDropdown(false);

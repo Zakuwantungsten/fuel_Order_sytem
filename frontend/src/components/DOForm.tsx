@@ -72,7 +72,9 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (rateTypeDropdownRef.current?.contains(target)) return;
       setShowRateTypeDropdown(false);
     };
 

@@ -26,12 +26,18 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (periodDropdownRef.current?.contains(target)) return;
+      setShowPeriodDropdown(false);
+    };
 
-  useEffect(() => {
-    loadAnalytics();
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, [period]);
 
   const loadAnalytics = async () => {

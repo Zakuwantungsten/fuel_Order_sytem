@@ -344,7 +344,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         setShowCustomReturnDropdown(false);
       }
     };
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        stationDropdownRef.current?.contains(target) ||
+        goingCheckpointRef.current?.contains(target) ||
+        returningCheckpointRef.current?.contains(target) ||
+        customGoingRef.current?.contains(target) ||
+        customReturnRef.current?.contains(target)
+      ) return;
       setShowStationDropdown(false);
       setShowGoingCheckpointDropdown(false);
       setShowReturningCheckpointDropdown(false);

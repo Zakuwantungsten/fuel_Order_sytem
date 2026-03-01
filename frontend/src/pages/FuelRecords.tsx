@@ -336,7 +336,14 @@ const FuelRecords = () => {
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        exportYearDropdownRef.current?.contains(target) ||
+        routeTypeDropdownRef.current?.contains(target) ||
+        routeDropdownRef.current?.contains(target) ||
+        monthDropdownRef.current?.contains(target)
+      ) return;
       setShowExportYearDropdown(false);
       setShowRouteTypeDropdown(false);
       setShowRouteDropdown(false);

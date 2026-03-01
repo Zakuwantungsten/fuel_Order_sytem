@@ -41,14 +41,23 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
       }
     };
 
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (routeTypeDropdownRef.current?.contains(target)) return;
+      setShowRouteTypeDropdown(false);
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, []);
 
   const loadData = async () => {
     try {
       const routesData = await configAPI.getRoutes();
-      setRoutes(routesData);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to load routes');
     }

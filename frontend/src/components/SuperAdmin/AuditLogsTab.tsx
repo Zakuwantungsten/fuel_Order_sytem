@@ -59,11 +59,24 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
       }
     };
 
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        actionDropdownRef.current?.contains(target) ||
+        severityDropdownRef.current?.contains(target)
+      ) return;
+      setShowActionDropdown(false);
+      setShowSeverityDropdown(false);
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, []);
   const [pagination, setPagination] = useState({
-    page: 1,
     limit: 50,
     total: 0,
     totalPages: 0,

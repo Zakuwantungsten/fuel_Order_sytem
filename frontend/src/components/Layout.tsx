@@ -46,8 +46,17 @@ const Layout = ({ children }: LayoutProps) => {
     }
 
     if (showUserMenu) {
+      const handleScroll = (event: Event) => {
+        const target = event.target as Node;
+        if (userMenuRef.current?.contains(target)) return;
+        setShowUserMenu(false);
+      };
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      window.addEventListener('scroll', handleScroll, true);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        window.removeEventListener('scroll', handleScroll, true);
+      };
     }
   }, [showUserMenu]);
 

@@ -50,14 +50,27 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
       }
     };
 
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        goingFieldDropdownRef.current?.contains(target) ||
+        returningFieldDropdownRef.current?.contains(target)
+      ) return;
+      setShowGoingFieldDropdown(false);
+      setShowReturningFieldDropdown(false);
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, []);
 
   const loadData = async () => {
     try {
       const [stationsData, formulaData] = await Promise.all([
-        configAPI.getStations(),
         configAPI.getFormulaVariables(),
       ]);
       setStations(stationsData);

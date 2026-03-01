@@ -70,7 +70,13 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        yearDropdownRef.current?.contains(target) ||
+        stationDropdownRef.current?.contains(target) ||
+        monthDropdownRef.current?.contains(target)
+      ) return;
       setShowYearDropdown(false);
       setShowStationDropdown(false);
       setShowMonthDropdown(false);
@@ -1080,8 +1086,22 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
       }
     };
 
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        stationDropdownRef.current?.contains(target) ||
+        paymentDropdownRef.current?.contains(target)
+      ) return;
+      setShowStationDropdown(false);
+      setShowPaymentDropdown(false);
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, []);
 
   // Load stations from database using React Query

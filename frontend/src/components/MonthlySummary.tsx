@@ -64,7 +64,13 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node;
+      if (
+        monthDropdownRef.current?.contains(target) ||
+        groupByDropdownRef.current?.contains(target) ||
+        yearDropdownRef.current?.contains(target)
+      ) return;
       setShowMonthDropdown(false);
       setShowGroupByDropdown(false);
       setShowYearDropdown(false);
