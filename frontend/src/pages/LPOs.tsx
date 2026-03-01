@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2 } from 'lucide-react';
 import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
-import type { LPOEntry, LPOSummary as LPOSummaryType, LPOWorkbook as LPOWorkbookType } from '../types';
-import { lposAPI, lpoDocumentsAPI, lpoWorkbookAPI, driverAccountAPI } from '../services/api';
+import type { LPOEntry, LPOSummary as LPOSummaryType } from '../types';
+import { lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
 import LPODetailForm from '../components/LPODetailForm';
 import LPOWorkbook from '../components/LPOWorkbook';
 import LPOSummaryComponent from '../components/LPOSummary';
@@ -17,6 +18,15 @@ import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGene
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
+import {
+  lpoKeys,
+  periodsToDateRange,
+  useLPOList,
+  useDriverAccountEntries,
+  useLPOWorkbooks,
+  useLPOAvailableYears,
+  useLPOAvailableFilters,
+} from '../hooks/useLPOs';
 
 // Month names for display
 const MONTH_NAMES = [
@@ -27,11 +37,8 @@ const MONTH_NAMES = [
 
 const LPOs = () => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = usePersistedState('lpo:searchTerm', '');
-  const [lpos, setLpos] = useState<LPOEntry[]>([]);
-  const [filteredLpos, setFilteredLpos] = useState<LPOEntry[]>([]);
-  const [workbooks, setWorkbooks] = useState<LPOWorkbookType[]>([]);
-  const [availableYears, setAvailableYears] = useState<number[]>([]);
   // selectedYear — priority: URL params (deep-links) > localStorage > current year
   const [selectedYear, setSelectedYear] = useState<number>(() => {
     const url = new URL(window.location.href);
@@ -39,19 +46,14 @@ const LPOs = () => {
 
     if (yearParam) {
       const year = parseInt(yearParam);
-      if (!isNaN(year)) {
-        console.log('Initializing selectedYear from URL params:', year);
-        return year;
-      }
+      if (!isNaN(year)) return year;
     }
 
-    // Fall back to persisted value
     try {
       const stored = localStorage.getItem('fuel-order:lpo:selectedYear');
       if (stored) return JSON.parse(stored) as number;
     } catch { /* ignore */ }
 
-    // Default to current year
     return new Date().getFullYear();
   });
 
@@ -61,7 +63,6 @@ const LPOs = () => {
       localStorage.setItem('fuel-order:lpo:selectedYear', JSON.stringify(selectedYear));
     } catch { /* ignore */ }
   }, [selectedYear]);
-  const [loading, setLoading] = useState(true);
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
   const [stationFilter, setStationFilter] = usePersistedState('lpo:stationFilter', '');
   const [dateFilter, setDateFilter] = usePersistedState('lpo:dateFilter', '');
@@ -106,6 +107,45 @@ const LPOs = () => {
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [filtersInitialized, setFiltersInitialized] = useState(false);
 
+  // --- React Query hooks (server-side pagination + caching) ---
+  const dateRange = periodsToDateRange(selectedPeriods);
+  const lpoQuery = useLPOList({
+    page: currentPage,
+    limit: itemsPerPage,
+    search: searchTerm || undefined,
+    station: stationFilter || undefined,
+    dateFrom: dateRange.dateFrom,
+    dateTo: dateRange.dateTo,
+    sort: 'createdAt',
+    order: 'desc',
+  });
+  const { data: driverEntries = [] } = useDriverAccountEntries();
+  const lpoEntries: LPOEntry[] = lpoQuery.data?.lpos ?? [];
+  // Merge server-paginated LPO entries with cached driver account entries
+  const orders = useMemo(() => [...lpoEntries, ...driverEntries], [lpoEntries, driverEntries]);
+  const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
+  const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
+  const loading = lpoQuery.isLoading;
+
+  const { data: workbooks = [] } = useLPOWorkbooks();
+  const { data: hookYears = [] } = useLPOAvailableYears();
+  const { data: filtersData } = useLPOAvailableFilters();
+
+  const availablePeriods = useMemo(() => {
+    return (filtersData?.periods ?? []).sort((a: {year: number; month: number}, b: {year: number; month: number}) =>
+      b.year !== a.year ? b.year - a.year : b.month - a.month
+    );
+  }, [filtersData]);
+
+  const availableStations: string[] = useMemo(() => {
+    return (filtersData?.stations ?? []).sort();
+  }, [filtersData]);
+
+  const availableYears = useMemo(() => {
+    const yearsFromPeriods = availablePeriods.map((p: {year: number}) => p.year);
+    return [...new Set([...hookYears, ...yearsFromPeriods])].sort((a, b) => b - a);
+  }, [hookYears, availablePeriods]);
+
   // Click-outside detection for filter dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -140,12 +180,6 @@ const LPOs = () => {
     };
   }, []);
 
-  useEffect(() => {
-    fetchLpos();
-    fetchWorkbooks();
-    fetchAvailableYears();
-  }, []);
-
   // Handle highlight from URL parameter
   useEffect(() => {
     const handleUrlChange = () => {
@@ -169,7 +203,7 @@ const LPOs = () => {
         console.log('Year Param:', yearParam);
         console.log('Month Param:', monthParam);
         console.log('Current selectedYear:', selectedYear);
-        console.log('Current selectedMonths:', selectedMonths);
+        console.log('Current selectedPeriods:', selectedPeriods);
         
         // Set year if provided (used for workbook display)
         let urlFilterYear = new Date().getFullYear();
@@ -212,11 +246,11 @@ const LPOs = () => {
 
   // Separate effect to handle highlight after LPOs are loaded and filtered
   useEffect(() => {
-    if (pendingHighlight && filteredLpos.length > 0) {
-      console.log('Attempting to find and highlight LPO:', pendingHighlight, 'in', filteredLpos.length, 'filtered LPOs');
+    if (pendingHighlight && orders.length > 0) {
+      console.log('Attempting to find and highlight LPO:', pendingHighlight, 'in', orders.length, 'filtered LPOs');
       
       // Find in filtered list (after year/month filters applied)
-      const recordIndex = filteredLpos.findIndex(l => l.lpoNo === pendingHighlight);
+      const recordIndex = orders.findIndex(l => l.lpoNo === pendingHighlight);
       
       if (recordIndex >= 0) {
         console.log('Found LPO at filtered index:', recordIndex);
@@ -236,7 +270,7 @@ const LPOs = () => {
         clearLPOHighlight();
       }
     }
-  }, [pendingHighlight, filteredLpos, itemsPerPage, currentPage]);
+  }, [pendingHighlight, orders, itemsPerPage, currentPage]);
   
   // Helper function to scroll and highlight
   const scrollToAndHighlightLPO = (lpoNo: string) => {
@@ -311,11 +345,10 @@ const LPOs = () => {
     window.history.replaceState({}, '', url.toString());
   };
 
+  // React Query handles filtering server-side; reset page on filter changes
   useEffect(() => {
-    if (filtersInitialized) {
-      filterLpos();
-    }
-  }, [searchTerm, stationFilter, dateFilter, selectedPeriods, lpos, filtersInitialized]);
+    setCurrentPage(1);
+  }, [searchTerm, stationFilter, dateFilter, selectedPeriods]);
 
   // Helper to parse date from various formats (e.g., "2-Dec", "1-Dec", "2025-12-02")
   const getMonthFromDate = (dateStr: string): number | null => {
@@ -355,47 +388,12 @@ const LPOs = () => {
     return new Date().getFullYear();
   };
 
-  // Get unique stations from the data
-  // Stations available in the currently selected period(s) only
-  const availableStations = useMemo(() => {
-    const stations = new Set<string>();
-    lpos.forEach(lpo => {
-      if (!lpo.dieselAt || !lpo.dieselAt.trim()) return;
-      // Only include stations from LPOs matching the selected periods
-      if (selectedPeriods.length > 0) {
-        const lpoYear = getEffectiveYear(lpo);
-        const lpoMonth = getMonthFromDate(lpo.date);
-        if (lpoMonth !== null && !selectedPeriods.some(p => p.year === lpoYear && p.month === lpoMonth)) return;
-      }
-      stations.add(lpo.dieselAt.trim().toUpperCase());
-    });
-    return Array.from(stations).sort();
-  }, [lpos, selectedPeriods]);
-
   // Auto-clear station filter when it's no longer valid for the selected period(s)
   useEffect(() => {
     if (stationFilter && availableStations.length > 0 && !availableStations.includes(stationFilter)) {
       setStationFilter('');
     }
   }, [availableStations]);
-
-  // All year+month periods that have LPO data — used for the period picker dropdown.
-  // getEffectiveYear handles both ISO dates (imported) and DD-Mon dates (manually created).
-  const availablePeriods = useMemo(() => {
-    const seen = new Map<string, { year: number; month: number }>();
-    lpos.forEach(lpo => {
-      const year = getEffectiveYear(lpo);
-      const month = getMonthFromDate(lpo.date);
-      if (month !== null) {
-        const key = `${year}-${month}`;
-        if (!seen.has(key)) seen.set(key, { year, month });
-      }
-    });
-    // Sort: most recent year first, most recent month first within each year
-    return Array.from(seen.values()).sort((a, b) =>
-      b.year !== a.year ? b.year - a.year : b.month - a.month
-    );
-  }, [lpos]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -415,104 +413,12 @@ const LPOs = () => {
     };
   }, []);
 
-  const fetchLpos = async () => {
-    try {
-      setLoading(true);
-      const [response, driverEntries] = await Promise.all([
-        lposAPI.getAll({ limit: 10000 }),
-        driverAccountAPI.getAll().catch(() => [] as any[])
-      ]);
-      // Extract data from new API response format
-      const lposData = Array.isArray(response.data) ? response.data : [];
-      
-      // Convert driver account entries to LPOEntry format and merge
-      const driverLpos: LPOEntry[] = (driverEntries || []).map((entry: any, idx: number) => {
-        // Extract numeric portion of lpoNo for proper sequential sorting
-        const numMatch = String(entry.lpoNo || '').match(/(\d+)/);
-        const numericSn = numMatch ? parseInt(numMatch[1], 10) : idx + 1;
-        return {
-          id: `da-${entry.id || entry._id}`,
-          sn: numericSn,
-          date: entry.date,
-          lpoNo: entry.lpoNo,
-          dieselAt: entry.station,
-          doSdo: 'NIL',
-          truckNo: entry.truckNo,
-          ltrs: entry.liters,
-          pricePerLtr: entry.rate,
-          destinations: 'NIL',
-          createdAt: entry.createdAt,
-        };
-      });
-      
-      const mergedData = [...lposData, ...driverLpos];
-      setLpos(mergedData);
-      setFilteredLpos(mergedData);
-    } catch (error) {
-      console.error('Error fetching LPOs:', error);
-      setLpos([]);
-      setFilteredLpos([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useRealtimeSync(['lpo_entries', 'lpo_summaries'], fetchLpos);
-
-  const fetchWorkbooks = async () => {
-    try {
-      const data = await lpoWorkbookAPI.getAll();
-      // Ensure data is always an array
-      setWorkbooks(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error fetching workbooks:', error);
-      setWorkbooks([]);
-    }
-  };
-
-  const fetchAvailableYears = async () => {
-    try {
-      // Check if there's a year parameter in the URL first
-      const url = new URL(window.location.href);
-      const yearParam = url.searchParams.get('year');
-      const urlYear = yearParam ? parseInt(yearParam) : null;
-      
-      const years = await lpoWorkbookAPI.getAvailableYears();
-      if (years.length > 0) {
-        setAvailableYears(years);
-        // If URL has a valid year param, use it; otherwise use most recent year
-        if (urlYear && !isNaN(urlYear) && years.includes(urlYear)) {
-          setSelectedYear(urlYear);
-        } else {
-          setSelectedYear(years[0]); // Most recent year
-        }
-      } else {
-        // Default to current year if no years available
-        const currentYear = new Date().getFullYear();
-        setAvailableYears([currentYear]);
-        setSelectedYear(urlYear && !isNaN(urlYear) ? urlYear : currentYear);
-      }
-    } catch (error) {
-      console.error('Error fetching available years:', error);
-      const url = new URL(window.location.href);
-      const yearParam = url.searchParams.get('year');
-      const urlYear = yearParam ? parseInt(yearParam) : null;
-      const currentYear = new Date().getFullYear();
-      setAvailableYears([currentYear]);
-      setSelectedYear(urlYear && !isNaN(urlYear) ? urlYear : currentYear);
-    }
-  };
-
-  // Merge all unique years (via getEffectiveYear) into availableYears so that
-  // the workbook export year picker shows all years including imported historical data.
-  useEffect(() => {
-    if (lpos.length === 0) return;
-    const yearsFromData = [...new Set(lpos.map(lpo => getEffectiveYear(lpo)))].sort((a, b) => b - a);
-    setAvailableYears(prev => {
-      const merged = [...new Set([...prev, ...yearsFromData])].sort((a, b) => b - a);
-      return merged.join(',') === prev.join(',') ? prev : merged;
-    });
-  }, [lpos]);
+  // Realtime sync — invalidate React Query cache instead of full refetch
+  useRealtimeSync(['lpo_entries', 'lpo_summaries'], () => {
+    queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
+    queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
+    queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
+  });
 
   const handleExportWorkbook = async (year: number) => {
     try {
@@ -535,7 +441,7 @@ const LPOs = () => {
   // Groups all entries with the same LPO number
   const convertToLPOSummary = (lpo: LPOEntry): LPOSummaryType => {
     // Find all entries with the same LPO number
-    const sameLoEntries = filteredLpos.filter(entry => entry.lpoNo === lpo.lpoNo);
+    const sameLoEntries = orders.filter(entry => entry.lpoNo === lpo.lpoNo);
     
     const entries = sameLoEntries.map(entry => ({
       doNo: entry.doSdo || 'NIL',
@@ -736,70 +642,26 @@ const LPOs = () => {
     return `${selectedPeriods.length} periods`;
   };
 
-  const filterLpos = () => {
-    let filtered = [...lpos];
-
-    // Period filter — match (year, month) pairs exactly, same as DO management.
-    // getEffectiveYear correctly handles both ISO imported dates and DD-Mon legacy dates.
-    if (selectedPeriods.length > 0) {
-      filtered = filtered.filter((lpo) => {
-        const lpoYear = getEffectiveYear(lpo);
-        const lpoMonth = getMonthFromDate(lpo.date);
-        if (lpoMonth === null) return true; // no month info — keep
-        return selectedPeriods.some(p => p.year === lpoYear && p.month === lpoMonth);
-      });
-    }
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (lpo) =>
-          lpo.lpoNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          lpo.truckNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          lpo.doSdo.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (stationFilter) {
-      filtered = filtered.filter((lpo) => lpo.dieselAt === stationFilter);
-    }
-
-    if (dateFilter) {
-      // dateFilter is ISO "YYYY-MM-DD"; LPO dates may be ISO or legacy "D-Mon"
-      try {
-        const d = new Date(dateFilter);
-        const legacy = `${d.getDate()}-${d.toLocaleDateString('en-US', { month: 'short' })}`; // "13-Jan"
-        filtered = filtered.filter((lpo) => lpo.date === dateFilter || lpo.date === legacy);
-      } catch (error) {
-        console.error('Error parsing date filter:', error);
-      }
-    }
-
-    setFilteredLpos(filtered);
-    setCurrentPage(1); // Reset to page 1 when filters change
-  };
-
   // Auto-fallback: if the default current period (today's year+month) has no data,
   // automatically switch to the most recent period that does.
   useEffect(() => {
-    if (loading || lpos.length === 0 || !filtersInitialized) return;
+    if (loading || orders.length === 0 || !filtersInitialized) return;
     const now = new Date();
     const defYear = now.getFullYear(), defMonth = now.getMonth() + 1;
-    // Only auto-switch when still on the initial default selection
     if (selectedPeriods.length !== 1 || selectedPeriods[0].year !== defYear || selectedPeriods[0].month !== defMonth) return;
-    if (filteredLpos.length === 0 && availablePeriods.length > 0) {
+    if (orders.length === 0 && availablePeriods.length > 0) {
       setSelectedPeriods([availablePeriods[0]]);
     }
-  }, [filteredLpos, loading, filtersInitialized, availablePeriods]);
+  }, [orders, loading, filtersInitialized, availablePeriods]);
 
   // Add month-based serial numbers to LPOs
   const lposWithMonthlySerialNumbers = useMemo(() => {
-    // Group LPOs by month and year
     const groupedByMonth: { [key: string]: LPOEntry[] } = {};
     
-    filteredLpos.forEach(lpo => {
+    orders.forEach(lpo => {
       const month = getMonthFromDate(lpo.date);
-      const year = getEffectiveYear(lpo); // ISO date year OR createdAt year for DD-Mon records
-      const key = `${year}-${month}`; // e.g., "2025-10" for October 2025
+      const year = getEffectiveYear(lpo);
+      const key = `${year}-${month}`;
       
       if (!groupedByMonth[key]) {
         groupedByMonth[key] = [];
@@ -807,16 +669,13 @@ const LPOs = () => {
       groupedByMonth[key].push(lpo);
     });
     
-    // Assign serial numbers within each month group
     const lposWithSN: LPOEntry[] = [];
     Object.keys(groupedByMonth).forEach(monthKey => {
       const monthLpos = groupedByMonth[monthKey];
-      // Sort by original sn (includes numeric lpoNo for driver account entries)
       monthLpos.sort((a, b) => {
         const aSn = a.sn || 0;
         const bSn = b.sn || 0;
         if (aSn !== bSn) return aSn - bSn;
-        // Fallback: sort by lpoNo numeric part
         const aNum = parseInt((String(a.lpoNo).match(/(\d+)/) || ['0','0'])[1]);
         const bNum = parseInt((String(b.lpoNo).match(/(\d+)/) || ['0','0'])[1]);
         return aNum - bNum;
@@ -825,27 +684,22 @@ const LPOs = () => {
       monthLpos.forEach((lpo, index) => {
         lposWithSN.push({
           ...lpo,
-          sn: index + 1 // Reset to 1 for each month
+          sn: index + 1
         });
       });
     });
     
-    // Sort back to original order (by createdAt or original sn)
     lposWithSN.sort((a, b) => {
       const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bDate - aDate; // Most recent first
+      return bDate - aDate;
     });
     
     return lposWithSN;
-  }, [filteredLpos]);
+  }, [orders]);
 
-  // Pagination calculations
-  const totalPages = Math.ceil(lposWithMonthlySerialNumbers.length / itemsPerPage);
-  const paginatedLpos = lposWithMonthlySerialNumbers.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // Server already paginates — use the serial-numbered list directly
+  const paginatedLpos = lposWithMonthlySerialNumbers;
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -875,9 +729,10 @@ const LPOs = () => {
       const now = new Date();
       setSelectedPeriods([{ year: now.getFullYear(), month: now.getMonth() + 1 }]);
 
-      fetchLpos();
-      fetchWorkbooks();
-      fetchAvailableYears();
+      queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
+      queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
+      queryClient.invalidateQueries({ queryKey: lpoKeys.availableYears() });
 
       // Auto-download PDF for the created LPO
       const pdfToastId = toast.loading(`Preparing PDF — LPO ${createdLpo.lpoNo}...`, {
@@ -972,8 +827,8 @@ const LPOs = () => {
     setSelectedWorkbookId(null);
     setSelectedLpoNo(null);
     setViewMode('list');
-    fetchWorkbooks(); // Refresh workbooks list
-    fetchLpos(); // Refresh LPO entries (includes driver account) to show updated values
+    queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
+    queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
   };
 
   // Navigate to workbook sheet view from driver account tab
@@ -1066,12 +921,12 @@ const LPOs = () => {
   };
 
   // Calculate totals for display
-  const totalLiters = filteredLpos.reduce((sum, lpo) => sum + lpo.ltrs, 0);
-  const totalAmount = filteredLpos.reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
-  const totalAmountTZS = filteredLpos
+  const totalLiters = orders.reduce((sum, lpo) => sum + lpo.ltrs, 0);
+  const totalAmount = orders.reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
+  const totalAmountTZS = orders
     .filter(lpo => { const u = (lpo.dieselAt || '').toUpperCase(); return !(u.startsWith('LAKE') && !u.includes('TUNDUMA')); })
     .reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
-  const totalAmountUSD = filteredLpos
+  const totalAmountUSD = orders
     .filter(lpo => { const u = (lpo.dieselAt || '').toUpperCase(); return u.startsWith('LAKE') && !u.includes('TUNDUMA'); })
     .reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
 
@@ -1184,7 +1039,7 @@ const LPOs = () => {
           </div>
         </div>
         <LPOSummaryComponent 
-          lpoEntries={lpos} 
+          lpoEntries={orders} 
           selectedStations={summaryFilters.stations}
           dateFrom={summaryFilters.dateFrom}
           dateTo={summaryFilters.dateTo}
@@ -1391,7 +1246,7 @@ const LPOs = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
           <div className="text-xs text-gray-600 dark:text-gray-400">Total Entries</div>
-          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{filteredLpos.length}</div>
+          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{totalItems}</div>
         </div>
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
           <div className="text-xs text-gray-600 dark:text-gray-400">Total Liters</div>
@@ -1576,7 +1431,7 @@ const LPOs = () => {
             <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm sm:text-base">Loading LPO entries...</p>
           </div>
-        ) : filteredLpos.length === 0 ? (
+        ) : orders.length === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
             <p className="text-sm sm:text-base">No LPO entries found</p>
           </div>
@@ -1886,11 +1741,11 @@ const LPOs = () => {
         )}
         
         {/* Pagination */}
-        {!loading && filteredLpos.length > 0 && (
+        {!loading && orders.length > 0 && (
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
-            totalItems={filteredLpos.length}
+            totalItems={totalItems}
             itemsPerPage={itemsPerPage}
             onPageChange={handlePageChange}
             onItemsPerPageChange={handleItemsPerPageChange}

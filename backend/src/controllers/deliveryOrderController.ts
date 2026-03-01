@@ -467,12 +467,76 @@ const cascadeToLPOEntries = async (
 };
 
 /**
+ * Get distinct year-month periods that have delivery order data.
+ * Used by the frontend period picker so it doesn't need to load all orders.
+ */
+export const getAvailablePeriods = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { importOrExport, doType, status } = req.query;
+    const filter: any = { isDeleted: false };
+
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
+
+    if (status === 'active') {
+      filter.isCancelled = { $ne: true };
+    } else if (status === 'cancelled') {
+      filter.isCancelled = true;
+    }
+
+    if (doType && (doType === 'DO' || doType === 'SDO')) {
+      filter.doType = doType;
+    }
+
+    if (importOrExport && importOrExport !== 'ALL') {
+      filter.importOrExport = importOrExport;
+    }
+
+    const dates = await DeliveryOrder.distinct('date', filter);
+    const seen = new Map<string, { year: number; month: number }>();
+
+    for (const dateStr of dates) {
+      if (!dateStr) continue;
+      let year: number | null = null;
+      let month: number | null = null;
+
+      const iso = (dateStr as string).match(/^(\d{4})-(\d{2})-\d{2}/);
+      if (iso) {
+        year = parseInt(iso[1]);
+        month = parseInt(iso[2]);
+      } else {
+        const d = new Date(dateStr as string);
+        if (!isNaN(d.getTime())) {
+          year = d.getFullYear();
+          month = d.getMonth() + 1;
+        }
+      }
+
+      if (year !== null && month !== null) {
+        const key = `${year}-${month}`;
+        if (!seen.has(key)) seen.set(key, { year, month });
+      }
+    }
+
+    const periods = Array.from(seen.values()).sort((a, b) =>
+      b.year !== a.year ? b.year - a.year : a.month - b.month
+    );
+
+    res.json(periods);
+  } catch (error) {
+    logger.error('Error fetching available periods:', error);
+    throw new ApiError(500, 'Failed to fetch available periods');
+  }
+};
+
+/**
  * Get all delivery orders with pagination and filters
  */
 export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, clientName, truckNo, importOrExport, destination, doType, search } = req.query;
+    const { dateFrom, dateTo, clientName, truckNo, importOrExport, destination, doType, search, status } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -481,6 +545,14 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
     if (req.user?.role === 'driver') {
       filter.truckNo = req.user.username;
     }
+
+    // Filter by status (active / cancelled)
+    if (status === 'active') {
+      filter.isCancelled = { $ne: true };
+    } else if (status === 'cancelled') {
+      filter.isCancelled = true;
+    }
+    // 'all' or undefined = no isCancelled filter
 
     // Filter by doType if specified (DO or SDO), otherwise return all
     if (doType && (doType === 'DO' || doType === 'SDO')) {

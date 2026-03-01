@@ -11,6 +11,7 @@ const router = Router();
 router.use(authenticate);
 
 // Get routes - manager and super_manager have read access
+router.get('/available-filters', asyncHandler(lpoEntryController.getAvailableFilters));
 router.get('/', commonValidation.pagination, validate, asyncHandler(lpoEntryController.getAllLPOEntries));
 router.get('/next-lpo-number', asyncHandler(lpoEntryController.getNextLPONumber));
 router.get('/lpo/:lpoNo', asyncHandler(lpoEntryController.getLPOEntriesByLPONo));

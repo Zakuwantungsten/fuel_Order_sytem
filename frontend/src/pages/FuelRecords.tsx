@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, X } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
-import { fuelRecordsAPI, lposAPI } from '../services/api';
+import { fuelRecordsAPI } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
@@ -12,6 +13,7 @@ import Pagination from '../components/Pagination';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 
 // Standard fuel allocations - used to highlight extra fuel (fuel exceeding standard allocation)
 const STANDARD_ALLOCATIONS = {
@@ -54,17 +56,22 @@ const getExtraAmount = (field: string, value: number | undefined): number => {
   return value - standard;
 };
 
+const MONTH_NAMES_FR = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** Convert YYYY-MM to "Month YYYY" format for API */
+const toMonthApiFormat = (yyyyMm: string): string => {
+  const [year, monthNum] = yyyyMm.split('-');
+  return `${MONTH_NAMES_FR[parseInt(monthNum) - 1]} ${year}`;
+};
+
 const FuelRecords = () => {
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = usePersistedState('fr:searchTerm', '');
-  const [records, setRecords] = useState<FuelRecord[]>([]);
-  const [lpos, setLpos] = useState<LPOEntry[]>([]);
-  const [filteredRecords, setFilteredRecords] = useState<FuelRecord[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FuelRecord | undefined>();
   const [routeFilter, setRouteFilter] = usePersistedState('fr:routeFilter', '');
   const [routeTypeFilter, setRouteTypeFilter] = usePersistedState<'IMPORT' | 'EXPORT'>('fr:routeTypeFilter', 'IMPORT');
-  const [availableRoutes, setAvailableRoutes] = useState<any[]>([]);
   const [exportYear, setExportYear] = useState<number>(() => new Date().getFullYear());
   const [viewMode, setViewMode] = usePersistedState<'records' | 'analytics'>('fr:viewMode', 'records');
   
@@ -107,12 +114,48 @@ const FuelRecords = () => {
   // Pagination state (server-side)
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = usePersistedState('fr:itemsPerPage', 10);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  
-  // Available months and years for filters (fetched separately)
-  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-  const [availableYears, setAvailableYears] = useState<number[]>([]);
+
+  // Month initialization flag (must be declared before React Query hooks that depend on it)
+  const [monthInitialized, setMonthInitialized] = useState(false);
+
+  // --- React Query hooks (replace manual fetch + state) ---
+  // Build the month filter for the API
+  const monthApiFilter = selectedMonth ? toMonthApiFormat(selectedMonth) : undefined;
+
+  // Route filter → from/to params
+  const routeFrom = routeFilter ? (routeTypeFilter === 'EXPORT' ? routeFilter.split('-')[0] : undefined) : undefined;
+  const routeTo = routeFilter ? (routeTypeFilter === 'IMPORT' ? routeFilter.split('-')[1] : undefined) : undefined;
+
+  const { data: recordsData, isLoading: loading, isFetching } = useFuelRecordsList({
+    page: currentPage,
+    limit: itemsPerPage,
+    search: searchTerm || undefined,
+    month: monthApiFilter,
+    routeFrom,
+    routeTo,
+    sort: 'date',
+    order: 'desc',
+  }, monthInitialized);
+
+  const records = recordsData?.records ?? [];
+  const filteredRecords = records;
+  const totalItems = recordsData?.pagination?.total ?? 0;
+  const totalPages = recordsData?.pagination?.totalPages ?? 0;
+
+  // LPO dropdown (for linking fuel records → LPOs)
+  const { data: lpos = [] } = useLPODropdown();
+
+  // Available routes for filter dropdown
+  const { data: availableRoutes = [] } = useFuelRecordRoutes(
+    monthApiFilter || '',
+    routeTypeFilter,
+    monthInitialized && !!monthApiFilter,
+  );
+
+  // Available months & years for month picker
+  const { data: periodsData } = useFuelRecordPeriods();
+  const availableMonths = periodsData?.months ?? [];
+  const availableYears = periodsData?.years ?? [];
   
   // Dropdown states
   const [showExportYearDropdown, setShowExportYearDropdown] = useState(false);
@@ -129,7 +172,6 @@ const FuelRecords = () => {
   // Ref and state to track highlight
   const highlightProcessedRef = useRef<string | null>(null);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
-  const [monthInitialized, setMonthInitialized] = useState(false);
 
   // Robust date parser that handles both YYYY-MM-DD (UI records) and D-Mon-YYYY (imported records)
   const parseRecordDate = (dateStr: string): Date | null => {
@@ -155,12 +197,6 @@ const FuelRecords = () => {
     return isNaN(d.getTime()) ? null : d;
   };
 
-  useEffect(() => {
-    fetchLpos();
-    fetchAvailableMonthsAndYears();
-    // fetchRoutes will be called when monthInitialized becomes true
-  }, []);
-  
   // Handle highlight from URL parameter
   useEffect(() => {
     const handleUrlChange = () => {
@@ -361,23 +397,13 @@ const FuelRecords = () => {
     };
   }, []);
 
-  // Fetch records when pagination or filters change - but only after month is initialized
-  useEffect(() => {
-    if (monthInitialized) {
-      fetchRecords();
-    }
-  }, [currentPage, itemsPerPage, searchTerm, routeFilter, selectedMonth, routeTypeFilter, monthInitialized]);
+  // Fetch records when pagination or filters change — React Query handles this
+  // automatically via the useFuelRecordsList hook above. No useEffect needed.
 
-  // Remove client-side filtering useEffect - filtering now happens on server
-  // useEffect(() => {
-  //   filterRecords();
-  // }, [searchTerm, routeFilter, records, selectedMonth, routeTypeFilter]);
-
-  // Reset route filter and fetch routes when import/export type or month changes
+  // Reset route filter when import/export type or month changes
   useEffect(() => {
     if (monthInitialized) {
       setRouteFilter('');
-      fetchRoutes();
     }
   }, [routeTypeFilter, selectedMonth, monthInitialized]);
   
@@ -387,17 +413,10 @@ const FuelRecords = () => {
   }, [searchTerm, routeFilter, selectedMonth, routeTypeFilter]);
 
   // Subscribe to real-time yard fuel notifications to auto-refresh the table
-  const fetchRecordsRef = useRef<() => void>();
-  useEffect(() => {
-    // Use the silent version for realtime updates — no loading spinner
-    fetchRecordsRef.current = () => fetchRecords(true);
-  });
-
   useEffect(() => {
     subscribeToNotifications((notification) => {
       if (notification.type === 'yard_fuel_recorded' || notification.type === 'truck_pending_linking') {
-        // Yard fuel was recorded — refresh fuel records table
-        fetchRecordsRef.current?.();
+        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
       }
     }, 'fuel-records');
 
@@ -408,156 +427,17 @@ const FuelRecords = () => {
 
   // Real-time sync: refresh when any user modifies fuel records or LPO entries
   useRealtimeSync(['fuel_records', 'lpo_entries'], () => {
-    fetchRecordsRef.current?.();
+    queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+    queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
   });
 
-  const fetchRecords = async (silent = false) => {
-    try {
-      if (!silent) setLoading(true);
-      
-      // Build filters for backend
-      const filters: any = {
-        page: currentPage,
-        limit: itemsPerPage,
-        sort: 'date',
-        order: 'desc'
-      };
-      
-      // Add search filter (searches truckNo, goingDo, returnDo)
-      if (searchTerm) {
-        filters.search = searchTerm;
-      }
-      
-      // Add route filter - routeFilter now contains "FROM-TO" format
-      if (routeFilter) {
-        const [from, to] = routeFilter.split('-');
-        if (routeTypeFilter === 'IMPORT') {
-          // For IMPORT, filter by the destination
-          filters.to = to;
-        } else {
-          // For EXPORT, filter by the origin (which is 'from' in the route key)
-          filters.from = from;
-        }
-      }
-      
-      // Add month filter - backend expects 'month' field which contains "Month YYYY" format
-      // Convert from "YYYY-MM" to "Month YYYY"
-      if (selectedMonth) {
-        const [year, monthNum] = selectedMonth.split('-');
-        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                           'July', 'August', 'September', 'October', 'November', 'December'];
-        const monthName = monthNames[parseInt(monthNum) - 1];
-        filters.month = `${monthName} ${year}`;
-      }
-      
-      const response = await fuelRecordsAPI.getAll(filters);
-      
-      // Store all records for export purposes (we still need them)
-      setRecords(response.data);
-      
-      // For server-side pagination, filtered records are same as fetched records
-      setFilteredRecords(response.data);
-      
-      // Update pagination metadata from server
-      if (response.pagination) {
-        setTotalItems(response.pagination.total);
-        setTotalPages(response.pagination.totalPages);
-      } else {
-        // Fallback if no pagination (all data returned)
-        setTotalItems(response.data.length);
-        setTotalPages(Math.ceil(response.data.length / itemsPerPage));
-      }
-    } catch (error) {
-      console.error('Error fetching fuel records:', error);
-      setRecords([]);
-      setFilteredRecords([]);
-      setTotalItems(0);
-      setTotalPages(0);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  };
-
-  const fetchLpos = async () => {
-    try {
-      const response = await lposAPI.getAll({ limit: 10000 });
-      // Extract data from new API response format
-      setLpos(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error('Error fetching LPOs:', error);
-      setLpos([]);
-    }
-  };
-
-  const fetchRoutes = async () => {
-    try {
-      // Build filters to fetch records for the selected month only
-      const filters: any = { limit: 10000 };
-      
-      // Add month filter - only fetch routes from current month
-      if (selectedMonth) {
-        const [year, monthNum] = selectedMonth.split('-');
-        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                           'July', 'August', 'September', 'October', 'November', 'December'];
-        const monthName = monthNames[parseInt(monthNum) - 1];
-        filters.month = `${monthName} ${year}`;
-      }
-      
-      const response = await fuelRecordsAPI.getAll(filters);
-      const allRecords = response.data;
-      
-      // Extract unique routes with both from and to fields
-      const routesMap = new Map<string, { from: string; to: string }>();
-      
-      allRecords.forEach(record => {
-        if (routeTypeFilter === 'IMPORT') {
-          // IMPORT = Going routes - use originalGoingFrom/To (preserved) or fallback to from/to
-          // Only include records that have a goingDo (not empty/null)
-          if (record.goingDo && record.goingDo.trim() !== '') {
-            const goingFrom = record.originalGoingFrom || record.from;
-            const goingTo = record.originalGoingTo || record.to;
-            if (goingFrom && goingTo) {
-              const routeKey = `${goingFrom}-${goingTo}`;
-              routesMap.set(routeKey, { from: goingFrom, to: goingTo });
-            }
-          }
-        } else {
-          // EXPORT = Return routes - use current from/to (already updated for return direction)
-          // Only include records that have a returnDo (not empty/null)
-          // DO NOT reverse - the from/to fields already represent the return journey direction
-          if (record.returnDo && record.returnDo.trim() !== '' && record.from && record.to) {
-            const routeKey = `${record.from}-${record.to}`;
-            routesMap.set(routeKey, { from: record.from, to: record.to });
-          }
-        }
-      });
-      
-      // Convert to array and sort by the full route string
-      const routes = Array.from(routesMap.values())
-        .sort((a, b) => {
-          const routeA = `${a.from} - ${a.to}`;
-          const routeB = `${b.from} - ${b.to}`;
-          return routeA.localeCompare(routeB);
-        });
-      
-      setAvailableRoutes(routes);
-    } catch (error) {
-      console.error('Error fetching routes:', error);
-      setAvailableRoutes([]);
-    }
-  };
-
-  // filterRecords is no longer needed - filtering happens on server
-  // Keeping it here commented out for reference
-  // const filterRecords = () => { ... };
-  
   // Server-side pagination - no need to slice, backend already returned the right page
   const paginatedRecords = filteredRecords;
   const startIndex = (currentPage - 1) * itemsPerPage;
   
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    // fetchRecords will be called automatically via useEffect
+    // React Query will auto-fetch with new page via query key change
     // Scroll to top of table when page changes
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -565,7 +445,7 @@ const FuelRecords = () => {
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
     setItemsPerPage(newItemsPerPage);
     setCurrentPage(1); // Reset to first page when changing items per page
-    // fetchRecords will be called automatically via useEffect with new limit
+    // React Query will auto-fetch with new limit via query key change
   };
 
   const handleCreate = () => {
@@ -584,7 +464,7 @@ const FuelRecords = () => {
     if (window.confirm('Are you sure you want to delete this fuel record?')) {
       try {
         await fuelRecordsAPI.delete(id);
-        fetchRecords();
+        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
       } catch (error) {
         console.error('Error deleting fuel record:', error);
       }
@@ -609,8 +489,8 @@ const FuelRecords = () => {
       } else {
         await fuelRecordsAPI.create(data);
       }
-      // No manual fetchRecords() needed — the backend emits a data_changed WebSocket
-      // event after every create/update, and useRealtimeSync picks it up silently.
+      // No manual fetch needed — React Query cache is invalidated via
+      // useRealtimeSync + WebSocket data_changed events.
     } catch (error) {
       console.error('Error saving fuel record:', error);
     }
@@ -730,33 +610,6 @@ const FuelRecords = () => {
   };
 
   // Fetch available months and years for filters
-  const fetchAvailableMonthsAndYears = async () => {
-    try {
-      // Fetch all records (high limit) to get months and years
-      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
-      const allRecords = response.data;
-      
-      const months = new Set<string>();
-      const years = new Set<number>();
-      
-      allRecords.forEach(record => {
-        const date = parseRecordDate(record.date as string);
-        if (!date) return;
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        months.add(monthKey);
-        years.add(date.getFullYear());
-      });
-      
-      const sortedMonths = Array.from(months).sort();
-      const sortedYears = Array.from(years).sort().reverse(); // Most recent first
-      
-      setAvailableMonths(sortedMonths);
-      setAvailableYears(sortedYears);
-    } catch (error) {
-      console.error('Error fetching available months/years:', error);
-    }
-  };
-  
   // Month navigation helpers
   const getAvailableMonths = () => {
     return availableMonths;

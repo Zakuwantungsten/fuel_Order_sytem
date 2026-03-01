@@ -11,6 +11,8 @@ const router = Router();
 router.use(authenticate);
 
 // Get routes
+router.get('/available-periods', asyncHandler(fuelRecordController.getAvailablePeriods));
+router.get('/available-routes', asyncHandler(fuelRecordController.getAvailableRoutes));
 router.get('/', commonValidation.pagination, validate, asyncHandler(fuelRecordController.getAllFuelRecords));
 router.get('/monthly-summary', asyncHandler(fuelRecordController.getMonthlyFuelSummary));
 router.get('/truck/:truckNo', asyncHandler(fuelRecordController.getFuelRecordsByTruck));

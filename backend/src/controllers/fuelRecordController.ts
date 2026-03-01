@@ -113,6 +113,160 @@ async function activateNextQueuedJourney(truckNo: string, username: string): Pro
 }
 
 /**
+ * Get available periods (year-month pairs) for the period picker dropdown.
+ * Uses MongoDB distinct + aggregation so we never fetch full records.
+ */
+export const getAvailablePeriods = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const filter: any = { isDeleted: false };
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
+
+    // Aggregate distinct year-month pairs from the date field
+    const results = await FuelRecord.aggregate([
+      { $match: filter },
+      {
+        $addFields: {
+          // Parse ISO "YYYY-MM-DD" dates
+          isoYear: {
+            $cond: [
+              { $regexMatch: { input: '$date', regex: /^\d{4}-\d{2}-\d{2}/ } },
+              { $toInt: { $substr: ['$date', 0, 4] } },
+              null,
+            ],
+          },
+          isoMonth: {
+            $cond: [
+              { $regexMatch: { input: '$date', regex: /^\d{4}-\d{2}-\d{2}/ } },
+              { $toInt: { $substr: ['$date', 5, 2] } },
+              null,
+            ],
+          },
+        },
+      },
+      { $match: { isoYear: { $ne: null }, isoMonth: { $ne: null } } },
+      { $group: { _id: { year: '$isoYear', month: '$isoMonth' } } },
+      { $sort: { '_id.year': -1, '_id.month': -1 } },
+    ]);
+
+    // Also handle "D-Mon-YYYY" format dates via a second pass
+    const legacyResults = await FuelRecord.aggregate([
+      { $match: { ...filter, date: { $regex: /^\d{1,2}-[A-Za-z]{3}-\d{4}$/ } } },
+      {
+        $addFields: {
+          parsedDate: { $dateFromString: { dateString: '$date', format: '%d-%b-%Y', onError: null } },
+        },
+      },
+      { $match: { parsedDate: { $ne: null } } },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$parsedDate' },
+            month: { $month: '$parsedDate' },
+          },
+        },
+      },
+    ]);
+
+    // Merge both sources
+    const seen = new Map<string, { year: number; month: number }>();
+    [...results, ...legacyResults].forEach((r) => {
+      const key = `${r._id.year}-${r._id.month}`;
+      if (!seen.has(key)) seen.set(key, { year: r._id.year, month: r._id.month });
+    });
+
+    const periods = Array.from(seen.values()).sort((a, b) =>
+      b.year !== a.year ? b.year - a.year : b.month - a.month
+    );
+
+    res.status(200).json({ success: true, data: { periods } });
+  } catch (error: any) {
+    logger.error('Error getting available periods:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get available routes for a given month filter.
+ * Returns unique {from, to} pairs — no full records fetched.
+ */
+export const getAvailableRoutes = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { month, routeType } = req.query;
+    const filter: any = { isDeleted: false };
+
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
+
+    // Apply month filter (reuse same logic as getAllFuelRecords)
+    if (month) {
+      const monthStr = (month as string).trim();
+      const parts = monthStr.split(/\s+/);
+      const rawMonth = (parts[0] || '').toLowerCase();
+      const yearStr = parts[1] || '';
+      const monthAbbrs: Record<string, string> = {
+        'january': 'jan', 'february': 'feb', 'march': 'mar', 'april': 'apr',
+        'may': 'may', 'june': 'jun', 'july': 'jul', 'august': 'aug',
+        'september': 'sep', 'october': 'oct', 'november': 'nov', 'december': 'dec',
+      };
+      const monthNums: Record<string, string> = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+        'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12',
+      };
+      const abbr = monthAbbrs[rawMonth] || rawMonth.substring(0, 3);
+      const num = monthNums[abbr] || '';
+      const sanitized = sanitizeRegexInput(monthStr);
+
+      if (yearStr && abbr && num) {
+        const monthConditions: any[] = [];
+        if (sanitized) monthConditions.push({ month: { $regex: sanitized, $options: 'i' } });
+        monthConditions.push(
+          { $and: [{ date: { $regex: abbr, $options: 'i' } }, { date: { $regex: yearStr } }] },
+          { date: { $regex: `^${yearStr}-${num}-` } },
+        );
+        if (!filter.$and) filter.$and = [];
+        (filter.$and as any[]).push({ $or: monthConditions });
+      }
+    }
+
+    // Only project the fields we need
+    const records = await FuelRecord.find(filter)
+      .select('from to goingDo returnDo originalGoingFrom originalGoingTo')
+      .lean();
+
+    const routesMap = new Map<string, { from: string; to: string }>();
+    const type = (routeType as string || 'IMPORT').toUpperCase();
+
+    records.forEach((record: any) => {
+      if (type === 'IMPORT') {
+        if (record.goingDo && record.goingDo.trim() !== '') {
+          const goingFrom = record.originalGoingFrom || record.from;
+          const goingTo = record.originalGoingTo || record.to;
+          if (goingFrom && goingTo) {
+            routesMap.set(`${goingFrom}-${goingTo}`, { from: goingFrom, to: goingTo });
+          }
+        }
+      } else {
+        if (record.returnDo && record.returnDo.trim() !== '' && record.from && record.to) {
+          routesMap.set(`${record.from}-${record.to}`, { from: record.from, to: record.to });
+        }
+      }
+    });
+
+    const routes = Array.from(routesMap.values()).sort((a, b) =>
+      `${a.from} - ${a.to}`.localeCompare(`${b.from} - ${b.to}`)
+    );
+
+    res.status(200).json({ success: true, data: { routes } });
+  } catch (error: any) {
+    logger.error('Error getting available routes:', error);
+    throw error;
+  }
+};
+
+/**
  * Get all fuel records with pagination and filters
  */
 export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promise<void> => {

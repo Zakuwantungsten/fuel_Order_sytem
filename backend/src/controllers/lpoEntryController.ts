@@ -130,6 +130,86 @@ export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
+ * Get distinct year-month periods and stations that have LPO data.
+ * Lightweight query used by the frontend period/station pickers.
+ */
+export const getAvailableFilters = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const filter: any = { isDeleted: false };
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
+
+    // Fetch periods via aggregation on actualDate (ISO dates)
+    const isoResults = await LPOEntry.aggregate([
+      { $match: { ...filter, actualDate: { $exists: true, $ne: null } } },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$actualDate' },
+            month: { $month: '$actualDate' },
+          },
+        },
+      },
+      { $sort: { '_id.year': -1, '_id.month': -1 } },
+    ]);
+
+    // For records without actualDate, parse the "date" string field
+    const legacyEntries = await LPOEntry.find({
+      ...filter,
+      $or: [{ actualDate: { $exists: false } }, { actualDate: null }],
+    }).select('date createdAt').lean();
+
+    const seen = new Map<string, { year: number; month: number }>();
+    isoResults.forEach(r => {
+      const key = `${r._id.year}-${r._id.month}`;
+      seen.set(key, { year: r._id.year, month: r._id.month });
+    });
+
+    const MON: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+    for (const entry of legacyEntries) {
+      const dateStr = entry.date;
+      if (!dateStr) continue;
+      let year: number | null = null;
+      let month: number | null = null;
+
+      const iso = (dateStr as string).match(/^(\d{4})-(\d{2})-\d{2}/);
+      if (iso) {
+        year = parseInt(iso[1]);
+        month = parseInt(iso[2]);
+      } else {
+        const dmon = (dateStr as string).match(/^\d{1,2}[\-\/\s]([A-Za-z]{3,})/i);
+        if (dmon) month = MON[dmon[1].toLowerCase().substring(0, 3)] ?? null;
+        const yr = (dateStr as string).match(/(\d{4})$/);
+        if (yr) year = parseInt(yr[1]);
+        if (year === null && entry.createdAt) year = new Date(entry.createdAt).getFullYear();
+      }
+      if (year !== null && month !== null) {
+        const key = `${year}-${month}`;
+        if (!seen.has(key)) seen.set(key, { year, month });
+      }
+    }
+
+    const periods = Array.from(seen.values()).sort((a, b) =>
+      b.year !== a.year ? b.year - a.year : b.month - a.month
+    );
+
+    // Stations via distinct
+    const stations = await LPOEntry.distinct('dieselAt', { ...filter, dieselAt: { $nin: [null, ''] } });
+    const sortedStations = (stations as string[])
+      .filter(s => s && s.trim())
+      .map(s => s.trim().toUpperCase())
+      .filter((v, i, arr) => arr.indexOf(v) === i)
+      .sort();
+
+    res.json({ periods, stations: sortedStations });
+  } catch (error) {
+    logger.error('Error fetching LPO available filters:', error);
+    throw new ApiError(500, 'Failed to fetch available filters');
+  }
+};
+
+/**
  * Get single LPO entry by ID
  */
 export const getLPOEntryById = async (req: AuthRequest, res: Response): Promise<void> => {

@@ -46,6 +46,7 @@ router.post(
 );
 
 // Get routes
+router.get('/available-periods', asyncHandler(deliveryOrderController.getAvailablePeriods));
 router.get('/', commonValidation.pagination, validate, asyncHandler(deliveryOrderController.getAllDeliveryOrders));
 router.get('/next-do-number', asyncHandler(deliveryOrderController.getNextDONumber));
 router.get('/trucks', asyncHandler(deliveryOrderController.getAllTrucks));

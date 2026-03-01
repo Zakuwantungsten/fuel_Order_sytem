@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
-import { DeliveryOrder, DOWorkbook as DOWorkbookType } from '../types';
+import { DeliveryOrder } from '../types';
 import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, adminAPI } from '../services/api';
 import fuelRecordService from '../services/fuelRecordService';
 import { configService } from '../services/configService';
@@ -14,11 +15,18 @@ import DOWorkbook from '../components/DOWorkbook';
 import CancelDOModal from '../components/CancelDOModal';
 import AmendedDOsModal from '../components/AmendedDOsModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
-import { cleanDeliveryOrders, isCorruptedDriverName } from '../utils/dataCleanup';
 import Pagination from '../components/Pagination';
 import { useTruckBatches, getExtraFuelFromBatches } from '../hooks/useTruckBatches';
 import { useRoutes, getTotalLitersFromRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import {
+  deliveryOrderKeys,
+  periodsToDateRange,
+  useDeliveryOrdersList,
+  useDOWorkbooks,
+  useDOAvailableYears,
+  useDOAvailablePeriods,
+} from '../hooks/useDeliveryOrders';
 
 // Month names for display
 const MONTH_NAMES = [
@@ -31,10 +39,9 @@ interface DeliveryOrdersProps {
 }
 
 const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = usePersistedState('do:searchTerm', '');
-  const [orders, setOrders] = useState<DeliveryOrder[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = usePersistedState('do:filterType', 'ALL');
   const [filterDoType, setFilterDoType] = usePersistedState<'ALL' | 'DO' | 'SDO'>('do:filterDoType', 'DO');
   const [filterStatus, setFilterStatus] = usePersistedState<'all' | 'active' | 'cancelled'>('do:filterStatus', 'all');
@@ -65,13 +72,45 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   // React Query hooks - Replace localStorage with API
   const { data: truckBatches } = useTruckBatches();
   const { data: routes } = useRoutes();
+
+  // --- React Query: server-side paginated orders ---
+  const dateRange = periodsToDateRange(selectedPeriods);
+  const { data: ordersData, isLoading: loading } = useDeliveryOrdersList({
+    page: currentPage,
+    limit: itemsPerPage,
+    search: searchTerm || undefined,
+    importOrExport: filterType,
+    doType: filterDoType === 'ALL' ? undefined : filterDoType,
+    status: filterStatus,
+    dateFrom: dateRange.dateFrom,
+    dateTo: dateRange.dateTo,
+  });
+  const orders = ordersData?.orders ?? [];
+  const totalItems = ordersData?.pagination?.total ?? 0;
+  const totalPages = ordersData?.pagination?.totalPages ?? 1;
+
+  // --- React Query: available periods for the month picker ---
+  const { data: availablePeriods = [] } = useDOAvailablePeriods(
+    filterType,
+    filterDoType === 'ALL' ? undefined : filterDoType,
+    filterStatus,
+  );
+
+  // --- React Query: workbooks & available years ---
+  const { data: workbooks = [] } = useDOWorkbooks(filterDoType);
+  const { data: yearsFromWorkbooks = [new Date().getFullYear()] } = useDOAvailableYears(filterDoType);
+
+  // Merge workbook-based years with data-based years from the available periods
+  const availableYears = useMemo(() => {
+    const yearsFromPeriods = [...new Set(availablePeriods.map(p => p.year))];
+    const merged = [...new Set([...yearsFromWorkbooks, ...yearsFromPeriods])].sort((a, b) => b - a);
+    return merged.length ? merged : [new Date().getFullYear()];
+  }, [yearsFromWorkbooks, availablePeriods]);
   
-  // Workbook state
-  const [workbooks, setWorkbooks] = useState<DOWorkbookType[]>([]);
-  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  // Workbook UI state
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedWorkbookId, setSelectedWorkbookId] = useState<string | number | null>(null);
-  const [previousFilterDoType, setPreviousFilterDoType] = useState<'ALL' | 'DO' | 'SDO'>('DO'); // Remember filter before opening workbook
+  const [previousFilterDoType, setPreviousFilterDoType] = useState<'ALL' | 'DO' | 'SDO'>('DO');
   const [exportingYear, setExportingYear] = useState<number | null>(null);
 
   // Filter dropdown states
@@ -139,10 +178,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   }, []);
 
   useEffect(() => {
-    loadOrders();
-    fetchWorkbooks();
-    fetchAvailableYears();
-    
     // Listen for URL changes from EnhancedDashboard
     const handleUrlChange = () => {
       // Force re-read of search params
@@ -219,46 +254,21 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       window.removeEventListener('urlchange', handleUrlChange);
       window.removeEventListener('popstate', handleUrlChange);
     };
-  }, [filterType, filterDoType]);
+  }, []);
 
   // Separate effect to handle highlight after orders are loaded
+  // With server-side pagination, orders already contains only the current page data
+  // filtered by the selected period. Just look for the DO in the current page.
   useEffect(() => {
     if (pendingHighlight && orders.length > 0) {
-      console.log('%c=== DO HIGHLIGHT SEARCH ===', 'background: #3b82f6; color: white; padding: 4px;');
-      console.log('Pending Highlight:', pendingHighlight);
-      console.log('Total orders:', orders.length);
-      console.log('Selected Periods:', selectedPeriods);
-      
-      // Find in filtered orders (after period filter applied)
-      const filteredList = orders.filter(order => {
-        if (selectedPeriods.length === 0) return true;
-        const orderYear = parseDateYearSafe(order.date);
-        const orderMonth = getMonthFromDate(order.date);
-        return selectedPeriods.some(p => p.year === orderYear && p.month === orderMonth);
-      });
-      
-      console.log('Filtered orders count:', filteredList.length);
-      const recordIndex = filteredList.findIndex(o => o.doNumber === pendingHighlight);
-      
-      if (recordIndex >= 0) {
-        console.log('Found DO at index:', recordIndex, 'in filtered list');
-        const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
-        console.log('Target page:', targetPage, 'Current page:', currentPage);
-        
-        if (targetPage !== currentPage) {
-          setCurrentPage(targetPage);
-          // Wait longer for page change and DOM update
-          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 1000);
-        } else {
-          // Already on correct page
-          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 500);
-        }
+      const found = orders.some(o => o.doNumber === pendingHighlight);
+      if (found) {
+        setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 500);
       } else {
-        console.log('DO not found in filtered orders:', pendingHighlight);
         clearDOHighlight();
       }
     }
-  }, [pendingHighlight, orders, selectedPeriods, itemsPerPage, currentPage]);
+  }, [pendingHighlight, orders]);
   
   // Helper function to scroll and highlight
   const scrollToAndHighlightDO = (doNumber: string) => {
@@ -366,130 +376,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     }
   }, [searchParams, orders]);
 
-  const loadOrders = async () => {
-    setLoading(true);
-    try {
-      const response = await deliveryOrdersAPI.getAll({
-        importOrExport: filterType,
-        doType: filterDoType === 'ALL' ? undefined : filterDoType,
-        limit: 10000, // Fetch all for client-side filtering
-      });
-      // Extract data from new API response format
-      const rawOrders = Array.isArray(response.data) ? response.data : [];
-      
-      // Clean corrupted data and log any issues found
-      const cleanedOrders = cleanDeliveryOrders(rawOrders);
-      const corruptedCount = rawOrders.filter(order => isCorruptedDriverName(order.driverName)).length;
-      
-      if (corruptedCount > 0) {
-        console.warn(`Found and cleaned ${corruptedCount} delivery orders with corrupted driver names`);
-      }
-      
-      setOrders(cleanedOrders);
-    } catch (error) {
-      console.error('Failed to load delivery orders:', error);
-      setOrders([]); // Set empty array on error
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useRealtimeSync('delivery_orders', loadOrders);
-
-  const fetchWorkbooks = async () => {
-    try {
-      // Fetch workbooks based on current filter
-      if (filterDoType === 'ALL') {
-        // Fetch both DO and SDO workbooks
-        const [doData, sdoData] = await Promise.all([
-          doWorkbookAPI.getAll().catch((err) => { console.error('DO workbook fetch error:', err); return []; }),
-          sdoWorkbookAPI.getAll().catch((err) => { console.error('SDO workbook fetch error:', err); return []; })
-        ]);
-        console.log('Raw DO data:', doData);
-        console.log('Raw SDO data:', sdoData);
-        const allWorkbooks = [
-          ...(Array.isArray(doData) ? doData.map(w => ({ ...w, type: 'DO' as const })) : []),
-          ...(Array.isArray(sdoData) ? sdoData.map(w => ({ ...w, type: 'SDO' as const })) : [])
-        ].sort((a, b) => (b.year || 0) - (a.year || 0)); // Sort by year descending
-        setWorkbooks(allWorkbooks);
-        console.log('Fetched ALL workbooks (DO + SDO):', allWorkbooks);
-        console.log('DO workbooks count:', allWorkbooks.filter(w => w.type === 'DO').length);
-        console.log('SDO workbooks count:', allWorkbooks.filter(w => w.type === 'SDO').length);
-      } else {
-        const data = filterDoType === 'SDO' 
-          ? await sdoWorkbookAPI.getAll()
-          : await doWorkbookAPI.getAll();
-        const typedData = Array.isArray(data) ? data.map(w => ({ ...w, type: filterDoType as 'DO' | 'SDO' })) : [];
-        setWorkbooks(typedData);
-        console.log(`Fetched ${filterDoType} workbooks:`, typedData);
-      }
-    } catch (error) {
-      console.error('Error fetching workbooks:', error);
-      setWorkbooks([]);
-    }
-  };
-
-  const fetchAvailableYears = async () => {
-    try {
-      // Fetch years based on current filter
-      if (filterDoType === 'ALL') {
-        // Fetch years from both DO and SDO
-        const [doYears, sdoYears] = await Promise.all([
-          doWorkbookAPI.getAvailableYears().catch(() => []),
-          sdoWorkbookAPI.getAvailableYears().catch(() => [])
-        ]);
-        const allYears = [...new Set([...doYears, ...sdoYears])].sort((a, b) => b - a);
-        console.log('Available ALL years:', allYears);
-        if (allYears.length > 0) {
-          setAvailableYears(allYears);
-          setSelectedYear(allYears[0]);
-        } else {
-          const currentYear = new Date().getFullYear();
-          setAvailableYears([currentYear]);
-          setSelectedYear(currentYear);
-        }
-      } else {
-        const years = filterDoType === 'SDO'
-          ? await sdoWorkbookAPI.getAvailableYears()
-          : await doWorkbookAPI.getAvailableYears();
-        console.log(`Available ${filterDoType} years:`, years);
-        if (years.length > 0) {
-          setAvailableYears(years);
-          setSelectedYear(years[0]); // Most recent year
-        } else {
-          const currentYear = new Date().getFullYear();
-          setAvailableYears([currentYear]);
-          setSelectedYear(currentYear);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching available years:', error);
-      const currentYear = new Date().getFullYear();
-      setAvailableYears([currentYear]);
-      setSelectedYear(currentYear);
-    }
-  };
-
-  // Merge years derived from the loaded orders into availableYears.
-  // This ensures that imported DOs (which have no workbook) still appear in the year dropdown.
-  useEffect(() => {
-    if (orders.length === 0) return;
-    const yearsFromData = [...new Set(
-      orders.map(o => {
-        const iso = o.date?.match(/^(\d{4})-\d{2}-\d{2}/);
-        if (iso) return parseInt(iso[1]);
-        const dmy = o.date?.match(/^\d{1,2}[\-\/\s][A-Za-z]+[\-\/\s](\d{4})$/);
-        if (dmy) return parseInt(dmy[1]);
-        const d = new Date(o.date ?? '');
-        return isNaN(d.getTime()) ? null : d.getFullYear();
-      }).filter((y): y is number => y !== null)
-    )].sort((a, b) => b - a);
-    if (yearsFromData.length === 0) return;
-    setAvailableYears(prev => {
-      const merged = [...new Set([...prev, ...yearsFromData])].sort((a, b) => b - a);
-      return merged.join(',') === prev.join(',') ? prev : merged;
-    });
-  }, [orders]);
+  // Invalidate React Query cache when WebSocket notifies of changes
+  useRealtimeSync('delivery_orders', () => {
+    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
+  });
 
   const handleExportWorkbook = async (year: number, workbookType?: string) => {
     try {
@@ -560,21 +451,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     // Restore previous filter type
     setFilterDoType(previousFilterDoType);
     setActiveTab('list');
-    fetchWorkbooks(); // Refresh workbooks list
-  };
-
-  // Helper: parse year from a date string in any of our stored formats
-  const parseDateYearSafe = (dateStr: string): number | null => {
-    if (!dateStr) return null;
-    // ISO "YYYY-MM-DD"
-    const iso = dateStr.match(/^(\d{4})-\d{2}-\d{2}/);
-    if (iso) return parseInt(iso[1]);
-    // "DD-Mon-YYYY" e.g. "15-Jan-2025"
-    const dmy = dateStr.match(/^\d{1,2}[\-\/\s][A-Za-z]+[\-\/\s](\d{4})$/);
-    if (dmy) return parseInt(dmy[1]);
-    // Native JS fallback
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? null : d.getFullYear();
+    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks(previousFilterDoType) });
   };
 
   // Helper to get month from date string (supports YYYY-MM-DD, DD-Mon-YYYY, D-Mon formats)
@@ -597,26 +474,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     return null;
   };
 
-  // Build the list of year-month pairs that actually have data, newest first
-  const availablePeriods = useMemo(() => {
-    const seen = new Map<string, { year: number; month: number }>();
-    orders.forEach(order => {
-      if (!order.date) return;
-      const year = parseDateYearSafe(order.date);
-      const month = getMonthFromDate(order.date);
-      if (year !== null && month !== null) {
-        const key = `${year}-${month}`;
-        if (!seen.has(key)) seen.set(key, { year, month });
-      }
-    });
-    return Array.from(seen.values()).sort((a, b) =>
-      b.year !== a.year ? b.year - a.year : a.month - b.month
-    );
-  }, [orders]);
-
   // Auto-fallback: if the default current-month has no data, step back one month
   useEffect(() => {
-    if (loading || orders.length === 0) return;
+    if (loading || availablePeriods.length === 0) return;
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth() + 1;
     // Only auto-fallback when still on the initial default selection
@@ -655,35 +515,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     return `${selectedPeriods.length} periods`;
   };
 
-  // Filter orders by search term, status, and months
-  const filteredOrders = Array.isArray(orders) ? orders.filter(order => {
-    // Search filter
-    const matchesSearch = order.doNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.truckNo.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // Status filter
-    const matchesStatus = filterStatus === 'all' ||
-      (filterStatus === 'active' && !order.isCancelled) ||
-      (filterStatus === 'cancelled' && order.isCancelled);
-    
-    // Period filter — match any selected year-month pair
-    let matchesPeriod = true;
-    if (selectedPeriods.length > 0 && selectedPeriods.length < availablePeriods.length) {
-      const orderYear = parseDateYearSafe(order.date);
-      const orderMonth = getMonthFromDate(order.date);
-      matchesPeriod = selectedPeriods.some(p => p.year === orderYear && p.month === orderMonth);
-    }
-    
-    return matchesSearch && matchesStatus && matchesPeriod;
-  }) : [];
-
-  // Pagination calculations
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
-  const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // Server-side pagination — orders already filtered and paginated by useDeliveryOrdersList
+  const paginatedOrders = orders;
 
   // Reset to page 1 when filters change
   const handlePageChange = (page: number) => {
@@ -844,8 +677,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         setSelectedPeriods([{ year: now.getFullYear(), month: now.getMonth() + 1 }]);
       }
       
-      console.log('Reloading orders...');
-      loadOrders();
+      // Invalidate React Query cache to refetch
+      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
       console.log('=== handleSaveOrder END - SUCCESS ===');
       return savedOrder;
     } catch (error) {
@@ -895,7 +729,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       
       alert(message);
       handleCloseCancelModal();
-      loadOrders();
+      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
     } catch (error: any) {
       console.error('Failed to cancel order:', error);
       const errorMessage = error.response?.data?.message || 'Failed to cancel delivery order';
@@ -1195,7 +1030,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     if (onProgress) {
       onProgress(orders.length, orders.length, 'Refreshing data...');
     }
-    await loadOrders();
+    await queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
     
     // Show summary of results
     console.log(`\n=== Bulk Creation Summary ===`);
@@ -1269,7 +1105,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     // Count how many orders come before this one in the same month
     let sn = 1;
     for (let i = 0; i < index; i++) {
-      const prevOrderMonth = getMonthFromDate(filteredOrders[i].date);
+      const prevOrderMonth = getMonthFromDate(orders[i].date);
       if (prevOrderMonth === orderMonth) {
         sn++;
       }
@@ -1885,7 +1721,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   setSearchTerm('');
                   setFilterType('ALL');
                   setFilterStatus('all');
-                  setSelectedMonths([new Date().getMonth() + 1]); // Reset to current month
+                  setSelectedPeriods([{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
                   setCurrentPage(1);
                 }}
                 className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -1902,7 +1738,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
                 <p className="text-sm sm:text-base">Loading delivery orders...</p>
               </div>
-            ) : filteredOrders.length === 0 ? (
+            ) : orders.length === 0 ? (
               <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
                 <p className="text-sm sm:text-base">No delivery orders found</p>
               </div>
@@ -2154,12 +1990,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           </div>
           
           {/* Pagination */}
-          {!loading && filteredOrders.length > 0 && (
+          {!loading && totalItems > 0 && (
             <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg transition-colors mt-4">
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
-                totalItems={filteredOrders.length}
+                totalItems={totalItems}
                 itemsPerPage={itemsPerPage}
                 onPageChange={handlePageChange}
                 onItemsPerPageChange={handleItemsPerPageChange}

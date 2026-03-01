@@ -164,6 +164,11 @@ export const deliveryOrdersAPI = {
       pagination: undefined
     };
   },
+
+  getAvailablePeriods: async (params?: { importOrExport?: string; doType?: string; status?: string }): Promise<Array<{ year: number; month: number }>> => {
+    const response = await apiClient.get('/delivery-orders/available-periods', { params });
+    return response.data || [];
+  },
   
   getById: async (id: string | number): Promise<DeliveryOrder> => {
     const response = await apiClient.get(`/delivery-orders/${id}`);
@@ -514,6 +519,11 @@ export const lposAPI = {
       pagination: undefined
     };
   },
+
+  getAvailableFilters: async (): Promise<{ periods: Array<{ year: number; month: number }>; stations: string[] }> => {
+    const response = await apiClient.get('/lpo-entries/available-filters');
+    return response.data || { periods: [], stations: [] };
+  },
   
   getById: async (id: string | number): Promise<LPOEntry> => {
     const response = await apiClient.get(`/lpo-entries/${id}`);
@@ -797,6 +807,16 @@ export const fuelRecordsAPI = {
       data: response.data.data?.data || response.data.data || [],
       pagination: undefined
     };
+  },
+
+  getAvailablePeriods: async (): Promise<{ periods: Array<{ year: number; month: number }> }> => {
+    const response = await apiClient.get('/fuel-records/available-periods');
+    return response.data.data || { periods: [] };
+  },
+
+  getAvailableRoutes: async (params: { month?: string; routeType?: string }): Promise<{ routes: Array<{ from: string; to: string }> }> => {
+    const response = await apiClient.get('/fuel-records/available-routes', { params });
+    return response.data.data || { routes: [] };
   },
   
   getById: async (id: string | number): Promise<FuelRecord> => {
