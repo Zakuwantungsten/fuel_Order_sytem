@@ -27,6 +27,7 @@ import {
   useDOAvailableYears,
   useDOAvailablePeriods,
 } from '../hooks/useDeliveryOrders';
+import { fuelRecordKeys } from '../hooks/useFuelRecords';
 
 // Month names for display
 const MONTH_NAMES = [
@@ -680,6 +681,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       // Invalidate React Query cache to refetch
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
+      // Also invalidate fuel records cache so FuelRecords page shows new/updated records
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
       console.log('=== handleSaveOrder END - SUCCESS ===');
       return savedOrder;
     } catch (error) {
@@ -731,6 +734,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       handleCloseCancelModal();
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
     } catch (error: any) {
       console.error('Failed to cancel order:', error);
       const errorMessage = error.response?.data?.message || 'Failed to cancel delivery order';
@@ -1032,6 +1036,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     }
     await queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
     queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
+    queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
     
     // Show summary of results
     console.log(`\n=== Bulk Creation Summary ===`);
