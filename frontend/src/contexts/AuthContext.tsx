@@ -35,10 +35,16 @@ const getInitialTheme = (userId?: string | number): 'light' | 'dark' => {
   }
 };
 
+// If there is an existing session in storage, start in a loading state so
+// ProtectedRoute shows a spinner instead of flashing the login page while
+// the async session check runs.
+const hasStoredSession =
+  typeof window !== 'undefined' && !!sessionStorage.getItem('fuel_order_auth');
+
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: hasStoredSession,
   error: null,
   theme: getInitialTheme(),
 };
@@ -155,7 +161,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
               // Token is invalid/expired — clear everything and show login.
               sessionStorage.removeItem('fuel_order_auth');
               sessionStorage.removeItem('fuel_order_token');
-              return; // stay on login screen
+              dispatch({ type: 'AUTH_ERROR', payload: '' });
+              return;
             }
           }
 
@@ -177,6 +184,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } catch (error) {
         console.error('Error checking existing session:', error);
         sessionStorage.removeItem('fuel_order_auth');
+        dispatch({ type: 'AUTH_ERROR', payload: '' });
       }
     };
 
