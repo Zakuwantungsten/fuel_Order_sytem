@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, X } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
 import { fuelRecordsAPI, lposAPI } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
@@ -797,6 +797,41 @@ const FuelRecords = () => {
     return new Date(monthKey + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
+  // Compute current month key
+  const getCurrentMonthKey = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  // True when any filter differs from its default
+  const isAnyFilterActive = () => {
+    const currentMonth = getCurrentMonthKey();
+    const defaultMonth = availableMonths.includes(currentMonth)
+      ? currentMonth
+      : availableMonths[availableMonths.length - 1] ?? currentMonth;
+    return (
+      searchTerm !== '' ||
+      routeFilter !== '' ||
+      routeTypeFilter !== 'IMPORT' ||
+      selectedMonth !== defaultMonth
+    );
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setRouteFilter('');
+    setRouteTypeFilter('IMPORT');
+    // Go to current month if it has data, otherwise most recent month with data
+    const currentMonth = getCurrentMonthKey();
+    if (availableMonths.includes(currentMonth)) {
+      setSelectedMonth(currentMonth);
+    } else if (availableMonths.length > 0) {
+      setSelectedMonth(availableMonths[availableMonths.length - 1]);
+    } else {
+      setSelectedMonth(currentMonth);
+    }
+  };
+
   // Get available years from state
   const getAvailableYears = (): number[] => {
     return availableYears.length > 0 ? availableYears : [new Date().getFullYear()];
@@ -1054,6 +1089,15 @@ const FuelRecords = () => {
               <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </button>
           </div>
+          {isAnyFilterActive() && (
+            <button
+              onClick={handleClearFilters}
+              className="w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              title="Reset all filters to default"
+            >
+              Clear Filters
+            </button>
+          )}
           <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
             Total Records: <span className="ml-2 font-semibold">{totalItems}</span>
           </div>
