@@ -14,6 +14,8 @@ import {
 } from '../services/cancellationService';
 import FuelRecordInspectModal, { calculateMbeyaReturnBalance } from './FuelRecordInspectModal';
 import ForwardLPOModal from './ForwardLPOModal';
+import { downloadLPOPDF } from '../utils/lpoImageGenerator';
+import { toast } from 'react-toastify';
 
 // Station defaults mapping based on direction
 // Correct rates: USD stations = 1.2, TZS stations have specific rates
@@ -2327,7 +2329,29 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       };
       localStorage.setItem('lpo_draft', JSON.stringify(forwardedDraft));
 
-      alert(`LPO #${createdLpo.lpoNo} created successfully!\n\nForm reloaded with LPO #${nextLpoNo} and the same trucks.\nSelect the target station and submit when ready.`);
+      // Auto-download PDF for the created LPO
+      const pdfToastId = toast.loading(`Preparing PDF — LPO ${createdLpo.lpoNo}...`, {
+        style: { background: '#0284c7', color: '#fff' },
+      });
+      try {
+        await downloadLPOPDF(createdLpo);
+        toast.update(pdfToastId, {
+          render: `LPO #${createdLpo.lpoNo} created & forwarded to #${nextLpoNo} — PDF downloaded`,
+          type: 'success',
+          isLoading: false,
+          autoClose: 4000,
+          style: undefined,
+        });
+      } catch (pdfErr: any) {
+        console.error('Error downloading PDF:', pdfErr);
+        toast.update(pdfToastId, {
+          render: `LPO #${createdLpo.lpoNo} created & forwarded to #${nextLpoNo}, but PDF download failed`,
+          type: 'warning',
+          isLoading: false,
+          autoClose: 6000,
+          style: undefined,
+        });
+      }
 
     } catch (error: any) {
       console.error('Error during create and forward:', error);

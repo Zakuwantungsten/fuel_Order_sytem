@@ -854,13 +854,41 @@ const LPOs = () => {
       // Create the LPO document - workbook is auto-created based on year
       // The backend's syncLPOEntriesToList will automatically create the LPOEntry records
       // for the list view, so we don't need to create them separately here
-      await lpoDocumentsAPI.create(data);
+      const createdLpo = await lpoDocumentsAPI.create(data);
       
-      alert('LPO Document created successfully! Sheet added to workbook.');
       setIsDetailFormOpen(false);
+
+      // Reset month filter to current month so the newly created LPO is visible
+      const now = new Date();
+      setSelectedPeriods([{ year: now.getFullYear(), month: now.getMonth() + 1 }]);
+
       fetchLpos();
       fetchWorkbooks();
       fetchAvailableYears();
+
+      // Auto-download PDF for the created LPO
+      const pdfToastId = toast.loading(`Preparing PDF — LPO ${createdLpo.lpoNo}...`, {
+        style: { background: '#0284c7', color: '#fff' },
+      });
+      try {
+        await downloadLPOPDF(createdLpo, undefined, user?.username);
+        toast.update(pdfToastId, {
+          render: `LPO ${createdLpo.lpoNo} created — PDF downloaded`,
+          type: 'success',
+          isLoading: false,
+          autoClose: 4000,
+          style: undefined,
+        });
+      } catch (pdfErr: any) {
+        console.error('Error downloading PDF:', pdfErr);
+        toast.update(pdfToastId, {
+          render: `LPO ${createdLpo.lpoNo} created, but PDF download failed`,
+          type: 'warning',
+          isLoading: false,
+          autoClose: 6000,
+          style: undefined,
+        });
+      }
     } catch (error: any) {
       console.error('Error saving LPO document:', error);
       console.error('Error response:', error.response?.data);
