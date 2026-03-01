@@ -1011,10 +1011,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       let statusMessage = `Found (${searchMonth} month): Going DO ${selectedRecord.goingDo}, Balance: ${selectedRecord.balance}L`;
       
       if (selectedRecord.journeyStatus === 'queued') {
-        statusMessage = `⏳ QUEUED Journey (Position #${selectedRecord.queueOrder || '?'}): ${selectedRecord.goingDo} - Waiting to activate`;
+        statusMessage = `QUEUED Journey (Position #${selectedRecord.queueOrder || '?'}): ${selectedRecord.goingDo} - Waiting to activate`;
         console.log('[LPO Truck Lookup] Using queued journey:', selectedRecord.goingDo);
       } else if (selectedRecord.journeyStatus === 'active') {
-        statusMessage = `🚛 ACTIVE Journey: DO ${selectedRecord.goingDo}, Balance: ${selectedRecord.balance}L`;
+        statusMessage = `ACTIVE Journey: DO ${selectedRecord.goingDo}, Balance: ${selectedRecord.balance}L`;
         if (queuedJourneys.length > 0) {
           statusMessage += ` | ${queuedJourneys.length} queued`;
         }
@@ -1111,12 +1111,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // Build status message based on journey status
       let statusMessage = '';
       if (journeyData.journeyStatus === 'queued') {
-        statusMessage = `⏳ QUEUED Journey (Position #${journeyData.queuePosition || '?'}): ${doNumber}`;
+        statusMessage = `QUEUED Journey (Position #${journeyData.queuePosition || '?'}): ${doNumber}`;
         if (journeyData.hasActiveJourney) {
           statusMessage += ` | Active: ${journeyData.activeJourneyDO}`;
         }
       } else if (journeyData.journeyStatus === 'active') {
-        statusMessage = `🚛 ACTIVE Journey: DO ${doNumber}, Balance: ${journeyData.balance}L`;
+        statusMessage = `ACTIVE Journey: DO ${doNumber}, Balance: ${journeyData.balance}L`;
         if (journeyData.queuedJourneys && journeyData.queuedJourneys.length > 0) {
           statusMessage += ` | ${journeyData.queuedJourneys.length} queued`;
         }
@@ -2316,6 +2316,25 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   if (!isOpen) return null;
 
+  // Compute whether any entry has status info that needs the Status column
+  const hasAnyIssue = (formData.entries || []).some((entry, idx) => {
+    if (!entry) return false;
+    const af = entryAutoFillData[idx] || { direction: 'going' as const, loading: false, fetched: false };
+    const dupInfo = duplicateWarnings.get(entry?.truckNo || '');
+    const hasDup = !!dupInfo && formData.station?.toUpperCase() !== 'CASH';
+    return !!(
+      (af.warningType && !af.loading && (entry?.truckNo?.length || 0) >= 5) ||
+      hasDup ||
+      (af.fetched && af.allJourneys) ||
+      (af.direction === 'returning' && af.returnDoMissing && af.fetched) ||
+      (af.allJourneys && (
+        (af.allJourneys.active && af.allJourneys.queued.length > 0) ||
+        (!af.allJourneys.active && af.allJourneys.queued.length > 1)
+      )) ||
+      (af.balanceInfo && af.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY')
+    );
+  });
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4" onClick={handleCancel}>
       <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-lg shadow-xl max-w-6xl w-full h-full sm:h-auto max-h-screen sm:max-h-[90vh] overflow-y-auto transition-colors" onClick={(e) => e.stopPropagation()}>
@@ -3218,6 +3237,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
                       Dest.
                     </th>
+                    {hasAnyIssue && (
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
+                        Status
+                      </th>
+                    )}
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
                       Actions
                     </th>
@@ -3261,49 +3285,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 <CheckCircle className="absolute right-1 top-1.5 w-4 h-4 text-blue-500" />
                               )}
                             </div>
-                            {/* No fuel record warning - allow manual entry */}
-                            {hasNoRecordWarning && (
-                              <div className="mt-1 text-xs text-amber-600 dark:text-amber-400" title={autoFill.warningMessage}>
-                                {autoFill.warningMessage?.includes('DUPLICATE') ? (
-                                  <span className="text-red-600 dark:text-red-400 font-semibold">⚠️ Already entered</span>
-                                ) : (
-                                  <>
-                                    {autoFill.warningType === 'not_found' && '⚠️ No record found'}
-                                    {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
-                                    {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
-                                  </>
-                                )}
-                                <span className="block text-[10px] text-gray-500 dark:text-gray-400">
-                                  {autoFill.warningMessage?.includes('DUPLICATE') ? 'Remove duplicate or use different truck' : 'Manual entry allowed'}
-                                </span>
-                              </div>
-                            )}
-                            {/* Duplicate allocation warning */}
-                            {isExactDuplicate && duplicateInfo && (
-                              <div className="mt-1 text-xs text-red-600 dark:text-red-400" title={`Blocked: Same amount in LPO ${duplicateInfo.lpoNo}`}>
-                                ⛔ Same amount in LPO #{duplicateInfo.lpoNo} ({duplicateInfo.liters}L)
-                              </div>
-                            )}
-                            {isDifferentAmount && duplicateInfo && (
-                              <div className="mt-1 text-xs text-blue-600 dark:text-blue-400" title={`Top-up allowed: Different amount from LPO ${duplicateInfo.lpoNo}`}>
-                                ➕ Top-up: +{duplicateInfo.newLiters}L (existing: {duplicateInfo.liters}L)
-                              </div>
-                            )}
-                            {/* Journey selection indicator */}
-                            {autoFill.fetched && autoFill.allJourneys && (
-                              <div className="mt-1 text-[10px] text-gray-600 dark:text-gray-400">
-                                {autoFill.selectedJourneyType === 'active' && autoFill.allJourneys.active && (
-                                  <span className={`font-medium ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
-                                    {(autoFill.fuelRecord as any)?.isLocked ? '🔒 Locked (Manual entry)' : '🚛 Active Journey'}
-                                  </span>
-                                )}
-                                {autoFill.selectedJourneyType === 'queued' && autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0] && (
-                                  <span className="text-blue-600 dark:text-blue-400 font-medium">
-                                    ⏳ Queued #{autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0]?.queueOrder || (autoFill.selectedJourneyIndex || 0) + 1}
-                                  </span>
-                                )}
-                              </div>
-                            )}
                           </td>
                           
                           {/* DO Number Input Cell - for DO-first search */}
@@ -3330,82 +3311,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           </td>
                           
                           <td className="px-3 py-3">
-                            <div className="flex flex-col gap-1">
-                              <button
-                                type="button"
-                                onClick={() => toggleDirection(index)}
-                                className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                  autoFill.direction === 'going'
-                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
-                                    : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
-                                }`}
-                                title="Click to toggle direction"
-                              >
-                                {autoFill.direction === 'going' ? (
-                                  <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
-                                ) : (
-                                  <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
-                                )}
-                              </button>
-                              {/* Warning when Return DO is not yet inputted */}
-                              {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched && (
-                                <span className="text-xs text-amber-600 dark:text-amber-400 mt-1" title="Return DO not yet inputted in fuel record">
-                                  ⚠️ No Return DO
-                                </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleDirection(index)}
+                              className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                autoFill.direction === 'going'
+                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
+                                  : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
+                              }`}
+                              title="Click to toggle direction"
+                            >
+                              {autoFill.direction === 'going' ? (
+                                <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
+                              ) : (
+                                <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
                               )}
-                              {/* Journey navigation: switch between active and queued journeys */}
-                              {autoFill.allJourneys && (autoFill.allJourneys.active && autoFill.allJourneys.queued.length > 0) && (
-                                <div className="flex items-center gap-1 mt-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleJourneyNavigation(index, 'active')}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                                      autoFill.selectedJourneyType === 'active'
-                                        ? 'bg-green-500 text-white'
-                                        : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                                    }`}
-                                    title="Switch to active journey"
-                                  >
-                                    🚛 Active
-                                  </button>
-                                  {autoFill.allJourneys.queued.map((queuedJourney, qIdx) => (
-                                    <button
-                                      key={qIdx}
-                                      type="button"
-                                      onClick={() => handleJourneyNavigation(index, 'queued', qIdx)}
-                                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                                        autoFill.selectedJourneyType === 'queued' && autoFill.selectedJourneyIndex === qIdx
-                                          ? 'bg-blue-500 text-white'
-                                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                                      }`}
-                                      title={`Switch to queued journey #${queuedJourney.queueOrder || qIdx + 1}: ${queuedJourney.goingDo}`}
-                                    >
-                                      ⏳ Q{queuedJourney.queueOrder || qIdx + 1}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                              {/* Show only queued journeys if no active */}
-                              {autoFill.allJourneys && !autoFill.allJourneys.active && autoFill.allJourneys.queued.length > 1 && (
-                                <div className="flex items-center gap-1 mt-1">
-                                  {autoFill.allJourneys.queued.map((queuedJourney, qIdx) => (
-                                    <button
-                                      key={qIdx}
-                                      type="button"
-                                      onClick={() => handleJourneyNavigation(index, 'queued', qIdx)}
-                                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                                        autoFill.selectedJourneyType === 'queued' && autoFill.selectedJourneyIndex === qIdx
-                                          ? 'bg-blue-500 text-white'
-                                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                                      }`}
-                                      title={`Switch to queued journey #${queuedJourney.queueOrder || qIdx + 1}: ${queuedJourney.goingDo}`}
-                                    >
-                                      ⏳ Q{queuedJourney.queueOrder || qIdx + 1}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            </button>
                           </td>
                           <td className="px-3 py-3">
                             <input
@@ -3441,6 +3362,128 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
                           </td>
+                          {/* Status column — warnings, journey info, navigation */}
+                          {hasAnyIssue && (
+                            <td className="px-3 py-3 max-w-[180px]">
+                              <div className="flex flex-col gap-1 text-xs">
+                                {/* No fuel record / in-form duplicate warning */}
+                                {hasNoRecordWarning && (
+                                  <div className="text-amber-600 dark:text-amber-400" title={autoFill.warningMessage}>
+                                    {autoFill.warningMessage?.includes('DUPLICATE') ? (
+                                      <span className="text-red-600 dark:text-red-400 font-semibold">⚠️ Already entered</span>
+                                    ) : (
+                                      <>
+                                        {autoFill.warningType === 'not_found' && '⚠️ No record found'}
+                                        {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
+                                        {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
+                                      </>
+                                    )}
+                                    <span className="block text-[10px] text-gray-500 dark:text-gray-400">
+                                      {autoFill.warningMessage?.includes('DUPLICATE') ? 'Remove duplicate or use different truck' : 'Manual entry allowed'}
+                                    </span>
+                                  </div>
+                                )}
+                                {/* Duplicate allocation warning */}
+                                {isExactDuplicate && duplicateInfo && (
+                                  <div className="text-red-600 dark:text-red-400" title={`Blocked: Same amount in LPO ${duplicateInfo.lpoNo}`}>
+                                    ⛔ Same amount in LPO #{duplicateInfo.lpoNo} ({duplicateInfo.liters}L)
+                                  </div>
+                                )}
+                                {isDifferentAmount && duplicateInfo && (
+                                  <div className="text-blue-600 dark:text-blue-400" title={`Top-up allowed: Different amount from LPO ${duplicateInfo.lpoNo}`}>
+                                    ➕ Top-up: +{duplicateInfo.newLiters}L (existing: {duplicateInfo.liters}L)
+                                  </div>
+                                )}
+                                {/* Journey selection indicator */}
+                                {autoFill.fetched && autoFill.allJourneys && (
+                                  <div className="text-[10px] text-gray-600 dark:text-gray-400">
+                                    {autoFill.selectedJourneyType === 'active' && autoFill.allJourneys.active && (
+                                      <span className={`font-medium ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                                        {(autoFill.fuelRecord as any)?.isLocked ? '🔒 Locked (Manual entry)' : '🚛 Active Journey'}
+                                      </span>
+                                    )}
+                                    {autoFill.selectedJourneyType === 'queued' && autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0] && (
+                                      <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                        ⏳ Queued #{autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0]?.queueOrder || (autoFill.selectedJourneyIndex || 0) + 1}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                {/* No Return DO warning */}
+                                {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched && (
+                                  <span className="text-amber-600 dark:text-amber-400" title="Return DO not yet inputted in fuel record">
+                                    ⚠️ No Return DO
+                                  </span>
+                                )}
+                                {/* Journey navigation: active + queued */}
+                                {autoFill.allJourneys && (autoFill.allJourneys.active && autoFill.allJourneys.queued.length > 0) && (
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleJourneyNavigation(index, 'active')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                        autoFill.selectedJourneyType === 'active'
+                                          ? 'bg-green-500 text-white'
+                                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                                      }`}
+                                      title="Switch to active journey"
+                                    >
+                                      🚛 Active
+                                    </button>
+                                    {autoFill.allJourneys.queued.map((queuedJourney, qIdx) => (
+                                      <button
+                                        key={qIdx}
+                                        type="button"
+                                        onClick={() => handleJourneyNavigation(index, 'queued', qIdx)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                          autoFill.selectedJourneyType === 'queued' && autoFill.selectedJourneyIndex === qIdx
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                                        }`}
+                                        title={`Switch to queued journey #${queuedJourney.queueOrder || qIdx + 1}: ${queuedJourney.goingDo}`}
+                                      >
+                                        ⏳ Q{queuedJourney.queueOrder || qIdx + 1}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {/* Show only queued journeys if no active */}
+                                {autoFill.allJourneys && !autoFill.allJourneys.active && autoFill.allJourneys.queued.length > 1 && (
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {autoFill.allJourneys.queued.map((queuedJourney, qIdx) => (
+                                      <button
+                                        key={qIdx}
+                                        type="button"
+                                        onClick={() => handleJourneyNavigation(index, 'queued', qIdx)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                          autoFill.selectedJourneyType === 'queued' && autoFill.selectedJourneyIndex === qIdx
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                                        }`}
+                                        title={`Switch to queued journey #${queuedJourney.queueOrder || qIdx + 1}: ${queuedJourney.goingDo}`}
+                                      >
+                                        ⏳ Q{queuedJourney.queueOrder || qIdx + 1}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {/* Balance info hint (Infinity return) */}
+                                {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && (
+                                  <div className={`${
+                                    autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation
+                                      ? 'text-amber-600 dark:text-amber-400'
+                                      : 'text-green-600 dark:text-green-400'
+                                  }`} title={autoFill.balanceInfo.reason}>
+                                    <Fuel className="w-3 h-3 inline mr-1" />
+                                    {autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation
+                                      ? `${autoFill.balanceInfo.suggestedLiters}L (reduced)`
+                                      : `${autoFill.balanceInfo.suggestedLiters}L`
+                                    }
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          )}
                           <td className="px-3 py-3">
                             <div className="flex items-center space-x-1">
                               {/* Inspect button - Quick view fuel record */}
@@ -3464,27 +3507,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
-                            {/* Show balance info hint for Mbeya Return */}
-                            {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && (
-                              <div className={`mt-1 text-xs ${
-                                autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation
-                                  ? 'text-amber-600 dark:text-amber-400'
-                                  : 'text-green-600 dark:text-green-400'
-                              }`} title={autoFill.balanceInfo.reason}>
-                                <Fuel className="w-3 h-3 inline mr-1" />
-                                {autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation
-                                  ? `${autoFill.balanceInfo.suggestedLiters}L (reduced)`
-                                  : `${autoFill.balanceInfo.suggestedLiters}L`
-                                }
-                              </div>
-                            )}
                           </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <td colSpan={hasAnyIssue ? 9 : 8} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                         No entries added. Click "Add Entry" to add fuel supply details.
                       </td>
                     </tr>
