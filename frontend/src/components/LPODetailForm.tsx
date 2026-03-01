@@ -2093,6 +2093,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return;
     }
 
+    // Block submission if any entry is set to 'returning' but has no Return DO
+    const trucksWithMissingReturnDo = formData.entries
+      .filter(e => e != null)
+      .map((entry, idx) => ({ entry, af: entryAutoFillData[idx] }))
+      .filter(({ af }) => af && af.direction === 'returning' && af.returnDoMissing && af.fetched)
+      .map(({ entry }) => entry.truckNo);
+    if (trucksWithMissingReturnDo.length > 0) {
+      alert(`Cannot submit: The following trucks are set to "Return" direction but have no Return DO in the system:\n\n${trucksWithMissingReturnDo.join(', ')}\n\nPlease switch them back to "Going" or wait until the Return DO is entered.`);
+      return;
+    }
+
     // Ensure all entries have required fields with proper defaults
     // For CASH mode, include both direction checkpoints (can have one or both)
     // For CUSTOM mode, include the custom station checkpoint mappings
@@ -3594,8 +3605,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             
             <button
               type="submit"
-              disabled={!formData.entries || formData.entries.length === 0}
+              disabled={
+                !formData.entries || formData.entries.length === 0 ||
+                (formData.entries || []).some((_, idx) => {
+                  const af = entryAutoFillData[idx];
+                  return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
+                })
+              }
               className="flex-shrink-0 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed whitespace-nowrap"
+              title={
+                (formData.entries || []).some((_, idx) => {
+                  const af = entryAutoFillData[idx];
+                  return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
+                }) ? 'Cannot submit: Some trucks have no Return DO. Switch them to Going or wait for Return DO entry.' : undefined
+              }
             >
               {initialData ? 'Update' : 'Create'} LPO Document
             </button>
