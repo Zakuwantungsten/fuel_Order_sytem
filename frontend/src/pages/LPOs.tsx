@@ -356,15 +356,28 @@ const LPOs = () => {
   };
 
   // Get unique stations from the data
+  // Stations available in the currently selected period(s) only
   const availableStations = useMemo(() => {
     const stations = new Set<string>();
     lpos.forEach(lpo => {
-      if (lpo.dieselAt && lpo.dieselAt.trim()) {
-        stations.add(lpo.dieselAt.trim().toUpperCase());
+      if (!lpo.dieselAt || !lpo.dieselAt.trim()) return;
+      // Only include stations from LPOs matching the selected periods
+      if (selectedPeriods.length > 0) {
+        const lpoYear = getEffectiveYear(lpo);
+        const lpoMonth = getMonthFromDate(lpo.date);
+        if (lpoMonth !== null && !selectedPeriods.some(p => p.year === lpoYear && p.month === lpoMonth)) return;
       }
+      stations.add(lpo.dieselAt.trim().toUpperCase());
     });
     return Array.from(stations).sort();
-  }, [lpos]);
+  }, [lpos, selectedPeriods]);
+
+  // Auto-clear station filter when it's no longer valid for the selected period(s)
+  useEffect(() => {
+    if (stationFilter && availableStations.length > 0 && !availableStations.includes(stationFilter)) {
+      setStationFilter('');
+    }
+  }, [availableStations]);
 
   // All year+month periods that have LPO data — used for the period picker dropdown.
   // getEffectiveYear handles both ISO dates (imported) and DD-Mon dates (manually created).
