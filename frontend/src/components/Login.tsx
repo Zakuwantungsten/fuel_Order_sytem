@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { MFAVerification } from './MFAVerification';
+import { MFASetupLogin } from './MFASetupLogin';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
 import { useLocation, Link } from 'react-router-dom';
@@ -23,7 +24,13 @@ const Login: React.FC = () => {
     preferredMethod: 'totp' | 'sms' | 'email';
   } | null>(null);
 
-  const { login, isLoading, error, clearError } = useAuth();
+  // MFA Setup State (when admin requires MFA but user hasn't set it up)
+  const [mfaSetupChallenge, setMfaSetupChallenge] = useState<{
+    userId: string;
+    tempSessionToken: string;
+  } | null>(null);
+
+  const { login, isLoading, error, clearError, completeLogin } = useAuth();
   const location = useLocation();
 
   // Load saved username but clear password when component mounts
@@ -122,15 +129,23 @@ const Login: React.FC = () => {
       // Send only username and password to login endpoint
       const result = await login(credentials);
       
-      // Check if MFA is required
-      if (result && (result as any).requiresMFA) {
+      // Check if MFA is required (result is only returned for MFA cases)
+      if (result && result.requiresMFA) {
         setMfaChallenge({
-          userId: (result as any).data.userId,
-          tempSessionToken: (result as any).data.tempSessionToken,
-          preferredMethod: (result as any).data.preferredMethod || 'totp',
+          userId: result.data.userId,
+          tempSessionToken: result.data.tempSessionToken,
+          preferredMethod: result.data.preferredMethod || 'totp',
         });
+        return;
       }
-      // If no MFA required, login success will be handled by the auth context
+      if (result && result.requiresMFASetup) {
+        setMfaSetupChallenge({
+          userId: result.data.userId,
+          tempSessionToken: result.data.tempSessionToken,
+        });
+        return;
+      }
+      // If no MFA required, login success was handled by the auth context
     } catch (error) {
       // Error will be handled by the auth context
       console.error('Login failed:', error);
@@ -138,36 +153,40 @@ const Login: React.FC = () => {
   };
   
   const handleMFASuccess = async (tokens: { accessToken: string; refreshToken: string; user: any }) => {
-    // Store tokens and user data
-    sessionStorage.setItem('fuel_order_token', tokens.accessToken);
-    sessionStorage.setItem('fuel_order_auth', JSON.stringify({
-      id: tokens.user._id || tokens.user.id,
-      username: tokens.user.username,
-      email: tokens.user.email,
-      firstName: tokens.user.firstName,
-      lastName: tokens.user.lastName,
-      role: tokens.user.role,
-      department: tokens.user.department,
-      station: (tokens.user as any).station,
-      truckNo: (tokens.user as any).truckNo,
-      currentDO: (tokens.user as any).currentDO,
-      isActive: tokens.user.isActive,
-      mustChangePassword: tokens.user.mustChangePassword ?? false, // Ensure this is set
-      token: tokens.accessToken,
-      lastLogin: tokens.user.lastLogin,
-      createdAt: tokens.user.createdAt,
-      updatedAt: tokens.user.updatedAt,
-      theme: tokens.user.theme || 'light',
-    }));
-    
-    // Reload to trigger auth context update
-    window.location.href = '/';
+    // Use AuthContext's completeLogin to properly set user state
+    await completeLogin({
+      user: {
+        ...tokens.user,
+        id: tokens.user._id || tokens.user.id,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    } as any);
   };
   
   const handleMFACancel = () => {
     setMfaChallenge(null);
     setCredentials({ ...credentials, password: '' });
   };
+
+  const handleMFASetupCancel = () => {
+    setMfaSetupChallenge(null);
+    setCredentials({ ...credentials, password: '' });
+  };
+
+  // If MFA setup is required, show the setup flow
+  if (mfaSetupChallenge) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-3 sm:p-6 transition-all duration-500">
+        <MFASetupLogin
+          userId={mfaSetupChallenge.userId}
+          tempSessionToken={mfaSetupChallenge.tempSessionToken}
+          onSuccess={handleMFASuccess}
+          onCancel={handleMFASetupCancel}
+        />
+      </div>
+    );
+  }
 
   // If MFA challenge is active, show MFA verification component
   if (mfaChallenge) {

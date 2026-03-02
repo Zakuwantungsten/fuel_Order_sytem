@@ -381,12 +381,14 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       throw new ApiError(403, 'Login blocked due to suspicious activity. Please contact your administrator.');
     }
 
-    // Check if MFA is enabled for this user
+    // Check if MFA is enabled for this user (user has set it up)
     const mfaEnabled = await mfaService.isMFAEnabled(user._id.toString());
+    // Check if MFA is required by system/admin settings (role-based or per-user mandatory)
+    const mfaRequired = await mfaService.isMFARequired(user._id.toString());
     const deviceId = req.body.deviceId || req.get('x-device-id');
     
     if (mfaEnabled) {
-      // Check if device is trusted
+      // User has MFA set up — verify it
       const mfaSettings = await MFA.findOne({ userId: user._id });
       const isDeviceTrusted = deviceId && typeof (mfaSettings as any)?.isDeviceTrusted === 'function' && (mfaSettings as any).isDeviceTrusted(deviceId);
       
@@ -429,6 +431,28 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         }
         logger.info(`User ${username} logged in from trusted device, skipping MFA`);
       }
+    } else if (mfaRequired) {
+      // MFA is required by admin settings but user hasn't set it up yet
+      // Generate a temporary token so frontend can redirect to MFA setup
+      const tempSessionToken = crypto.randomBytes(32).toString('hex');
+      const tempSessionExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes for setup
+
+      user.refreshToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
+      await user.save();
+
+      logger.info(`User ${username} must set up MFA (required by system policy)`);
+
+      res.status(200).json({
+        success: true,
+        requiresMFASetup: true,
+        message: 'MFA setup is required for your account. Please set up an authenticator app to continue.',
+        data: {
+          userId: user._id.toString(),
+          tempSessionToken,
+          tempSessionExpiry,
+        },
+      });
+      return;
     }
 
     if (!allowMultipleSessions) {
@@ -622,6 +646,137 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
       message: 'MFA verification successful. Login complete.',
       data: {
         ...response,
+        sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Generate TOTP secret for forced MFA setup during login
+ * Uses tempSessionToken instead of JWT auth
+ */
+export const setupMFAGenerate = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId, tempSessionToken } = req.body;
+
+    if (!userId || !tempSessionToken) {
+      throw new ApiError(400, 'User ID and session token are required');
+    }
+
+    const user = await User.findById(userId).select('+refreshToken');
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    // Verify temp session token
+    const hashedTempToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
+    if (user.refreshToken !== hashedTempToken) {
+      throw new ApiError(401, 'Invalid or expired session token');
+    }
+
+    // Generate TOTP secret
+    const totpData = await mfaService.generateTOTPSecret(
+      userId,
+      user.username,
+      user.email
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        secret: totpData.secret,
+        qrCodeUrl: totpData.qrCodeUrl,
+        manualEntryKey: totpData.manualEntryKey,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Verify TOTP code, enable MFA, and complete login for forced MFA setup
+ * Uses tempSessionToken instead of JWT auth
+ */
+export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId, tempSessionToken, secret, code } = req.body;
+
+    if (!userId || !tempSessionToken || !secret || !code) {
+      throw new ApiError(400, 'User ID, session token, secret, and verification code are required');
+    }
+
+    const user = await User.findById(userId).select('+refreshToken');
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    // Verify temp session token
+    const hashedTempToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
+    if (user.refreshToken !== hashedTempToken) {
+      throw new ApiError(401, 'Invalid or expired session token');
+    }
+
+    // Enable TOTP via MFA service
+    const result = await mfaService.enableTOTP(userId, secret, code);
+
+    if (!result.success) {
+      throw new ApiError(400, 'Invalid verification code. Please try again.');
+    }
+
+    logger.info(`User ${user.username} completed mandatory MFA setup`);
+
+    // Read session config
+    const sessionConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+    const jwtExpiryHours = sessionConfig?.systemSettings?.session?.jwtExpiry;
+    const refreshExpiryDays = sessionConfig?.systemSettings?.session?.refreshTokenExpiry;
+    const accessExpiry = jwtExpiryHours ? `${jwtExpiryHours}h` : undefined;
+    const refreshExpiry = refreshExpiryDays ? `${refreshExpiryDays}d` : undefined;
+    const allowMultipleSessions = sessionConfig?.systemSettings?.session?.allowMultipleSessions ?? true;
+
+    if (!allowMultipleSessions) {
+      emitToUser(user.username, 'session_event', {
+        type: 'force_logout',
+        message: 'You have been logged out because a new session was started from another location.',
+      });
+    }
+
+    // Generate final tokens — user is now fully authenticated
+    const payload: JWTPayload = {
+      userId: user._id.toString(),
+      username: user.username,
+      role: user.role,
+    };
+
+    const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
+
+    user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    user.lastLogin = new Date();
+    await user.save();
+
+    await AuditService.logLogin(
+      user.username,
+      true,
+      req.ip,
+      req.get('user-agent'),
+      user._id.toString()
+    );
+
+    const response: AuthResponse = {
+      user: user.toJSON(),
+      accessToken,
+      refreshToken,
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'MFA setup complete. Login successful.',
+      data: {
+        ...response,
+        backupCodes: result.backupCodes,
         sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
       },
     });

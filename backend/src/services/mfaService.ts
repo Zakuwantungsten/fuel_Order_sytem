@@ -1,8 +1,8 @@
 import speakeasy from 'speakeasy';
-import QRCode from 'qrcode';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { MFA, IMFA } from '../models/MFA';
+import UserMFA from '../models/UserMFA';
 import { User } from '../models/User';
 import { SystemConfig } from '../models/SystemConfig';
 import emailService from '../services/emailService';
@@ -36,12 +36,12 @@ class MFAService {
       length: 32,
     });
     
-    // Generate QR code
-    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url || '');
-    
+    // Return the otpauth:// URI directly so the frontend can render it
+    // as a QR code with react-qr-code (SVG). Google Authenticator needs
+    // the otpauth:// URI, not a base64 data URL or raw secret.
     return {
       secret: secret.base32,
-      qrCodeUrl,
+      qrCodeUrl: secret.otpauth_url || '',
       manualEntryKey: secret.base32,
     };
   }
@@ -304,13 +304,17 @@ class MFAService {
   }
   
   /**
-   * Check if user is required to use MFA based on system settings
+   * Check if user is required to use MFA based on system settings or per-user mandatory flag
    */
   async isMFARequired(userId: string): Promise<boolean> {
     const user = await User.findById(userId);
     if (!user) return false;
     
-    // Read MFA enforcement config from SystemConfig
+    // Check per-user mandatory flag (set by admin in MFA Management tab)
+    const userMfa = await UserMFA.findOne({ userId });
+    if (userMfa?.isMandatory) return true;
+    
+    // Read MFA enforcement config from SystemConfig (Security Tab global settings)
     const config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
     const mfaSettings = config?.securitySettings?.mfa;
     

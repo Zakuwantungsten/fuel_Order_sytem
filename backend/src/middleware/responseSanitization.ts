@@ -29,6 +29,8 @@ export const responseSanitizationMiddleware = (
     '/auth/refresh',
     '/auth/verify-mfa',
     '/auth/first-login-password',
+    '/auth/setup-mfa/generate',
+    '/auth/setup-mfa/verify',
   ];
 
   const isTokenRoute = AUTH_TOKEN_ROUTES.some((route) => req.path.endsWith(route));

@@ -82,6 +82,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
     case 'AUTH_CLEAR_ERROR':
       return {
         ...state,
+        isLoading: false,
         error: null,
       };
     case 'SET_THEME':
@@ -101,7 +102,8 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 
 // Auth context type
 interface AuthContextType extends AuthState {
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<any>;
+  completeLogin: (authData: AuthResponse) => Promise<void>;
   logout: () => void;
   clearError: () => void;
   clearMustChangePassword: () => void;
@@ -215,23 +217,68 @@ export function AuthProvider({ children }: AuthProviderProps) {
     loadSystemSettings();
   }, []);
 
+  // Complete login with already-fetched auth data (used after MFA verification/setup)
+  const completeLogin = async (authData: AuthResponse): Promise<void> => {
+    const { user, accessToken, sessionTimeoutMinutes } = authData;
+
+    sessionStorage.setItem('fuel_order_token', accessToken);
+
+    const permissions = getRolePermissions(user.role);
+    const serverTheme = user.theme;
+    const userTheme: 'light' | 'dark' = serverTheme ?? getInitialTheme(user.id);
+
+    const authUser: AuthUser = {
+      ...user,
+      token: accessToken,
+      permissions,
+      lastLogin: new Date().toISOString(),
+      theme: userTheme,
+    };
+
+    sessionStorage.setItem('fuel_order_auth', JSON.stringify({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      department: user.department,
+      station: (user as any).station,
+      yard: (user as any).yard,
+      truckNo: (user as any).truckNo,
+      currentDO: (user as any).currentDO,
+      isActive: user.isActive,
+      mustChangePassword: user.mustChangePassword ?? false,
+      token: accessToken,
+      lastLogin: authUser.lastLogin,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      theme: userTheme,
+      sessionTimeoutMinutes: sessionTimeoutMinutes ?? 30,
+    }));
+
+    sessionStorage.removeItem('fuel_order_active_tab');
+    dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
+    dispatch({ type: 'SET_THEME', payload: userTheme });
+  };
+
   // Login function
   const login = async (credentials: LoginCredentials): Promise<any> => {
     dispatch({ type: 'AUTH_START' });
 
     try {
       // Call real backend API
-      const authResponse = await authAPI.login(credentials);
+      const rawResponse = await authAPI.login(credentials);
       
-      // Check if MFA is required instead of normal auth response
-      if ((authResponse as any).requiresMFA) {
-        // Clear the loading state before returning
-        dispatch({ type: 'AUTH_ERROR', payload: '' });
-        // Return MFA response so Login component can handle it
-        return authResponse;
+      // If MFA is required or MFA setup needed, return the raw response
+      // so Login.tsx can handle it directly (no AuthContext state change)
+      if (rawResponse.requiresMFA || rawResponse.requiresMFASetup) {
+        dispatch({ type: 'AUTH_CLEAR_ERROR' });
+        return rawResponse;
       }
       
-      const { user, accessToken, sessionTimeoutMinutes } = authResponse as AuthResponse;
+      const authResponse = rawResponse.data as AuthResponse;
+      const { user, accessToken, sessionTimeoutMinutes } = authResponse;
 
       // Save token to sessionStorage (cleared when tab/browser is closed)
       sessionStorage.setItem('fuel_order_token', accessToken);
@@ -462,6 +509,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const contextValue: AuthContextType = {
     ...state,
     login,
+    completeLogin,
     logout,
     clearError,
     clearMustChangePassword,

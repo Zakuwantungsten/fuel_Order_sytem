@@ -904,11 +904,11 @@ export const dashboardAPI = {
 
 // Authentication API
 export const authAPI = {
-  login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
+  login: async (credentials: LoginCredentials): Promise<any> => {
     const deviceId = sessionStorage.getItem('deviceId');
     const loginPayload = { ...credentials, ...(deviceId && { deviceId }) };
     const response = await apiClient.post('/auth/login', loginPayload);
-    return response.data.data;
+    return response.data;
   },
 
   logout: async (): Promise<void> => {

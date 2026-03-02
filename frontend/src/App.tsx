@@ -242,21 +242,10 @@ function AppContent() {
     );
   }
 
-  // Show loading spinner during authentication check
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center transition-colors">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 max-w-md w-full mx-4">
-          <div className="flex items-center justify-center space-x-3 mb-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-            <span className="text-gray-700 dark:text-gray-200 font-medium">Loading...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show login if not authenticated
+  // Show login if not authenticated — check this BEFORE isLoading so that
+  // the Login component never unmounts during the login API call (AUTH_START
+  // sets isLoading=true, and unmounting Login would lose its MFA local state).
+  // Login.tsx has its own loading UI (disabled button + spinner).
   if (!isAuthenticated) {
     return (
       <Routes>

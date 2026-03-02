@@ -2,6 +2,7 @@ import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
 import { User } from '../models';
 import UserMFA from '../models/UserMFA';
+import { MFA } from '../models/MFA';
 import { AuditService } from '../utils/auditService';
 
 /**
@@ -12,19 +13,31 @@ export const listMFAStatus = async (req: AuthRequest, res: Response): Promise<vo
     .select('_id username firstName lastName role isActive')
     .lean();
 
-  const mfaRecords = await UserMFA.find({
-    userId: { $in: users.map((u) => u._id) },
-  })
-    .select('userId isEnabled totpEnabled smsEnabled emailEnabled isMandatory lastMFAVerification failedMFAAttempts mfaLockedUntil')
-    .lean();
+  // Read from both MFA models — auth flow uses the MFA model, management uses UserMFA
+  const userIds = users.map((u) => u._id);
+  const [userMfaRecords, mfaRecords] = await Promise.all([
+    UserMFA.find({ userId: { $in: userIds } })
+      .select('userId isEnabled totpEnabled smsEnabled emailEnabled isMandatory lastMFAVerification failedMFAAttempts mfaLockedUntil')
+      .lean(),
+    MFA.find({ userId: { $in: userIds } })
+      .select('userId isEnabled totpEnabled smsEnabled emailEnabled lastVerifiedAt failedAttempts lockedUntil')
+      .lean(),
+  ]);
 
+  const userMfaByUser: Record<string, typeof userMfaRecords[0]> = {};
+  for (const r of userMfaRecords) {
+    userMfaByUser[r.userId.toString()] = r;
+  }
   const mfaByUser: Record<string, typeof mfaRecords[0]> = {};
   for (const r of mfaRecords) {
     mfaByUser[r.userId.toString()] = r;
   }
 
   const result = users.map((u) => {
-    const mfa = mfaByUser[u._id.toString()];
+    const uid = u._id.toString();
+    const umfa = userMfaByUser[uid];
+    const mfa = mfaByUser[uid];
+    // Merge: MFA model is authoritative for actual setup status; UserMFA for admin flags
     return {
       userId: u._id,
       username: u.username,
@@ -32,14 +45,14 @@ export const listMFAStatus = async (req: AuthRequest, res: Response): Promise<vo
       lastName: u.lastName,
       role: u.role,
       isActive: u.isActive,
-      mfaEnabled: mfa?.isEnabled ?? false,
-      totpEnabled: mfa?.totpEnabled ?? false,
-      smsEnabled: mfa?.smsEnabled ?? false,
-      emailEnabled: mfa?.emailEnabled ?? false,
-      isMandatory: mfa?.isMandatory ?? false,
-      lastVerified: mfa?.lastMFAVerification ?? null,
-      failedAttempts: mfa?.failedMFAAttempts ?? 0,
-      lockedUntil: mfa?.mfaLockedUntil ?? null,
+      mfaEnabled: mfa?.isEnabled || umfa?.isEnabled || false,
+      totpEnabled: mfa?.totpEnabled || umfa?.totpEnabled || false,
+      smsEnabled: mfa?.smsEnabled || umfa?.smsEnabled || false,
+      emailEnabled: mfa?.emailEnabled || umfa?.emailEnabled || false,
+      isMandatory: umfa?.isMandatory ?? false,
+      lastVerified: mfa?.lastVerifiedAt ?? umfa?.lastMFAVerification ?? null,
+      failedAttempts: mfa?.failedAttempts ?? umfa?.failedMFAAttempts ?? 0,
+      lockedUntil: mfa?.lockedUntil ?? umfa?.mfaLockedUntil ?? null,
     };
   });
 
@@ -57,11 +70,19 @@ export const disableUserMFA = async (req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  await UserMFA.findOneAndUpdate(
-    { userId },
-    { $set: { isEnabled: false, totpEnabled: false, smsEnabled: false, emailEnabled: false, totpSecret: null } },
-    { upsert: false }
-  );
+  // Disable in both MFA models so it takes effect in auth flow AND management view
+  await Promise.all([
+    UserMFA.findOneAndUpdate(
+      { userId },
+      { $set: { isEnabled: false, totpEnabled: false, smsEnabled: false, emailEnabled: false, totpSecret: null } },
+      { upsert: false }
+    ),
+    MFA.findOneAndUpdate(
+      { userId },
+      { $set: { isEnabled: false, totpEnabled: false, smsEnabled: false, emailEnabled: false, totpSecret: '', totpVerified: false, backupCodes: [], backupCodesUsed: 0 } },
+      { upsert: false }
+    ),
+  ]);
 
   await AuditService.log({
     userId: req.user?.userId,

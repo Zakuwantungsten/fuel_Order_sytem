@@ -6,6 +6,7 @@ import { userValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
 import { 
   authRateLimiter, 
+  mfaSetupRateLimiter,
   passwordResetRateLimiter, 
   registrationRateLimiter 
 } from '../middleware/rateLimiters';
@@ -34,6 +35,19 @@ router.post(
   '/verify-mfa',
   authRateLimiter,
   asyncHandler(authController.verifyMFA)
+);
+
+// MFA forced setup (when admin requires MFA but user hasn't set it up)
+router.post(
+  '/setup-mfa/generate',
+  mfaSetupRateLimiter,
+  asyncHandler(authController.setupMFAGenerate)
+);
+
+router.post(
+  '/setup-mfa/verify',
+  mfaSetupRateLimiter,
+  asyncHandler(authController.setupMFAVerify)
 );
 
 router.post('/refresh', asyncHandler(authController.refreshToken));

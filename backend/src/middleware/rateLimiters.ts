@@ -8,11 +8,23 @@ import { config } from '../config';
 export const authRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 5, // 5 per minute
-  message: 'Too many login attempts. Please try again after 1 minute.',
+  message: { success: false, message: 'Too many login attempts. Please try again after 1 minute.' },
   standardHeaders: true,
   legacyHeaders: false,
   // Skip successful requests to allow legitimate users
   skipSuccessfulRequests: true, // Don't count successful logins
+});
+
+/**
+ * Rate limiter for MFA setup endpoints (generate / verify)
+ * More lenient than auth — these are post-login setup steps, not brute-force targets
+ */
+export const mfaSetupRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  message: { success: false, message: 'Too many requests. Please try again after 1 minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 /**
@@ -22,7 +34,7 @@ export const authRateLimiter = rateLimit({
 export const passwordResetRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3, // Limit each IP to 3 requests per hour
-  message: 'Too many password reset requests. Please try again after 1 hour.',
+  message: { success: false, message: 'Too many password reset requests. Please try again after 1 hour.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -34,7 +46,7 @@ export const passwordResetRateLimiter = rateLimit({
 export const registrationRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5, // Limit each IP to 5 registrations per hour
-  message: 'Too many registration attempts. Please try again after 1 hour.',
+  message: { success: false, message: 'Too many registration attempts. Please try again after 1 hour.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -46,7 +58,7 @@ export const registrationRateLimiter = rateLimit({
 export const driverAuthRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 3, // Limit each IP to 3 attempts per windowMs
-  message: 'Too many driver authentication attempts. Please try again after 15 minutes.',
+  message: { success: false, message: 'Too many driver authentication attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -57,7 +69,7 @@ export const driverAuthRateLimiter = rateLimit({
 export const generalRateLimiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMaxRequests,
-  message: 'Too many requests from this IP, please try again later.',
+  message: { success: false, message: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -72,7 +84,7 @@ export const generalRateLimiter = rateLimit({
 export const apiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: parseInt(process.env.API_RATE_LIMIT_MAX || '500', 10),
-  message: 'Too many requests from this IP, please try again later.',
+  message: { success: false, message: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
@@ -84,7 +96,7 @@ export const apiRateLimiter = rateLimit({
 export const exportRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 5, // 5 req/min
-  message: 'Too many export requests. Please try again later.',
+  message: { success: false, message: 'Too many export requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
