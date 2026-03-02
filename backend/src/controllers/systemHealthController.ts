@@ -39,9 +39,7 @@ export const getSystemHealth = async (_req: AuthRequest, res: Response): Promise
         timestamp: new Date().toISOString(),
         process: {
           uptimeSeconds: Math.round(uptimeSeconds),
-          nodeVersion: process.version,
-          platform: process.platform,
-          pid: process.pid,
+          // nodeVersion, platform, pid intentionally omitted (fingerprint defense)
           memory: {
             heapUsedMB: +(memUsage.heapUsed / 1024 / 1024).toFixed(2),
             heapTotalMB: +(memUsage.heapTotal / 1024 / 1024).toFixed(2),

@@ -582,9 +582,7 @@ export const healthCheck = async (req: AuthRequest, res: Response): Promise<void
       success: true,
       message: 'Server is healthy',
       data: {
-        uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
       },
     });
   } catch (error: any) {

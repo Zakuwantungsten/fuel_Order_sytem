@@ -360,14 +360,21 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     );
 
     // Assess login risk score (UEBA)
-    const riskResult = await assessLoginRisk(user, req);
+    const riskResult = await assessLoginRisk(
+      user._id.toString(),
+      username,
+      req.ip || 'unknown',
+      req.get('user-agent') || 'unknown',
+      user.role
+    );
     if (riskResult.blockLogin) {
       logger.warn(`Login blocked for ${username} due to critical risk score: ${riskResult.score}`);
       await AuditService.log({
         userId: user._id.toString(),
-        action: 'login_blocked',
-        resource: 'auth',
-        details: { riskScore: riskResult.score, riskLevel: riskResult.level, factors: riskResult.factors },
+        username,
+        action: 'LOGIN_BLOCKED',
+        resourceType: 'auth',
+        details: JSON.stringify({ riskScore: riskResult.score, riskLevel: riskResult.level, factors: riskResult.factors }),
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });
@@ -464,9 +471,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     if (riskResult.score > 30) {
       await AuditService.log({
         userId: user._id.toString(),
-        action: 'elevated_risk_login',
-        resource: 'auth',
-        details: { riskScore: riskResult.score, riskLevel: riskResult.level, factors: riskResult.factors },
+        username,
+        action: 'ELEVATED_RISK_LOGIN',
+        resourceType: 'auth',
+        details: JSON.stringify({ riskScore: riskResult.score, riskLevel: riskResult.level, factors: riskResult.factors }),
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });

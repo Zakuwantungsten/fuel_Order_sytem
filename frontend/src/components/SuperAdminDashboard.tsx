@@ -60,10 +60,12 @@ import DLPControlsTab from './SuperAdmin/DLPControlsTab';
 import BreakGlassTab from './SuperAdmin/BreakGlassTab';
 import ThreatDetectionTab from './SuperAdmin/ThreatDetectionTab';
 import SIEMExportTab from './SuperAdmin/SIEMExportTab';
+import SecurityBlocklistTab from './SuperAdmin/SecurityBlocklistTab';
+import SecurityEventsTab from './SuperAdmin/SecurityEventsTab';
 
 interface SuperAdminDashboardProps {
   user: any;
-  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'ip_rules' | 'sessions' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'bulk_users' | 'storage' | 'alert_thresholds' | 'email_logs' | 'mfa_management' | 'api_tokens' | 'performance_metrics' | 'db_indexes' | 'driver_credentials_enhanced' | 'config_history' | 'custom_report' | 'notification_config' | 'security_score' | 'privilege_elevation' | 'dlp_controls' | 'break_glass' | 'threat_detection' | 'siem_export';
+  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'ip_rules' | 'sessions' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'bulk_users' | 'storage' | 'alert_thresholds' | 'email_logs' | 'mfa_management' | 'api_tokens' | 'performance_metrics' | 'db_indexes' | 'driver_credentials_enhanced' | 'config_history' | 'custom_report' | 'notification_config' | 'security_score' | 'privilege_elevation' | 'dlp_controls' | 'break_glass' | 'threat_detection' | 'siem_export' | 'security_blocklist' | 'security_events';
   onNavigate?: (section: string) => void;
 }
 
@@ -130,6 +132,8 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
     api_tokens:                  { group: 'Security',     label: 'API Tokens'           },
     security_score:              { group: 'Security',     label: 'Security Score'       },
     threat_detection:            { group: 'Security',     label: 'Threat Detection'     },
+    security_blocklist:          { group: 'Security',     label: 'IP Blocklist'         },
+    security_events:             { group: 'Security',     label: 'Security Events'      },
     dlp_controls:                { group: 'Security',     label: 'DLP Controls'         },
     break_glass:                 { group: 'Security',     label: 'Break-Glass Access'   },
     privilege_elevation:         { group: 'Users',        label: 'Privilege Elevation'  },
@@ -350,6 +354,12 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
             )}
             {section === 'siem_export' && (
               <SIEMExportTab />
+            )}
+            {section === 'security_blocklist' && (
+              <SecurityBlocklistTab />
+            )}
+            {section === 'security_events' && (
+              <SecurityEventsTab />
             )}
           </>
         )}

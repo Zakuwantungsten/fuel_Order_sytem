@@ -21,7 +21,8 @@ export class ApiError extends Error {
  * Handle not found routes
  */
 export const notFound = (req: Request, res: Response, next: NextFunction): void => {
-  const error = new ApiError(404, `Route ${req.originalUrl} not found`);
+  // Don't reveal the exact URL in the error message (path enumeration defense)
+  const error = new ApiError(404, 'Not found');
   next(error);
 };
 
@@ -101,12 +102,11 @@ export const errorHandler = (
     });
   }
 
-  // Send error response
+  // Send error response — never include stack traces (even in dev, use server logs)
   res.status(statusCode).json({
     success: false,
     message,
     requestId: (req as any).requestId,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };
 

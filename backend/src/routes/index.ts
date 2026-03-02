@@ -51,6 +51,8 @@ import dlpRoutes from './dlpRoutes';
 import breakGlassRoutes from './breakGlassRoutes';
 import siemRoutes from './siemRoutes';
 import threatDetectionRoutes from './threatDetectionRoutes';
+import securityBlocklistRoutes from './securityBlocklistRoutes';
+import securityEventsRoutes from './securityEventsRoutes';
 
 const router = Router();
 
@@ -113,5 +115,7 @@ router.use('/system-admin/dlp', dlpRoutes); // Data loss prevention controls
 router.use('/system-admin/break-glass', breakGlassRoutes); // Break-glass emergency access
 router.use('/system-admin/siem', siemRoutes); // SIEM export / audit event streaming
 router.use('/system-admin/threat-detection', threatDetectionRoutes); // UEBA threat detection
+router.use('/system-admin/security-blocklist', securityBlocklistRoutes); // IP reputation / auto-blocklist
+router.use('/system-admin/security-events', securityEventsRoutes); // Security event log viewer
 
 export default router;

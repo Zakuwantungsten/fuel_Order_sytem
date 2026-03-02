@@ -52,6 +52,20 @@ export const config = {
   // System Timezone
   timezone: process.env.TZ || 'Africa/Nairobi',
 
+  // ✅ SECURITY: Hardening Configuration
+  securityPathBlocking: process.env.SECURITY_PATH_BLOCKING !== 'false',   // enabled by default
+  securityBlockPaths: process.env.SECURITY_BLOCK_PATHS || '',             // comma-separated extra paths/regex
+  securityIpBlocking: process.env.SECURITY_IP_BLOCKING !== 'false',       // enabled by default
+  securitySuspiciousThreshold: parseInt(process.env.SECURITY_SUSPICIOUS_THRESHOLD || '5', 10),
+  securityBlockDurationMs: parseInt(process.env.SECURITY_BLOCK_DURATION_MS || '600000', 10), // 10 min
+  security404CountThreshold: parseInt(process.env.SECURITY_404_COUNT_THRESHOLD || '30', 10),
+  security404WindowMs: parseInt(process.env.SECURITY_404_WINDOW_MS || '300000', 10),         // 5 min
+  securityEventLogging: process.env.SECURITY_EVENT_LOGGING !== 'false',   // enabled by default
+  securityAlertEmail: process.env.SECURITY_ALERT_EMAIL || '',
+  securityAlertCooldownMs: parseInt(process.env.SECURITY_ALERT_COOLDOWN_MS || '300000', 10), // 5 min
+  securityUaBlocking: process.env.SECURITY_UA_BLOCKING !== 'false',       // enabled by default
+  securityEventRetentionDays: parseInt(process.env.SECURITY_EVENT_RETENTION_DAYS || '90', 10),
+
   // Web Push (VAPID) — used for browser push notifications
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',

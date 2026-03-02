@@ -13,6 +13,8 @@ export { AuditLog, IAuditLogDocument } from './AuditLog';
 export { Notification, INotification } from './Notification';
 export { SystemAnnouncement, ISystemAnnouncement } from './SystemAnnouncement';
 export { IPRule, IIPRule } from './IPRule';
+export { BlockedIP, IBlockedIP } from './BlockedIP';
+export { SecurityEvent, ISecurityEvent } from './SecurityEvent';
 export { FuelPriceHistory, FuelPriceSchedule, IFuelPriceHistory, IFuelPriceSchedule } from './FuelPrice';
 export { FeatureFlag, IFeatureFlag } from './FeatureFlag';
 export { default as Webhook, IWebhook, WEBHOOK_EVENTS } from './Webhook';

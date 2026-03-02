@@ -103,7 +103,7 @@ const getInitialTab = (userRole: string): string => {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports',
         'sa_overview', 'sa_database', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_config', 
-        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'sa_announcements', 'sa_ip_rules', 'sa_sessions', 'sa_config_diff', 'sa_fuel_prices', 'sa_cron_jobs', 'sa_data_export', 'sa_feature_flags', 'sa_system_health', 'sa_maintenance', 'sa_webhooks', 'sa_rate_limits', 'sa_activity_heatmap', 'sa_bulk_users', 'sa_storage', 'sa_alert_thresholds', 'sa_email_logs', 'sa_mfa_management', 'sa_api_tokens', 'sa_performance_metrics', 'sa_db_indexes', 'sa_driver_credentials_enhanced', 'sa_config_history', 'sa_custom_report', 'sa_notification_config', 'sa_security_score', 'sa_privilege_elevation', 'sa_dlp_controls', 'sa_break_glass', 'sa_threat_detection', 'sa_siem_export', 'driver_credentials', 'excel_import'
+        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'sa_announcements', 'sa_ip_rules', 'sa_sessions', 'sa_config_diff', 'sa_fuel_prices', 'sa_cron_jobs', 'sa_data_export', 'sa_feature_flags', 'sa_system_health', 'sa_maintenance', 'sa_webhooks', 'sa_rate_limits', 'sa_activity_heatmap', 'sa_bulk_users', 'sa_storage', 'sa_alert_thresholds', 'sa_email_logs', 'sa_mfa_management', 'sa_api_tokens', 'sa_performance_metrics', 'sa_db_indexes', 'sa_driver_credentials_enhanced', 'sa_config_history', 'sa_custom_report', 'sa_notification_config', 'sa_security_score', 'sa_privilege_elevation', 'sa_dlp_controls', 'sa_break_glass', 'sa_threat_detection', 'sa_siem_export', 'sa_security_blocklist', 'sa_security_events', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'admin' || userRole === 'boss') {
@@ -286,6 +286,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_threat_detection', label: 'Threat Detection', icon: Radar, sectionLabel: 'Security' },
         { id: 'sa_dlp_controls', label: 'DLP Controls', icon: ShieldBan, sectionLabel: 'Security' },
         { id: 'sa_break_glass', label: 'Break-Glass Access', icon: KeyRound, sectionLabel: 'Security' },
+        { id: 'sa_security_blocklist', label: 'IP Blocklist', icon: ShieldBan, sectionLabel: 'Security' },
+        { id: 'sa_security_events', label: 'Security Events', icon: ShieldAlert, sectionLabel: 'Security' },
         // Fleet & Fuel
         { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Building2, sectionLabel: 'Fleet & Fuel' },
         { id: 'sa_routes', label: 'Routes', icon: Route, sectionLabel: 'Fleet & Fuel' },
@@ -498,6 +500,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <SuperAdminDashboard user={user} section="threat_detection" onNavigate={setActiveTab} />;
       case 'sa_siem_export':
         return <SuperAdminDashboard user={user} section="siem_export" onNavigate={setActiveTab} />;
+      case 'sa_security_blocklist':
+        return <SuperAdminDashboard user={user} section="security_blocklist" onNavigate={setActiveTab} />;
+      case 'sa_security_events':
+        return <SuperAdminDashboard user={user} section="security_events" onNavigate={setActiveTab} />;
       
       // Admin sections (admin/boss roles)
       case 'admin_overview':

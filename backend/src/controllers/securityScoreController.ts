@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { calculateSecurityScore } from '../utils/securityScoreService';
-import { logAuditEvent } from '../utils/auditService';
+import AuditService from '../utils/auditService';
 
 /**
  * Security Score / Posture Dashboard Controller
@@ -9,14 +9,14 @@ export const getSecurityScore = async (req: Request, res: Response) => {
   try {
     const score = await calculateSecurityScore();
 
-    await logAuditEvent({
+    await AuditService.log({
       action: 'VIEW_SENSITIVE_DATA',
       resourceType: 'security_score',
       resourceId: 'dashboard',
       username: (req as any).user?.username || 'system',
       ipAddress: req.ip || 'unknown',
       userAgent: req.get('User-Agent') || '',
-      details: { overallScore: score.overallScore },
+      details: JSON.stringify({ overallScore: score.overallScore }),
       severity: 'low',
       outcome: 'SUCCESS',
     });

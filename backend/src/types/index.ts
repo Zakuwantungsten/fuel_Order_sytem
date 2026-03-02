@@ -41,6 +41,8 @@ export type AuditAction =
   | 'ROLE_CHANGE'            // user role changed by admin
   | 'ACCOUNT_LOCKED'         // brute-force lock
   | 'ACCOUNT_UNLOCKED'       // admin unlock
+  | 'LOGIN_BLOCKED'          // login blocked by risk scoring
+  | 'ELEVATED_RISK_LOGIN'    // successful login with elevated risk
   // ── DATA ACCESS (Google Cloud "Data Access Logs" equivalent) ──────────────
   | 'VIEW_SENSITIVE_DATA'    // read of sensitive reports / exports / PII
   | 'EXPORT'

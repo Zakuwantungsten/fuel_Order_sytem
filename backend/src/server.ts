@@ -14,6 +14,12 @@ import { csrfProtection, provideCsrfToken, csrfErrorHandler } from './middleware
 import { responseSanitizationMiddleware, requestLoggingMiddleware } from './middleware/responseSanitization';
 import { auditAccessDenied } from './middleware/auditAccessDenied';
 import { ipFilterMiddleware } from './middleware/ipFilter';
+import { attackPatternMiddleware } from './middleware/attackPatternMiddleware';
+import { ipReputationMiddleware } from './middleware/ipReputationMiddleware';
+import { uaBlockingMiddleware } from './middleware/uaBlockingMiddleware';
+import { suspicious404Middleware } from './middleware/suspicious404Middleware';
+import { fingerprintObfuscationMiddleware } from './middleware/fingerprintObfuscation';
+import honeypotRoutes from './routes/honeypotRoutes';
 import logger from './utils/logger';
 import { initializeWebSocket } from './services/websocket';
 import { requestId } from './middleware/requestId';
@@ -34,7 +40,13 @@ app.use(helmet({
   dnsPrefetchControl: {
     allow: false, // ✅ Prevent browser DNS prefetch for user-supplied URLs (SSRF defense)
   },
+  hidePoweredBy: true,  // ✅ Strip X-Powered-By header
+  frameguard: { action: 'deny' },  // ✅ Prevent clickjacking
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
+
+// ✅ SECURITY: Strip technology-revealing response headers
+app.use(fingerprintObfuscationMiddleware);
 
 if (config.nodeEnv === 'production') {
   app.use(
@@ -57,6 +69,17 @@ app.use(
 
 // Cookie parser (required for CSRF)
 app.use(cookieParser());
+
+// ✅ SECURITY: Block malicious path probes before anything else
+// Runs early to reject /.env, /.git, /wp-admin, etc. with 403
+app.use(attackPatternMiddleware);
+
+// ✅ SECURITY: IP reputation / auto-blocklist (fail2ban-style)
+// Checks if IP was auto-blocked after repeated suspicious activity
+app.use(ipReputationMiddleware);
+
+// ✅ SECURITY: Block requests from known malicious / scanning user-agents
+app.use(uaBlockingMiddleware);
 
 // Request ID for traceability
 app.use(requestId);
@@ -82,6 +105,7 @@ const legacyApiBasePath = '/api';
 import { startArchivalScheduler } from './jobs/archivalScheduler';
 // Import fuel price scheduler (registers itself with jobRegistry on import)
 import './jobs/fuelPriceScheduler';
+import './jobs/securityEventRetention';
 import { jobRegistry } from './jobs/jobRegistry';
 
 // Enforce HTTPS only in production
@@ -166,25 +190,28 @@ app.use(legacyApiBasePath, (req, res, next) => {
   next();
 }, routes);
 
-// Welcome route
+// Welcome route (no version or tech info)
 app.get('/', (_req, res) => {
   res.json({
     success: true,
-    message: 'Fuel Order Management System API',
-    version: '1.0.0',
-    documentation: '/api/docs',
+    message: 'API is running',
   });
 });
 
-// Health check route
+// Health check route (no uptime / version leaks)
 app.get('/api/health', (_req, res) => {
   res.status(200).json({
     success: true,
     message: 'Server is healthy',
-    uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
 });
+
+// ✅ SECURITY: Honeypot trap routes (catches scanners probing common CMS/admin paths)
+app.use(honeypotRoutes);
+
+// ✅ SECURITY: Track 404 rate per IP — auto-block after sustained probing
+app.use(suspicious404Middleware);
 
 // 404 handler
 app.use(notFound);

@@ -733,9 +733,7 @@ export const getEnvironmentVariables = async (req: AuthRequest, res: Response): 
       r2Configured: !!(process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY),
       
       // System info
-      nodeVersion: process.version,
-      platform: process.platform,
-      arch: process.arch,
+      // nodeVersion, platform, arch intentionally omitted (fingerprint defense)
     };
 
     // Audit log with CRITICAL severity
