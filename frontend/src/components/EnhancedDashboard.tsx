@@ -569,7 +569,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden transition-colors">
       {/* Mobile sidebar backdrop */}
-      {sidebarOpen && (
+      {sidebarOpen && user.role !== 'super_admin' && (
         <div 
           className="fixed inset-0 bg-gray-600 bg-opacity-75 z-20 lg:hidden"
           onClick={() => setSidebarOpen(false)}
@@ -589,8 +589,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               </div>
             )}
             <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors lg:ml-auto"
+              onClick={() => user.role !== 'super_admin' && setSidebarOpen(!sidebarOpen)}
+              className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors lg:ml-auto${user.role === 'super_admin' ? ' hidden' : ''}`}
               aria-label={sidebarOpen ? 'Close menu' : 'Toggle menu'}
             >
               {/* On mobile: always show X, on desktop: toggle between X and Menu */}
@@ -629,7 +629,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                 <button
                   onClick={() => {
                     setActiveTab(item.id);
-                    setSidebarOpen(false);
+                    if (user.role !== 'super_admin') setSidebarOpen(false);
                   }}
                   title={!sidebarOpen ? item.label : undefined}
                   className={`w-full flex items-center px-3 py-2 text-left transition-colors ${
@@ -638,7 +638,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                       : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
-                  <IconComponent className="w-4 h-4 flex-shrink-0" />
+                  <IconComponent className="w-6 h-6 flex-shrink-0" />
                   {sidebarOpen && <span className="ml-2.5 text-sm truncate">{item.label}</span>}
                 </button>
                 )}
