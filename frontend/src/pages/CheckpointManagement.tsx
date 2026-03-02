@@ -55,6 +55,7 @@ const CheckpointManagement = () => {
     coordinates: { latitude: 0, longitude: 0 },
   });
   const [altNameInput, setAltNameInput] = useState('');
+  const [coordsInput, setCoordsInput] = useState('');
 
   const regions = [
     'KENYA',
@@ -157,6 +158,7 @@ const CheckpointManagement = () => {
       coordinates: { latitude: 0, longitude: 0 },
     });
     setAltNameInput('');
+    setCoordsInput('');
   };
 
   const addAlternativeName = () => {
@@ -244,7 +246,8 @@ const CheckpointManagement = () => {
               </button>
             </div>
 
-            <div className="p-6">\n          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Name (Uppercase)
@@ -277,12 +280,19 @@ const CheckpointManagement = () => {
               </label>
               <input
                 type="text"
-                value={formData.coordinates ? `${formData.coordinates.latitude}, ${formData.coordinates.longitude}` : ''}
+                value={coordsInput}
                 onChange={(e) => {
-                  const parts = e.target.value.split(',').map(p => p.trim());
-                  const lat = parseFloat(parts[0]) || 0;
-                  const lng = parseFloat(parts[1]) || 0;
-                  setFormData({ ...formData, coordinates: { latitude: lat, longitude: lng } });
+                  const val = e.target.value;
+                  setCoordsInput(val);
+                  // Parse coordinates from the raw input
+                  const parts = val.trim().split(/[,\s\t]+/).filter(Boolean);
+                  if (parts.length >= 2) {
+                    const lat = parseFloat(parts[0]);
+                    const lng = parseFloat(parts[1]);
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                      setFormData({ ...formData, coordinates: { latitude: lat, longitude: lng } });
+                    }
+                  }
                 }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 placeholder="-8.9288883, 33.4146716"
@@ -468,7 +478,7 @@ const CheckpointManagement = () => {
                           : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
                       }`}>{checkpoint.isActive ? 'Active' : 'Inactive'}</span>
                       <button
-                        onClick={() => { setEditingId(checkpoint._id); setFormData(checkpoint); setShowAddForm(true); }}
+                        onClick={() => { setEditingId(checkpoint._id); setFormData(checkpoint); setCoordsInput(checkpoint.coordinates ? `${checkpoint.coordinates.latitude}, ${checkpoint.coordinates.longitude}` : ''); setShowAddForm(true); }}
                         className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
                       ><Edit2 className="w-4 h-4" /></button>
                       <button
@@ -606,6 +616,7 @@ const CheckpointManagement = () => {
                         onClick={() => {
                           setEditingId(checkpoint._id);
                           setFormData(checkpoint);
+                          setCoordsInput(checkpoint.coordinates ? `${checkpoint.coordinates.latitude}, ${checkpoint.coordinates.longitude}` : '');
                           setShowAddForm(true);
                         }}
                         className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
