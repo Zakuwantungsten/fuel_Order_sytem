@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle, ChevronDown, Check } from 'lucide-react';
 import { LPOEntry, DriverAccountEntry } from '../types';
 import { driverAccountAPI } from '../services/api';
 import XLSX from 'xlsx-js-style';
@@ -68,7 +68,20 @@ const LPOSummary = ({
   const [localSelectedStations, setLocalSelectedStations] = useState<string[]>(selectedStations);
   const [localDateFrom, setLocalDateFrom] = useState<string>(dateFrom);
   const [localDateTo, setLocalDateTo] = useState<string>(dateTo);
+  const [showStationDropdown, setShowStationDropdown] = useState(false);
+  const stationDropdownRef = useRef<HTMLDivElement>(null);
   const [availableStations, setAvailableStations] = useState<string[]>([]);
+
+  // Click-outside handler for station dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
+        setShowStationDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [driverAccountEntries, setDriverAccountEntries] = useState<ExtendedLPOEntry[]>([]);
   const [loadingDriverAccounts, setLoadingDriverAccounts] = useState(false);
 
@@ -533,87 +546,92 @@ const LPOSummary = ({
             </div>
           </div>
 
-          {/* Filters Section */}
+          {/* Filters Section - inline row like list view */}
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Station Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Filter by Stations ({localSelectedStations.length} selected)
-                </label>
-                <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-gray-50 dark:bg-gray-700 transition-colors">
-                  <label className="flex items-center mb-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={localSelectedStations.length === availableStations.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setLocalSelectedStations([...availableStations]);
-                        } else {
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Station Filter Dropdown */}
+              <div className="relative" ref={stationDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowStationDropdown(!showStationDropdown)}
+                  className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                >
+                  <span>
+                    {localSelectedStations.length === 0
+                      ? 'No Stations'
+                      : localSelectedStations.length === availableStations.length
+                        ? 'All Stations'
+                        : `${localSelectedStations.length} Station${localSelectedStations.length > 1 ? 's' : ''}`}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showStationDropdown && (
+                  <div className="absolute z-50 mt-1 w-56 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (localSelectedStations.length === availableStations.length) {
                           setLocalSelectedStations([]);
+                        } else {
+                          setLocalSelectedStations([...availableStations]);
                         }
                       }}
-                      className="mr-2"
-                    />
-                    <span className="font-medium">Select All</span>
-                  </label>
-                  {availableStations.map(station => (
-                    <label key={station} className="flex items-center mb-1 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={localSelectedStations.includes(station)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setLocalSelectedStations(prev => [...prev, station]);
-                          } else {
+                      className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                    >
+                      <span className="font-medium">Select All</span>
+                      {localSelectedStations.length === availableStations.length && <Check className="w-4 h-4 text-primary-600" />}
+                    </button>
+                    {availableStations.map((station) => (
+                      <button
+                        key={station}
+                        type="button"
+                        onClick={() => {
+                          if (localSelectedStations.includes(station)) {
                             setLocalSelectedStations(prev => prev.filter(s => s !== station));
+                          } else {
+                            setLocalSelectedStations(prev => [...prev, station]);
                           }
                         }}
-                        className="mr-2"
-                      />
-                      {station}
-                    </label>
-                  ))}
-                </div>
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                      >
+                        <span>{station}</span>
+                        {localSelectedStations.includes(station) && <Check className="w-4 h-4 text-primary-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Date Range Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Date Range Filter
-                </label>
-                <div className="space-y-2">
-                  <input
-                    type="date"
-                    value={localDateFrom}
-                    onChange={(e) => setLocalDateFrom(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
-                  />
-                  <input
-                    type="date"
-                    value={localDateTo}
-                    onChange={(e) => setLocalDateTo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
-                  />
-                </div>
-              </div>
+              {/* Date From */}
+              <input
+                type="date"
+                value={localDateFrom}
+                onChange={(e) => setLocalDateFrom(e.target.value)}
+                className="min-w-[170px] px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+              {/* Date To */}
+              <input
+                type="date"
+                value={localDateTo}
+                onChange={(e) => setLocalDateTo(e.target.value)}
+                className="min-w-[170px] px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
 
-              {/* Filter Actions */}
-              <div className="flex flex-col justify-end space-y-2">
-                <button
-                  onClick={() => {
-                    setLocalSelectedStations([...availableStations]);
-                    setLocalDateFrom('');
-                    setLocalDateTo('');
-                  }}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
-                >
-                  Clear Filters
-                </button>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Showing {summary.totalLPOs} of {lpoEntries.filter(e => e.date.includes(selectedMonth)).length} entries
-                </div>
-              </div>
+              {/* Clear Filters */}
+              <button
+                onClick={() => {
+                  setLocalSelectedStations([...availableStations]);
+                  setLocalDateFrom('');
+                  setLocalDateTo('');
+                }}
+                className="inline-flex items-center justify-center min-w-[130px] px-5 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Clear Filters
+              </button>
+
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {summary.totalLPOs} of {lpoEntries.filter(e => e.date.includes(selectedMonth)).length} entries
+              </span>
             </div>
           </div>
         </div>
