@@ -45,6 +45,12 @@ import dbIndexRoutes from './dbIndexRoutes';
 import configHistoryRoutes from './configHistoryRoutes';
 import customReportRoutes from './customReportRoutes';
 import notificationConfigRoutes from './notificationConfigRoutes';
+import securityScoreRoutes from './securityScoreRoutes';
+import privilegeRoutes from './privilegeRoutes';
+import dlpRoutes from './dlpRoutes';
+import breakGlassRoutes from './breakGlassRoutes';
+import siemRoutes from './siemRoutes';
+import threatDetectionRoutes from './threatDetectionRoutes';
 
 const router = Router();
 
@@ -101,5 +107,11 @@ router.use('/system-admin/db-indexes', dbIndexRoutes); // DB index explorer
 router.use('/system-admin/config-history', configHistoryRoutes); // Config version history
 router.use('/system-admin/custom-report', customReportRoutes); // Custom report builder
 router.use('/system-admin/notification-config', notificationConfigRoutes); // Notification center config
+router.use('/system-admin/security-score', securityScoreRoutes); // Security posture dashboard
+router.use('/system-admin/privilege-elevation', privilegeRoutes); // JIT privilege elevation
+router.use('/system-admin/dlp', dlpRoutes); // Data loss prevention controls
+router.use('/system-admin/break-glass', breakGlassRoutes); // Break-glass emergency access
+router.use('/system-admin/siem', siemRoutes); // SIEM export / audit event streaming
+router.use('/system-admin/threat-detection', threatDetectionRoutes); // UEBA threat detection
 
 export default router;

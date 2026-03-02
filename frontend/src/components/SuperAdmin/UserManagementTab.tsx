@@ -124,6 +124,11 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
 
   useRealtimeSync('users', loadUsers);
 
+  // Load users on mount and whenever filters change
+  useEffect(() => {
+    loadUsers();
+  }, [filterRole, filterStatus]);
+
   const handleCreateUser = () => {
     setShowCreateModal(true);
   };

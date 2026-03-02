@@ -92,7 +92,7 @@ export const PerformanceMetricsTab: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                 <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(val: number) => [val, 'Events']} labelFormatter={(h) => `Hour ${h}:00`} />
+                <Tooltip formatter={(val) => [val, 'Events']} labelFormatter={(h) => `Hour ${h}:00`} />
                 <Bar dataKey="count" fill="#10b981" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -128,7 +128,7 @@ export const PerformanceMetricsTab: React.FC = () => {
               <h3 className="font-medium text-gray-900 dark:text-white text-sm mb-4">Severity Breakdown</h3>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={data.severityBreakdown} dataKey="count" nameKey="severity" cx="50%" cy="50%" outerRadius={70} label={({ severity, percent }) => `${severity} ${(percent * 100).toFixed(0)}%`}>
+                  <Pie data={data.severityBreakdown} dataKey="count" nameKey="severity" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
                     {data.severityBreakdown.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
                   <Legend />

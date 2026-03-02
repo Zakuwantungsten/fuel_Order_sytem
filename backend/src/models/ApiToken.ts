@@ -12,6 +12,11 @@ export interface IApiToken extends Document {
   revokedAt?: Date;
   revokedBy?: string;
   scopes: string[];
+  // Rotation policy
+  rotationIntervalDays?: number;    // How often to rotate (e.g., 90)
+  lastRotatedAt?: Date;
+  nextRotationDue?: Date;
+  rotationReminderSent?: boolean;
   createdAt: Date;
 }
 
@@ -28,6 +33,11 @@ const ApiTokenSchema = new Schema<IApiToken>(
     revokedAt: { type: Date },
     revokedBy: { type: String },
     scopes: [{ type: String }],
+    // Rotation policy fields
+    rotationIntervalDays: { type: Number, min: 1, max: 365 },
+    lastRotatedAt: { type: Date },
+    nextRotationDue: { type: Date, index: true },
+    rotationReminderSent: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

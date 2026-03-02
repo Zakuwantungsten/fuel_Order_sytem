@@ -47,6 +47,12 @@ import {
   Bell,
   Mail,
   ShieldCheck,
+  Radar,
+  Server,
+  ShieldBan,
+  KeyRound,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
@@ -97,7 +103,7 @@ const getInitialTab = (userRole: string): string => {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports',
         'sa_overview', 'sa_database', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_config', 
-        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'sa_announcements', 'sa_ip_rules', 'sa_sessions', 'sa_config_diff', 'sa_fuel_prices', 'sa_cron_jobs', 'sa_data_export', 'sa_feature_flags', 'sa_system_health', 'sa_maintenance', 'sa_webhooks', 'sa_rate_limits', 'sa_activity_heatmap', 'sa_bulk_users', 'sa_storage', 'sa_alert_thresholds', 'sa_email_logs', 'sa_mfa_management', 'sa_api_tokens', 'sa_performance_metrics', 'sa_db_indexes', 'sa_driver_credentials_enhanced', 'sa_config_history', 'sa_custom_report', 'sa_notification_config', 'driver_credentials', 'excel_import'
+        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'sa_announcements', 'sa_ip_rules', 'sa_sessions', 'sa_config_diff', 'sa_fuel_prices', 'sa_cron_jobs', 'sa_data_export', 'sa_feature_flags', 'sa_system_health', 'sa_maintenance', 'sa_webhooks', 'sa_rate_limits', 'sa_activity_heatmap', 'sa_bulk_users', 'sa_storage', 'sa_alert_thresholds', 'sa_email_logs', 'sa_mfa_management', 'sa_api_tokens', 'sa_performance_metrics', 'sa_db_indexes', 'sa_driver_credentials_enhanced', 'sa_config_history', 'sa_custom_report', 'sa_notification_config', 'sa_security_score', 'sa_privilege_elevation', 'sa_dlp_controls', 'sa_break_glass', 'sa_threat_detection', 'sa_siem_export', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'admin' || userRole === 'boss') {
@@ -146,6 +152,12 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   // Now reads from localStorage to persist across refreshes
   const [activeTab, setActiveTab] = useState(() => getInitialTab(user.role));
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
+    try {
+      const stored = sessionStorage.getItem('fuel_order_collapsed_sections');
+      return stored ? new Set(JSON.parse(stored)) : new Set<string>();
+    } catch { return new Set<string>(); }
+  });
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showPendingYardFuel, setShowPendingYardFuel] = useState(false);
@@ -218,6 +230,15 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     }
   }, [editDoId, activeTab]);
 
+  const toggleSidebarSection = (section: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      next.has(section) ? next.delete(section) : next.add(section);
+      sessionStorage.setItem('fuel_order_collapsed_sections', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
   const getMenuItems = () => {
     // Drivers only see their portal, no overview
     if (isDriver) {
@@ -254,12 +275,17 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_users', label: 'User Management', icon: Users, sectionLabel: 'Users & Access' },
         { id: 'sa_bulk_users', label: 'Bulk Users', icon: Users, sectionLabel: 'Users & Access' },
         { id: 'sa_driver_credentials_enhanced', label: 'Driver Credentials', icon: Key, sectionLabel: 'Users & Access' },
+        { id: 'sa_privilege_elevation', label: 'Privilege Elevation', icon: Shield, sectionLabel: 'Users & Access' },
         // Security
         { id: 'sa_security', label: 'Security Settings', icon: Shield, sectionLabel: 'Security' },
         { id: 'sa_ip_rules', label: 'IP Rules', icon: Network, sectionLabel: 'Security' },
         { id: 'sa_sessions', label: 'Active Sessions', icon: ShieldAlert, sectionLabel: 'Security' },
         { id: 'sa_mfa_management', label: '2FA Management', icon: ShieldCheck, sectionLabel: 'Security' },
         { id: 'sa_api_tokens', label: 'API Tokens', icon: Key, sectionLabel: 'Security' },
+        { id: 'sa_security_score', label: 'Security Score', icon: ShieldCheck, sectionLabel: 'Security' },
+        { id: 'sa_threat_detection', label: 'Threat Detection', icon: Radar, sectionLabel: 'Security' },
+        { id: 'sa_dlp_controls', label: 'DLP Controls', icon: ShieldBan, sectionLabel: 'Security' },
+        { id: 'sa_break_glass', label: 'Break-Glass Access', icon: KeyRound, sectionLabel: 'Security' },
         // Fleet & Fuel
         { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Building2, sectionLabel: 'Fleet & Fuel' },
         { id: 'sa_routes', label: 'Routes', icon: Route, sectionLabel: 'Fleet & Fuel' },
@@ -274,6 +300,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_activity_heatmap', label: 'Activity Heatmap', icon: Zap, sectionLabel: 'Monitoring' },
         { id: 'sa_alert_thresholds', label: 'Alert Thresholds', icon: Bell, sectionLabel: 'Monitoring' },
         { id: 'sa_email_logs', label: 'Email Logs', icon: Mail, sectionLabel: 'Monitoring' },
+        { id: 'sa_siem_export', label: 'SIEM Export', icon: Server, sectionLabel: 'Monitoring' },
         // Analytics
         { id: 'sa_analytics', label: 'Analytics & Reports', icon: FileBarChart, sectionLabel: 'Analytics' },
         { id: 'sa_audit', label: 'Audit Logs', icon: FileSearch, sectionLabel: 'Analytics' },
@@ -459,6 +486,18 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <SuperAdminDashboard user={user} section="custom_report" onNavigate={setActiveTab} />;
       case 'sa_notification_config':
         return <SuperAdminDashboard user={user} section="notification_config" onNavigate={setActiveTab} />;
+      case 'sa_security_score':
+        return <SuperAdminDashboard user={user} section="security_score" onNavigate={setActiveTab} />;
+      case 'sa_privilege_elevation':
+        return <SuperAdminDashboard user={user} section="privilege_elevation" onNavigate={setActiveTab} />;
+      case 'sa_dlp_controls':
+        return <SuperAdminDashboard user={user} section="dlp_controls" onNavigate={setActiveTab} />;
+      case 'sa_break_glass':
+        return <SuperAdminDashboard user={user} section="break_glass" onNavigate={setActiveTab} />;
+      case 'sa_threat_detection':
+        return <SuperAdminDashboard user={user} section="threat_detection" onNavigate={setActiveTab} />;
+      case 'sa_siem_export':
+        return <SuperAdminDashboard user={user} section="siem_export" onNavigate={setActiveTab} />;
       
       // Admin sections (admin/boss roles)
       case 'admin_overview':
@@ -568,15 +607,25 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             const IconComponent = item.icon as React.ElementType;
             const prevItem = (menuItems as any[])[idx - 1];
             const showSectionLabel = sidebarOpen && (item as any).sectionLabel && (item as any).sectionLabel !== (prevItem as any)?.sectionLabel;
+            const currentSection = (item as any).sectionLabel;
+            const isCollapsed = currentSection && collapsedSections.has(currentSection);
             return (
               <div key={item.id}>
                 {showSectionLabel && (
-                  <div className="px-3 pt-4 pb-1">
+                  <button
+                    onClick={() => toggleSidebarSection(currentSection)}
+                    className="w-full px-3 pt-4 pb-1 flex items-center justify-between group hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
+                  >
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
-                      {(item as any).sectionLabel}
+                      {currentSection}
                     </span>
-                  </div>
+                    {isCollapsed
+                      ? <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                      : <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                    }
+                  </button>
                 )}
+                {!isCollapsed && (
                 <button
                   onClick={() => {
                     setActiveTab(item.id);
@@ -592,6 +641,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   <IconComponent className="w-4 h-4 flex-shrink-0" />
                   {sidebarOpen && <span className="ml-2.5 text-sm truncate">{item.label}</span>}
                 </button>
+                )}
               </div>
             );
           })}

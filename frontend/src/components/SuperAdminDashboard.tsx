@@ -54,10 +54,16 @@ import DriverCredentialManagerEnhancedTab from './SuperAdmin/DriverCredentialMan
 import ConfigVersionHistoryTab from './SuperAdmin/ConfigVersionHistoryTab';
 import CustomReportBuilderTab from './SuperAdmin/CustomReportBuilderTab';
 import NotificationCenterConfigTab from './SuperAdmin/NotificationCenterConfigTab';
+import SecurityScoreTab from './SuperAdmin/SecurityScoreTab';
+import PrivilegeElevationTab from './SuperAdmin/PrivilegeElevationTab';
+import DLPControlsTab from './SuperAdmin/DLPControlsTab';
+import BreakGlassTab from './SuperAdmin/BreakGlassTab';
+import ThreatDetectionTab from './SuperAdmin/ThreatDetectionTab';
+import SIEMExportTab from './SuperAdmin/SIEMExportTab';
 
 interface SuperAdminDashboardProps {
   user: any;
-  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'ip_rules' | 'sessions' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'bulk_users' | 'storage' | 'alert_thresholds' | 'email_logs' | 'mfa_management' | 'api_tokens' | 'performance_metrics' | 'db_indexes' | 'driver_credentials_enhanced' | 'config_history' | 'custom_report' | 'notification_config';
+  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'ip_rules' | 'sessions' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'bulk_users' | 'storage' | 'alert_thresholds' | 'email_logs' | 'mfa_management' | 'api_tokens' | 'performance_metrics' | 'db_indexes' | 'driver_credentials_enhanced' | 'config_history' | 'custom_report' | 'notification_config' | 'security_score' | 'privilege_elevation' | 'dlp_controls' | 'break_glass' | 'threat_detection' | 'siem_export';
   onNavigate?: (section: string) => void;
 }
 
@@ -122,6 +128,12 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
     sessions:                    { group: 'Security',     label: 'Active Sessions'      },
     mfa_management:              { group: 'Security',     label: 'MFA Management'       },
     api_tokens:                  { group: 'Security',     label: 'API Tokens'           },
+    security_score:              { group: 'Security',     label: 'Security Score'       },
+    threat_detection:            { group: 'Security',     label: 'Threat Detection'     },
+    dlp_controls:                { group: 'Security',     label: 'DLP Controls'         },
+    break_glass:                 { group: 'Security',     label: 'Break-Glass Access'   },
+    privilege_elevation:         { group: 'Users',        label: 'Privilege Elevation'  },
+    siem_export:                 { group: 'Monitoring',   label: 'SIEM Export'          },
     fuel_stations:               { group: 'Fleet & Fuel', label: 'Fuel Stations'        },
     routes:                      { group: 'Fleet & Fuel', label: 'Routes'               },
     fuel_prices:                 { group: 'Fleet & Fuel', label: 'Fuel Prices'          },
@@ -320,6 +332,24 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
             )}
             {section === 'notification_config' && (
               <NotificationCenterConfigTab />
+            )}
+            {section === 'security_score' && (
+              <SecurityScoreTab />
+            )}
+            {section === 'privilege_elevation' && (
+              <PrivilegeElevationTab />
+            )}
+            {section === 'dlp_controls' && (
+              <DLPControlsTab />
+            )}
+            {section === 'break_glass' && (
+              <BreakGlassTab />
+            )}
+            {section === 'threat_detection' && (
+              <ThreatDetectionTab />
+            )}
+            {section === 'siem_export' && (
+              <SIEMExportTab />
             )}
           </>
         )}

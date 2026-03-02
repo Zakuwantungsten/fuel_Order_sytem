@@ -13,6 +13,8 @@ import emailService from '../services/emailService';
 import mfaService from '../services/mfaService';
 import { emitToUser } from '../services/websocket';
 import { getPasswordPolicy, enforcePasswordPolicy } from '../utils/passwordPolicy';
+import { checkBreachedPassword } from '../utils/breachedPasswordCheck';
+import { assessLoginRisk } from '../utils/riskScoringService';
 
 
 /**
@@ -27,6 +29,12 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     const policyError = enforcePasswordPolicy(password, policy);
     if (policyError) {
       throw new ApiError(400, policyError);
+    }
+
+    // Check against HaveIBeenPwned breached password database
+    const breachResult = await checkBreachedPassword(password);
+    if (breachResult.breached) {
+      throw new ApiError(400, `This password has appeared in ${breachResult.count.toLocaleString()} data breaches. Please choose a different password.`);
     }
 
     // Check if user already exists
@@ -351,6 +359,21 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       req.ip || 'unknown'
     );
 
+    // Assess login risk score (UEBA)
+    const riskResult = await assessLoginRisk(user, req);
+    if (riskResult.blockLogin) {
+      logger.warn(`Login blocked for ${username} due to critical risk score: ${riskResult.score}`);
+      await AuditService.log({
+        userId: user._id.toString(),
+        action: 'login_blocked',
+        resource: 'auth',
+        details: { riskScore: riskResult.score, riskLevel: riskResult.level, factors: riskResult.factors },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+      throw new ApiError(403, 'Login blocked due to suspicious activity. Please contact your administrator.');
+    }
+
     // Check if MFA is enabled for this user
     const mfaEnabled = await mfaService.isMFAEnabled(user._id.toString());
     const deviceId = req.body.deviceId || req.get('x-device-id');
@@ -437,6 +460,18 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       user._id.toString()
     );
 
+    // Log risk score if elevated
+    if (riskResult.score > 30) {
+      await AuditService.log({
+        userId: user._id.toString(),
+        action: 'elevated_risk_login',
+        resource: 'auth',
+        details: { riskScore: riskResult.score, riskLevel: riskResult.level, factors: riskResult.factors },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+    }
+
     const response: AuthResponse = {
       user: user.toJSON(),
       accessToken,
@@ -449,6 +484,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       data: {
         ...response,
         sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
+        riskScore: riskResult.score,
+        riskLevel: riskResult.level,
       },
     });
   } catch (error: any) {
@@ -819,6 +856,12 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
       throw new ApiError(400, policyError);
     }
 
+    // Check against HaveIBeenPwned breached password database
+    const breachCheck = await checkBreachedPassword(newPassword);
+    if (breachCheck.breached) {
+      throw new ApiError(400, `This password has appeared in ${breachCheck.count.toLocaleString()} data breaches. Please choose a different password.`);
+    }
+
     // Enforce password history: new password must not match recent previous passwords
     if (policy.historyCount > 0) {
       const historyToCheck = [user.password!, ...(user.passwordHistory ?? [])].slice(0, policy.historyCount);
@@ -913,6 +956,12 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
     const fl_policyError = enforcePasswordPolicy(newPassword, fl_policy);
     if (fl_policyError) {
       throw new ApiError(400, fl_policyError);
+    }
+
+    // Check against HaveIBeenPwned breached password database
+    const fl_breachCheck = await checkBreachedPassword(newPassword);
+    if (fl_breachCheck.breached) {
+      throw new ApiError(400, `This password has appeared in ${fl_breachCheck.count.toLocaleString()} data breaches. Please choose a different password.`);
     }
 
     // Enforce password history
@@ -1123,6 +1172,12 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
     const rp_policyError = enforcePasswordPolicy(newPassword, rp_policy);
     if (rp_policyError) {
       throw new ApiError(400, rp_policyError);
+    }
+
+    // Check against HaveIBeenPwned breached password database
+    const rp_breachCheck = await checkBreachedPassword(newPassword);
+    if (rp_breachCheck.breached) {
+      throw new ApiError(400, `This password has appeared in ${rp_breachCheck.count.toLocaleString()} data breaches. Please choose a different password.`);
     }
 
     // Enforce password history
