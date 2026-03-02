@@ -31,7 +31,22 @@ import {
   Activity,
   Building2,
   Receipt,
-  FileUp
+  FileUp,
+  Megaphone,
+  Network,
+  ShieldAlert,
+  GitCompare,
+  Cpu,
+  Download,
+  Flag,
+  Wrench,
+  Webhook,
+  Gauge,
+  Zap,
+  HardDrive,
+  Bell,
+  Mail,
+  ShieldCheck,
 } from 'lucide-react';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
@@ -82,7 +97,7 @@ const getInitialTab = (userRole: string): string => {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports',
         'sa_overview', 'sa_database', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_config', 
-        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'driver_credentials', 'excel_import'
+        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'sa_announcements', 'sa_ip_rules', 'sa_sessions', 'sa_config_diff', 'sa_fuel_prices', 'sa_cron_jobs', 'sa_data_export', 'sa_feature_flags', 'sa_system_health', 'sa_maintenance', 'sa_webhooks', 'sa_rate_limits', 'sa_activity_heatmap', 'sa_bulk_users', 'sa_storage', 'sa_alert_thresholds', 'sa_email_logs', 'sa_mfa_management', 'sa_api_tokens', 'sa_performance_metrics', 'sa_db_indexes', 'sa_driver_credentials_enhanced', 'sa_config_history', 'sa_custom_report', 'sa_notification_config', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'admin' || userRole === 'boss') {
@@ -234,22 +249,54 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     // Super Admin gets only super admin specific sections
     if (user.role === 'super_admin') {
       return [
-        { id: 'sa_overview', label: 'Super Admin Overview', icon: Shield },
-        { id: 'sa_database', label: 'Database Monitor', icon: Database },
-        { id: 'sa_users', label: 'User Management', icon: Users },
-        { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Building2 },
-        { id: 'sa_routes', label: 'Routes', icon: Route },
-        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
-        { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
-        { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
-        { id: 'sa_config', label: 'Configuration', icon: Settings },
-        { id: 'sa_audit', label: 'Audit & Logs', icon: FileSearch },
-        { id: 'sa_security', label: 'Security', icon: Shield },
-        { id: 'sa_trash', label: 'Trash Management', icon: Trash2 },
-        { id: 'sa_archival', label: 'Data Archival', icon: Archive },
-        { id: 'sa_backup', label: 'Backup & Recovery', icon: Database },
-        { id: 'sa_analytics', label: 'Analytics & Reports', icon: FileBarChart },
-        { id: 'excel_import', label: 'Excel Import', icon: FileUp },
+        { id: 'sa_overview', label: 'Overview', icon: Shield, sectionLabel: 'Super Admin' },
+        // Users & Access
+        { id: 'sa_users', label: 'User Management', icon: Users, sectionLabel: 'Users & Access' },
+        { id: 'sa_bulk_users', label: 'Bulk Users', icon: Users, sectionLabel: 'Users & Access' },
+        { id: 'sa_driver_credentials_enhanced', label: 'Driver Credentials', icon: Key, sectionLabel: 'Users & Access' },
+        // Security
+        { id: 'sa_security', label: 'Security Settings', icon: Shield, sectionLabel: 'Security' },
+        { id: 'sa_ip_rules', label: 'IP Rules', icon: Network, sectionLabel: 'Security' },
+        { id: 'sa_sessions', label: 'Active Sessions', icon: ShieldAlert, sectionLabel: 'Security' },
+        { id: 'sa_mfa_management', label: '2FA Management', icon: ShieldCheck, sectionLabel: 'Security' },
+        { id: 'sa_api_tokens', label: 'API Tokens', icon: Key, sectionLabel: 'Security' },
+        // Fleet & Fuel
+        { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Building2, sectionLabel: 'Fleet & Fuel' },
+        { id: 'sa_routes', label: 'Routes', icon: Route, sectionLabel: 'Fleet & Fuel' },
+        { id: 'sa_fuel_prices', label: 'Fuel Prices', icon: TrendingUp, sectionLabel: 'Fleet & Fuel' },
+        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation, sectionLabel: 'Fleet & Fuel' },
+        { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned, sectionLabel: 'Fleet & Fuel' },
+        { id: 'driver_credentials', label: 'Driver Access', icon: Key, sectionLabel: 'Fleet & Fuel' },
+        // Monitoring
+        { id: 'sa_database', label: 'Database Monitor', icon: Database, sectionLabel: 'Monitoring' },
+        { id: 'sa_system_health', label: 'System Health', icon: Activity, sectionLabel: 'Monitoring' },
+        { id: 'sa_performance_metrics', label: 'Performance', icon: TrendingUp, sectionLabel: 'Monitoring' },
+        { id: 'sa_activity_heatmap', label: 'Activity Heatmap', icon: Zap, sectionLabel: 'Monitoring' },
+        { id: 'sa_alert_thresholds', label: 'Alert Thresholds', icon: Bell, sectionLabel: 'Monitoring' },
+        { id: 'sa_email_logs', label: 'Email Logs', icon: Mail, sectionLabel: 'Monitoring' },
+        // Analytics
+        { id: 'sa_analytics', label: 'Analytics & Reports', icon: FileBarChart, sectionLabel: 'Analytics' },
+        { id: 'sa_audit', label: 'Audit Logs', icon: FileSearch, sectionLabel: 'Analytics' },
+        { id: 'sa_custom_report', label: 'Custom Reports', icon: FileBarChart, sectionLabel: 'Analytics' },
+        // Data
+        { id: 'sa_backup', label: 'Backup & Recovery', icon: Database, sectionLabel: 'Data' },
+        { id: 'sa_archival', label: 'Data Archival', icon: Archive, sectionLabel: 'Data' },
+        { id: 'sa_trash', label: 'Trash Management', icon: Trash2, sectionLabel: 'Data' },
+        { id: 'sa_storage', label: 'Storage Manager', icon: HardDrive, sectionLabel: 'Data' },
+        { id: 'sa_data_export', label: 'Data Export', icon: Download, sectionLabel: 'Data' },
+        // System
+        { id: 'sa_config', label: 'Configuration', icon: Settings, sectionLabel: 'System' },
+        { id: 'sa_config_history', label: 'Config History', icon: GitCompare, sectionLabel: 'System' },
+        { id: 'sa_config_diff', label: 'Config Diff', icon: GitCompare, sectionLabel: 'System' },
+        { id: 'sa_feature_flags', label: 'Feature Flags', icon: Flag, sectionLabel: 'System' },
+        { id: 'sa_cron_jobs', label: 'Cron Jobs', icon: Cpu, sectionLabel: 'System' },
+        { id: 'sa_maintenance', label: 'Maintenance Mode', icon: Wrench, sectionLabel: 'System' },
+        { id: 'sa_webhooks', label: 'Webhooks', icon: Webhook, sectionLabel: 'System' },
+        { id: 'sa_rate_limits', label: 'Rate Limits', icon: Gauge, sectionLabel: 'System' },
+        { id: 'sa_db_indexes', label: 'DB Indexes', icon: Database, sectionLabel: 'System' },
+        { id: 'sa_announcements', label: 'Announcements', icon: Megaphone, sectionLabel: 'System' },
+        { id: 'sa_notification_config', label: 'Notification Config', icon: Bell, sectionLabel: 'System' },
+        { id: 'excel_import', label: 'Excel Import', icon: FileUp, sectionLabel: 'System' },
       ];
     }
 
@@ -362,6 +409,56 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <SuperAdminDashboard user={user} section="backup" onNavigate={setActiveTab} />;
       case 'sa_analytics':
         return <SuperAdminDashboard user={user} section="analytics" onNavigate={setActiveTab} />;
+      case 'sa_announcements':
+        return <SuperAdminDashboard user={user} section="announcements" onNavigate={setActiveTab} />;
+      case 'sa_ip_rules':
+        return <SuperAdminDashboard user={user} section="ip_rules" onNavigate={setActiveTab} />;
+      case 'sa_sessions':
+        return <SuperAdminDashboard user={user} section="sessions" onNavigate={setActiveTab} />;
+      case 'sa_config_diff':
+        return <SuperAdminDashboard user={user} section="config_diff" onNavigate={setActiveTab} />;
+      case 'sa_fuel_prices':
+        return <SuperAdminDashboard user={user} section="fuel_prices" onNavigate={setActiveTab} />;
+      case 'sa_cron_jobs':
+        return <SuperAdminDashboard user={user} section="cron_jobs" onNavigate={setActiveTab} />;
+      case 'sa_data_export':
+        return <SuperAdminDashboard user={user} section="data_export" onNavigate={setActiveTab} />;
+      case 'sa_feature_flags':
+        return <SuperAdminDashboard user={user} section="feature_flags" onNavigate={setActiveTab} />;
+      case 'sa_system_health':
+        return <SuperAdminDashboard user={user} section="system_health" onNavigate={setActiveTab} />;
+      case 'sa_maintenance':
+        return <SuperAdminDashboard user={user} section="maintenance" onNavigate={setActiveTab} />;
+      case 'sa_webhooks':
+        return <SuperAdminDashboard user={user} section="webhooks" onNavigate={setActiveTab} />;
+      case 'sa_rate_limits':
+        return <SuperAdminDashboard user={user} section="rate_limits" onNavigate={setActiveTab} />;
+      case 'sa_activity_heatmap':
+        return <SuperAdminDashboard user={user} section="activity_heatmap" onNavigate={setActiveTab} />;
+      case 'sa_bulk_users':
+        return <SuperAdminDashboard user={user} section="bulk_users" onNavigate={setActiveTab} />;
+      case 'sa_storage':
+        return <SuperAdminDashboard user={user} section="storage" onNavigate={setActiveTab} />;
+      case 'sa_alert_thresholds':
+        return <SuperAdminDashboard user={user} section="alert_thresholds" onNavigate={setActiveTab} />;
+      case 'sa_email_logs':
+        return <SuperAdminDashboard user={user} section="email_logs" onNavigate={setActiveTab} />;
+      case 'sa_mfa_management':
+        return <SuperAdminDashboard user={user} section="mfa_management" onNavigate={setActiveTab} />;
+      case 'sa_api_tokens':
+        return <SuperAdminDashboard user={user} section="api_tokens" onNavigate={setActiveTab} />;
+      case 'sa_performance_metrics':
+        return <SuperAdminDashboard user={user} section="performance_metrics" onNavigate={setActiveTab} />;
+      case 'sa_db_indexes':
+        return <SuperAdminDashboard user={user} section="db_indexes" onNavigate={setActiveTab} />;
+      case 'sa_driver_credentials_enhanced':
+        return <SuperAdminDashboard user={user} section="driver_credentials_enhanced" onNavigate={setActiveTab} />;
+      case 'sa_config_history':
+        return <SuperAdminDashboard user={user} section="config_history" onNavigate={setActiveTab} />;
+      case 'sa_custom_report':
+        return <SuperAdminDashboard user={user} section="custom_report" onNavigate={setActiveTab} />;
+      case 'sa_notification_config':
+        return <SuperAdminDashboard user={user} section="notification_config" onNavigate={setActiveTab} />;
       
       // Admin sections (admin/boss roles)
       case 'admin_overview':
@@ -441,9 +538,9 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       )}
       
       {/* Sidebar */}
-      <div className={`bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 right-0 lg:right-auto lg:left-0 z-30 transform ${
-        sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
-      } w-56 ${!sidebarOpen && 'lg:w-14'}`}>
+      <div className={`bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-30 transform ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      } w-60 ${!sidebarOpen && 'lg:w-14'}`}>
         <div className="p-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             {sidebarOpen && (
@@ -466,25 +563,36 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           </div>
         </div>
 
-        <nav className="mt-8 flex-1 overflow-y-auto">
-          {menuItems.map((item) => {
-            const IconComponent = item.icon;
+        <nav className="mt-2 flex-1 overflow-y-auto pb-4">
+          {(menuItems as any[]).map((item, idx) => {
+            const IconComponent = item.icon as React.ElementType;
+            const prevItem = (menuItems as any[])[idx - 1];
+            const showSectionLabel = sidebarOpen && (item as any).sectionLabel && (item as any).sectionLabel !== (prevItem as any)?.sectionLabel;
             return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setSidebarOpen(false);
-                }}
-                className={`w-full flex items-center px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                  activeTab === item.id 
-                    ? 'bg-indigo-50 dark:bg-indigo-900/30 border-r-2 border-indigo-500 text-indigo-600 dark:text-indigo-400' 
-                    : 'text-gray-700 dark:text-gray-300'
-                }`}
-              >
-                <IconComponent className="w-5 h-5" />
-                {sidebarOpen && <span className="ml-2 text-sm">{item.label}</span>}
-              </button>
+              <div key={item.id}>
+                {showSectionLabel && (
+                  <div className="px-3 pt-4 pb-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+                      {(item as any).sectionLabel}
+                    </span>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setSidebarOpen(false);
+                  }}
+                  title={!sidebarOpen ? item.label : undefined}
+                  className={`w-full flex items-center px-3 py-2 text-left transition-colors ${
+                    activeTab === item.id
+                      ? 'bg-indigo-50 dark:bg-indigo-900/30 border-r-2 border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <IconComponent className="w-4 h-4 flex-shrink-0" />
+                  {sidebarOpen && <span className="ml-2.5 text-sm truncate">{item.label}</span>}
+                </button>
+              </div>
             );
           })}
         </nav>
@@ -591,9 +699,12 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         <header className="hidden lg:flex bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-3 flex-shrink-0 transition-colors">
           <div className="flex items-center justify-between w-full">
             <div>
-              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                 {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
               </h2>
+              {activeTab.startsWith('sa_') && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Super Admin</p>
+              )}
             </div>
             <div className="flex items-center space-x-3">
               <button 

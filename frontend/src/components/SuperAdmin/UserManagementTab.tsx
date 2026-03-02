@@ -431,11 +431,26 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
-                <tr key="loading">
-                  <td colSpan={6} className="px-4 py-8 text-center">
-                    <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto" />
-                  </td>
-                </tr>
+                <>
+                  {[...Array(6)].map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                          <div className="space-y-1.5">
+                            <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-28" />
+                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-20" />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" /></td>
+                      <td className="px-4 py-3"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-36" /></td>
+                      <td className="px-4 py-3"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-24" /></td>
+                      <td className="px-4 py-3"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-24" /></td>
+                      <td className="px-4 py-3 text-right"><div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-16 ml-auto" /></td>
+                    </tr>
+                  ))}
+                </>
               ) : filteredUsers.length === 0 ? (
                 <tr key="no-users">
                   <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">

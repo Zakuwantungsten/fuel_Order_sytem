@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ConfirmModal from './ConfirmModal';
 import { formatDate as formatSystemDate } from '../../utils/timezone';
 import { Database, Download, Upload, Calendar, RefreshCw, Trash2, AlertCircle, CheckCircle, Clock, HardDrive, Package } from 'lucide-react';
 import { backupAPI } from '../../services/api';
@@ -17,6 +18,13 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
   const [_showScheduleModal, setShowScheduleModal] = useState(false);
   // Using underscore prefix to suppress unused variable warning
   void _showScheduleModal;
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning';
+    onConfirm: () => Promise<void>;
+  } | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -64,31 +72,45 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     }
   };
 
-  const handleRestore = async (backup: Backup) => {
-    if (!confirm(`Are you sure you want to restore from "${backup.fileName}"? This will replace all current data!`)) {
-      return;
-    }
-
-    try {
-      await backupAPI.restoreBackup(backup.id);
-      onMessage('success', 'Backup restore started. This may take several minutes.');
-    } catch (error: any) {
-      onMessage('error', error.response?.data?.message || 'Failed to restore backup');
-    }
+  const handleRestore = (backup: Backup) => {
+    setConfirmState({
+      title: 'Restore Backup',
+      message: `Restore from "${backup.fileName}"? This will overwrite all current data and cannot be undone.`,
+      variant: 'warning',
+      onConfirm: async () => {
+        setConfirming(true);
+        try {
+          await backupAPI.restoreBackup(backup.id);
+          onMessage('success', 'Backup restore started. This may take several minutes.');
+        } catch (error: any) {
+          onMessage('error', error.response?.data?.message || 'Failed to restore backup');
+        } finally {
+          setConfirming(false);
+          setConfirmState(null);
+        }
+      },
+    });
   };
 
-  const handleDelete = async (backup: Backup) => {
-    if (!confirm(`Delete backup "${backup.fileName}"?`)) {
-      return;
-    }
-
-    try {
-      await backupAPI.deleteBackup(backup.id);
-      onMessage('success', 'Backup deleted successfully');
-      loadData();
-    } catch (error: any) {
-      onMessage('error', error.response?.data?.message || 'Failed to delete backup');
-    }
+  const handleDelete = (backup: Backup) => {
+    setConfirmState({
+      title: 'Delete Backup',
+      message: `Delete "${backup.fileName}"? This action cannot be undone.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirming(true);
+        try {
+          await backupAPI.deleteBackup(backup.id);
+          onMessage('success', 'Backup deleted successfully');
+          loadData();
+        } catch (error: any) {
+          onMessage('error', error.response?.data?.message || 'Failed to delete backup');
+        } finally {
+          setConfirming(false);
+          setConfirmState(null);
+        }
+      },
+    });
   };
 
   const handleToggleSchedule = async (schedule: BackupSchedule) => {
@@ -222,9 +244,23 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
         </div>
 
         {loading ? (
-          <div className="p-8 text-center">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" />
-            <p className="mt-2 text-sm text-gray-500">Loading backups...</p>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700 animate-pulse">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-48" />
+                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-32" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="h-8 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : backups.length === 0 ? (
           <div className="p-8 text-center">
@@ -380,6 +416,16 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
           </p>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        variant={confirmState?.variant}
+        loading={confirming}
+        onConfirm={() => confirmState?.onConfirm()}
+        onCancel={() => !confirming && setConfirmState(null)}
+      />
     </div>
   );
 }

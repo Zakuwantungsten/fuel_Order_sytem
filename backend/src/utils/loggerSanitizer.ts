@@ -34,13 +34,17 @@ const SENSITIVE_KEYS = [
 ];
 
 /**
- * Check if a key contains sensitive information
+ * Check if a key IS or ENDS WITH a sensitive pattern.
+ * Using endsWith (not includes) prevents false positives such as
+ * "refreshTokenExpiry" being redacted just because it contains "token".
+ * Real credential fields ("accessToken", "refreshToken") end with the pattern.
  */
 function isSensitiveKey(key: string): boolean {
   const lowerKey = key.toLowerCase().replace(/[_\s-]/g, '');
-  return SENSITIVE_KEYS.some(
-    (sensitiveKey) => lowerKey.includes(sensitiveKey.replace(/[_\s-]/g, ''))
-  );
+  return SENSITIVE_KEYS.some((sensitiveKey) => {
+    const normalized = sensitiveKey.toLowerCase().replace(/[_\s-]/g, '');
+    return lowerKey === normalized || lowerKey.endsWith(normalized);
+  });
 }
 
 /**

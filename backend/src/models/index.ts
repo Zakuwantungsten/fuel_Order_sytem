@@ -11,6 +11,11 @@ export { DriverAccountEntry, IDriverAccountEntryDocument } from './DriverAccount
 export { DriverCredential, IDriverCredential } from './DriverCredential';
 export { AuditLog, IAuditLogDocument } from './AuditLog';
 export { Notification, INotification } from './Notification';
+export { SystemAnnouncement, ISystemAnnouncement } from './SystemAnnouncement';
+export { IPRule, IIPRule } from './IPRule';
+export { FuelPriceHistory, FuelPriceSchedule, IFuelPriceHistory, IFuelPriceSchedule } from './FuelPrice';
+export { FeatureFlag, IFeatureFlag } from './FeatureFlag';
+export { default as Webhook, IWebhook, WEBHOOK_EVENTS } from './Webhook';
 
 // Export fleet tracking models
 export { Checkpoint, ICheckpoint } from './Checkpoint';

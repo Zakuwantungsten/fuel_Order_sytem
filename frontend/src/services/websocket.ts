@@ -19,6 +19,7 @@ let _maintenanceEventCallback: ((event: any) => void) | null = null;
 let _settingsEventCallback: ((event: any) => void) | null = null;
 let _securityEventCallback: ((event: any) => void) | null = null;
 const _dataChangedCallbacks = new Map<string, (event: { collection: string; action: string; timestamp: number }) => void>();
+let _announcementEventCallback: ((event: { action: string; announcement: any; timestamp: number }) => void) | null = null;
 // Fired whenever the socket successfully reconnects so subscribers can reload stale data
 const _reconnectCallbacks = new Map<string, () => void>();
 
@@ -74,6 +75,9 @@ export const initializeWebSocket = (token: string): Socket => {
   });
   socket.on('data_changed', (event) => {
     _dataChangedCallbacks.forEach((cb) => cb(event));
+  });
+  socket.on('announcement_event', (event) => {
+    if (_announcementEventCallback) _announcementEventCallback(event);
   });
 
   socket.on('connect', () => {
@@ -198,6 +202,21 @@ export const subscribeToSecurityEvents = (callback: (event: any) => void): void 
  */
 export const unsubscribeFromSecurityEvents = (): void => {
   _securityEventCallback = null;
+};
+
+/**
+ * Subscribe to system announcement events.
+ * Fired whenever a super_admin creates, updates, or deletes an announcement.
+ * The callback receives { action: 'created'|'updated'|'deleted', announcement, timestamp }.
+ */
+export const subscribeToAnnouncementEvents = (
+  callback: (event: { action: string; announcement: any; timestamp: number }) => void
+): void => {
+  _announcementEventCallback = callback;
+};
+
+export const unsubscribeFromAnnouncementEvents = (): void => {
+  _announcementEventCallback = null;
 };
 
 export const subscribeToDataChanges = (callback: (event: { collection: string; action: string; timestamp: number }) => void, id: string): void => {

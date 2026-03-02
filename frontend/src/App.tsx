@@ -16,6 +16,7 @@ import { setSystemName, setSystemTimezone, setSystemDateFormat } from './utils/t
 import tahmeedLogo from './assets/logo.png';
 import tahmeedLogoDark from './assets/Dec 2, 2025, 06_08_52 PM.png';
 import { LogOut, RefreshCw, Wrench, Clock, Shield } from 'lucide-react';
+import SystemBanner from './components/SystemBanner';
 
 // Shown to non-allowed users when the system is in maintenance mode
 function MaintenancePage({ message, onLogout }: { message: string; onLogout: () => void }) {
@@ -290,7 +291,12 @@ function AppContent() {
         path="/*"
         element={
           <ProtectedRoute>
-            <EnhancedDashboard user={user} onLogout={logout} />
+            <div className="flex flex-col min-h-screen">
+              <SystemBanner userRole={user?.role} />
+              <div className="flex-1">
+                <EnhancedDashboard user={user} onLogout={logout} />
+              </div>
+            </div>
           </ProtectedRoute>
         }
       />

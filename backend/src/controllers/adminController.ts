@@ -1,4 +1,5 @@
  import { Response } from 'express';
+import ExcelJS from 'exceljs';
 import { SystemConfig, User, DeliveryOrder, LPOEntry, FuelRecord, YardFuelDispense, AuditLog } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
@@ -1246,6 +1247,191 @@ export const getCriticalEvents = async (req: AuthRequest, res: Response): Promis
     });
   } catch (error: any) {
     logger.error('Error getting critical events:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /audit-logs/stats
+ * Real-time stat cards for the audit dashboard header.
+ * Equivalent to Google Cloud Monitoring / Datadog audit dashboards.
+ */
+export const getAuditStats = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const stats = await AuditService.getStatsSummary();
+    res.status(200).json({ success: true, data: stats });
+  } catch (error: any) {
+    logger.error('Error getting audit stats:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /audit-logs/verify-integrity
+ * Walk the log chain and verify every SHA-256 hash.
+ * Equivalent to `aws cloudtrail validate-logs`.
+ * Only super_admin can run this — the check itself is logged as VERIFY_INTEGRITY.
+ */
+export const verifyAuditIntegrity = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { startDate, endDate, limit = 5000 } = req.query;
+
+    const report = await AuditService.verifyIntegrity({
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate:   endDate   ? new Date(endDate   as string) : undefined,
+      limit:     Number(limit),
+    });
+
+    // Log the fact that an integrity check was performed (audit the auditors)
+    await AuditService.log({
+      userId:       req.user?.userId,
+      username:     req.user?.username ?? 'unknown',
+      action:       'VERIFY_INTEGRITY',
+      resourceType: 'audit_logs',
+      correlationId: (req as any).requestId,
+      ipAddress:
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+        req.socket?.remoteAddress || 'unknown',
+      details: `Integrity check: ${report.totalChecked} entries, score ${report.integrityScore}/100`,
+      severity: report.integrityScore < 100 ? 'critical' : 'low',
+    });
+
+    res.status(200).json({ success: true, data: report });
+  } catch (error: any) {
+    logger.error('Error verifying audit integrity:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /audit-logs/export
+ * Download logs as CSV — fixes the non-functional Export button in the UI.
+ * Like AWS CloudTrail S3 export / Azure Log Analytics export.
+ */
+export const exportAuditLogs = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { action, resourceType, username, severity, outcome, startDate, endDate } = req.query;
+
+    const result = await AuditService.getLogs({
+      action:       action       as any,
+      resourceType: resourceType as string,
+      username:     username     as string,
+      severity:     severity     as any,
+      outcome:      outcome      as any,
+      startDate:    startDate ? new Date(startDate as string) : undefined,
+      endDate:      endDate   ? new Date(endDate   as string) : undefined,
+      limit:        10000, // max export size
+      page:         1,
+    });
+
+    // ── Build styled XLSX ──────────────────────────────────────────────────
+    const workbook  = new ExcelJS.Workbook();
+    workbook.creator = 'Fuel Order System';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Audit Logs', {
+      views: [{ state: 'frozen', ySplit: 1 }],   // freeze header row
+    });
+
+    // Column definitions with widths
+    sheet.columns = [
+      { header: 'Timestamp',      key: 'timestamp',     width: 22 },
+      { header: 'Username',       key: 'username',      width: 20 },
+      { header: 'User ID',        key: 'userId',        width: 28 },
+      { header: 'Action',         key: 'action',        width: 22 },
+      { header: 'Resource Type',  key: 'resourceType',  width: 18 },
+      { header: 'Resource ID',    key: 'resourceId',    width: 28 },
+      { header: 'Outcome',        key: 'outcome',       width: 12 },
+      { header: 'Severity',       key: 'severity',      width: 12 },
+      { header: 'Risk Score',     key: 'riskScore',     width: 12 },
+      { header: 'IP Address',     key: 'ipAddress',     width: 16 },
+      { header: 'Correlation ID', key: 'correlationId', width: 38 },
+      { header: 'Details',        key: 'details',       width: 50 },
+      { header: 'SHA-256 Hash',   key: 'hash',          width: 70 },
+    ];
+
+    // Style the header row
+    const headerRow = sheet.getRow(1);
+    headerRow.eachCell((cell) => {
+      cell.font       = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.fill       = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+      cell.alignment  = { vertical: 'middle', horizontal: 'center', wrapText: false };
+      cell.border     = {
+        bottom: { style: 'medium', color: { argb: 'FF2E6DA4' } },
+      };
+    });
+    headerRow.height = 22;
+
+    // Row fill colours keyed by severity / outcome
+    const SEVERITY_FILL: Record<string, string> = {
+      critical: 'FFFFF0F0',  // light red
+      high:     'FFFFF5E6',  // light orange
+      medium:   'FFFFFFF0',  // light yellow
+      low:      'FFF0FFF0',  // light green
+    };
+    const OUTCOME_FONT_COLOR: Record<string, string> = {
+      FAILURE: 'FFC0392B',
+      PARTIAL: 'FFD35400',
+      SUCCESS: 'FF1E8449',
+    };
+
+    result.logs.forEach((log: any, idx: number) => {
+      const row = sheet.addRow({
+        timestamp:     new Date(log.timestamp).toISOString(),
+        username:      log.username      || '',
+        userId:        log.userId        || '',
+        action:        log.action        || '',
+        resourceType:  log.resourceType  || '',
+        resourceId:    log.resourceId    || '',
+        outcome:       log.outcome       || 'SUCCESS',
+        severity:      log.severity      || '',
+        riskScore:     log.riskScore     ?? 0,
+        ipAddress:     log.ipAddress     || '',
+        correlationId: log.correlationId || '',
+        details:       log.details       || '',
+        hash:          log.hash          || '',
+      });
+
+      // Alternating base fill → overridden by severity
+      const baseFill = SEVERITY_FILL[(log.severity || '').toLowerCase()]
+                       ?? (idx % 2 === 0 ? 'FFFAFAFA' : 'FFFFFFFF');
+
+      row.eachCell((cell, colNumber) => {
+        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: baseFill } };
+        cell.alignment = { vertical: 'middle', wrapText: false };
+        cell.font      = { size: 10 };
+      });
+
+      // Colour-code the Outcome cell (column 7)
+      const outcomeCell = row.getCell(7);
+      const outcomeColor = OUTCOME_FONT_COLOR[(log.outcome || 'SUCCESS').toUpperCase()] ?? 'FF000000';
+      outcomeCell.font = { bold: true, size: 10, color: { argb: outcomeColor } };
+
+      // Highlight critical rows with a left border accent
+      if ((log.severity || '').toLowerCase() === 'critical') {
+        row.eachCell((cell) => {
+          cell.border = { left: { style: 'medium', color: { argb: 'FFCC0000' } } };
+        });
+      }
+
+      row.commit();
+    });
+
+    // Log the export action
+    await AuditService.logExport(
+      req.user!.userId, req.user!.username,
+      'audit_logs', 'XLSX', result.logs.length,
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress,
+      (req as any).requestId
+    );
+
+    const filename = `audit-logs-${Date.now()}.xlsx`;
+    res.setHeader('Content-Type',        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error: any) {
+    logger.error('Error exporting audit logs:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

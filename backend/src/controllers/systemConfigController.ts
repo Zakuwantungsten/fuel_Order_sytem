@@ -859,3 +859,126 @@ export const getProfilingSettings = async (req: AuthRequest, res: Response): Pro
     throw error;
   }
 };
+
+/**
+ * GET /api/system-config/settings/rate-limits
+ * Return current rate limit settings (stored in system config or env defaults)
+ */
+export const getRateLimitSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const systemConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    const rateLimits = systemConfig?.systemSettings?.rateLimits || {
+      apiRateLimitMax: parseInt(process.env.API_RATE_LIMIT_MAX || '500', 10),
+      rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
+    };
+    res.json({ success: true, data: rateLimits });
+  } catch (error: any) {
+    logger.error('Error getting rate limit settings:', error);
+    throw error;
+  }
+};
+
+/**
+ * PUT /api/system-config/settings/rate-limits
+ * Persist rate limit settings to system config (effective after server restart)
+ */
+export const updateRateLimitSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { apiRateLimitMax, rateLimitWindowMs } = req.body;
+
+    if (typeof apiRateLimitMax !== 'number' || apiRateLimitMax < 10 || apiRateLimitMax > 10_000) {
+      res.status(400).json({ success: false, message: 'apiRateLimitMax must be between 10 and 10,000' });
+      return;
+    }
+
+    let systemConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    if (!systemConfig || !systemConfig.systemSettings) {
+      res.status(404).json({ success: false, message: 'System settings not found' });
+      return;
+    }
+
+    systemConfig.systemSettings.rateLimits = { apiRateLimitMax, rateLimitWindowMs };
+    systemConfig.markModified('systemSettings');
+    systemConfig.lastUpdatedBy = req.user?.username || 'system';
+    await systemConfig.save();
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CONFIG_CHANGE',
+      resourceType: 'rate_limits',
+      details: `Rate limits updated: max=${apiRateLimitMax}, window=${rateLimitWindowMs}ms`,
+      severity: 'high',
+      ipAddress: req.ip,
+    });
+
+    res.json({ success: true, data: { apiRateLimitMax, rateLimitWindowMs }, message: 'Rate limit settings saved. Restart server to apply.' });
+  } catch (error: any) {
+    logger.error('Error updating rate limit settings:', error);
+    throw error;
+  }
+};
+
+// ─── Alert Thresholds ────────────────────────────────────────────────────────
+
+const DEFAULT_ALERT_THRESHOLDS = {
+  memoryUsagePct: 85,       // % heap used above which alert fires
+  dbConnectionsMax: 90,     // number of connections that triggers alert
+  errorRatePer5min: 20,     // error log entries per 5 minutes
+  diskUsagePct: 90,         // not auto-collected, just for reference
+  cpuUsagePct: 90,
+};
+
+export const getAlertThresholds = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const systemConfig = await SystemConfig.findOne().lean();
+    const thresholds = (systemConfig as any)?.systemSettings?.alertThresholds || DEFAULT_ALERT_THRESHOLDS;
+    res.json({ success: true, data: thresholds });
+  } catch (error: any) {
+    logger.error('Error getting alert thresholds:', error);
+    throw error;
+  }
+};
+
+export const updateAlertThresholds = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { memoryUsagePct, dbConnectionsMax, errorRatePer5min, diskUsagePct, cpuUsagePct } = req.body;
+
+    const clamp = (v: unknown, min: number, max: number, def: number): number => {
+      const n = Number(v);
+      if (isNaN(n)) return def;
+      return Math.min(max, Math.max(min, Math.round(n)));
+    };
+
+    const thresholds = {
+      memoryUsagePct: clamp(memoryUsagePct, 10, 100, DEFAULT_ALERT_THRESHOLDS.memoryUsagePct),
+      dbConnectionsMax: clamp(dbConnectionsMax, 1, 10000, DEFAULT_ALERT_THRESHOLDS.dbConnectionsMax),
+      errorRatePer5min: clamp(errorRatePer5min, 1, 10000, DEFAULT_ALERT_THRESHOLDS.errorRatePer5min),
+      diskUsagePct: clamp(diskUsagePct, 10, 100, DEFAULT_ALERT_THRESHOLDS.diskUsagePct),
+      cpuUsagePct: clamp(cpuUsagePct, 10, 100, DEFAULT_ALERT_THRESHOLDS.cpuUsagePct),
+    };
+
+    let systemConfig = await SystemConfig.findOne();
+    if (!systemConfig) systemConfig = new SystemConfig({});
+    if (!systemConfig.systemSettings) (systemConfig as any).systemSettings = {};
+    (systemConfig as any).systemSettings.alertThresholds = thresholds;
+    systemConfig.markModified('systemSettings');
+    systemConfig.lastUpdatedBy = req.user?.username || 'system';
+    await systemConfig.save();
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CONFIG_CHANGE',
+      resourceType: 'alert_thresholds',
+      details: `Alert thresholds updated: ${JSON.stringify(thresholds)}`,
+      severity: 'medium',
+      ipAddress: req.ip,
+    });
+
+    res.json({ success: true, data: thresholds, message: 'Alert thresholds saved' });
+  } catch (error: any) {
+    logger.error('Error updating alert thresholds:', error);
+    throw error;
+  }
+};

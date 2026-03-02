@@ -128,6 +128,11 @@ export interface ISystemSettings {
     message: string;
     allowedRoles: string[];
   };
+  // Rate Limit Settings
+  rateLimits?: {
+    apiRateLimitMax: number;
+    rateLimitWindowMs: number;
+  };
 }
 
 // MFA Settings

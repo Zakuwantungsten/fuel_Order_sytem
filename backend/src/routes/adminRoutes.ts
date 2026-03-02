@@ -234,8 +234,11 @@ router.post('/database/profiling', authorize('super_admin'), asyncHandler(adminC
 
 // Audit Logs
 router.get('/audit-logs', authorize('super_admin'), asyncHandler(adminController.getAuditLogs));
+router.get('/audit-logs/stats', authorize('super_admin'), asyncHandler(adminController.getAuditStats));
 router.get('/audit-logs/summary', authorize('super_admin'), asyncHandler(adminController.getActivitySummary));
 router.get('/audit-logs/critical', authorize('super_admin'), asyncHandler(adminController.getCriticalEvents));
+router.get('/audit-logs/verify-integrity', authorize('super_admin'), asyncHandler(adminController.verifyAuditIntegrity));
+router.get('/audit-logs/export', authorize('super_admin'), asyncHandler(adminController.exportAuditLogs));
 
 // System Statistics
 router.get('/system-stats', authorize('super_admin'), asyncHandler(adminController.getSystemStats));

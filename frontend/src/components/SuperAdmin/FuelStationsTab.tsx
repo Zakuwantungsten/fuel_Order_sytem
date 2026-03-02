@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import ConfirmModal from './ConfirmModal';
 import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check, AlertTriangle, RotateCcw, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
 import { configAPI, StandardAllocations, YardFuelTimeLimitConfig } from '../../services/api';
 import { FuelStationConfig, FuelRecordFieldOption } from '../../types';
@@ -14,6 +15,8 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   const [fuelRecordFieldsReturning, setFuelRecordFieldsReturning] = useState<FuelRecordFieldOption[]>([]);
   const [showStationModal, setShowStationModal] = useState(false);
   const [editingStation, setEditingStation] = useState<FuelStationConfig | null>(null);
+  const [deleteStationTarget, setDeleteStationTarget] = useState<string | null>(null);
+  const [deletingStation, setDeletingStation] = useState(false);
 
   // Standard Allocations state
   const [allocations, setAllocations] = useState<StandardAllocations | null>(null);
@@ -216,14 +219,22 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
     }
   };
 
-  const handleDeleteStation = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this station?')) return;
+  const handleDeleteStation = (id: string) => {
+    setDeleteStationTarget(id);
+  };
+
+  const confirmDeleteStation = async () => {
+    if (!deleteStationTarget) return;
+    setDeletingStation(true);
     try {
-      await configAPI.deleteStation(id);
+      await configAPI.deleteStation(deleteStationTarget);
       onMessage('success', 'Station deleted successfully');
+      setDeleteStationTarget(null);
       loadData();
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to delete station');
+    } finally {
+      setDeletingStation(false);
     }
   };
 
@@ -268,7 +279,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
             Fuel Stations Management
           </h2>
         </div>
-        <button onClick={() => openStationModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700">
+        <button onClick={() => openStationModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
           <Plus className="w-3.5 h-3.5" />Add Station
         </button>
       </div>
@@ -553,7 +564,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                 <button onClick={() => { setShowStationModal(false); setEditingStation(null); resetStationForm(); }}
                   className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={editingStation ? handleUpdateStation : handleCreateStation}
-                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2">
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2">
                   <Save className="w-4 h-4" />{editingStation ? 'Update' : 'Create'}
                 </button>
               </div>
@@ -739,6 +750,16 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
           setEditingAllocations(allocations ? { ...allocations } : null);
         }}
       />
+
+      <ConfirmModal
+        open={deleteStationTarget !== null}
+        title="Delete Station"
+        message="Are you sure you want to delete this station? This action cannot be undone."
+        variant="danger"
+        loading={deletingStation}
+        onConfirm={confirmDeleteStation}
+        onCancel={() => !deletingStation && setDeleteStationTarget(null)}
+      />
     </div>
   );
 }
@@ -892,6 +913,7 @@ function StandardAllocationsSection({
           </div>
         </>
       )}
+
     </div>
   );
 }

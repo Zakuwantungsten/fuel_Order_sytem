@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import ConfirmModal from './ConfirmModal';
 import { Route, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-react';
 import { configAPI } from '../../services/api';
 import { RouteConfig } from '../../types';
@@ -12,6 +13,8 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
   const [routes, setRoutes] = useState<RouteConfig[]>([]);
   const [showRouteModal, setShowRouteModal] = useState(false);
   const [editingRoute, setEditingRoute] = useState<RouteConfig | null>(null);
+  const [deleteRouteTarget, setDeleteRouteTarget] = useState<string | null>(null);
+  const [deletingRoute, setDeletingRoute] = useState(false);
 
   const [routeForm, setRouteForm] = useState({
     routeName: '',
@@ -174,14 +177,22 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
     }
   };
 
-  const handleDeleteRoute = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this route?')) return;
+  const handleDeleteRoute = (id: string) => {
+    setDeleteRouteTarget(id);
+  };
+
+  const confirmDeleteRoute = async () => {
+    if (!deleteRouteTarget) return;
+    setDeletingRoute(true);
     try {
-      await configAPI.deleteRoute(id);
+      await configAPI.deleteRoute(deleteRouteTarget);
       onMessage('success', 'Route deleted successfully');
+      setDeleteRouteTarget(null);
       loadData();
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to delete route');
+    } finally {
+      setDeletingRoute(false);
     }
   };
 
@@ -222,7 +233,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
             Routes Management
           </h2>
         </div>
-        <button onClick={() => openRouteModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700">
+        <button onClick={() => openRouteModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
           <Plus className="w-3.5 h-3.5" />Add Route
         </button>
       </div>
@@ -449,7 +460,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                 <button onClick={() => { setShowRouteModal(false); setEditingRoute(null); resetRouteForm(); }}
                   className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={editingRoute ? handleUpdateRoute : handleCreateRoute}
-                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2">
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2">
                   <Save className="w-4 h-4" />{editingRoute ? 'Update' : 'Create'}
                 </button>
               </div>
@@ -457,6 +468,16 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteRouteTarget !== null}
+        title="Delete Route"
+        message="Are you sure you want to delete this route? This action cannot be undone."
+        variant="danger"
+        loading={deletingRoute}
+        onConfirm={confirmDeleteRoute}
+        onCancel={() => !deletingRoute && setDeleteRouteTarget(null)}
+      />
     </div>
   );
 }

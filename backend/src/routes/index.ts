@@ -24,6 +24,27 @@ import driverCredentialRoutes from './driverCredentialRoutes';
 import checkpointRoutes from './checkpointRoutes';
 import fleetTrackingRoutes from './fleetTrackingRoutes';
 import importRoutes from './importRoutes';
+import announcementRoutes from './announcementRoutes';
+import ipRuleRoutes from './ipRuleRoutes';
+import sessionRoutes from './sessionRoutes';
+import configDiffRoutes from './configDiffRoutes';
+import fuelPriceRoutes from './fuelPriceRoutes';
+import cronJobRoutes from './cronJobRoutes';
+import dataExportRoutes from './dataExportRoutes';
+import featureFlagRoutes from './featureFlagRoutes';
+import systemHealthRoutes from './systemHealthRoutes';
+import webhookRoutes from './webhookRoutes';
+import activityHeatmapRoutes from './activityHeatmapRoutes';
+import bulkUserRoutes from './bulkUserRoutes';
+import storageRoutes from './storageRoutes';
+import emailLogRoutes from './emailLogRoutes';
+import mfaManagementRoutes from './mfaManagementRoutes';
+import apiTokenRoutes from './apiTokenRoutes';
+import performanceMetricsRoutes from './performanceMetricsRoutes';
+import dbIndexRoutes from './dbIndexRoutes';
+import configHistoryRoutes from './configHistoryRoutes';
+import customReportRoutes from './customReportRoutes';
+import notificationConfigRoutes from './notificationConfigRoutes';
 
 const router = Router();
 
@@ -59,5 +80,26 @@ router.use('/driver-credentials', driverCredentialRoutes); // Driver credential 
 router.use('/checkpoints', checkpointRoutes); // Checkpoint management for fleet tracking
 router.use('/fleet-tracking', fleetTrackingRoutes); // Fleet position tracking and visualization
 router.use('/import', importRoutes); // Excel data import (admin only)
+router.use('/announcements', announcementRoutes); // System announcements (banners)
+router.use('/system-admin/ip-rules', ipRuleRoutes); // IP allowlist / blocklist
+router.use('/system-admin/sessions', sessionRoutes); // Active session management
+router.use('/system-admin/config-diff', configDiffRoutes); // Config change diff view
+router.use('/system-admin/fuel-prices', fuelPriceRoutes); // Fuel price history & scheduling
+router.use('/system-admin/cron-jobs', cronJobRoutes); // Cron job manager
+router.use('/system-admin/data-export', dataExportRoutes); // Data export center
+router.use('/system-admin/feature-flags', featureFlagRoutes); // Feature flags
+router.use('/system-admin/system-health', systemHealthRoutes); // System health monitor
+router.use('/system-admin/webhooks', webhookRoutes); // Webhook manager
+router.use('/system-admin/activity-heatmap', activityHeatmapRoutes); // User activity heatmap
+router.use('/system-admin/bulk-users', bulkUserRoutes); // Bulk user management
+router.use('/system-admin/storage', storageRoutes); // Storage manager
+router.use('/system-admin/email-logs', emailLogRoutes); // Email log viewer
+router.use('/system-admin/mfa-management', mfaManagementRoutes); // 2FA management
+router.use('/system-admin/api-tokens', apiTokenRoutes); // API token manager
+router.use('/system-admin/performance-metrics', performanceMetricsRoutes); // Performance metrics
+router.use('/system-admin/db-indexes', dbIndexRoutes); // DB index explorer
+router.use('/system-admin/config-history', configHistoryRoutes); // Config version history
+router.use('/system-admin/custom-report', customReportRoutes); // Custom report builder
+router.use('/system-admin/notification-config', notificationConfigRoutes); // Notification center config
 
 export default router;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import ConfirmModal from './ConfirmModal';
 import { formatDate as formatSystemDate } from '../../utils/timezone';
 import { 
   Trash2, 
@@ -36,6 +37,13 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [retentionSettings, setRetentionSettings] = useState<any>(null);
   const [dateFilter, setDateFilter] = useState('30'); // Last 30 days
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning';
+    onConfirm: () => Promise<void>;
+  } | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   // Dropdown states
   const [showResourceTypeDropdown, setShowResourceTypeDropdown] = useState(false);
@@ -134,68 +142,102 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
     }
   };
 
-  const handleBulkRestore = async () => {
+  const handleBulkRestore = () => {
     if (selectedItems.size === 0) {
       onMessage('error', 'No items selected');
       return;
     }
-
-    if (!confirm(`Restore ${selectedItems.size} item(s)?`)) return;
-
-    try {
-      await trashAPI.bulkRestore(selectedType, Array.from(selectedItems));
-      onMessage('success', `${selectedItems.size} item(s) restored`);
-      setSelectedItems(new Set());
-      loadDeletedItems();
-      loadTrashStats();
-    } catch (error: any) {
-      onMessage('error', 'Failed to restore items');
-    }
+    setConfirmState({
+      title: 'Restore Items',
+      message: `Restore ${selectedItems.size} item(s) from trash?`,
+      variant: 'warning',
+      onConfirm: async () => {
+        setConfirming(true);
+        try {
+          await trashAPI.bulkRestore(selectedType, Array.from(selectedItems));
+          onMessage('success', `${selectedItems.size} item(s) restored`);
+          setSelectedItems(new Set());
+          setConfirmState(null);
+          loadDeletedItems();
+          loadTrashStats();
+        } catch (error: any) {
+          onMessage('error', 'Failed to restore items');
+        } finally {
+          setConfirming(false);
+        }
+      },
+    });
   };
 
-  const handlePermanentDelete = async (id: string) => {
-    if (!confirm('⚠️ PERMANENT DELETE - This action cannot be undone! Continue?')) return;
-
-    try {
-      await trashAPI.permanentDelete(selectedType, id);
-      onMessage('success', 'Item permanently deleted');
-      loadDeletedItems();
-      loadTrashStats();
-    } catch (error: any) {
-      onMessage('error', 'Failed to delete item permanently');
-    }
+  const handlePermanentDelete = (id: string) => {
+    setConfirmState({
+      title: 'Permanently Delete Item',
+      message: 'This will permanently delete this item. This action cannot be undone.',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirming(true);
+        try {
+          await trashAPI.permanentDelete(selectedType, id);
+          onMessage('success', 'Item permanently deleted');
+          setConfirmState(null);
+          loadDeletedItems();
+          loadTrashStats();
+        } catch (error: any) {
+          onMessage('error', 'Failed to delete item permanently');
+        } finally {
+          setConfirming(false);
+        }
+      },
+    });
   };
 
-  const handleBulkPermanentDelete = async () => {
+  const handleBulkPermanentDelete = () => {
     if (selectedItems.size === 0) {
       onMessage('error', 'No items selected');
       return;
     }
-
-    if (!confirm(`⚠️ PERMANENT DELETE ${selectedItems.size} ITEMS - This action cannot be undone! Continue?`)) return;
-
-    try {
-      await trashAPI.bulkPermanentDelete(selectedType, Array.from(selectedItems));
-      onMessage('success', `${selectedItems.size} item(s) permanently deleted`);
-      setSelectedItems(new Set());
-      loadDeletedItems();
-      loadTrashStats();
-    } catch (error: any) {
-      onMessage('error', 'Failed to delete items permanently');
-    }
+    setConfirmState({
+      title: 'Permanently Delete Items',
+      message: `Permanently delete ${selectedItems.size} item(s)? This action cannot be undone.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirming(true);
+        try {
+          await trashAPI.bulkPermanentDelete(selectedType, Array.from(selectedItems));
+          onMessage('success', `${selectedItems.size} item(s) permanently deleted`);
+          setSelectedItems(new Set());
+          setConfirmState(null);
+          loadDeletedItems();
+          loadTrashStats();
+        } catch (error: any) {
+          onMessage('error', 'Failed to delete items permanently');
+        } finally {
+          setConfirming(false);
+        }
+      },
+    });
   };
 
-  const handleEmptyTrash = async () => {
-    if (!confirm(`⚠️ EMPTY TRASH - This will permanently delete ALL ${items.length} items in ${selectedType}! This cannot be undone!`)) return;
-
-    try {
-      await trashAPI.emptyTrash(selectedType);
-      onMessage('success', 'Trash emptied successfully');
-      loadDeletedItems();
-      loadTrashStats();
-    } catch (error: any) {
-      onMessage('error', 'Failed to empty trash');
-    }
+  const handleEmptyTrash = () => {
+    setConfirmState({
+      title: 'Empty Trash',
+      message: `Permanently delete all ${items.length} items in ${selectedType}? This action cannot be undone.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirming(true);
+        try {
+          await trashAPI.emptyTrash(selectedType);
+          onMessage('success', 'Trash emptied successfully');
+          setConfirmState(null);
+          loadDeletedItems();
+          loadTrashStats();
+        } catch (error: any) {
+          onMessage('error', 'Failed to empty trash');
+        } finally {
+          setConfirming(false);
+        }
+      },
+    });
   };
 
   const handleUpdateRetention = async () => {
@@ -536,6 +578,16 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
           </p>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        variant={confirmState?.variant}
+        loading={confirming}
+        onConfirm={() => confirmState?.onConfirm()}
+        onCancel={() => !confirming && setConfirmState(null)}
+      />
     </div>
   );
 }

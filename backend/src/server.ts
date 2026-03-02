@@ -12,6 +12,8 @@ import routes from './routes';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { csrfProtection, provideCsrfToken, csrfErrorHandler } from './middleware/csrf';
 import { responseSanitizationMiddleware, requestLoggingMiddleware } from './middleware/responseSanitization';
+import { auditAccessDenied } from './middleware/auditAccessDenied';
+import { ipFilterMiddleware } from './middleware/ipFilter';
 import logger from './utils/logger';
 import { initializeWebSocket } from './services/websocket';
 import { requestId } from './middleware/requestId';
@@ -78,6 +80,9 @@ const legacyApiBasePath = '/api';
 
 // Import archival scheduler
 import { startArchivalScheduler } from './jobs/archivalScheduler';
+// Import fuel price scheduler (registers itself with jobRegistry on import)
+import './jobs/fuelPriceScheduler';
+import { jobRegistry } from './jobs/jobRegistry';
 
 // Enforce HTTPS only in production
 if (config.nodeEnv === 'production') {
@@ -99,6 +104,9 @@ app.use(responseSanitizationMiddleware);
 
 // ✅ SECURITY: Request logging - avoids logging sensitive request bodies
 app.use(requestLoggingMiddleware);
+
+// ✅ AUDIT: Auto-log every 401/403 as ACCESS_DENIED (PCI-DSS 10.2.3)
+app.use(auditAccessDenied);
 
 // Logging middleware (always through Winston)
 morgan.token('reqId', (req) => (req as any).requestId || 'unknown');
@@ -146,6 +154,9 @@ const applyCsrfProtection = (basePath: string) => {
 
 applyCsrfProtection(apiBasePath);
 applyCsrfProtection(legacyApiBasePath);
+
+// IP Allowlist / Blocklist filter (evaluated against active rules in DB)
+app.use(ipFilterMiddleware);
 
 // API routes
 app.use(apiBasePath, routes);
@@ -198,6 +209,10 @@ const startServer = async () => {
 
     // Start archival scheduler (runs monthly at 2 AM on 1st day)
     startArchivalScheduler();
+
+    // Start all registered cron jobs via central registry
+    jobRegistry.startAll();
+    logger.info('Job registry started');
 
     // Start listening
     httpServer.listen(PORT, () => {

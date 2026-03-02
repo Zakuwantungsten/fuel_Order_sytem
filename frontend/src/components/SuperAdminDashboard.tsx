@@ -4,11 +4,10 @@ import {
   Users,
   Settings,
   FileSearch,
-  Shield,
+  ChevronRight,
   Database,
   Activity,
   Trash2,
-  Bell,
   RefreshCw,
   AlertTriangle,
   CheckCircle,
@@ -30,10 +29,35 @@ import AnalyticsTab from './SuperAdmin/AnalyticsTab';
 import TrashManagementTab from './SuperAdmin/TrashManagementTab';
 import ArchivalManagementTab from './SuperAdmin/ArchivalManagementTab';
 import SystemConfigDashboard from './SuperAdmin/SystemConfigDashboard';
+import AnnouncementsTab from './SuperAdmin/AnnouncementsTab';
+import IPRulesTab from './SuperAdmin/IPRulesTab';
+import SessionsTab from './SuperAdmin/SessionsTab';
+import ConfigDiffTab from './SuperAdmin/ConfigDiffTab';
+import FuelPriceTab from './SuperAdmin/FuelPriceTab';
+import CronJobsTab from './SuperAdmin/CronJobsTab';
+import DataExportTab from './SuperAdmin/DataExportTab';
+import FeatureFlagsTab from './SuperAdmin/FeatureFlagsTab';
+import SystemHealthTab from './SuperAdmin/SystemHealthTab';
+import MaintenanceModeTab from './SuperAdmin/MaintenanceModeTab';
+import WebhookManagerTab from './SuperAdmin/WebhookManagerTab';
+import RateLimitConfigTab from './SuperAdmin/RateLimitConfigTab';
+import ActivityHeatmapTab from './SuperAdmin/ActivityHeatmapTab';
+import BulkUserManagementTab from './SuperAdmin/BulkUserManagementTab';
+import StorageManagerTab from './SuperAdmin/StorageManagerTab';
+import AlertThresholdsTab from './SuperAdmin/AlertThresholdsTab';
+import EmailLogViewerTab from './SuperAdmin/EmailLogViewerTab';
+import MFAManagementTab from './SuperAdmin/MFAManagementTab';
+import ApiTokenManagerTab from './SuperAdmin/ApiTokenManagerTab';
+import PerformanceMetricsTab from './SuperAdmin/PerformanceMetricsTab';
+import DbIndexExplorerTab from './SuperAdmin/DbIndexExplorerTab';
+import DriverCredentialManagerEnhancedTab from './SuperAdmin/DriverCredentialManagerEnhancedTab';
+import ConfigVersionHistoryTab from './SuperAdmin/ConfigVersionHistoryTab';
+import CustomReportBuilderTab from './SuperAdmin/CustomReportBuilderTab';
+import NotificationCenterConfigTab from './SuperAdmin/NotificationCenterConfigTab';
 
 interface SuperAdminDashboardProps {
   user: any;
-  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival';
+  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'ip_rules' | 'sessions' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'bulk_users' | 'storage' | 'alert_thresholds' | 'email_logs' | 'mfa_management' | 'api_tokens' | 'performance_metrics' | 'db_indexes' | 'driver_credentials_enhanced' | 'config_history' | 'custom_report' | 'notification_config';
   onNavigate?: (section: string) => void;
 }
 
@@ -88,89 +112,91 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
     }
   };
 
-  const getSectionTitle = () => {
-    const titles: Record<string, string> = {
-      overview: '🏠 SUPER ADMIN DASHBOARD',
-      database: '💾 DATABASE MONITOR',
-      users: '👥 USER MANAGEMENT',
-      fuel_stations: '⛽ FUEL STATIONS',
-      routes: '🛣️ ROUTES',
-      config: '⚙️ CONFIGURATION',
-      audit: '📋 AUDIT & LOGS',
-      security: '🔐 SECURITY',
-      trash: '🗑️ TRASH MANAGEMENT',
-      archival: '📦 DATA ARCHIVAL',
-      backup: '💾 BACKUP & RECOVERY',
-      analytics: '📊 ANALYTICS & REPORTS',
-    };
-    return titles[section] || 'SUPER ADMIN';
+  const SECTION_META: Record<string, { group: string; label: string }> = {
+    overview:                    { group: '',             label: 'Overview'             },
+    users:                       { group: 'Users',        label: 'User Management'      },
+    bulk_users:                  { group: 'Users',        label: 'Bulk Users'           },
+    driver_credentials_enhanced: { group: 'Users',        label: 'Driver Credentials'   },
+    security:                    { group: 'Security',     label: 'Security Settings'    },
+    ip_rules:                    { group: 'Security',     label: 'IP Rules'             },
+    sessions:                    { group: 'Security',     label: 'Active Sessions'      },
+    mfa_management:              { group: 'Security',     label: 'MFA Management'       },
+    api_tokens:                  { group: 'Security',     label: 'API Tokens'           },
+    fuel_stations:               { group: 'Fleet & Fuel', label: 'Fuel Stations'        },
+    routes:                      { group: 'Fleet & Fuel', label: 'Routes'               },
+    fuel_prices:                 { group: 'Fleet & Fuel', label: 'Fuel Prices'          },
+    database:                    { group: 'Monitoring',   label: 'Database Monitor'     },
+    system_health:               { group: 'Monitoring',   label: 'System Health'        },
+    performance_metrics:         { group: 'Monitoring',   label: 'Performance Metrics'  },
+    activity_heatmap:            { group: 'Monitoring',   label: 'Activity Heatmap'     },
+    alert_thresholds:            { group: 'Monitoring',   label: 'Alert Thresholds'     },
+    email_logs:                  { group: 'Monitoring',   label: 'Email Logs'           },
+    analytics:                   { group: 'Analytics',    label: 'Analytics & Reports'  },
+    audit:                       { group: 'Analytics',    label: 'Audit Logs'           },
+    custom_report:               { group: 'Analytics',    label: 'Custom Reports'       },
+    backup:                      { group: 'Data',         label: 'Backup & Recovery'    },
+    archival:                    { group: 'Data',         label: 'Data Archival'        },
+    trash:                       { group: 'Data',         label: 'Trash Management'     },
+    storage:                     { group: 'Data',         label: 'Storage Manager'      },
+    data_export:                 { group: 'Data',         label: 'Data Export'          },
+    config:                      { group: 'System',       label: 'Configuration'        },
+    config_history:              { group: 'System',       label: 'Config History'       },
+    config_diff:                 { group: 'System',       label: 'Config Diff'          },
+    feature_flags:               { group: 'System',       label: 'Feature Flags'        },
+    cron_jobs:                   { group: 'System',       label: 'Cron Jobs'            },
+    maintenance:                 { group: 'System',       label: 'Maintenance Mode'     },
+    webhooks:                    { group: 'System',       label: 'Webhooks'             },
+    rate_limits:                 { group: 'System',       label: 'Rate Limits'          },
+    db_indexes:                  { group: 'System',       label: 'DB Indexes'           },
+    announcements:               { group: 'System',       label: 'Announcements'        },
+    notification_config:         { group: 'System',       label: 'Notification Config'  },
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-800 dark:to-purple-800 shadow-lg">
-        <div className="px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
-                <Shield className="w-7 h-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">
-                  {getSectionTitle()}
-                </h1>
-                <p className="text-indigo-100 text-sm mt-1">
-                  {user?.firstName || 'Admin'} • Full system control & monitoring
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-lg hover:bg-white/30 transition-colors">
-                <Bell className="w-4 h-4" />
-                <span className="text-sm font-medium">0 Alerts</span>
-              </button>
-              {section === 'overview' && (
-                <button
-                  onClick={loadData}
-                  disabled={loading}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-lg hover:bg-white/30 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                  <span className="text-sm font-medium">Refresh</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+  const breadcrumb = SECTION_META[section];
 
-      {/* Alerts */}
-      {error && (
-        <div className="px-4 mt-4">
-          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3 shadow-sm">
-            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-            <span className="text-red-700 dark:text-red-300 flex-1">{error}</span>
-            <button onClick={() => setError(null)} className="flex-shrink-0">
-              <X className="w-4 h-4 text-red-600 dark:text-red-400 hover:text-red-800" />
-            </button>
-          </div>
-        </div>
-      )}
-      {success && (
-        <div className="px-4 mt-4">
-          <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center gap-3 shadow-sm">
-            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-            <span className="text-green-700 dark:text-green-300 flex-1">{success}</span>
-            <button onClick={() => setSuccess(null)} className="flex-shrink-0">
-              <X className="w-4 h-4 text-green-600 dark:text-green-400 hover:text-green-800" />
-            </button>
-          </div>
+  return (
+    <div className="min-h-full">
+      {/* Breadcrumb */}
+      {breadcrumb && (
+        <div className="px-4 pt-3 pb-1">
+          <nav className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+            <span>Super Admin</span>
+            {breadcrumb.group && (
+              <>
+                <ChevronRight className="w-3 h-3" />
+                <span>{breadcrumb.group}</span>
+              </>
+            )}
+            <ChevronRight className="w-3 h-3" />
+            <span className="font-medium text-gray-700 dark:text-gray-300">{breadcrumb.label}</span>
+          </nav>
         </div>
       )}
 
       {/* Section Content */}
-      <div className="px-4 mt-6 pb-8">
+      <div className="px-4 pb-8 pt-3">
+        {(error || success) && (
+          <div className="mb-4 space-y-2">
+            {error && (
+              <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-3">
+                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                <span className="text-sm text-red-700 dark:text-red-300 flex-1">{error}</span>
+                <button onClick={() => setError(null)} className="flex-shrink-0">
+                  <X className="w-4 h-4 text-red-400 hover:text-red-600" />
+                </button>
+              </div>
+            )}
+            {success && (
+              <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-3">
+                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                <span className="text-sm text-green-700 dark:text-green-300 flex-1">{success}</span>
+                <button onClick={() => setSuccess(null)} className="flex-shrink-0">
+                  <X className="w-4 h-4 text-green-400 hover:text-green-600" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {loading && section === 'overview' ? (
           <div className="flex items-center justify-center h-64">
             <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
@@ -219,6 +245,81 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
             )}
             {section === 'analytics' && (
               <AnalyticsTab onMessage={showMessage} />
+            )}
+            {section === 'announcements' && (
+              <AnnouncementsTab onMessage={showMessage} />
+            )}
+            {section === 'ip_rules' && (
+              <IPRulesTab onMessage={showMessage} />
+            )}
+            {section === 'sessions' && (
+              <SessionsTab onMessage={showMessage} />
+            )}
+            {section === 'config_diff' && (
+              <ConfigDiffTab onMessage={showMessage} />
+            )}
+            {section === 'fuel_prices' && (
+              <FuelPriceTab onMessage={showMessage} />
+            )}
+            {section === 'cron_jobs' && (
+              <CronJobsTab onMessage={showMessage} />
+            )}
+            {section === 'data_export' && (
+              <DataExportTab onMessage={showMessage} />
+            )}
+            {section === 'feature_flags' && (
+              <FeatureFlagsTab onMessage={showMessage} />
+            )}
+            {section === 'system_health' && (
+              <SystemHealthTab onMessage={showMessage} />
+            )}
+            {section === 'maintenance' && (
+              <MaintenanceModeTab onMessage={showMessage} />
+            )}
+            {section === 'webhooks' && (
+              <WebhookManagerTab onMessage={showMessage} />
+            )}
+            {section === 'rate_limits' && (
+              <RateLimitConfigTab onMessage={showMessage} />
+            )}
+            {section === 'activity_heatmap' && (
+              <ActivityHeatmapTab onMessage={showMessage} />
+            )}
+            {section === 'bulk_users' && (
+              <BulkUserManagementTab />
+            )}
+            {section === 'storage' && (
+              <StorageManagerTab />
+            )}
+            {section === 'alert_thresholds' && (
+              <AlertThresholdsTab />
+            )}
+            {section === 'email_logs' && (
+              <EmailLogViewerTab />
+            )}
+            {section === 'mfa_management' && (
+              <MFAManagementTab />
+            )}
+            {section === 'api_tokens' && (
+              <ApiTokenManagerTab />
+            )}
+            {section === 'performance_metrics' && (
+              <PerformanceMetricsTab />
+            )}
+            {section === 'db_indexes' && (
+              <DbIndexExplorerTab />
+            )}
+            {section === 'driver_credentials_enhanced' && (
+              <DriverCredentialManagerEnhancedTab />
+            )}
+            {section === 'config_history' && (
+              <ConfigVersionHistoryTab />
+            )}
+            {section === 'custom_report' && (
+              <CustomReportBuilderTab />
+            )}
+            {section === 'notification_config' && (
+              <NotificationCenterConfigTab />
             )}
           </>
         )}
@@ -283,7 +384,7 @@ function OverviewTab({
           </div>
           <p className="text-green-100 text-sm">Server Status</p>
           <p className="text-2xl font-bold mt-1">
-            {dbHealth.healthy ? '✅ Online' : '❌ Offline'}
+            {dbHealth.healthy ? 'Online' : 'Offline'}
           </p>
           <p className="text-xs text-green-100 mt-2">
             DB: {dbHealth.status || 'Unknown'}

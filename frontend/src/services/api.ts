@@ -1442,6 +1442,7 @@ export const systemAdminAPI = {
     resourceType?: string;
     username?: string;
     severity?: string;
+    outcome?: string;
     startDate?: string;
     endDate?: string;
     page?: number;
@@ -1449,6 +1450,11 @@ export const systemAdminAPI = {
   }) => {
     const response = await apiClient.get('/admin/audit-logs', { params });
     return response.data;
+  },
+
+  getAuditStats: async () => {
+    const response = await apiClient.get('/admin/audit-logs/stats');
+    return response.data.data;
   },
 
   getActivitySummary: async (days: number = 7) => {
@@ -1459,6 +1465,22 @@ export const systemAdminAPI = {
   getCriticalEvents: async (limit: number = 10) => {
     const response = await apiClient.get('/admin/audit-logs/critical', { params: { limit } });
     return response.data.data;
+  },
+
+  verifyAuditIntegrity: async (params?: { startDate?: string; endDate?: string; limit?: number }) => {
+    const response = await apiClient.get('/admin/audit-logs/verify-integrity', { params });
+    return response.data.data;
+  },
+
+  exportAuditLogs: async (params?: {
+    action?: string; resourceType?: string; username?: string;
+    severity?: string; outcome?: string; startDate?: string; endDate?: string;
+  }) => {
+    const response = await apiClient.get('/admin/audit-logs/export', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
   },
 
   // System Stats

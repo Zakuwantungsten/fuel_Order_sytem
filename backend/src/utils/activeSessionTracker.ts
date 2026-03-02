@@ -23,17 +23,15 @@ export interface ActiveSession {
 
 class ActiveSessionTracker {
   private sessions = new Map<string, ActiveSession>();
+  /** Set of userIds whose sessions have been forcefully terminated by an admin */
+  private terminated = new Set<string>();
 
-  /**
-   * Record (or refresh) a user session. Call this after every successful
-   * authentication inside the authenticate() middleware.
-   */
   touch(userId: string, username: string, role: string, ip: string): void {
     const existing = this.sessions.get(userId);
     if (existing) {
       existing.lastSeen = new Date();
       existing.requestCount++;
-      existing.ip = ip; // update in case they reconnected from a different IP
+      existing.ip = ip;
     } else {
       this.sessions.set(userId, {
         userId,
@@ -47,10 +45,6 @@ class ActiveSessionTracker {
     }
   }
 
-  /**
-   * Return all sessions that are still within the TTL window.
-   * Expired sessions are pruned on read.
-   */
   getActive(): ActiveSession[] {
     const now = Date.now();
     const active: ActiveSession[] = [];
@@ -63,18 +57,38 @@ class ActiveSessionTracker {
       }
     }
 
-    // Most recently active first
     return active.sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime());
   }
 
-  /**
-   * Explicitly remove a user session (e.g. on logout).
-   */
   remove(userId: string): void {
     this.sessions.delete(userId);
   }
 
-  /** Total number of currently tracked sessions (before TTL pruning). */
+  /** Force-terminate a session. The next request from this user will receive 401. */
+  terminate(userId: string): void {
+    this.sessions.delete(userId);
+    this.terminated.add(userId);
+    // Auto-clear termination flag after TTL so relogins work normally
+    setTimeout(() => this.terminated.delete(userId), SESSION_TTL_MS);
+  }
+
+  /** Terminate ALL active sessions except the specified userId */
+  terminateAll(exceptUserId?: string): string[] {
+    const ids: string[] = [];
+    for (const [userId] of this.sessions) {
+      if (userId !== exceptUserId) {
+        this.terminate(userId);
+        ids.push(userId);
+      }
+    }
+    return ids;
+  }
+
+  /** Returns true if this session was explicitly terminated by an admin */
+  isTerminated(userId: string): boolean {
+    return this.terminated.has(userId);
+  }
+
   get size(): number {
     return this.sessions.size;
   }

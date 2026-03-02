@@ -21,30 +21,53 @@ export type UserRole =
   | 'export_officer';
 
 // Audit Log Types
-export type AuditAction = 
-  | 'CREATE' 
-  | 'UPDATE' 
-  | 'DELETE' 
-  | 'RESTORE' 
+export type AuditAction =
+  // ── CRUD ──────────────────────────────────────────────────────────────────
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'RESTORE'
   | 'PERMANENT_DELETE'
-  | 'LOGIN' 
-  | 'LOGOUT' 
+  | 'IMPORT'
+  // ── AUTH ──────────────────────────────────────────────────────────────────
+  | 'LOGIN'
+  | 'LOGOUT'
   | 'FAILED_LOGIN'
   | 'PASSWORD_RESET'
+  | 'TOKEN_REFRESH'
+  | 'SESSION_EXPIRED'
+  // ── ACCESS CONTROL (PCI-DSS 10.2.1 / 10.2.3) ─────────────────────────────
+  | 'ACCESS_DENIED'          // any 401 / 403 — auto-logged by middleware
+  | 'ROLE_CHANGE'            // user role changed by admin
+  | 'ACCOUNT_LOCKED'         // brute-force lock
+  | 'ACCOUNT_UNLOCKED'       // admin unlock
+  // ── DATA ACCESS (Google Cloud "Data Access Logs" equivalent) ──────────────
+  | 'VIEW_SENSITIVE_DATA'    // read of sensitive reports / exports / PII
+  | 'EXPORT'
+  // ── WORKFLOW ──────────────────────────────────────────────────────────────
+  | 'APPROVE'
+  | 'REJECT'
+  // ── SYSTEM MANAGEMENT ─────────────────────────────────────────────────────
   | 'CONFIG_CHANGE'
   | 'BULK_OPERATION'
-  | 'EXPORT'
   | 'ENABLE_MAINTENANCE'
   | 'DISABLE_MAINTENANCE'
+  // ── CHECKPOINTS ───────────────────────────────────────────────────────────
   | 'CREATE_CHECKPOINT'
   | 'UPDATE_CHECKPOINT'
   | 'DELETE_CHECKPOINT'
   | 'REORDER_CHECKPOINTS'
   | 'SEED_CHECKPOINTS'
+  // ── AUDIT INTEGRITY ───────────────────────────────────────────────────────
+  | 'VERIFY_INTEGRITY'       // when a superadmin runs an integrity check
+  // ── LEGACY / MIGRATION ────────────────────────────────────────────────────
   | 'user_migration_executed'
   | 'user_flag_cleared';
 
 export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+/** outcome mirrors Azure resultType / AWS CloudTrail errorCode presence */
+export type AuditOutcome = 'SUCCESS' | 'FAILURE' | 'PARTIAL';
 
 export interface IAuditLog {
   timestamp: Date;
@@ -59,6 +82,27 @@ export interface IAuditLog {
   userAgent?: string;
   details?: string;
   severity: AuditSeverity;
+
+  // ── Big-tech integrity & correlation fields ────────────────────────────────
+  /** SUCCESS / FAILURE / PARTIAL — like Azure resultType / AWS errorCode presence */
+  outcome: AuditOutcome;
+  /** UUID piped from x-request-id header — like AWS requestID / Azure correlationId */
+  correlationId?: string;
+  /** Session ID for session-level correlation */
+  sessionId?: string;
+  /** True for read-only operations (GET), false for mutations — like AWS CloudTrail readOnly */
+  readOnly: boolean;
+  /** HTTP status or application error code when outcome=FAILURE */
+  errorCode?: string;
+  /** Automated risk score 0-100 derived from action, severity, failure pattern */
+  riskScore: number;
+  /** SHA-256 of immutable log fields — tamper detection (like AWS CloudTrail LFIV) */
+  hash?: string;
+  /** Hash of the previous log entry — forms a verifiable chain of custody */
+  previousHash?: string;
+  /** Free-form labels for custom categorisation/filtering */
+  tags?: string[];
+
   createdAt: Date;
 }
 

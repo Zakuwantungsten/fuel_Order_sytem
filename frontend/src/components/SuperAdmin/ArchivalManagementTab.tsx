@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ConfirmModal from './ConfirmModal';
 import { formatDate as formatSystemDate } from '../../utils/timezone';
 import { 
   Archive, 
@@ -75,6 +76,7 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
     selectedCollections: [] as string[],
   });
   const [archivalRunning, setArchivalRunning] = useState(false);
+  const [showArchivalConfirm, setShowArchivalConfirm] = useState(false);
 
   useEffect(() => {
     loadStats();
@@ -125,15 +127,13 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
     }
   };
 
-  const handleRunArchival = async () => {
-    const { dryRun, monthsToKeep, auditLogMonthsToKeep, selectedCollections } = manualOptions;
-    
-    const confirmMsg = dryRun 
-      ? 'Run archival in DRY RUN mode? (No data will be moved)'
-      : `⚠️ ACTUAL ARCHIVAL - This will move data older than ${monthsToKeep} months to archive collections. Continue?`;
-    
-    if (!confirm(confirmMsg)) return;
+  const handleRunArchival = () => {
+    setShowArchivalConfirm(true);
+  };
 
+  const doRunArchival = async () => {
+    const { dryRun, monthsToKeep, auditLogMonthsToKeep, selectedCollections } = manualOptions;
+    setShowArchivalConfirm(false);
     setArchivalRunning(true);
     try {
       const result = await archivalAPI.runArchival({
@@ -842,6 +842,20 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={showArchivalConfirm}
+        title={manualOptions.dryRun ? 'Run Dry Run Archival' : 'Run Actual Archival'}
+        message={manualOptions.dryRun
+          ? 'Run archival in DRY RUN mode? No data will be moved or deleted — this is a safe preview.'
+          : `This will move data older than ${manualOptions.monthsToKeep} months to archive collections. This action cannot be undone.`
+        }
+        variant={manualOptions.dryRun ? 'info' : 'danger'}
+        confirmLabel={manualOptions.dryRun ? 'Run Dry Run' : 'Run Archival'}
+        loading={archivalRunning}
+        onConfirm={doRunArchival}
+        onCancel={() => setShowArchivalConfirm(false)}
+      />
     </div>
   );
 }

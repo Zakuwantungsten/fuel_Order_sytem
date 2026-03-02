@@ -490,7 +490,7 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                       <button
                         onClick={() => saveSettings('general')}
                         disabled={saving}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50"
                       >
                         {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Save General Settings
@@ -601,7 +601,7 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                       <button
                         onClick={() => saveSettings('session')}
                         disabled={saving}
-                        className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg disabled:opacity-50"
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50"
                       >
                         {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Save Security Settings
@@ -723,7 +723,7 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                       <button
                         onClick={() => saveSettings('data')}
                         disabled={saving}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50"
                       >
                         {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Save Data Settings
@@ -1242,7 +1242,7 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
                     <button
                       onClick={updateProfiling}
                       disabled={saving}
-                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50"
                     >
                       {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                       Save Profiling Settings

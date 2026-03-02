@@ -316,6 +316,23 @@ export const emitDataChange = (
   io.emit('data_changed', { collection, action, timestamp: Date.now() });
 };
 
+/**
+ * Broadcast a system announcement event to all connected clients.
+ * Used when a super_admin creates, updates, or deletes an announcement so every
+ * open browser tab immediately refreshes its banners without a reload.
+ */
+export const emitAnnouncementEvent = (
+  action: 'created' | 'updated' | 'deleted',
+  announcement: any
+): void => {
+  if (!io) {
+    logger.warn('WebSocket server not initialized – cannot emit announcement event');
+    return;
+  }
+  io.emit('announcement_event', { action, announcement, timestamp: Date.now() });
+  logger.info(`Announcement event broadcasted: ${action} — "${announcement.title || announcement._id}"`);
+};
+
 export default {
   initializeWebSocket,
   emitNotification,
@@ -327,4 +344,5 @@ export default {
   emitMaintenanceEvent,
   emitGeneralSettingsEvent,
   emitSecuritySettingsEvent,
+  emitAnnouncementEvent,
 };

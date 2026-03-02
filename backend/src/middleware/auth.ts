@@ -163,6 +163,15 @@ export const authenticate = async (
       (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
       req.socket?.remoteAddress ||
       'unknown';
+    // Reject sessions forcefully terminated by an admin (check before touch)
+    if (activeSessionTracker.isTerminated(decoded.userId)) {
+      res.status(401).json({
+        success: false,
+        message: 'Your session has been terminated by an administrator. Please log in again.',
+      });
+      return;
+    }
+
     activeSessionTracker.touch(decoded.userId, decoded.username, decoded.role, ip);
 
     next();

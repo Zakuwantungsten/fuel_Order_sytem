@@ -44,6 +44,14 @@ router.get('/database', systemConfigController.getDatabaseConfiguration);
 router.get('/profiling', systemConfigController.getProfilingSettings);
 router.put('/profiling', systemConfigController.updateProfilingSettings);
 
+// Rate limit settings
+router.get('/settings/rate-limits', systemConfigController.getRateLimitSettings);
+router.put('/settings/rate-limits', systemConfigController.updateRateLimitSettings);
+
+// Alert threshold settings
+router.get('/settings/alert-thresholds', systemConfigController.getAlertThresholds);
+router.put('/settings/alert-thresholds', systemConfigController.updateAlertThresholds);
+
 /**
  * Critical System Access Routes
  */
