@@ -537,7 +537,7 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
     }
 
     // Find user and verify temp session token
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).select('+refreshToken');
     if (!user) {
       throw new ApiError(404, 'User not found');
     }
