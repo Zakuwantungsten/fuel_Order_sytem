@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import ConfirmModal from './ConfirmModal';
+import Pagination from '../Pagination';
 import {
   TrendingUp, TrendingDown, DollarSign, Clock, Plus, RefreshCw,
   X, CheckCircle, Edit3, ChevronDown, ChevronUp, Zap,
@@ -555,25 +556,14 @@ export default function FuelPriceTab({ onMessage }: Props) {
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 mt-4">
-            <button
-              onClick={() => setHistPage((p) => Math.max(1, p - 1))}
-              disabled={histPage === 1}
-              className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              Previous
-            </button>
-            <span className="text-sm text-gray-500">Page {histPage} of {totalPages}</span>
-            <button
-              onClick={() => setHistPage((p) => Math.min(totalPages, p + 1))}
-              disabled={histPage === totalPages}
-              className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              Next
-            </button>
-          </div>
-        )}
+        <Pagination
+          currentPage={histPage}
+          totalPages={totalPages}
+          totalItems={histTotal}
+          itemsPerPage={HIST_LIMIT}
+          onPageChange={setHistPage}
+          showItemsPerPage={false}
+        />
       </div>
 
       <ConfirmModal

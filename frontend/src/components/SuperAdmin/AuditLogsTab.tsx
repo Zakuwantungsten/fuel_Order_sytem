@@ -5,6 +5,7 @@ import {
   ShieldCheck, RefreshCw, AlertTriangle, Eye, X, ChevronRight,
 } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
+import Pagination from '../Pagination';
 
 interface AuditLogsTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -597,29 +598,14 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
         </div>
 
         {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-t dark:border-gray-700 flex items-center justify-between">
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Page {pagination.page} of {pagination.totalPages} ({pagination.total.toLocaleString()} total entries)
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
-                disabled={pagination.page === 1}
-                className="px-3 py-1 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded text-sm disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-600"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
-                disabled={pagination.page === pagination.totalPages}
-                className="px-3 py-1 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded text-sm disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-600"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          itemsPerPage={pagination.limit}
+          onPageChange={(p) => setPagination(prev => ({ ...prev, page: p }))}
+          onItemsPerPageChange={(limit) => setPagination(prev => ({ ...prev, limit, page: 1 }))}
+        />
       </div>
 
       {/* Log detail modal */}

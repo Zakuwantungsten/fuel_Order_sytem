@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ShieldPlus, Clock, CheckCircle, XCircle, RefreshCw, UserCheck, Ban } from 'lucide-react';
+import apiClient from '../../services/api';
 
 interface PrivilegeRequest {
   _id: string;
@@ -38,16 +39,12 @@ export default function PrivilegeElevationTab() {
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const token = sessionStorage.getItem('token');
-      const url = statusFilter
-        ? `/api/v1/system-admin/privilege-elevation?status=${statusFilter}`
-        : '/api/v1/system-admin/privilege-elevation';
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      const json = await res.json();
-      if (json.success) setRequests(json.data);
-      else setError(json.message);
+      const params = statusFilter ? { status: statusFilter } : {};
+      const res = await apiClient.get('/system-admin/privilege-elevation', { params });
+      if (res.data.success) setRequests(res.data.data);
+      else setError(res.data.message);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.response?.data?.message || err.message);
     } finally {
       setLoading(false);
     }
@@ -57,25 +54,19 @@ export default function PrivilegeElevationTab() {
 
   const handleAction = async (id: string, action: 'approve' | 'deny' | 'revoke', reason?: string) => {
     try {
-      const token = sessionStorage.getItem('token');
-      const res = await fetch(`/api/v1/system-admin/privilege-elevation/${id}/${action}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ reason }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setSuccess(json.message);
+      const res = await apiClient.post(`/system-admin/privilege-elevation/${id}/${action}`, { reason });
+      if (res.data.success) {
+        setSuccess(res.data.message);
         setDenyingId(null);
         setDenyReason('');
         fetchRequests();
         setTimeout(() => setSuccess(null), 4000);
       } else {
-        setError(json.message);
+        setError(res.data.message);
         setTimeout(() => setError(null), 5000);
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.response?.data?.message || err.message);
     }
   };
 

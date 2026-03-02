@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GitCompare, RefreshCw, AlertTriangle, Loader2, Plus, ChevronDown, ChevronRight, Camera } from 'lucide-react';
+import Pagination from '../Pagination';
 import apiClient from '../../services/api';
 
 interface Snapshot {
@@ -22,6 +23,8 @@ export const ConfigVersionHistoryTab: React.FC = () => {
   const [taking, setTaking] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const LIMIT = 10;
 
   const fetchSnapshots = async (p = page) => {
     setLoading(true);
@@ -30,6 +33,7 @@ export const ConfigVersionHistoryTab: React.FC = () => {
       const res = await apiClient.get('/system-admin/config-history', { params: { page: p, limit: 10 } });
       setSnapshots(res.data.data.snapshots || []);
       setTotalPages(res.data.data.pagination?.totalPages || 1);
+      setTotalItems(res.data.data.pagination?.total || 0);
     } catch {
       setError('Failed to load configuration history');
     } finally {
@@ -128,13 +132,14 @@ export const ConfigVersionHistoryTab: React.FC = () => {
             })}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 disabled:opacity-40">Prev</button>
-              <span className="text-sm text-gray-500">{page} / {totalPages}</span>
-              <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 disabled:opacity-40">Next</button>
-            </div>
-          )}
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={LIMIT}
+            onPageChange={setPage}
+            showItemsPerPage={false}
+          />
         </>
       )}
 
