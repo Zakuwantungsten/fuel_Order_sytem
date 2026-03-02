@@ -21,6 +21,7 @@ interface UserLocationHistory {
 class GeolocationService {
   private isEnabled: boolean = false;
   private userLocationCache: Map<string, UserLocationHistory> = new Map();
+  private ipGeoCache: Map<string, { data: GeoLocation | null; expires: number }> = new Map();
   private apiProvider: 'ipapi' | 'ipinfo' | 'maxmind' = 'ipapi';
   private apiKey: string | null = null;
 
@@ -64,6 +65,31 @@ class GeolocationService {
   }
 
   /**
+   * Check if an IP is local/private (not resolvable by external APIs)
+   */
+  private isLocalIP(ip: string): boolean {
+    return (
+      !ip ||
+      ip === '::1' ||
+      ip === '127.0.0.1' ||
+      ip === '::ffff:127.0.0.1' ||
+      ip.startsWith('10.') ||
+      ip.startsWith('192.168.') ||
+      ip.startsWith('172.16.') ||
+      ip.startsWith('172.17.') ||
+      ip.startsWith('172.18.') ||
+      ip.startsWith('172.19.') ||
+      ip.startsWith('172.2') || // 172.20-29
+      ip.startsWith('172.30.') ||
+      ip.startsWith('172.31.') ||
+      ip.startsWith('fe80:') ||
+      ip.startsWith('fc00:') ||
+      ip.startsWith('fd') ||
+      ip === '0.0.0.0'
+    );
+  }
+
+  /**
    * Get geolocation for IP address
    */
   async getIPGeolocation(ipAddress: string): Promise<GeoLocation | null> {
@@ -71,8 +97,26 @@ class GeolocationService {
       return null;
     }
 
+    // Skip local/private IPs — external APIs can't resolve them
+    if (this.isLocalIP(ipAddress)) {
+      return {
+        ip: ipAddress,
+        country: 'Local',
+        countryCode: 'LO',
+        city: 'Localhost',
+        timestamp: new Date(),
+      };
+    }
+
+    // Check IP-level cache (10 minute TTL)
+    const cached = this.ipGeoCache.get(ipAddress);
+    if (cached && cached.expires > Date.now()) {
+      return cached.data;
+    }
+
     try {
       let response;
+      let result: GeoLocation | null = null;
 
       if (this.apiProvider === 'ipapi') {
         // Free API, no key required
@@ -80,7 +124,7 @@ class GeolocationService {
           timeout: 3000,
         });
 
-        return {
+        result = {
           ip: ipAddress,
           country: response.data.country_name || 'Unknown',
           countryCode: response.data.country_code || 'XX',
@@ -102,7 +146,7 @@ class GeolocationService {
           ? response.data.loc.split(',').map(Number)
           : [null, null];
 
-        return {
+        result = {
           ip: ipAddress,
           country: response.data.country || 'Unknown',
           countryCode: response.data.country || 'XX',
@@ -124,7 +168,7 @@ class GeolocationService {
           }
         );
 
-        return {
+        result = {
           ip: ipAddress,
           country: response.data.country.names.en || 'Unknown',
           countryCode: response.data.country.iso_code || 'XX',
@@ -132,11 +176,20 @@ class GeolocationService {
         };
       }
 
-      return null;
+      // Cache the result (10 minute TTL)
+      if (result) {
+        this.ipGeoCache.set(ipAddress, { data: result, expires: Date.now() + 10 * 60 * 1000 });
+      }
+      return result;
     } catch (error: any) {
-      logger.error(
-        `Failed to get geolocation for IP ${ipAddress}: ${error.message}`
-      );
+      const is429 = error?.response?.status === 429;
+      if (is429) {
+        logger.warn(`Geolocation API rate limited for IP ${ipAddress} — skipping`);
+        // Cache null for 5 minutes to avoid hammering the API
+        this.ipGeoCache.set(ipAddress, { data: null, expires: Date.now() + 5 * 60 * 1000 });
+      } else {
+        logger.warn(`Failed to get geolocation for IP ${ipAddress}: ${error.message}`);
+      }
       return null;
     }
   }
