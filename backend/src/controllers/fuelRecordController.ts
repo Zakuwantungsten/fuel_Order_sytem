@@ -629,25 +629,18 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     // Auto-link any pending yard fuel entries for this truck
     try {
-      const axios = require('axios');
-      const response = await axios.post(
-        'http://localhost:5000/api/yard-fuel/link-pending',
-        {
-          fuelRecordId: fuelRecord._id.toString(),
-          truckNo: fuelRecord.truckNo,
-          doNumber: fuelRecord.goingDo,
-          date: fuelRecord.date,
-        },
-        {
-          headers: {
-            Authorization: req.headers.authorization,
-          },
-        }
+      const { linkPendingYardFuelDirect } = await import('./yardFuelController');
+      const linkResult = await linkPendingYardFuelDirect(
+        fuelRecord._id.toString(),
+        fuelRecord.truckNo,
+        fuelRecord.goingDo,
+        fuelRecord.date,
+        req.user?.username || 'system'
       );
 
-      if (response.data.data.linkedCount > 0) {
+      if (linkResult.linkedCount > 0) {
         logger.info(
-          `Auto-linked ${response.data.data.linkedCount} pending yard fuel entry(ies) for truck ${fuelRecord.truckNo}`
+          `Auto-linked ${linkResult.linkedCount} pending yard fuel entry(ies) for truck ${fuelRecord.truckNo}`
         );
       }
     } catch (linkError: any) {

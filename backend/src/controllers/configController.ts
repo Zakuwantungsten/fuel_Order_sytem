@@ -836,3 +836,140 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
     });
   }
 };
+
+/**
+ * Get yard fuel dispense time limit configuration
+ */
+export const getYardFuelTimeLimit = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'yard_fuel_time_limit',
+      isDeleted: false,
+    }).lean();
+
+    const defaultConfig = {
+      enabled: false,
+      perYard: {
+        darYard: { enabled: true, timeLimitDays: 2 },
+        tangaYard: { enabled: true, timeLimitDays: 2 },
+        mmsaYard: { enabled: true, timeLimitDays: 2 },
+      },
+    };
+
+    if (!config) {
+      res.status(200).json({
+        success: true,
+        message: 'Yard fuel time limit settings retrieved successfully',
+        data: defaultConfig,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Yard fuel time limit settings retrieved successfully',
+      data: config.yardFuelTimeLimit || defaultConfig,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch yard fuel time limit settings',
+    });
+  }
+};
+
+/**
+ * Update yard fuel dispense time limit configuration
+ */
+export const updateYardFuelTimeLimit = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { enabled, perYard } = req.body;
+
+    // Validate per-yard timeLimitDays
+    if (perYard) {
+      for (const yardKey of ['darYard', 'tangaYard', 'mmsaYard'] as const) {
+        if (perYard[yardKey]?.timeLimitDays !== undefined) {
+          const days = Number(perYard[yardKey].timeLimitDays);
+          if (isNaN(days) || days < 0.5 || days > 30) {
+            res.status(400).json({
+              success: false,
+              message: `Time limit for ${yardKey} must be between 0.5 and 30 days`,
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    const defaultYard = { enabled: true, timeLimitDays: 2 };
+
+    let config = await SystemConfig.findOne({
+      configType: 'yard_fuel_time_limit',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = new SystemConfig({
+        configType: 'yard_fuel_time_limit',
+        yardFuelTimeLimit: {
+          enabled: enabled ?? false,
+          perYard: {
+            darYard: { ...defaultYard, ...perYard?.darYard },
+            tangaYard: { ...defaultYard, ...perYard?.tangaYard },
+            mmsaYard: { ...defaultYard, ...perYard?.mmsaYard },
+          },
+        },
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    } else {
+      if (!config.yardFuelTimeLimit) {
+        config.yardFuelTimeLimit = {
+          enabled: false,
+          perYard: {
+            darYard: { ...defaultYard },
+            tangaYard: { ...defaultYard },
+            mmsaYard: { ...defaultYard },
+          },
+        };
+      }
+
+      if (enabled !== undefined) config.yardFuelTimeLimit.enabled = enabled;
+      if (perYard) {
+        for (const yardKey of ['darYard', 'tangaYard', 'mmsaYard'] as const) {
+          if (perYard[yardKey]) {
+            if (!config.yardFuelTimeLimit.perYard[yardKey]) {
+              config.yardFuelTimeLimit.perYard[yardKey] = { ...defaultYard };
+            }
+            if (perYard[yardKey].enabled !== undefined) {
+              config.yardFuelTimeLimit.perYard[yardKey].enabled = perYard[yardKey].enabled;
+            }
+            if (perYard[yardKey].timeLimitDays !== undefined) {
+              config.yardFuelTimeLimit.perYard[yardKey].timeLimitDays = Number(perYard[yardKey].timeLimitDays);
+            }
+          }
+        }
+      }
+
+      config.lastUpdatedBy = req.user?.username || 'system';
+    }
+
+    config.markModified('yardFuelTimeLimit');
+    await config.save();
+
+    logger.info(`Yard fuel time limit updated by ${req.user?.username}: enabled=${config.yardFuelTimeLimit!.enabled}`);
+
+    emitDataChange('yard_fuel_time_limit', 'update');
+    setCacheBustingHeaders(res);
+
+    res.status(200).json({
+      success: true,
+      message: 'Yard fuel time limit settings updated successfully',
+      data: config.yardFuelTimeLimit,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update yard fuel time limit settings',
+    });
+  }
+};

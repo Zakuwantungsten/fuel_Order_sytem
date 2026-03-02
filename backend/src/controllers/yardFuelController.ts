@@ -1,10 +1,44 @@
 import { Response } from 'express';
 import { YardFuelDispense, FuelRecord } from '../models';
+import { SystemConfig } from '../models/SystemConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
+
+/**
+ * Get yard fuel time limit config and build a date filter if enabled for this yard
+ */
+async function getTimeLimitDateFilter(yard: string): Promise<Record<string, any> | null> {
+  try {
+    const config = await SystemConfig.findOne({
+      configType: 'yard_fuel_time_limit',
+      isDeleted: false,
+    }).lean();
+
+    if (!config?.yardFuelTimeLimit?.enabled) return null;
+
+    const { perYard } = config.yardFuelTimeLimit;
+
+    // Check if time limit is enabled for this specific yard and get its days
+    const yardKey = yard === 'DAR YARD' ? 'darYard' : yard === 'TANGA YARD' ? 'tangaYard' : 'mmsaYard';
+    const yardSetting = perYard[yardKey];
+    if (!yardSetting?.enabled) return null;
+
+    const timeLimitDays = yardSetting.timeLimitDays || 2;
+
+    // Calculate the cutoff date
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - timeLimitDays);
+    const cutoffStr = cutoffDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    return { $gte: cutoffStr };
+  } catch (error) {
+    logger.warn('Failed to load yard fuel time limit config, proceeding without limit:', error);
+    return null;
+  }
+}
 
 /**
  * Get all yard fuel dispenses with pagination and filters
@@ -149,12 +183,21 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
     try {
       const truckNo = yardFuelDispense.truckNo;
       
-      // Find matching fuel record (most recent active record for truck)
-      const fuelRecord = await FuelRecord.findOne({
+      // Build query with optional time limit
+      const fuelRecordQuery: any = {
         truckNo: { $regex: new RegExp(`^${truckNo}$`, 'i') },
         isDeleted: false,
         isCancelled: false,
-      }).sort({ date: -1 });
+      };
+
+      const dateFilter = await getTimeLimitDateFilter(yard);
+      if (dateFilter) {
+        fuelRecordQuery.date = dateFilter;
+        logger.info(`Applying time limit filter for ${yard}: date >= ${dateFilter.$gte}`);
+      }
+
+      // Find matching fuel record (most recent active record for truck)
+      const fuelRecord = await FuelRecord.findOne(fuelRecordQuery).sort({ date: -1 });
 
       if (fuelRecord) {
         // Update the appropriate yard column
@@ -638,11 +681,40 @@ export const linkPendingYardFuelToFuelRecord = async (
       `Linking pending yard fuel entries for truck ${truckNo} to active DO ${doNumber} (Fuel Record: ${fuelRecordId})`
     );
 
-    // Find all pending yard fuel entries for this truck (no date restriction)
-    const pendingEntries = await YardFuelDispense.find({
+    // Find all pending yard fuel entries for this truck, applying time limit per yard
+    const pendingQuery: any = {
       truckNo: { $regex: new RegExp(`^${truckNo}$`, 'i') },
       status: 'pending',
       isDeleted: false,
+    };
+
+    // Load time limit config to filter by date if enabled
+    let timeLimitConfig: any = null;
+    try {
+      const tlConfig = await SystemConfig.findOne({
+        configType: 'yard_fuel_time_limit',
+        isDeleted: false,
+      }).lean();
+      if (tlConfig?.yardFuelTimeLimit?.enabled) {
+        timeLimitConfig = tlConfig.yardFuelTimeLimit;
+      }
+    } catch (err) {
+      logger.warn('Failed to load time limit config for link-pending:', err);
+    }
+
+    const allPendingEntries = await YardFuelDispense.find(pendingQuery);
+
+    // Apply per-yard time limit filtering (each yard has its own days)
+    const pendingEntries = allPendingEntries.filter(entry => {
+      if (!timeLimitConfig) return true;
+      const yardKey = entry.yard === 'DAR YARD' ? 'darYard' : entry.yard === 'TANGA YARD' ? 'tangaYard' : 'mmsaYard';
+      const yardSetting = timeLimitConfig.perYard[yardKey];
+      if (!yardSetting?.enabled) return true; // time limit not enabled for this yard
+      const days = yardSetting.timeLimitDays || 2;
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      const cutoffStr = cutoffDate.toISOString().split('T')[0];
+      return entry.date >= cutoffStr;
     });
 
     let linkedCount = 0;
@@ -756,4 +828,98 @@ export const linkPendingYardFuelToFuelRecord = async (
   } catch (error: any) {
     throw error;
   }
+};
+
+/**
+ * Direct function to link pending yard fuel (called internally, not via HTTP)
+ * Used by fuelRecordController when creating a fuel record
+ */
+export const linkPendingYardFuelDirect = async (
+  fuelRecordId: string,
+  truckNo: string,
+  doNumber: string,
+  date: string,
+  username: string
+): Promise<{ linkedCount: number }> => {
+  // Verify fuel record exists
+  const fuelRecord = await FuelRecord.findOne({
+    _id: fuelRecordId,
+    isDeleted: false,
+    isCancelled: false,
+  });
+
+  if (!fuelRecord) return { linkedCount: 0 };
+
+  // Load time limit config
+  let timeLimitConfig: any = null;
+  try {
+    const tlConfig = await SystemConfig.findOne({
+      configType: 'yard_fuel_time_limit',
+      isDeleted: false,
+    }).lean();
+    if (tlConfig?.yardFuelTimeLimit?.enabled) {
+      timeLimitConfig = tlConfig.yardFuelTimeLimit;
+    }
+  } catch (err) {
+    logger.warn('Failed to load time limit config for direct link:', err);
+  }
+
+  const allPending = await YardFuelDispense.find({
+    truckNo: { $regex: new RegExp(`^${truckNo}$`, 'i') },
+    status: 'pending',
+    isDeleted: false,
+  });
+
+  const pendingEntries = allPending.filter(entry => {
+    if (!timeLimitConfig) return true;
+    const yardKey = entry.yard === 'DAR YARD' ? 'darYard' : entry.yard === 'TANGA YARD' ? 'tangaYard' : 'mmsaYard';
+    const yardSetting = timeLimitConfig.perYard[yardKey];
+    if (!yardSetting?.enabled) return true;
+    const days = yardSetting.timeLimitDays || 2;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const cutoffStr = cutoffDate.toISOString().split('T')[0];
+    return entry.date >= cutoffStr;
+  });
+
+  let linkedCount = 0;
+
+  for (const entry of pendingEntries) {
+    entry.status = 'linked';
+    entry.linkedFuelRecordId = fuelRecordId;
+    entry.linkedDONumber = doNumber;
+    entry.autoLinked = true;
+
+    if (!entry.history) entry.history = [];
+    entry.history.push({
+      action: 'linked',
+      performedBy: username,
+      timestamp: new Date(),
+      details: { doNumber, fuelRecordId, linkedAt: new Date() },
+    });
+
+    await entry.save();
+    linkedCount++;
+
+    try {
+      const { resolvePendingYardFuelNotifications, createYardFuelLinkedNotification } = await import('./notificationController');
+      await resolvePendingYardFuelNotifications(entry._id.toString(), username);
+      await createYardFuelLinkedNotification(
+        entry._id.toString(),
+        { truckNo: entry.truckNo, liters: entry.liters, yard: entry.yard, enteredBy: entry.enteredBy, doNumber },
+        username
+      );
+    } catch (notifError: any) {
+      logger.warn('Failed to handle notifications for linked yard fuel:', notifError);
+    }
+
+    logger.info(`Linked pending yard fuel entry ${entry._id} to DO ${doNumber} (${entry.truckNo})`);
+  }
+
+  if (linkedCount > 0) {
+    emitDataChange('yard_fuel', 'update');
+    emitDataChange('fuel_records', 'update');
+  }
+
+  return { linkedCount };
 };

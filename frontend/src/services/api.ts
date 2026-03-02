@@ -1234,14 +1234,36 @@ export interface TruckBatches {
 }
 
 export interface StandardAllocations {
+  mmsaYard: number;
   tangaYardToDar: number;
   darYardStandard: number;
   darYardKisarawe: number;
+  darGoing: number;
+  moroGoing: number;
   mbeyaGoing: number;
+  tdmGoing: number;
+  zambiaGoing: number;
+  congoFuel: number;
+  zambiaReturn: number;
   tundumaReturn: number;
   mbeyaReturn: number;
   moroReturnToMombasa: number;
+  darReturn: number;
   tangaReturnToMombasa: number;
+}
+
+export interface YardTimeLimitSetting {
+  enabled: boolean;
+  timeLimitDays: number;
+}
+
+export interface YardFuelTimeLimitConfig {
+  enabled: boolean;
+  perYard: {
+    darYard: YardTimeLimitSetting;
+    tangaYard: YardTimeLimitSetting;
+    mmsaYard: YardTimeLimitSetting;
+  };
 }
 
 export interface AdminStats {
@@ -1731,6 +1753,28 @@ export const configAPI = {
   getFormulaVariables: async () => {
     const response = await apiClient.get('/config/formula-variables');
     return response.data;
+  },
+
+  // Standard Allocations
+  getStandardAllocations: async (): Promise<StandardAllocations> => {
+    const response = await apiClient.get('/config/standard-allocations');
+    return response.data.data;
+  },
+
+  updateStandardAllocations: async (allocations: Partial<StandardAllocations>): Promise<StandardAllocations> => {
+    const response = await apiClient.put('/admin/standard-allocations', allocations);
+    return response.data.data;
+  },
+
+  // Yard Fuel Time Limit Settings
+  getYardFuelTimeLimit: async (): Promise<YardFuelTimeLimitConfig> => {
+    const response = await apiClient.get('/config/yard-fuel-time-limit');
+    return response.data.data;
+  },
+
+  updateYardFuelTimeLimit: async (settings: Partial<YardFuelTimeLimitConfig>): Promise<YardFuelTimeLimitConfig> => {
+    const response = await apiClient.put('/system-config/yard-fuel-time-limit', settings);
+    return response.data.data;
   },
 };
 

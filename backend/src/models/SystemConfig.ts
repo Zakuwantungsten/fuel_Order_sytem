@@ -32,15 +32,39 @@ export interface ITruckBatch {
   addedAt: Date;
 }
 
+// Per-yard time limit setting
+export interface IYardTimeLimitSetting {
+  enabled: boolean;
+  timeLimitDays: number;
+}
+
+// Yard Fuel Dispense Time Limit Configuration
+export interface IYardFuelTimeLimitConfig {
+  enabled: boolean; // Global toggle
+  perYard: {
+    darYard: IYardTimeLimitSetting;
+    tangaYard: IYardTimeLimitSetting;
+    mmsaYard: IYardTimeLimitSetting;
+  };
+}
+
 // Standard Allocations
 export interface IStandardAllocations {
+  mmsaYard: number;
   tangaYardToDar: number;
   darYardStandard: number;
   darYardKisarawe: number;
+  darGoing: number;
+  moroGoing: number;
   mbeyaGoing: number;
+  tdmGoing: number;
+  zambiaGoing: number;
+  congoFuel: number;
+  zambiaReturn: number;
   tundumaReturn: number;
   mbeyaReturn: number;
   moroReturnToMombasa: number;
+  darReturn: number;
   tangaReturnToMombasa: number;
 }
 
@@ -131,13 +155,14 @@ export interface ISecuritySettings {
 
 // System Configuration Document
 export interface ISystemConfig {
-  configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'general' | 'system_settings' | 'security_settings';
+  configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'yard_fuel_time_limit' | 'general' | 'system_settings' | 'security_settings';
   fuelStations?: IFuelStation[];
   routes?: IRouteConfig[];
   truckBatches?: {
     [extraLiters: string]: ITruckBatch[];  // Dynamic keys for any liter amount
   };
   standardAllocations?: IStandardAllocations;
+  yardFuelTimeLimit?: IYardFuelTimeLimitConfig;
   defaultFuelPrice?: number;
   systemSettings?: ISystemSettings;
   securitySettings?: ISecuritySettings;
@@ -190,13 +215,21 @@ const truckBatchSchema = new Schema<ITruckBatch>(
 
 const standardAllocationsSchema = new Schema<IStandardAllocations>(
   {
+    mmsaYard: { type: Number, default: 0 },
     tangaYardToDar: { type: Number, default: 100 },
     darYardStandard: { type: Number, default: 550 },
     darYardKisarawe: { type: Number, default: 580 },
+    darGoing: { type: Number, default: 0 },
+    moroGoing: { type: Number, default: 0 },
     mbeyaGoing: { type: Number, default: 450 },
+    tdmGoing: { type: Number, default: 0 },
+    zambiaGoing: { type: Number, default: 0 },
+    congoFuel: { type: Number, default: 0 },
+    zambiaReturn: { type: Number, default: 400 },
     tundumaReturn: { type: Number, default: 100 },
     mbeyaReturn: { type: Number, default: 400 },
     moroReturnToMombasa: { type: Number, default: 100 },
+    darReturn: { type: Number, default: 0 },
     tangaReturnToMombasa: { type: Number, default: 70 },
   },
   { _id: false }
@@ -207,7 +240,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     configType: {
       type: String,
       required: true,
-      enum: ['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'general', 'system_settings', 'security_settings'],
+      enum: ['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'yard_fuel_time_limit', 'general', 'system_settings', 'security_settings'],
       unique: true,
     },
     fuelStations: [fuelStationSchema],
@@ -217,6 +250,23 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       default: {},
     },
     standardAllocations: standardAllocationsSchema,
+    yardFuelTimeLimit: {
+      enabled: { type: Boolean, default: false },
+      perYard: {
+        darYard: {
+          enabled: { type: Boolean, default: true },
+          timeLimitDays: { type: Number, default: 2, min: 0.5, max: 30 },
+        },
+        tangaYard: {
+          enabled: { type: Boolean, default: true },
+          timeLimitDays: { type: Number, default: 2, min: 0.5, max: 30 },
+        },
+        mmsaYard: {
+          enabled: { type: Boolean, default: true },
+          timeLimitDays: { type: Number, default: 2, min: 0.5, max: 30 },
+        },
+      },
+    },
     defaultFuelPrice: { type: Number, default: 1450 },
     systemSettings: {
       general: {

@@ -4,7 +4,7 @@ import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, X } from 'lucide-react';
 import { FuelRecord, LPOEntry } from '../types';
-import { fuelRecordsAPI } from '../services/api';
+import { fuelRecordsAPI, configAPI, StandardAllocations } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
@@ -15,45 +15,52 @@ import { subscribeToNotifications, unsubscribeFromNotifications } from '../servi
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 
-// Standard fuel allocations - used to highlight extra fuel (fuel exceeding standard allocation)
-const STANDARD_ALLOCATIONS = {
-  darYard: 550,           // Standard DAR yard allocation (580 for Kisarawe)
-  tangaYard: 100,         // Tanga yard to reach Dar
-  mbeyaGoing: -450,       // Mbeya going (negative value in records)
-  tundumaReturn: -100,    // Tunduma return
-  mbeyaReturn: -400,      // Mbeya return
-  zambiaReturn: -400,     // Zambia return (total: 50 Ndola + 350 Kapiri)
-  moroReturn: -100,       // Morogoro return (for Mombasa-bound)
-  tangaReturn: -70,       // Tanga return (for Mombasa-bound)
+// Map backend standard allocation field names to fuel record column field names
+const ALLOCATION_FIELD_MAP: Record<string, keyof StandardAllocations> = {
+  mmsaYard: 'mmsaYard',
+  tangaYard: 'tangaYardToDar',
+  darYard: 'darYardStandard',
+  darGoing: 'darGoing',
+  moroGoing: 'moroGoing',
+  mbeyaGoing: 'mbeyaGoing',
+  tdmGoing: 'tdmGoing',
+  zambiaGoing: 'zambiaGoing',
+  congoFuel: 'congoFuel',
+  zambiaReturn: 'zambiaReturn',
+  tundumaReturn: 'tundumaReturn',
+  mbeyaReturn: 'mbeyaReturn',
+  moroReturn: 'moroReturnToMombasa',
+  darReturn: 'darReturn',
+  tangaReturn: 'tangaReturnToMombasa',
 };
 
 // Check if a fuel value exceeds the standard allocation (more fuel than expected)
-const isExtraFuel = (field: string, value: number | undefined): boolean => {
-  if (!value || value === 0) return false;
+const isExtraFuel = (field: string, value: number | undefined, allocations: StandardAllocations | null): boolean => {
+  if (!value || value === 0 || !allocations) return false;
   
-  const standard = STANDARD_ALLOCATIONS[field as keyof typeof STANDARD_ALLOCATIONS];
+  const allocKey = ALLOCATION_FIELD_MAP[field];
+  if (!allocKey) return false;
+  
+  const standard = allocations[allocKey];
   if (standard === undefined) return false;
-  
-  // For negative values (fuel consumed), if the value is more negative than standard, it means more fuel was used
-  if (standard < 0) {
-    return value < standard; // e.g., -500 < -450 means 50 extra liters were used
-  }
-  
-  // For positive values (yard allocations), if value exceeds standard, it's extra
-  return value > standard;
+
+  // All standards from backend are stored as positive values.
+  // For "going" fields (positive in records), compare directly.
+  // For "return/going consumed" fields (negative in records), compare absolute values.
+  return Math.abs(value) > standard;
 };
 
 // Get the extra amount above standard allocation
-const getExtraAmount = (field: string, value: number | undefined): number => {
-  if (!value || value === 0) return 0;
+const getExtraAmount = (field: string, value: number | undefined, allocations: StandardAllocations | null): number => {
+  if (!value || value === 0 || !allocations) return 0;
   
-  const standard = STANDARD_ALLOCATIONS[field as keyof typeof STANDARD_ALLOCATIONS];
+  const allocKey = ALLOCATION_FIELD_MAP[field];
+  if (!allocKey) return 0;
+  
+  const standard = allocations[allocKey];
   if (standard === undefined) return 0;
-  
-  if (standard < 0) {
-    return standard - value; // Returns positive number for extra fuel used
-  }
-  return value - standard;
+
+  return Math.abs(value) - standard;
 };
 
 const MONTH_NAMES_FR = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -78,6 +85,9 @@ const FuelRecords = () => {
   // Details modal state
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | number | null>(null);
+  
+  // Standard allocations (fetched from backend)
+  const [standardAllocations, setStandardAllocations] = useState<StandardAllocations | null>(null);
   
   // Month navigation state — priority: URL params (deep-links) > localStorage > current month
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -429,6 +439,16 @@ const FuelRecords = () => {
   useRealtimeSync(['fuel_records', 'lpo_entries'], () => {
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
+  });
+
+  // Fetch standard allocations from backend
+  useEffect(() => {
+    configAPI.getStandardAllocations().then(setStandardAllocations).catch(() => {});
+  }, []);
+
+  // Real-time sync: refresh allocations when admin changes them
+  useRealtimeSync('standard_allocations', () => {
+    configAPI.getStandardAllocations().then(setStandardAllocations).catch(() => {});
   });
 
   // Server-side pagination - no need to slice, backend already returned the right page
@@ -1210,8 +1230,8 @@ const FuelRecords = () => {
                   
                   // Helper to render fuel cell with highlighting for extra fuel
                   const renderFuelCell = (field: string, value: number | undefined) => {
-                    const hasExtraFuel = isExtraFuel(field, value);
-                    const extraAmount = hasExtraFuel ? getExtraAmount(field, value) : 0;
+                    const hasExtraFuel = isExtraFuel(field, value, standardAllocations);
+                    const extraAmount = hasExtraFuel ? getExtraAmount(field, value, standardAllocations) : 0;
                     
                     return (
                       <td 
@@ -1270,20 +1290,20 @@ const FuelRecords = () => {
                       </td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{(record.totalLts || 0).toLocaleString()}</td>
                       <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.extra || '-'}</td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.mmsaYard || '-'}</td>
+                      {renderFuelCell('mmsaYard', record.mmsaYard)}
                       {renderFuelCell('tangaYard', record.tangaYard)}
                       {renderFuelCell('darYard', record.darYard)}
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darGoing || '-'}</td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.moroGoing || '-'}</td>
+                      {renderFuelCell('darGoing', record.darGoing)}
+                      {renderFuelCell('moroGoing', record.moroGoing)}
                       {renderFuelCell('mbeyaGoing', record.mbeyaGoing)}
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.tdmGoing || '-'}</td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.zambiaGoing || '-'}</td>
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.congoFuel || '-'}</td>
+                      {renderFuelCell('tdmGoing', record.tdmGoing)}
+                      {renderFuelCell('zambiaGoing', record.zambiaGoing)}
+                      {renderFuelCell('congoFuel', record.congoFuel)}
                       {renderFuelCell('zambiaReturn', record.zambiaReturn)}
                       {renderFuelCell('tundumaReturn', record.tundumaReturn)}
                       {renderFuelCell('mbeyaReturn', record.mbeyaReturn)}
                       {renderFuelCell('moroReturn', record.moroReturn)}
-                      <td className={`px-2 py-2 text-[10px] sm:text-xs text-center ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-400'}`}>{record.darReturn || '-'}</td>
+                      {renderFuelCell('darReturn', record.darReturn)}
                       {renderFuelCell('tangaReturn', record.tangaReturn)}
                       <td className={`px-2 py-2 text-[10px] sm:text-xs text-center font-semibold ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.balance.toLocaleString()}</td>
                       <td className="px-2 py-2">

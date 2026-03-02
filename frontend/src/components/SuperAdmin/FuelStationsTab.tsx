@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-react';
-import { configAPI } from '../../services/api';
+import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check, AlertTriangle, RotateCcw, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
+import { configAPI, StandardAllocations, YardFuelTimeLimitConfig } from '../../services/api';
 import { FuelStationConfig, FuelRecordFieldOption } from '../../types';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
@@ -14,6 +14,23 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   const [fuelRecordFieldsReturning, setFuelRecordFieldsReturning] = useState<FuelRecordFieldOption[]>([]);
   const [showStationModal, setShowStationModal] = useState(false);
   const [editingStation, setEditingStation] = useState<FuelStationConfig | null>(null);
+
+  // Standard Allocations state
+  const [allocations, setAllocations] = useState<StandardAllocations | null>(null);
+  const [editingAllocations, setEditingAllocations] = useState<StandardAllocations | null>(null);
+  const [isEditingAllocations, setIsEditingAllocations] = useState(false);
+  const [savingAllocations, setSavingAllocations] = useState(false);
+
+  // Yard Fuel Time Limit state
+  const [timeLimit, setTimeLimit] = useState<YardFuelTimeLimitConfig>({
+    enabled: false,
+    perYard: {
+      darYard: { enabled: true, timeLimitDays: 2 },
+      tangaYard: { enabled: true, timeLimitDays: 2 },
+      mmsaYard: { enabled: true, timeLimitDays: 2 },
+    },
+  });
+  const [savingTimeLimit, setSavingTimeLimit] = useState(false);
 
   const [stationForm, setStationForm] = useState({
     stationName: '',
@@ -70,19 +87,27 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
 
   const loadData = async () => {
     try {
-      const [stationsData, formulaData] = await Promise.all([
+      const [stationsData, formulaData, allocData, timeLimitData] = await Promise.all([
         configAPI.getStations(),
         configAPI.getFormulaVariables(),
+        configAPI.getStandardAllocations(),
+        configAPI.getYardFuelTimeLimit(),
       ]);
       setStations(stationsData);
       setFuelRecordFieldsGoing(formulaData.fuelRecordFieldsGoing || []);
       setFuelRecordFieldsReturning(formulaData.fuelRecordFieldsReturning || []);
+      setAllocations(allocData);
+      if (timeLimitData) setTimeLimit(timeLimitData);
+      // If currently editing, update the editing form too (real-time sync)
+      if (!isEditingAllocations) {
+        setEditingAllocations(allocData);
+      }
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to load fuel stations');
     }
   };
 
-  useRealtimeSync('fuel_stations', loadData);
+  useRealtimeSync(['fuel_stations', 'standard_allocations', 'yard_fuel_time_limit'], loadData);
 
   const handleCreateStation = async () => {
     try {
@@ -535,6 +560,337 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Yard Fuel Dispense Time Limit Settings */}
+      <div className="space-y-4 mt-10 pt-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              Yard Fuel Dispense Time Limit
+            </h2>
+          </div>
+          <button
+            onClick={async () => {
+              const newEnabled = !timeLimit.enabled;
+              setSavingTimeLimit(true);
+              try {
+                const updated = await configAPI.updateYardFuelTimeLimit({ enabled: newEnabled });
+                setTimeLimit(updated);
+                onMessage('success', `Time limit ${newEnabled ? 'enabled' : 'disabled'} successfully`);
+              } catch (error: any) {
+                onMessage('error', error.response?.data?.message || 'Failed to update time limit');
+              } finally {
+                setSavingTimeLimit(false);
+              }
+            }}
+            disabled={savingTimeLimit}
+            className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors ${
+              timeLimit.enabled
+                ? 'bg-orange-600 text-white hover:bg-orange-700'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
+            } disabled:opacity-50`}
+          >
+            {timeLimit.enabled ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+            {timeLimit.enabled ? 'Enabled' : 'Disabled'}
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          When enabled, yard fuel can only be dispensed for trucks that have an active fuel record created within the specified time window. This prevents dispensing fuel to trucks with old/stale records.
+        </p>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 space-y-4">
+          {/* Per-Yard Time Limit Settings */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Per-Yard Time Limits</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {([
+                { key: 'darYard' as const, label: 'DAR YARD' },
+                { key: 'tangaYard' as const, label: 'TANGA YARD' },
+                { key: 'mmsaYard' as const, label: 'MMSA YARD' },
+              ]).map(({ key, label }) => (
+                <div
+                  key={key}
+                  className={`p-4 rounded-lg border transition-colors ${
+                    timeLimit.perYard[key]?.enabled && timeLimit.enabled
+                      ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20'
+                      : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50'
+                  } ${!timeLimit.enabled ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+                    <button
+                      onClick={async () => {
+                        const newEnabled = !timeLimit.perYard[key]?.enabled;
+                        const newPerYard = {
+                          ...timeLimit.perYard,
+                          [key]: { ...timeLimit.perYard[key], enabled: newEnabled },
+                        };
+                        setSavingTimeLimit(true);
+                        try {
+                          const updated = await configAPI.updateYardFuelTimeLimit({ perYard: newPerYard });
+                          setTimeLimit(updated);
+                          onMessage('success', `${label} time limit ${newEnabled ? 'enabled' : 'disabled'}`);
+                        } catch (error: any) {
+                          onMessage('error', error.response?.data?.message || 'Failed to update yard setting');
+                        } finally {
+                          setSavingTimeLimit(false);
+                        }
+                      }}
+                      disabled={!timeLimit.enabled || savingTimeLimit}
+                      className="disabled:cursor-not-allowed"
+                    >
+                      {timeLimit.perYard[key]?.enabled && timeLimit.enabled ? (
+                        <ToggleRight className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                      ) : (
+                        <ToggleLeft className="w-5 h-5 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="30"
+                      step="0.5"
+                      value={timeLimit.perYard[key]?.timeLimitDays ?? 2}
+                      onChange={(e) => {
+                        const newPerYard = {
+                          ...timeLimit.perYard,
+                          [key]: { ...timeLimit.perYard[key], timeLimitDays: parseFloat(e.target.value) || 2 },
+                        };
+                        setTimeLimit({ ...timeLimit, perYard: newPerYard });
+                      }}
+                      disabled={!timeLimit.enabled || !timeLimit.perYard[key]?.enabled}
+                      className="w-16 px-2 py-1.5 text-sm border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    <span className="text-xs text-gray-600 dark:text-gray-400">days</span>
+                    <button
+                      onClick={async () => {
+                        const days = timeLimit.perYard[key]?.timeLimitDays ?? 2;
+                        if (days < 0.5 || days > 30) {
+                          onMessage('error', 'Time limit must be between 0.5 and 30 days');
+                          return;
+                        }
+                        setSavingTimeLimit(true);
+                        try {
+                          const updated = await configAPI.updateYardFuelTimeLimit({ perYard: timeLimit.perYard });
+                          setTimeLimit(updated);
+                          onMessage('success', `${label} time window updated to ${days} days`);
+                        } catch (error: any) {
+                          onMessage('error', error.response?.data?.message || 'Failed to update time window');
+                        } finally {
+                          setSavingTimeLimit(false);
+                        }
+                      }}
+                      disabled={!timeLimit.enabled || !timeLimit.perYard[key]?.enabled || savingTimeLimit}
+                      className="px-2 py-1.5 text-xs bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+              Set individual time limits per yard. When disabled for a yard, that yard has no time limit restriction even if the global setting is enabled.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Standard Allocations Configuration */}
+      <StandardAllocationsSection
+        allocations={allocations}
+        editingAllocations={editingAllocations}
+        isEditing={isEditingAllocations}
+        saving={savingAllocations}
+        onEdit={() => {
+          setEditingAllocations(allocations ? { ...allocations } : null);
+          setIsEditingAllocations(true);
+        }}
+        onCancel={() => {
+          setEditingAllocations(allocations ? { ...allocations } : null);
+          setIsEditingAllocations(false);
+        }}
+        onChange={(field, value) => {
+          if (editingAllocations) {
+            setEditingAllocations({ ...editingAllocations, [field]: value });
+          }
+        }}
+        onSave={async () => {
+          if (!editingAllocations) return;
+          setSavingAllocations(true);
+          try {
+            const updated = await configAPI.updateStandardAllocations(editingAllocations);
+            setAllocations(updated);
+            setEditingAllocations(updated);
+            setIsEditingAllocations(false);
+            onMessage('success', 'Standard allocations updated successfully');
+          } catch (error: any) {
+            onMessage('error', error.response?.data?.message || 'Failed to update allocations');
+          } finally {
+            setSavingAllocations(false);
+          }
+        }}
+        onReset={() => {
+          setEditingAllocations(allocations ? { ...allocations } : null);
+        }}
+      />
+    </div>
+  );
+}
+
+// Field labels for standard allocations (all checkpoint columns from fuel record table)
+const ALLOCATION_FIELDS: { key: keyof StandardAllocations; label: string }[] = [
+  { key: 'mmsaYard', label: 'MMSA Yard' },
+  { key: 'tangaYardToDar', label: 'Tanga Yard' },
+  { key: 'darYardStandard', label: 'Dar Yard (Standard)' },
+  { key: 'darYardKisarawe', label: 'Dar Yard (Kisarawe)' },
+  { key: 'darGoing', label: 'Dar Going' },
+  { key: 'moroGoing', label: 'Moro Going' },
+  { key: 'mbeyaGoing', label: 'Mbeya Going' },
+  { key: 'tdmGoing', label: 'Tunduma Going' },
+  { key: 'zambiaGoing', label: 'Zambia Going' },
+  { key: 'congoFuel', label: 'Congo Fuel' },
+  { key: 'zambiaReturn', label: 'Zambia Return' },
+  { key: 'tundumaReturn', label: 'Tunduma Return' },
+  { key: 'mbeyaReturn', label: 'Mbeya Return' },
+  { key: 'moroReturnToMombasa', label: 'Moro Return' },
+  { key: 'darReturn', label: 'Dar Return' },
+  { key: 'tangaReturnToMombasa', label: 'Tanga Return' },
+];
+
+function StandardAllocationsSection({
+  allocations,
+  editingAllocations,
+  isEditing,
+  saving,
+  onEdit,
+  onCancel,
+  onChange,
+  onSave,
+  onReset,
+}: {
+  allocations: StandardAllocations | null;
+  editingAllocations: StandardAllocations | null;
+  isEditing: boolean;
+  saving: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+  onChange: (field: keyof StandardAllocations, value: number) => void;
+  onSave: () => void;
+  onReset: () => void;
+}) {
+  const data = isEditing ? editingAllocations : allocations;
+
+  return (
+    <div className="space-y-4 mt-20 pt-8 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+            Standard Fuel Allocations
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <button
+                onClick={onReset}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />Reset
+              </button>
+              <button
+                onClick={onCancel}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <X className="w-3.5 h-3.5" />Cancel
+              </button>
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" />{saving ? 'Saving...' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-yellow-600 text-white rounded-md hover:bg-yellow-700"
+            >
+              <Edit2 className="w-3.5 h-3.5" />Edit Allocations
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        These are the standard fuel amounts expected at each checkpoint. The fuel record table will show a ⚠ caution icon when a record exceeds these thresholds.
+      </p>
+
+      {!data ? (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+          Loading standard allocations...
+        </div>
+      ) : (
+        <>
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-3">
+            {ALLOCATION_FIELDS.map(({ key, label }) => (
+              <div key={key} className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{label}</h3>
+                  {isEditing ? (
+                    <input
+                      type="number"
+                      value={data[key]}
+                      onChange={(e) => onChange(key, parseFloat(e.target.value) || 0)}
+                      className="w-24 px-2 py-1.5 text-sm border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-right"
+                    />
+                  ) : (
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{data[key]}L</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Checkpoint</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-400">Standard (Liters)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y dark:divide-gray-700">
+                {ALLOCATION_FIELDS.map(({ key, label }) => (
+                  <tr key={key} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                    <td className="px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100">{label}</td>
+                    <td className="px-3 py-2.5 text-sm text-right">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          value={data[key]}
+                          onChange={(e) => onChange(key, parseFloat(e.target.value) || 0)}
+                          className="w-28 px-2 py-1 text-sm border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-right"
+                        />
+                      ) : (
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{data[key]}L</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

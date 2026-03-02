@@ -24,4 +24,8 @@ router.delete('/routes/:id', configController.deleteRoute);
 // Formula helpers
 router.get('/formula-variables', configController.getFormulaVariables);
 
+// Yard fuel time limit settings
+router.get('/yard-fuel-time-limit', configController.getYardFuelTimeLimit);
+router.put('/yard-fuel-time-limit', configController.updateYardFuelTimeLimit);
+
 export default router;

@@ -62,13 +62,21 @@ const DEFAULT_ROUTES = [
 // No hardcoded defaults - all managed through SystemConfig
 
 const DEFAULT_STANDARD_ALLOCATIONS = {
+  mmsaYard: 0,
   tangaYardToDar: 100,
   darYardStandard: 550,
   darYardKisarawe: 580,
+  darGoing: 0,
+  moroGoing: 0,
   mbeyaGoing: 450,
+  tdmGoing: 0,
+  zambiaGoing: 0,
+  congoFuel: 0,
+  zambiaReturn: 400,
   tundumaReturn: 100,
   mbeyaReturn: 400,
   moroReturnToMombasa: 100,
+  darReturn: 0,
   tangaReturnToMombasa: 70,
 };
 
@@ -1041,6 +1049,12 @@ export const updateStandardAllocations = async (req: AuthRequest, res: Response)
     await config.save();
 
     logger.info(`Standard allocations updated by ${req.user?.username}`);
+
+    // Emit real-time update so all clients refresh
+    emitDataChange('standard_allocations', 'update');
+
+    // Force cache bust
+    setCacheBustingHeaders(res);
 
     res.status(200).json({
       success: true,

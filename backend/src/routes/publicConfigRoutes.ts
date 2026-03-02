@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth';
 import * as configController from '../controllers/configController';
+import * as adminController from '../controllers/adminController';
 
 const router = express.Router();
 
@@ -21,5 +22,11 @@ router.get('/truck-batches', configController.getTruckBatches);
 
 // Formula helpers
 router.get('/formula-variables', configController.getFormulaVariables);
+
+// Standard allocations (read-only for all authenticated users)
+router.get('/standard-allocations', adminController.getStandardAllocations);
+
+// Yard fuel time limit (read-only for all authenticated users)
+router.get('/yard-fuel-time-limit', configController.getYardFuelTimeLimit);
 
 export default router;
