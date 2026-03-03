@@ -36,7 +36,7 @@ export default function ThreatDetectionTab() {
 
   const headers = () => ({
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+    Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
   });
 
   const fetchOverview = async () => {
@@ -44,7 +44,47 @@ export default function ThreatDetectionTab() {
     try {
       const res = await fetch('/api/v1/system-admin/threat-detection/anomalies?days=7', { headers: headers() });
       const json = await res.json();
-      if (json.success) setOverview(json.data);
+      if (json.success) {
+        const d = json.data || {};
+        setOverview({
+          threatLevel: d.threatLevel || 'low',
+          highRiskUsers: (d.highRiskUsers || []).map((u: any) => ({
+            userId: u.userId || u._id || '',
+            name: u.name || u._id || 'Unknown',
+            email: u.email || '',
+            riskScore: u.riskScore ?? u.avgRiskScore ?? u.maxRiskScore ?? 0,
+            reasons: u.reasons || u.actions || [],
+          })),
+          failedLoginClusters: (d.failedLoginClusters || []).map((c: any) => ({
+            _id: typeof c._id === 'object' ? (c._id as any).ip || JSON.stringify(c._id) : (c._id || ''),
+            count: c.count ?? c.attempts ?? 0,
+            lastAttempt: c.lastAttempt || '',
+          })),
+          offHoursActivity: (d.offHoursActivity || []).map((a: any) => ({
+            _id: a._id || '',
+            name: a.name || a._id || 'Unknown',
+            actionCount: a.actionCount ?? a.offHoursEvents ?? 0,
+          })),
+          largeExports: (d.largeExports || []).map((e: any) => ({
+            _id: e._id || '',
+            name: e.name || e._id || 'Unknown',
+            exportCount: e.exportCount ?? 0,
+            totalRecords: e.totalRecords ?? 0,
+          })),
+          impossibleTravel: (d.impossibleTravel || []).map((t: any) => ({
+            userId: t.userId || t.username || t._id || '',
+            name: t.name || t.username || 'Unknown',
+            locations: t.locations || (t.details?.locations) || [],
+            timeDiff: t.timeDiff ?? t.details?.timeDiff ?? 0,
+          })),
+          accessAnomalies: (d.accessAnomalies || []).map((a: any) => ({
+            _id: typeof a._id === 'object' ? (a._id as any).username || JSON.stringify(a._id) : (a._id || ''),
+            name: a.name || (typeof a._id === 'object' ? (a._id as any).username : a._id) || 'Unknown',
+            uniqueIPs: a.uniqueIPs ?? a.accessCount ?? 0,
+            countries: a.countries || (typeof a._id === 'object' && (a._id as any).resourceType ? [(a._id as any).resourceType] : []),
+          })),
+        });
+      }
       else setError(json.message);
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false); }
@@ -109,8 +149,8 @@ export default function ThreatDetectionTab() {
             expanded={expandedSections.has('highRiskUsers')} onToggle={() => toggle('highRiskUsers')}>
             {overview.highRiskUsers.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">No high-risk users detected</p> : (
               <div className="space-y-2">
-                {overview.highRiskUsers.map(u => (
-                  <div key={u.userId} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                {overview.highRiskUsers.map((u, i) => (
+                  <div key={u.userId || `user-${i}`} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                     <div>
                       <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{u.name}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{u.email}</p>
@@ -137,8 +177,8 @@ export default function ThreatDetectionTab() {
             expanded={expandedSections.has('failedLoginClusters')} onToggle={() => toggle('failedLoginClusters')}>
             {overview.failedLoginClusters.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">No suspicious clusters</p> : (
               <div className="space-y-2">
-                {overview.failedLoginClusters.map(c => (
-                  <div key={c._id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                {overview.failedLoginClusters.map((c, i) => (
+                  <div key={`${c._id}-${i}`} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                     <div>
                       <p className="font-medium text-sm text-gray-900 dark:text-gray-100">IP: {c._id}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">Last attempt: {new Date(c.lastAttempt).toLocaleString()}</p>
@@ -155,8 +195,8 @@ export default function ThreatDetectionTab() {
             expanded={expandedSections.has('offHoursActivity')} onToggle={() => toggle('offHoursActivity')}>
             {overview.offHoursActivity.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">No off-hours activity</p> : (
               <div className="space-y-2">
-                {overview.offHoursActivity.map(a => (
-                  <div key={a._id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                {overview.offHoursActivity.map((a, i) => (
+                  <div key={`${a._id}-${i}`} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                     <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{a.name}</p>
                     <span className="text-sm font-medium text-amber-600">{a.actionCount} actions</span>
                   </div>
@@ -170,8 +210,8 @@ export default function ThreatDetectionTab() {
             expanded={expandedSections.has('largeExports')} onToggle={() => toggle('largeExports')}>
             {overview.largeExports.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">No suspicious exports</p> : (
               <div className="space-y-2">
-                {overview.largeExports.map(e => (
-                  <div key={e._id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                {overview.largeExports.map((e, i) => (
+                  <div key={`${e._id}-${i}`} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                     <div>
                       <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{e.name}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{e.totalRecords} total records exported</p>
@@ -188,8 +228,8 @@ export default function ThreatDetectionTab() {
             expanded={expandedSections.has('impossibleTravel')} onToggle={() => toggle('impossibleTravel')}>
             {overview.impossibleTravel.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">No impossible travel detected</p> : (
               <div className="space-y-2">
-                {overview.impossibleTravel.map(t => (
-                  <div key={t.userId} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                {overview.impossibleTravel.map((t, i) => (
+                  <div key={t.userId || `travel-${i}`} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                     <div>
                       <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{t.name}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">Locations: {t.locations.join(' → ')}</p>
@@ -206,8 +246,8 @@ export default function ThreatDetectionTab() {
             expanded={expandedSections.has('accessAnomalies')} onToggle={() => toggle('accessAnomalies')}>
             {overview.accessAnomalies.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">No access anomalies</p> : (
               <div className="space-y-2">
-                {overview.accessAnomalies.map(a => (
-                  <div key={a._id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                {overview.accessAnomalies.map((a, i) => (
+                  <div key={`${a._id}-${i}`} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                     <div>
                       <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{a.name}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">Countries: {a.countries.join(', ')}</p>

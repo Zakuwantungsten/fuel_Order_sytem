@@ -53,7 +53,7 @@ export default function DLPControlsTab() {
 
   const headers = () => ({
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+    Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
   });
 
   const fetchData = async () => {

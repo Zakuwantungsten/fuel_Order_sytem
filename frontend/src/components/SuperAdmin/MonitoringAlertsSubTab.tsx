@@ -26,7 +26,7 @@ export default function MonitoringAlertsSubTab() {
   const loadOverview = async () => {
     setLoading(true);
     try {
-      const token = sessionStorage.getItem('token');
+      const token = sessionStorage.getItem('fuel_order_token');
       const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
       const [thresholdRes, emailRes, siemRes] = await Promise.allSettled([

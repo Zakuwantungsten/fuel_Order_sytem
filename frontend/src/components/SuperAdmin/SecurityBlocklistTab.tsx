@@ -82,7 +82,7 @@ const REASON_COLORS: Record<string, string> = {
 const API_BASE = '/api/v1/system-admin/security-blocklist';
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem('fuel_order_token');
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
@@ -311,7 +311,7 @@ export default function SecurityBlocklistTab() {
       )}
 
       {/* Reason breakdown */}
-      {stats && Object.keys(stats.byReason).length > 0 && (
+      {stats && stats.byReason && Object.keys(stats.byReason).length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Blocks by Reason</h3>
           <div className="flex flex-wrap gap-2">

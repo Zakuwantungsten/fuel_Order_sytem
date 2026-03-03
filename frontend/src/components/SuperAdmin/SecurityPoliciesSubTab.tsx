@@ -101,7 +101,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
 
   const authHeaders = () => ({
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+    Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
   });
 
   /* ── Load security settings ── */

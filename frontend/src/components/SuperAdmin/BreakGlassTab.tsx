@@ -29,7 +29,7 @@ export default function BreakGlassTab() {
 
   const headers = () => ({
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+    Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
   });
 
   const fetchAccounts = async () => {

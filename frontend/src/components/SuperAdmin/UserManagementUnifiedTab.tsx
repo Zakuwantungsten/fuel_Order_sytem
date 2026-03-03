@@ -1147,7 +1147,7 @@ function CreateUserModal({ onClose, onSuccess, onError }: {
       setLoadingStations(true);
       try {
         const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/config/stations`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('fuel_order_token')}` }
+          headers: { 'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}` }
         });
         if (response.ok) {
           const result = await response.json();
@@ -1318,7 +1318,7 @@ function EditUserModal({ user, onClose, onSuccess, onError }: {
       setLoadingStations(true);
       try {
         const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/config/stations`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('fuel_order_token')}` }
+          headers: { 'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}` }
         });
         if (response.ok) {
           const result = await response.json();

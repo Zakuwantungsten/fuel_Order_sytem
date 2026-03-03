@@ -101,7 +101,7 @@ const API_BASE = '/api/v1/system-admin/security-events';
 /* ───────── Helpers ───────── */
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem('fuel_order_token');
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });

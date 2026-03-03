@@ -39,7 +39,7 @@ export default function SecurityAccessControlSubTab({ onMessage }: Props) {
 
   const authHeaders = () => ({
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+    Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
   });
 
   // Fetch overview stats from multiple endpoints

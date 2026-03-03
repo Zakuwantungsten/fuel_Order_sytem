@@ -47,7 +47,7 @@ export default function SecurityScoreTab() {
     setLoading(true);
     setError(null);
     try {
-      const token = sessionStorage.getItem('token');
+      const token = sessionStorage.getItem('fuel_order_token');
       const res = await fetch('/api/v1/system-admin/security-score', {
         headers: { Authorization: `Bearer ${token}` },
       });

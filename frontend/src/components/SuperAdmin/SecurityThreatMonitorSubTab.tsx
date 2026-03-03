@@ -40,7 +40,7 @@ export default function SecurityThreatMonitorSubTab() {
   const [loading, setLoading] = useState(true);
 
   const authHeaders = () => ({
-    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+    Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
   });
 
   const loadOverview = async () => {
