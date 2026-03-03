@@ -4,6 +4,8 @@ import { ApiError } from '../middleware/errorHandler';
 import BlocklistService from '../services/blocklistService';
 import AuditService from '../utils/auditService';
 import logger from '../utils/logger';
+import { config } from '../config';
+import { SystemConfig } from '../models/SystemConfig';
 
 /**
  * GET /api/v1/system-admin/security-blocklist
@@ -163,5 +165,127 @@ export const unblockIP = async (req: AuthRequest, res: Response): Promise<void> 
     if (err instanceof ApiError) throw err;
     logger.error('unblockIP error:', err);
     throw new ApiError(500, 'Failed to unblock IP');
+  }
+};
+
+/**
+ * GET /api/v1/system-admin/security-blocklist/config
+ * Returns current autoblock configuration (runtime values).
+ */
+export const getAutoblockConfig = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    res.status(200).json({
+      success: true,
+      data: {
+        ipBlockingEnabled: config.securityIpBlocking,
+        blockDurationMs: config.securityBlockDurationMs,
+        suspiciousThreshold: config.securitySuspiciousThreshold,
+        threshold404Count: config.security404CountThreshold,
+        threshold404WindowMs: config.security404WindowMs,
+        uaBlockingEnabled: config.securityUaBlocking,
+        ipGatingEnabled: (config as any).securityIpGating ?? false,
+      },
+    });
+  } catch (err) {
+    logger.error('getAutoblockConfig error:', err);
+    throw new ApiError(500, 'Failed to fetch autoblock configuration');
+  }
+};
+
+/**
+ * PUT /api/v1/system-admin/security-blocklist/config
+ * Updates autoblock configuration at runtime and persists to DB.
+ */
+export const updateAutoblockConfig = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const {
+      ipBlockingEnabled,
+      blockDurationMs,
+      suspiciousThreshold,
+      threshold404Count,
+      threshold404WindowMs,
+      uaBlockingEnabled,
+      ipGatingEnabled,
+    } = req.body;
+
+    // Validate numeric values
+    if (blockDurationMs !== undefined && (typeof blockDurationMs !== 'number' || (blockDurationMs !== 0 && blockDurationMs < 60000))) {
+      throw new ApiError(400, 'Block duration must be 0 (permanent) or at least 60,000ms (1 minute)');
+    }
+    if (suspiciousThreshold !== undefined && (typeof suspiciousThreshold !== 'number' || suspiciousThreshold < 1 || suspiciousThreshold > 100)) {
+      throw new ApiError(400, 'Suspicious threshold must be between 1 and 100');
+    }
+    if (threshold404Count !== undefined && (typeof threshold404Count !== 'number' || threshold404Count < 5 || threshold404Count > 500)) {
+      throw new ApiError(400, '404 count threshold must be between 5 and 500');
+    }
+    if (threshold404WindowMs !== undefined && (typeof threshold404WindowMs !== 'number' || threshold404WindowMs < 60000)) {
+      throw new ApiError(400, '404 window must be at least 60,000ms (1 minute)');
+    }
+
+    // Apply to runtime config
+    if (ipBlockingEnabled !== undefined) (config as any).securityIpBlocking = !!ipBlockingEnabled;
+    if (blockDurationMs !== undefined) (config as any).securityBlockDurationMs = blockDurationMs;
+    if (suspiciousThreshold !== undefined) (config as any).securitySuspiciousThreshold = suspiciousThreshold;
+    if (threshold404Count !== undefined) (config as any).security404CountThreshold = threshold404Count;
+    if (threshold404WindowMs !== undefined) (config as any).security404WindowMs = threshold404WindowMs;
+    if (uaBlockingEnabled !== undefined) (config as any).securityUaBlocking = !!uaBlockingEnabled;
+    if (ipGatingEnabled !== undefined) (config as any).securityIpGating = !!ipGatingEnabled;
+
+    // Persist to DB
+    let sysConfig = await SystemConfig.findOne({ configType: 'security_settings', isDeleted: false });
+    if (!sysConfig) {
+      sysConfig = await SystemConfig.create({
+        configType: 'security_settings',
+        securitySettings: {},
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+
+    if (!sysConfig.securitySettings) sysConfig.securitySettings = {} as any;
+    sysConfig.securitySettings!.autoblock = {
+      ipBlockingEnabled: config.securityIpBlocking,
+      blockDurationMs: config.securityBlockDurationMs,
+      suspiciousThreshold: config.securitySuspiciousThreshold,
+      threshold404Count: config.security404CountThreshold,
+      threshold404WindowMs: config.security404WindowMs,
+      uaBlockingEnabled: config.securityUaBlocking,
+      ipGatingEnabled: (config as any).securityIpGating ?? false,
+    };
+    sysConfig.lastUpdatedBy = req.user?.username || 'system';
+    sysConfig.markModified('securitySettings');
+    await sysConfig.save();
+
+    // Audit log
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CONFIG_CHANGE',
+      resourceType: 'autoblock_config',
+      resourceId: 'security_blocklist',
+      details: `Updated autoblock configuration: ${JSON.stringify(req.body)}`,
+      severity: 'high',
+      outcome: 'SUCCESS',
+      ipAddress: req.ip || '',
+    });
+
+    logger.info(`Autoblock config updated by ${req.user?.username}`, req.body);
+
+    res.status(200).json({
+      success: true,
+      message: 'Autoblock configuration updated',
+      data: {
+        ipBlockingEnabled: config.securityIpBlocking,
+        blockDurationMs: config.securityBlockDurationMs,
+        suspiciousThreshold: config.securitySuspiciousThreshold,
+        threshold404Count: config.security404CountThreshold,
+        threshold404WindowMs: config.security404WindowMs,
+        uaBlockingEnabled: config.securityUaBlocking,
+        ipGatingEnabled: (config as any).securityIpGating ?? false,
+      },
+    });
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    logger.error('updateAutoblockConfig error:', err);
+    throw new ApiError(500, 'Failed to update autoblock configuration');
   }
 };

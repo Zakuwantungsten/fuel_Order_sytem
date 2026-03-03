@@ -1,5 +1,7 @@
 import { config } from '../config';
 import { BlockedIP, BlockReason } from '../models/BlockedIP';
+import { IPRule } from '../models/IPRule';
+import { SystemConfig } from '../models/SystemConfig';
 import logger from '../utils/logger';
 import { securityAlertService } from './securityAlertService';
 
@@ -226,6 +228,27 @@ const BlocklistService = {
       securityAlertService.alertIPBlocked(
         normalized, reason, details || '', durationMs ?? null
       ).catch(() => {});
+
+      // IP Gating: also add as persistent IP block rule
+      if ((config as any).securityIpGating && blockedBy !== 'ip_gating') {
+        try {
+          const existing = await IPRule.findOne({ ip: normalized, type: 'block', isActive: true });
+          if (!existing) {
+            await IPRule.create({
+              ip: normalized,
+              type: 'block',
+              description: `Auto-gated: ${reason}. ${(details || '').slice(0, 200)}`,
+              isActive: true,
+              createdBy: blockedBy || 'system:ip-gating',
+            });
+            logger.info('BlocklistService: IP added to persistent block rules (IP gating)', {
+              ip: normalized, reason,
+            });
+          }
+        } catch (gateErr) {
+          logger.error('BlocklistService: Failed to add IP gating rule', { ip: normalized, gateErr });
+        }
+      }
     } catch (err) {
       logger.error('BlocklistService: Failed to persist block to DB', { ip: normalized, err });
       // In-memory block is still active even if DB persist fails
@@ -464,6 +487,37 @@ const BlocklistService = {
     blockedIPs.clear();
     suspiciousIPs.clear();
     _lastDbSync = 0;
+  },
+
+  /**
+   * Load persisted autoblock config from DB into runtime config.
+   * Called once on server startup after DB connection is ready.
+   */
+  async initConfig(): Promise<void> {
+    try {
+      const sysConfig = await SystemConfig.findOne({
+        configType: 'security_settings',
+        isDeleted: false,
+      }).lean();
+
+      const ab = sysConfig?.securitySettings?.autoblock;
+      if (ab) {
+        if (ab.ipBlockingEnabled !== undefined) (config as any).securityIpBlocking = ab.ipBlockingEnabled;
+        if (ab.blockDurationMs !== undefined) (config as any).securityBlockDurationMs = ab.blockDurationMs;
+        if (ab.suspiciousThreshold !== undefined) (config as any).securitySuspiciousThreshold = ab.suspiciousThreshold;
+        if (ab.threshold404Count !== undefined) (config as any).security404CountThreshold = ab.threshold404Count;
+        if (ab.threshold404WindowMs !== undefined) (config as any).security404WindowMs = ab.threshold404WindowMs;
+        if (ab.uaBlockingEnabled !== undefined) (config as any).securityUaBlocking = ab.uaBlockingEnabled;
+        if (ab.ipGatingEnabled !== undefined) (config as any).securityIpGating = ab.ipGatingEnabled;
+        logger.info('BlocklistService: Loaded autoblock config from DB', {
+          ipBlocking: config.securityIpBlocking,
+          blockDurationMs: config.securityBlockDurationMs,
+          suspiciousThreshold: config.securitySuspiciousThreshold,
+        });
+      }
+    } catch (err) {
+      logger.warn('BlocklistService: Could not load autoblock config from DB, using env defaults', err);
+    }
   },
 };
 

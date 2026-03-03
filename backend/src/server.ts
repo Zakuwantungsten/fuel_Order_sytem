@@ -22,6 +22,7 @@ import { fingerprintObfuscationMiddleware } from './middleware/fingerprintObfusc
 import honeypotRoutes from './routes/honeypotRoutes';
 import logger from './utils/logger';
 import { initializeWebSocket } from './services/websocket';
+import BlocklistService from './services/blocklistService';
 import { requestId } from './middleware/requestId';
 
 // Validate environment variables
@@ -229,6 +230,9 @@ const startServer = async () => {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Load persisted autoblock config from DB into runtime config
+    await BlocklistService.initConfig();
 
     // Initialize WebSocket server
     initializeWebSocket(httpServer);

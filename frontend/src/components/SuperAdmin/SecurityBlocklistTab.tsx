@@ -12,6 +12,10 @@ import {
   ChevronDown,
   ChevronUp,
   Activity,
+  Settings,
+  Save,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 
 /* ───────── Types ───────── */
@@ -77,6 +81,39 @@ const REASON_COLORS: Record<string, string> = {
   auto_escalation: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
+interface AutoblockConfig {
+  ipBlockingEnabled: boolean;
+  blockDurationMs: number;
+  suspiciousThreshold: number;
+  threshold404Count: number;
+  threshold404WindowMs: number;
+  uaBlockingEnabled: boolean;
+  ipGatingEnabled: boolean;
+}
+
+const DURATION_OPTIONS = [
+  { value: 60000, label: '1 minute' },
+  { value: 300000, label: '5 minutes' },
+  { value: 600000, label: '10 minutes' },
+  { value: 1800000, label: '30 minutes' },
+  { value: 3600000, label: '1 hour' },
+  { value: 7200000, label: '2 hours' },
+  { value: 86400000, label: '24 hours' },
+  { value: 172800000, label: '48 hours' },
+  { value: 604800000, label: '7 days' },
+  { value: 2592000000, label: '30 days' },
+  { value: 7776000000, label: '90 days' },
+  { value: 0, label: 'Permanent' },
+];
+
+const WINDOW_OPTIONS = [
+  { value: 60000, label: '1 minute' },
+  { value: 120000, label: '2 minutes' },
+  { value: 300000, label: '5 minutes' },
+  { value: 600000, label: '10 minutes' },
+  { value: 900000, label: '15 minutes' },
+];
+
 /* ───────── Helpers ───────── */
 
 const API_BASE = '/api/v1/system-admin/security-blocklist';
@@ -127,6 +164,44 @@ export default function SecurityBlocklistTab() {
   // Filters
   const [searchIP, setSearchIP] = useState('');
 
+  // Autoblock configuration
+  const [showConfig, setShowConfig] = useState(false);
+  const [autoblockConfig, setAutoblockConfig] = useState<AutoblockConfig | null>(null);
+  const [configDraft, setConfigDraft] = useState<AutoblockConfig | null>(null);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  const fetchConfig = useCallback(async () => {
+    try {
+      const data = await apiFetch<AutoblockConfig>('/config');
+      setAutoblockConfig(data);
+      setConfigDraft(data);
+    } catch (err: any) {
+      // Non-critical, don't block the rest of the UI
+    }
+  }, []);
+
+  const saveConfig = async () => {
+    if (!configDraft) return;
+    setSavingConfig(true);
+    try {
+      const updated = await apiFetch<AutoblockConfig>('/config', {
+        method: 'PUT',
+        body: JSON.stringify(configDraft),
+      });
+      setAutoblockConfig(updated);
+      setConfigDraft(updated);
+      setSuccess('Autoblock configuration saved');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingConfig(false);
+    }
+    setTimeout(() => setSuccess(null), 3000);
+  };
+
+  const configChanged = autoblockConfig && configDraft &&
+    JSON.stringify(autoblockConfig) !== JSON.stringify(configDraft);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -154,6 +229,7 @@ export default function SecurityBlocklistTab() {
   }, [tab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchConfig(); }, [fetchConfig]);
 
   const handleBlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -309,6 +385,183 @@ export default function SecurityBlocklistTab() {
           ))}
         </div>
       )}
+
+      {/* Autoblock Configuration */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowConfig(!showConfig)}
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Settings className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">Autoblock Configuration</span>
+            {autoblockConfig && (
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                autoblockConfig.ipBlockingEnabled
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              }`}>
+                {autoblockConfig.ipBlockingEnabled ? 'Active' : 'Disabled'}
+              </span>
+            )}
+          </div>
+          {showConfig ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </button>
+
+        {showConfig && configDraft && (
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-4 space-y-4">
+            {/* Toggles row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* IP Blocking toggle */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">IP Auto-Blocking</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Automatically block suspicious IPs</p>
+                </div>
+                <button
+                  onClick={() => setConfigDraft({ ...configDraft, ipBlockingEnabled: !configDraft.ipBlockingEnabled })}
+                  className="flex-shrink-0"
+                >
+                  {configDraft.ipBlockingEnabled
+                    ? <ToggleRight className="w-8 h-8 text-green-600 dark:text-green-400" />
+                    : <ToggleLeft className="w-8 h-8 text-gray-400" />
+                  }
+                </button>
+              </div>
+
+              {/* UA Blocking toggle */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">User-Agent Blocking</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Block malicious bots / user-agents</p>
+                </div>
+                <button
+                  onClick={() => setConfigDraft({ ...configDraft, uaBlockingEnabled: !configDraft.uaBlockingEnabled })}
+                  className="flex-shrink-0"
+                >
+                  {configDraft.uaBlockingEnabled
+                    ? <ToggleRight className="w-8 h-8 text-green-600 dark:text-green-400" />
+                    : <ToggleLeft className="w-8 h-8 text-gray-400" />
+                  }
+                </button>
+              </div>
+
+              {/* IP Gating toggle */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">IP Gating</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Auto-add blocked IPs to persistent rules</p>
+                </div>
+                <button
+                  onClick={() => setConfigDraft({ ...configDraft, ipGatingEnabled: !configDraft.ipGatingEnabled })}
+                  className="flex-shrink-0"
+                >
+                  {configDraft.ipGatingEnabled
+                    ? <ToggleRight className="w-8 h-8 text-green-600 dark:text-green-400" />
+                    : <ToggleLeft className="w-8 h-8 text-gray-400" />
+                  }
+                </button>
+              </div>
+            </div>
+
+            {/* Duration + thresholds */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Block Duration */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1">Auto-Block Duration</label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">How long auto-blocked IPs stay blocked</p>
+                <select
+                  value={configDraft.blockDurationMs}
+                  onChange={e => setConfigDraft({ ...configDraft, blockDurationMs: parseInt(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                >
+                  {DURATION_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Suspicious event threshold */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1">
+                  Suspicious Event Threshold
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Events before auto-block triggers</p>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={configDraft.suspiciousThreshold}
+                  onChange={e => setConfigDraft({ ...configDraft, suspiciousThreshold: parseInt(e.target.value) || 1 })}
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* 404 count threshold */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1">
+                  404 Count Threshold
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">404 errors to flag as suspicious</p>
+                <input
+                  type="number"
+                  min={5}
+                  max={500}
+                  value={configDraft.threshold404Count}
+                  onChange={e => setConfigDraft({ ...configDraft, threshold404Count: parseInt(e.target.value) || 5 })}
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* 404 sliding window */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1">
+                  404 Sliding Window
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Time window for counting 404s</p>
+                <select
+                  value={configDraft.threshold404WindowMs}
+                  onChange={e => setConfigDraft({ ...configDraft, threshold404WindowMs: parseInt(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                >
+                  {WINDOW_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Save button */}
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Changes apply immediately and persist across server restarts
+              </p>
+              <div className="flex gap-2">
+                {configChanged && (
+                  <button
+                    onClick={() => setConfigDraft(autoblockConfig)}
+                    className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                  >
+                    Discard
+                  </button>
+                )}
+                <button
+                  onClick={saveConfig}
+                  disabled={!configChanged || savingConfig}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 text-sm rounded-lg transition-colors ${
+                    configChanged
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Save className="w-4 h-4" />
+                  {savingConfig ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Reason breakdown */}
       {stats && stats.byReason && Object.keys(stats.byReason).length > 0 && (

@@ -80,4 +80,13 @@ export const ipRuleService = {
     const res = await apiClient.post(`${BASE}/test`, { ip });
     return res.data.data;
   },
+
+  getGatingConfig: async (): Promise<{ ipGatingEnabled: boolean }> => {
+    const res = await apiClient.get('/system-admin/security-blocklist/config');
+    return { ipGatingEnabled: res.data.data.ipGatingEnabled ?? false };
+  },
+
+  updateGating: async (ipGatingEnabled: boolean): Promise<void> => {
+    await apiClient.put('/system-admin/security-blocklist/config', { ipGatingEnabled });
+  },
 };

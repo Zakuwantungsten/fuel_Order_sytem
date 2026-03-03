@@ -7,6 +7,8 @@ import {
   getBlockHistory,
   blockIP,
   unblockIP,
+  getAutoblockConfig,
+  updateAutoblockConfig,
 } from '../controllers/securityBlocklistController';
 
 const router = Router();
@@ -18,6 +20,8 @@ router.get('/', getBlockedIPs);
 router.get('/suspicious', getSuspiciousIPs);
 router.get('/stats', getBlocklistStats);
 router.get('/history', getBlockHistory);
+router.get('/config', getAutoblockConfig);
+router.put('/config', updateAutoblockConfig);
 router.post('/block', blockIP);
 router.delete('/unblock/:ip', unblockIP);
 

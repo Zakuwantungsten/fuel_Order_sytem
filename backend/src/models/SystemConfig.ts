@@ -156,6 +156,15 @@ export interface ISecuritySettings {
     singleSession: boolean;
   };
   mfa?: IMFASettings;
+  autoblock?: {
+    ipBlockingEnabled: boolean;
+    blockDurationMs: number;
+    suspiciousThreshold: number;
+    threshold404Count: number;
+    threshold404WindowMs: number;
+    uaBlockingEnabled: boolean;
+    ipGatingEnabled: boolean;
+  };
 }
 
 // System Configuration Document
@@ -336,6 +345,15 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       mfa: {
         globalEnabled: { type: Boolean, default: false },
         requiredRoles: { type: [String], default: [] },
+      },
+      autoblock: {
+        ipBlockingEnabled: { type: Boolean, default: true },
+        blockDurationMs: { type: Number, default: 600000 },
+        suspiciousThreshold: { type: Number, default: 5 },
+        threshold404Count: { type: Number, default: 30 },
+        threshold404WindowMs: { type: Number, default: 300000 },
+        uaBlockingEnabled: { type: Boolean, default: true },
+        ipGatingEnabled: { type: Boolean, default: false },
       },
     },
     lastUpdatedBy: { type: String, required: true },

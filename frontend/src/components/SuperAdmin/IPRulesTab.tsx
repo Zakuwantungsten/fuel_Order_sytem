@@ -56,6 +56,10 @@ export default function IPRulesTab({ onMessage }: Props) {
   const [testResult, setTestResult] = useState<{ verdict: 'allow' | 'block' | 'none'; matchedRule?: string } | null>(null);
   const [testing, setTesting] = useState(false);
 
+  // IP gating
+  const [ipGatingEnabled, setIpGatingEnabled] = useState(false);
+  const [gatingLoading, setGatingLoading] = useState(false);
+
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -69,6 +73,10 @@ export default function IPRulesTab({ onMessage }: Props) {
   }, [onMessage]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    ipRuleService.getGatingConfig().then(cfg => setIpGatingEnabled(cfg.ipGatingEnabled)).catch(() => {});
+  }, []);
 
   const filtered = rules.filter((r) => {
     const matchSearch = !search || r.ip.includes(search) || r.description.toLowerCase().includes(search.toLowerCase());
@@ -161,6 +169,20 @@ export default function IPRulesTab({ onMessage }: Props) {
     }
   }
 
+  async function handleToggleGating() {
+    setGatingLoading(true);
+    try {
+      const newVal = !ipGatingEnabled;
+      await ipRuleService.updateGating(newVal);
+      setIpGatingEnabled(newVal);
+      onMessage(newVal ? 'IP gating enabled — auto-blocked IPs will be added as persistent block rules' : 'IP gating disabled', 'success');
+    } catch {
+      onMessage('Failed to update IP gating', 'error');
+    } finally {
+      setGatingLoading(false);
+    }
+  }
+
   const hasAllowRules = activeAllowCount > 0;
 
   return (
@@ -214,6 +236,46 @@ export default function IPRulesTab({ onMessage }: Props) {
             <p className={`text-2xl font-bold ${color}`}>{count}</p>
           </div>
         ))}
+      </div>
+
+      {/* IP Gating */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${ipGatingEnabled ? 'bg-indigo-100 dark:bg-indigo-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
+              <ShieldOff className={`w-4 h-4 ${ipGatingEnabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">IP Gating</h3>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                  ipGatingEnabled
+                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+                    : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                }`}>
+                  {ipGatingEnabled ? 'Active' : 'Off'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                When enabled, IPs auto-blocked by the security blocklist are automatically added here as persistent block rules.
+                This ensures blocks survive server restarts and memory clears.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleToggleGating}
+            disabled={gatingLoading}
+            className="flex-shrink-0 ml-4"
+          >
+            {gatingLoading ? (
+              <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+            ) : ipGatingEnabled ? (
+              <ToggleRight className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+            ) : (
+              <ToggleLeft className="w-8 h-8 text-gray-400" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* IP Tester */}
@@ -388,6 +450,11 @@ export default function IPRulesTab({ onMessage }: Props) {
                           Inactive
                         </span>
                       )}
+                      {(rule.createdBy === 'system:ip-gating' || rule.description?.startsWith('Auto-gated:')) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                          Auto-gated
+                        </span>
+                      )}
                     </div>
                     {rule.description && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{rule.description}</p>
@@ -524,6 +591,31 @@ export default function IPRulesTab({ onMessage }: Props) {
                   className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${form.isActive ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'}`}
                 >
                   <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${form.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* IP Gating (global) */}
+              <div className="flex items-center justify-between p-3 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">IP Gating</p>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${ipGatingEnabled ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
+                      {ipGatingEnabled ? 'On' : 'Off'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">Auto-add dynamically detected suspicious IPs as block rules</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleGating}
+                  disabled={gatingLoading}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${ipGatingEnabled ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'}`}
+                >
+                  {gatingLoading ? (
+                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  ) : (
+                    <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${ipGatingEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                  )}
                 </button>
               </div>
             </div>

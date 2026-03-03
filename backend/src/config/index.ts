@@ -64,6 +64,7 @@ export const config = {
   securityAlertEmail: process.env.SECURITY_ALERT_EMAIL || '',
   securityAlertCooldownMs: parseInt(process.env.SECURITY_ALERT_COOLDOWN_MS || '300000', 10), // 5 min
   securityUaBlocking: process.env.SECURITY_UA_BLOCKING !== 'false',       // enabled by default
+  securityIpGating: process.env.SECURITY_IP_GATING === 'true',           // disabled by default
   securityEventRetentionDays: parseInt(process.env.SECURITY_EVENT_RETENTION_DAYS || '90', 10),
 
   // Web Push (VAPID) — used for browser push notifications
