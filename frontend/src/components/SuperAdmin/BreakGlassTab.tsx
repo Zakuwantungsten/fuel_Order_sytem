@@ -27,10 +27,15 @@ export default function BreakGlassTab() {
 
   const [form, setForm] = useState({ username: '', description: '', password: '', confirmPassword: '' });
 
-  const headers = () => ({
+const headers = () => {
+  const h: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-  });
+  };
+  const match = decodeURIComponent(document.cookie).split(';').map(c => c.trim()).find(c => c.startsWith('XSRF-TOKEN='));
+  if (match) h['X-XSRF-TOKEN'] = match.substring('XSRF-TOKEN='.length);
+  return h;
+};
 
   const fetchAccounts = async () => {
     setLoading(true);

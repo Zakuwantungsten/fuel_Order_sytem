@@ -102,10 +102,15 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
     return next;
   });
 
-  const authHeaders = () => ({
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-  });
+  const authHeaders = () => {
+    const h: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
+    };
+    const match = decodeURIComponent(document.cookie).split(';').map(c => c.trim()).find(c => c.startsWith('XSRF-TOKEN='));
+    if (match) h['X-XSRF-TOKEN'] = match.substring('XSRF-TOKEN='.length);
+    return h;
+  };
 
   /* ── Load security settings ── */
   const applySettings = useCallback((data: { session?: any; password?: any; mfa?: any; notifications?: any }) => {

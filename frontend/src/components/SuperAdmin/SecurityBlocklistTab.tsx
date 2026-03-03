@@ -120,13 +120,20 @@ const API_BASE = '/api/v1/system-admin/security-blocklist';
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const token = sessionStorage.getItem('fuel_order_token');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+    ...(opts?.headers as Record<string, string> || {}),
+  };
+  // Attach CSRF token for state-changing requests
+  const method = (opts?.method || 'GET').toUpperCase();
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const match = decodeURIComponent(document.cookie).split(';').map(c => c.trim()).find(c => c.startsWith('XSRF-TOKEN='));
+    if (match) headers['X-XSRF-TOKEN'] = match.substring('XSRF-TOKEN='.length);
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(opts?.headers || {}),
-    },
+    headers,
   });
   const json = await res.json();
   if (!res.ok || !json.success) throw new Error(json.message || 'Request failed');

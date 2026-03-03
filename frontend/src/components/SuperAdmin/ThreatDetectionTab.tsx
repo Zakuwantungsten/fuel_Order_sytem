@@ -34,10 +34,15 @@ export default function ThreatDetectionTab() {
   const [baseline, setBaseline] = useState<UserBaseline | null>(null);
   const [baselineLoading, setBaselineLoading] = useState(false);
 
-  const headers = () => ({
+const headers = () => {
+  const h: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-  });
+  };
+  const match = decodeURIComponent(document.cookie).split(';').map(c => c.trim()).find(c => c.startsWith('XSRF-TOKEN='));
+  if (match) h['X-XSRF-TOKEN'] = match.substring('XSRF-TOKEN='.length);
+  return h;
+};
 
   const fetchOverview = async () => {
     setLoading(true);
