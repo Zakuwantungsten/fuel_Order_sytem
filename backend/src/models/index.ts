@@ -18,6 +18,8 @@ export { SecurityEvent, ISecurityEvent } from './SecurityEvent';
 export { FuelPriceHistory, FuelPriceSchedule, IFuelPriceHistory, IFuelPriceSchedule } from './FuelPrice';
 export { FeatureFlag, IFeatureFlag } from './FeatureFlag';
 export { default as Webhook, IWebhook, WEBHOOK_EVENTS } from './Webhook';
+export { PendingOTP, IPendingOTP } from './PendingOTP';
+export { LoginActivity, ILoginActivity } from './LoginActivity';
 
 // Export fleet tracking models
 export { Checkpoint, ICheckpoint } from './Checkpoint';

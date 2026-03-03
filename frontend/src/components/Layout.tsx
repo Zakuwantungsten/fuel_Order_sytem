@@ -21,6 +21,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo, RESOURCES, ACTIONS } from '../utils/permissions';
 import NotificationBell from './NotificationBell';
+import DevicesSessionsPanel from './DevicesSessionsPanel';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -33,6 +34,7 @@ const Layout = ({ children }: LayoutProps) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSecurityPanel, setShowSecurityPanel] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   
   const { user, hasPermission, logout, toggleTheme, isDark } = useAuth();
@@ -322,6 +324,17 @@ const Layout = ({ children }: LayoutProps) => {
                       <User className="w-4 h-4 mr-3" />
                       Profile Settings
                     </button>
+
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        setShowSecurityPanel(true);
+                      }}
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      <Shield className="w-4 h-4 mr-3" />
+                      Security & Devices
+                    </button>
                     
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                     <button
@@ -452,6 +465,19 @@ const Layout = ({ children }: LayoutProps) => {
                       <User className="w-4 h-4 mr-3" />
                       Profile Settings
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        setShowSecurityPanel(true);
+                      }}
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <Shield className="w-4 h-4 mr-3" />
+                      Security & Devices
+                    </button>
                     
                     <button
                       type="button"
@@ -496,6 +522,16 @@ const Layout = ({ children }: LayoutProps) => {
           {children}
         </main>
       </div>
+
+      {/* Security & Devices Modal */}
+      {showSecurityPanel && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSecurityPanel(false)} />
+          <div className="relative z-[210] w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+            <DevicesSessionsPanel onClose={() => setShowSecurityPanel(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

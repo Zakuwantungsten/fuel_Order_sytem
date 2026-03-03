@@ -12,48 +12,47 @@ interface TOTPSetupData {
   manualEntryKey: string;
 }
 
+type Step = 'method' | 'totp-scan' | 'totp-verify' | 'email-verify' | 'sms-phone' | 'sms-verify' | 'backup-codes';
+
 export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
-  const [step, setStep] = useState<'method' | 'totp-scan' | 'totp-verify' | 'backup-codes'>('method');
+  const [step, setStep] = useState<Step>('method');
   const [totpData, setTotpData] = useState<TOTPSetupData | null>(null);
   const [verificationCode, setVerificationCode] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedBackupCodes, setCopiedBackupCodes] = useState(false);
 
+  const authHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
+  });
+
   const handleMethodSelection = async (method: 'totp' | 'sms' | 'email') => {
+    setError('');
+    setVerificationCode('');
     if (method === 'totp') {
       await generateTOTPSecret();
+    } else if (method === 'email') {
+      await startEmailSetup();
+    } else if (method === 'sms') {
+      setStep('sms-phone');
     }
-    // SMS and Email can be implemented later
   };
 
+  // ── TOTP ──
   const generateTOTPSecret = async () => {
     setLoading(true);
     setError('');
-    
     try {
-      const response = await fetch('/api/mfa/setup/totp/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to generate TOTP secret');
-      }
-
+      const res = await fetch('/api/mfa/setup/totp/generate', { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to generate TOTP secret');
       setTotpData(data.data);
       setStep('totp-scan');
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
   };
 
   const handleVerifyTOTP = async () => {
@@ -113,6 +112,68 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
     URL.revokeObjectURL(url);
   };
 
+  // ── Email OTP ──
+  const startEmailSetup = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/mfa/setup/email/enable', { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to send email code');
+      setStep('email-verify');
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const handleVerifyEmail = async () => {
+    if (!verificationCode) { setError('Please enter the code'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/mfa/setup/email/verify', {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ code: verificationCode }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Invalid code');
+      onComplete();
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  // ── SMS OTP ──
+  const handleSendSMSCode = async () => {
+    if (!phoneNumber) { setError('Enter your phone number'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/mfa/setup/sms/send', {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ phoneNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to send SMS');
+      setStep('sms-verify');
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const handleVerifySMS = async () => {
+    if (!verificationCode) { setError('Enter the code'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/mfa/setup/sms/verify', {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ code: verificationCode, phoneNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Invalid code');
+      onComplete();
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
   return (
     <div className="max-w-lg mx-auto p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
       <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
@@ -146,11 +207,12 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
           </button>
 
           <button
-            disabled
-            className="w-full p-4 text-left border-2 border-gray-300 dark:border-gray-600 rounded-lg opacity-50 cursor-not-allowed"
+            onClick={() => handleMethodSelection('email')}
+            disabled={loading}
+            className="w-full p-4 text-left border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
           >
             <h3 className="font-semibold text-gray-900 dark:text-white">
-              📧 Email (Coming Soon)
+              📧 Email
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Receive codes via email
@@ -158,11 +220,12 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
           </button>
 
           <button
-            disabled
-            className="w-full p-4 text-left border-2 border-gray-300 dark:border-gray-600 rounded-lg opacity-50 cursor-not-allowed"
+            onClick={() => handleMethodSelection('sms')}
+            disabled={loading}
+            className="w-full p-4 text-left border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
           >
             <h3 className="font-semibold text-gray-900 dark:text-white">
-              📱 SMS (Coming Soon)
+              💬 SMS
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Receive codes via text message
@@ -290,6 +353,118 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
             className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
           >
             I've Saved My Backup Codes
+          </button>
+        </div>
+      )}
+
+      {/* Email Verify Step */}
+      {step === 'email-verify' && (
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              📧 We sent a 6-digit verification code to your email. Check your inbox.
+            </p>
+          </div>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={verificationCode}
+            onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="000000"
+            className="w-full px-4 py-3 text-center text-2xl font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            autoFocus
+          />
+          <button
+            onClick={handleVerifyEmail}
+            disabled={loading || verificationCode.length !== 6}
+            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            {loading ? 'Verifying...' : 'Verify & Enable Email OTP'}
+          </button>
+          <button
+            onClick={() => startEmailSetup()}
+            disabled={loading}
+            className="w-full px-4 py-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            Resend code
+          </button>
+          <button
+            onClick={() => { setStep('method'); setVerificationCode(''); }}
+            className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
+          >
+            Back
+          </button>
+        </div>
+      )}
+
+      {/* SMS Phone Number Step */}
+      {step === 'sms-phone' && (
+        <div className="space-y-4">
+          <p className="text-gray-600 dark:text-gray-300">
+            Enter your phone number to receive verification codes via SMS:
+          </p>
+          <input
+            type="tel"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="+1 234 567 8900"
+            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            autoFocus
+          />
+          <button
+            onClick={handleSendSMSCode}
+            disabled={loading || !phoneNumber}
+            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            {loading ? 'Sending...' : 'Send Verification Code'}
+          </button>
+          <button
+            onClick={() => setStep('method')}
+            className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
+          >
+            Back
+          </button>
+        </div>
+      )}
+
+      {/* SMS Verify Step */}
+      {step === 'sms-verify' && (
+        <div className="space-y-4">
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
+            <p className="text-sm text-green-800 dark:text-green-200">
+              💬 Code sent to {phoneNumber}
+            </p>
+          </div>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={verificationCode}
+            onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="000000"
+            className="w-full px-4 py-3 text-center text-2xl font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            autoFocus
+          />
+          <button
+            onClick={handleVerifySMS}
+            disabled={loading || verificationCode.length !== 6}
+            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            {loading ? 'Verifying...' : 'Verify & Enable SMS OTP'}
+          </button>
+          <button
+            onClick={() => handleSendSMSCode()}
+            disabled={loading}
+            className="w-full px-4 py-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            Resend code
+          </button>
+          <button
+            onClick={() => { setStep('sms-phone'); setVerificationCode(''); }}
+            className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
+          >
+            Back
           </button>
         </div>
       )}

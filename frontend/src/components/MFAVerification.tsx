@@ -21,6 +21,8 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
   const [deviceName, setDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
 
   useEffect(() => {
     // Auto-generate device name
@@ -28,6 +30,45 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
     const os = getOSName();
     setDeviceName(`${browser} on ${os}`);
   }, []);
+
+  // Auto-send OTP if preferred method is email or sms
+  useEffect(() => {
+    if (preferredMethod === 'email' || preferredMethod === 'sms') {
+      sendOTP(preferredMethod);
+    }
+  }, [preferredMethod]);
+
+  const sendOTP = async (otpMethod: 'email' | 'sms') => {
+    setSendingOtp(true);
+    setError('');
+    try {
+      const response = await fetch('/api/v1/mfa/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, method: otpMethod }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to send verification code');
+      }
+      setOtpSent(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleMethodSelect = (m: 'totp' | 'backup' | 'sms' | 'email') => {
+    setMethod(m);
+    setCode('');
+    setError('');
+    if (m === 'email' || m === 'sms') {
+      sendOTP(m);
+    } else {
+      setOtpSent(false);
+    }
+  };
 
   const getBrowserName = (): string => {
     const userAgent = navigator.userAgent;
@@ -134,11 +175,11 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
         </label>
         <div className="space-y-2">
           <button
-            onClick={() => setMethod('totp')}
-            className={`w-full p-3 text-left border-2 rounded transition-colors ${
+            onClick={() => handleMethodSelect('totp')}
+            className={`w-full p-3 text-left border-2 rounded-lg transition-colors ${
               method === 'totp'
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-                : 'border-gray-300 dark:border-gray-600'
+                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
             }`}
           >
             <span className="font-semibold">📱 Authenticator App</span>
@@ -148,11 +189,39 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
           </button>
 
           <button
-            onClick={() => setMethod('backup')}
-            className={`w-full p-3 text-left border-2 rounded transition-colors ${
+            onClick={() => handleMethodSelect('email')}
+            className={`w-full p-3 text-left border-2 rounded-lg transition-colors ${
+              method === 'email'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+            }`}
+          >
+            <span className="font-semibold">📧 Email Code</span>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {sendingOtp && method === 'email' ? 'Sending code...' : 'Get a code sent to your email'}
+            </p>
+          </button>
+
+          <button
+            onClick={() => handleMethodSelect('sms')}
+            className={`w-full p-3 text-left border-2 rounded-lg transition-colors ${
+              method === 'sms'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+            }`}
+          >
+            <span className="font-semibold">💬 SMS Code</span>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {sendingOtp && method === 'sms' ? 'Sending code...' : 'Get a code sent via SMS'}
+            </p>
+          </button>
+
+          <button
+            onClick={() => handleMethodSelect('backup')}
+            className={`w-full p-3 text-left border-2 rounded-lg transition-colors ${
               method === 'backup'
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-                : 'border-gray-300 dark:border-gray-600'
+                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
             }`}
           >
             <span className="font-semibold">🔑 Backup Code</span>
@@ -162,6 +231,22 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
           </button>
         </div>
       </div>
+
+      {/* OTP Sent Confirmation */}
+      {otpSent && (method === 'email' || method === 'sms') && (
+        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
+          <p className="text-sm text-green-800 dark:text-green-200">
+            {method === 'email' ? '📧 Code sent to your email' : '💬 Code sent via SMS'}
+          </p>
+          <button
+            onClick={() => sendOTP(method)}
+            disabled={sendingOtp}
+            className="text-xs text-green-600 dark:text-green-400 hover:underline mt-1"
+          >
+            {sendingOtp ? 'Sending...' : 'Resend code'}
+          </button>
+        </div>
+      )}
 
       {/* Code Input */}
       <div className="mb-6">
@@ -220,10 +305,10 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
       </div>
 
       {/* Help Text */}
-      <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-700 rounded text-sm text-gray-600 dark:text-gray-400">
-        <p className="font-semibold mb-1">Lost your device?</p>
+      <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-400">
+        <p className="font-semibold mb-1">Can't access your verification method?</p>
         <p>
-          Use one of your backup codes to access your account, then you can reconfigure MFA.
+          Try another method above, or use a backup code. If you're locked out, contact your administrator.
         </p>
       </div>
     </div>

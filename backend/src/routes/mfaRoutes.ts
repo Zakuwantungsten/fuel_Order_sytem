@@ -27,6 +27,17 @@ router.post(
   mfaController.verifyAndEnableTOTP
 );
 
+// Email OTP Setup
+router.post('/setup/email/enable', authenticate, mfaSetupLimiter, mfaController.enableEmailOTP);
+router.post('/setup/email/verify', authenticate, mfaSetupLimiter, mfaController.verifyAndEnableEmailOTP);
+
+// SMS OTP Setup
+router.post('/setup/sms/send', authenticate, mfaSetupLimiter, mfaController.sendSMSSetupOTP);
+router.post('/setup/sms/verify', authenticate, mfaSetupLimiter, mfaController.verifyAndEnableSMSOTP);
+
+// Send OTP for login verification (public - uses userId from temp session)
+router.post('/send-otp', mfaVerifyLimiter, mfaController.sendLoginOTP);
+
 // MFA Verification (during login)
 router.post('/verify', mfaVerifyLimiter, mfaController.verifyMFACode);
 
@@ -51,5 +62,10 @@ router.delete(
 
 // Check if device is trusted (public, but needs user context)
 router.post('/check-device', mfaController.checkTrustedDevice);
+
+// Login Activity / Sessions
+router.get('/login-activity', authenticate, mfaController.getLoginActivity);
+router.delete('/sessions/:sessionId', authenticate, mfaController.revokeSession);
+router.post('/sessions/revoke-all', authenticate, mfaController.revokeAllOtherSessions);
 
 export default router;

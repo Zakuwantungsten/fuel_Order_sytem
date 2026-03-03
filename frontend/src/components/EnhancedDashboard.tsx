@@ -62,6 +62,7 @@ import NotificationsPage from './NotificationsPage';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
+import DevicesSessionsPanel from './DevicesSessionsPanel';
 
 // Import your existing components
 import Dashboard from '../pages/Dashboard';
@@ -153,6 +154,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   });
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showSecurityPanel, setShowSecurityPanel] = useState(false);
   const [showPendingYardFuel, setShowPendingYardFuel] = useState(false);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [editDoId, setEditDoId] = useState<string | null>(null);
@@ -627,6 +629,16 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                       <Key className="w-4 h-4 mr-3" />
                       Change Password
                     </button>
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        setShowSecurityPanel(true);
+                      }}
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      <Shield className="w-4 h-4 mr-3" />
+                      Security & Devices
+                    </button>
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                     <button
                       onClick={() => {
@@ -727,6 +739,16 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                         <Key className="w-4 h-4 mr-3" />
                         Change Password
                       </button>
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          setShowSecurityPanel(true);
+                        }}
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        <Shield className="w-4 h-4 mr-3" />
+                        Security & Devices
+                      </button>
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                       <button
                         onClick={() => {
@@ -772,6 +794,16 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             setTimeout(() => setSuccessMessage(null), 5000);
           }}
         />
+      )}
+
+      {/* Security & Devices Modal */}
+      {showSecurityPanel && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSecurityPanel(false)} />
+          <div className="relative z-[210] w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+            <DevicesSessionsPanel onClose={() => setShowSecurityPanel(false)} />
+          </div>
+        </div>
       )}
 
       {/* Pending Yard Fuel Modal */}

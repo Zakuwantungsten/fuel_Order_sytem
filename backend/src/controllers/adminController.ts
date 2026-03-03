@@ -2189,10 +2189,16 @@ export const getSecuritySettings = async (req: AuthRequest, res: Response): Prom
       requiredRoles: [],
     };
 
+    const notifications = config?.systemSettings?.notifications || {
+      loginNotifications: true,
+      newDeviceAlerts: true,
+      deviceTracking: true,
+    };
+
     res.status(200).json({
       success: true,
       message: 'Security settings retrieved successfully',
-      data: { session, password, mfa },
+      data: { session, password, mfa, notifications },
     });
   } catch (error: any) {
     logger.error('Error getting security settings:', error);
@@ -2211,7 +2217,7 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       throw new ApiError(400, 'Type and settings are required');
     }
 
-    const validTypes = ['password', 'session', 'mfa'];
+    const validTypes = ['password', 'session', 'mfa', 'notifications'];
     if (!validTypes.includes(type)) {
       throw new ApiError(400, 'Invalid security settings type');
     }
@@ -2246,6 +2252,14 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       if (settings.globalEnabled !== undefined) config.securitySettings!.mfa!.globalEnabled = settings.globalEnabled;
       if (Array.isArray(settings.requiredRoles)) config.securitySettings!.mfa!.requiredRoles = settings.requiredRoles;
       config.markModified('securitySettings');
+    } else if (type === 'notifications') {
+      if (!config.systemSettings) config.systemSettings = {} as any;
+      if (!config.systemSettings!.notifications) config.systemSettings!.notifications = {} as any;
+      const n = config.systemSettings!.notifications!;
+      if (settings.loginNotifications !== undefined) n.loginNotifications = settings.loginNotifications;
+      if (settings.newDeviceAlerts !== undefined) n.newDeviceAlerts = settings.newDeviceAlerts;
+      if (settings.deviceTracking !== undefined) n.deviceTracking = settings.deviceTracking;
+      config.markModified('systemSettings');
     }
 
     config.lastUpdatedBy = req.user?.username || 'system';

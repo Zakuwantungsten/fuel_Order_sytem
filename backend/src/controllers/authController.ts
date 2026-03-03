@@ -2,6 +2,7 @@ import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { User, DriverCredential, SystemConfig } from '../models';
 import { MFA } from '../models/MFA';
+import LoginActivity from '../models/LoginActivity';
 import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger, createDriverUserId } from '../utils';
 import { AuditService } from '../utils/auditService';
@@ -16,6 +17,25 @@ import { getPasswordPolicy, enforcePasswordPolicy } from '../utils/passwordPolic
 import { checkBreachedPassword } from '../utils/breachedPasswordCheck';
 import { assessLoginRisk } from '../utils/riskScoringService';
 
+/** Helper: parses UA for browser/os/deviceType */
+function parseUA(ua: string) {
+  let browser = 'Unknown', os = 'Unknown', deviceType: 'desktop' | 'mobile' | 'tablet' | 'unknown' = 'unknown';
+  if (ua.includes('Edg/')) browser = 'Microsoft Edge';
+  else if (ua.includes('OPR/')) browser = 'Opera';
+  else if (ua.includes('Chrome/')) browser = 'Google Chrome';
+  else if (ua.includes('Firefox/')) browser = 'Firefox';
+  else if (ua.includes('Safari/') && !ua.includes('Chrome')) browser = 'Safari';
+  if (ua.includes('Windows NT 10')) os = 'Windows 10/11';
+  else if (ua.includes('Windows')) os = 'Windows';
+  else if (ua.includes('Mac OS X')) os = 'macOS';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+  else if (ua.includes('Linux')) os = 'Linux';
+  if (ua.includes('Mobi')) deviceType = 'mobile';
+  else if (ua.includes('Tablet') || ua.includes('iPad')) deviceType = 'tablet';
+  else if (ua.includes('Windows') || ua.includes('Mac') || ua.includes('Linux')) deviceType = 'desktop';
+  return { browser, os, deviceType };
+}
 
 /**
  * Register a new user
@@ -510,6 +530,26 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       refreshToken,
     };
 
+    // Record login activity & send notification email (fire-and-forget)
+    const notifSettings = sessionConfig?.systemSettings?.notifications;
+    const deviceTrackingEnabled = notifSettings?.deviceTracking !== false; // default true
+    const loginNotifsEnabled = notifSettings?.loginNotifications !== false; // default true
+    const ua = req.get('user-agent') || '';
+    const ip = req.ip || 'unknown';
+    const parsed = parseUA(ua);
+    if (deviceTrackingEnabled) {
+      (LoginActivity as any).recordLogin(
+        user._id.toString(), user.refreshToken, ip, ua
+      ).then((activity: any) => {
+        if (loginNotifsEnabled) {
+          emailService.sendLoginNotification(user.email, user.firstName || user.username, {
+            browser: parsed.browser, os: parsed.os, ipAddress: ip,
+            time: new Date(), isNewDevice: activity.isNewDevice, deviceType: parsed.deviceType,
+          }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
+        }
+      }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
+    }
+
     res.status(200).json({
       success: true,
       message: 'Login successful',
@@ -641,6 +681,26 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
       refreshToken,
     };
 
+    // Record login activity & send notification (fire-and-forget)
+    const mfaNotifSettings = sessionConfig?.systemSettings?.notifications;
+    const mfaDeviceTracking = mfaNotifSettings?.deviceTracking !== false;
+    const mfaLoginNotifs = mfaNotifSettings?.loginNotifications !== false;
+    const mfaUA = req.get('user-agent') || '';
+    const mfaIP = req.ip || 'unknown';
+    const mfaParsed = parseUA(mfaUA);
+    if (mfaDeviceTracking) {
+      (LoginActivity as any).recordLogin(
+        user._id.toString(), user.refreshToken, mfaIP, mfaUA, verificationResult.methodUsed
+      ).then((activity: any) => {
+        if (mfaLoginNotifs) {
+          emailService.sendLoginNotification(user.email, user.firstName || user.username, {
+            browser: mfaParsed.browser, os: mfaParsed.os, ipAddress: mfaIP,
+            time: new Date(), isNewDevice: activity.isNewDevice, deviceType: mfaParsed.deviceType,
+          }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
+        }
+      }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
+    }
+
     res.status(200).json({
       success: true,
       message: 'MFA verification successful. Login complete.',
@@ -770,6 +830,26 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
       accessToken,
       refreshToken,
     };
+
+    // Record login activity & send notification (fire-and-forget)
+    const setupNotifSettings = sessionConfig?.systemSettings?.notifications;
+    const setupDeviceTracking = setupNotifSettings?.deviceTracking !== false;
+    const setupLoginNotifs = setupNotifSettings?.loginNotifications !== false;
+    const setupUA = req.get('user-agent') || '';
+    const setupIP = req.ip || 'unknown';
+    const setupParsed = parseUA(setupUA);
+    if (setupDeviceTracking) {
+      (LoginActivity as any).recordLogin(
+        user._id.toString(), user.refreshToken, setupIP, setupUA, 'totp_setup'
+      ).then((activity: any) => {
+        if (setupLoginNotifs) {
+          emailService.sendLoginNotification(user.email, user.firstName || user.username, {
+            browser: setupParsed.browser, os: setupParsed.os, ipAddress: setupIP,
+            time: new Date(), isNewDevice: activity.isNewDevice, deviceType: setupParsed.deviceType,
+          }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
+        }
+      }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
+    }
 
     res.status(200).json({
       success: true,

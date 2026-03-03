@@ -111,6 +111,9 @@ export interface ISystemSettings {
     weeklyReport: boolean;
     slowQueryThreshold: number; // ms
     storageWarningThreshold: number; // percentage
+    loginNotifications: boolean; // Send email on every login
+    newDeviceAlerts: boolean; // Extra alert for new device sign-ins
+    deviceTracking: boolean; // Track login devices and sessions
   };
   // Email Configuration
   email?: {
@@ -313,6 +316,9 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         weeklyReport: { type: Boolean, default: true },
         slowQueryThreshold: { type: Number, default: 500 },
         storageWarningThreshold: { type: Number, default: 80 },
+        loginNotifications: { type: Boolean, default: true },
+        newDeviceAlerts: { type: Boolean, default: true },
+        deviceTracking: { type: Boolean, default: true },
       },
       email: {
         host: { type: String, default: '' },

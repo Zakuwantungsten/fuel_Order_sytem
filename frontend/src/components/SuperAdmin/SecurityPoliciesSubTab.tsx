@@ -3,7 +3,7 @@ import {
   Lock, Key, Fingerprint, ShieldBan, Mail, Save,
   Loader2, AlertTriangle, Send, CheckCircle, XCircle,
   Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw,
-  ChevronDown, ChevronRight, X, Shield,
+  ChevronDown, ChevronRight, X, Shield, Bell,
 } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
 import { subscribeToSecurityEvents, unsubscribeFromSecurityEvents } from '../../services/websocket';
@@ -40,6 +40,7 @@ interface Props {
 const DEFAULT_SESSION = { sessionTimeout: 30, jwtExpiry: 24, refreshTokenExpiry: 7, maxLoginAttempts: 5, lockoutDuration: 15, allowMultipleSessions: true };
 const DEFAULT_PASSWORD = { minLength: 12, requireUppercase: true, requireLowercase: true, requireNumbers: true, requireSpecialChars: true, historyCount: 5 };
 const DEFAULT_MFA = { globalEnabled: false, requiredRoles: [] as string[] };
+const DEFAULT_NOTIFICATIONS = { loginNotifications: true, newDeviceAlerts: true, deviceTracking: true };
 
 const ALL_ROLES = [
   { value: 'super_admin', label: 'Super Admin' }, { value: 'admin', label: 'Admin' },
@@ -69,9 +70,11 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
   const [savingSession, setSavingSession] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [savingMFA, setSavingMFA] = useState(false);
+  const [savingNotifications, setSavingNotifications] = useState(false);
   const [sessionSettings, setSessionSettings] = useState(DEFAULT_SESSION);
   const [passwordPolicy, setPasswordPolicy] = useState(DEFAULT_PASSWORD);
   const [mfaSettings, setMfaSettings] = useState(DEFAULT_MFA);
+  const [notifSettings, setNotifSettings] = useState(DEFAULT_NOTIFICATIONS);
 
   /* Email */
   const [emailStatus, setEmailStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
@@ -105,10 +108,11 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
   });
 
   /* ── Load security settings ── */
-  const applySettings = useCallback((data: { session?: any; password?: any; mfa?: any }) => {
+  const applySettings = useCallback((data: { session?: any; password?: any; mfa?: any; notifications?: any }) => {
     if (data.session) setSessionSettings(prev => ({ ...prev, ...data.session }));
     if (data.password) setPasswordPolicy(prev => ({ ...prev, ...data.password }));
     if (data.mfa) setMfaSettings(prev => ({ ...prev, ...data.mfa }));
+    if (data.notifications) setNotifSettings(prev => ({ ...prev, ...data.notifications }));
   }, []);
 
   useEffect(() => {
@@ -169,6 +173,15 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
       onMessage('success', 'MFA settings saved');
     } catch (err: any) { onMessage('error', err.response?.data?.message || 'Failed'); }
     finally { setSavingMFA(false); }
+  };
+
+  const saveNotifications = async () => {
+    setSavingNotifications(true);
+    try {
+      await systemAdminAPI.updateSecuritySettings('notifications', notifSettings);
+      onMessage('success', 'Login security settings saved');
+    } catch (err: any) { onMessage('error', err.response?.data?.message || 'Failed'); }
+    finally { setSavingNotifications(false); }
   };
 
   const toggleMFARole = (role: string) => {
@@ -404,6 +417,42 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
         </div>
         <div className="flex justify-end">
           <SaveBtn label="Save MFA Settings" saving={savingMFA} onClick={saveMFA} />
+        </div>
+      </SectionCard>
+
+      {/* ═══════ Login Security ═══════ */}
+      <SectionCard title="Login Security" icon={<Bell className="w-5 h-5" />} open={expanded.has('loginSecurity')} onToggle={() => toggle('loginSecurity')}>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4 flex items-start gap-2">
+          <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            Control login-related security features for all users. These settings affect login activity tracking, email notifications, and new device detection.
+          </p>
+        </div>
+        <div className="space-y-3 mb-4">
+          {[
+            { key: 'deviceTracking' as const, label: 'Device & Session Tracking', desc: 'Track login activity including browser, OS, IP address, and device type for all users' },
+            { key: 'loginNotifications' as const, label: 'Login Notification Emails', desc: 'Send an email notification to users each time they sign in from any device' },
+            { key: 'newDeviceAlerts' as const, label: 'New Device Alerts', desc: 'Send a special alert email when a user signs in from a previously unseen device' },
+          ].map(({ key, label, desc }) => (
+            <div key={key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-gray-100">{label}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
+              </div>
+              <button
+                onClick={() => setNotifSettings(p => ({ ...p, [key]: !p[key] }))}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                  notifSettings[key] ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}>
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                  notifSettings[key] ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end">
+          <SaveBtn label="Save Login Security" saving={savingNotifications} onClick={saveNotifications} />
         </div>
       </SectionCard>
 

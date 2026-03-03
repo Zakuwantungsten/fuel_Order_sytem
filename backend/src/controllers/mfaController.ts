@@ -5,6 +5,7 @@ import { MFA } from '../models/MFA';
 import { User } from '../models/User';
 import { asyncHandler } from '../middleware/errorHandler';
 import { AuditService } from '../utils/auditService';
+import LoginActivity from '../models/LoginActivity';
 import crypto from 'crypto';
 
 /**
@@ -353,6 +354,189 @@ export const checkTrustedDevice = asyncHandler(async (req: AuthRequest, res: Res
   });
 });
 
+/**
+ * @route   POST /api/mfa/setup/email/enable
+ * @desc    Enable Email OTP as an MFA method
+ * @access  Private
+ */
+export const enableEmailOTP = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  if (!userId) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
+
+  const user = await User.findById(userId);
+  if (!user) { res.status(404).json({ success: false, message: 'User not found' }); return; }
+
+  // Send a verification OTP to the user's email
+  await mfaService.sendEmailOTP(userId, user.email);
+
+  res.json({ success: true, message: 'Verification code sent to your email' });
+});
+
+/**
+ * @route   POST /api/mfa/setup/email/verify
+ * @desc    Verify the email OTP and enable Email MFA
+ * @access  Private
+ */
+export const verifyAndEnableEmailOTP = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  const { code } = req.body;
+  if (!userId) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
+  if (!code) { res.status(400).json({ success: false, message: 'Verification code is required' }); return; }
+
+  const valid = await mfaService.verifyPendingOTP(userId, 'email', code);
+  if (!valid) { res.status(400).json({ success: false, message: 'Invalid or expired verification code' }); return; }
+
+  await mfaService.enableEmailOTP(userId);
+
+  // Generate backup codes if this is the first MFA method
+  const mfa = await mfaService.getMFASettings(userId);
+  const backupCodes = mfa.backupCodes.length > 0 ? undefined : undefined; // already handled in enableEmailOTP
+
+  res.json({ success: true, message: 'Email OTP enabled successfully' });
+});
+
+/**
+ * @route   POST /api/mfa/setup/sms/send
+ * @desc    Send a verification OTP to a phone number for SMS MFA setup
+ * @access  Private
+ */
+export const sendSMSSetupOTP = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  const { phoneNumber } = req.body;
+  if (!userId) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
+  if (!phoneNumber) { res.status(400).json({ success: false, message: 'Phone number is required' }); return; }
+
+  await mfaService.sendSMSOTP(userId, phoneNumber);
+
+  res.json({ success: true, message: 'Verification code sent via SMS' });
+});
+
+/**
+ * @route   POST /api/mfa/setup/sms/verify
+ * @desc    Verify SMS OTP and enable SMS MFA
+ * @access  Private
+ */
+export const verifyAndEnableSMSOTP = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  const { code, phoneNumber } = req.body;
+  if (!userId) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
+  if (!code || !phoneNumber) { res.status(400).json({ success: false, message: 'Code and phone number are required' }); return; }
+
+  const valid = await mfaService.verifyPendingOTP(userId, 'sms', code);
+  if (!valid) { res.status(400).json({ success: false, message: 'Invalid or expired verification code' }); return; }
+
+  await mfaService.enableSMSOTP(userId, phoneNumber);
+
+  res.json({ success: true, message: 'SMS OTP enabled successfully' });
+});
+
+/**
+ * @route   POST /api/mfa/send-otp
+ * @desc    Send OTP for login verification (email or sms)
+ * @access  Public (needs userId context from temp session)
+ */
+export const sendLoginOTP = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const { userId, method } = req.body;
+  if (!userId || !method) { res.status(400).json({ success: false, message: 'userId and method required' }); return; }
+
+  const user = await User.findById(userId);
+  if (!user) { res.status(404).json({ success: false, message: 'User not found' }); return; }
+
+  const mfa = await MFA.findOne({ userId });
+  if (!mfa) { res.status(400).json({ success: false, message: 'MFA not configured' }); return; }
+
+  if (method === 'email' && mfa.emailEnabled) {
+    await mfaService.sendEmailOTP(userId, user.email);
+    res.json({ success: true, message: 'Code sent to your email' });
+  } else if (method === 'sms' && mfa.smsEnabled) {
+    await mfaService.sendSMSOTP(userId, mfa.phoneNumber);
+    res.json({ success: true, message: 'Code sent via SMS' });
+  } else {
+    res.status(400).json({ success: false, message: 'Requested method is not enabled' });
+  }
+});
+
+/**
+ * @route   GET /api/mfa/login-activity
+ * @desc    Get login activity / active sessions for current user
+ * @access  Private
+ */
+export const getLoginActivity = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  if (!userId) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
+
+  const activities = await LoginActivity.find({ userId })
+    .sort({ loginAt: -1 })
+    .limit(50)
+    .lean();
+
+  // The most recent active (non-logged-out) session is likely the current one
+  const mapped = activities.map((a, index) => ({
+    id: a._id,
+    browser: a.browser,
+    os: a.os,
+    deviceType: a.deviceType,
+    ipAddress: a.ipAddress,
+    isNewDevice: a.isNewDevice,
+    mfaMethod: a.mfaMethod,
+    loginAt: a.loginAt,
+    lastActiveAt: a.lastActiveAt,
+    loggedOutAt: a.loggedOutAt,
+    isCurrent: a.isCurrent && !a.loggedOutAt && index === 0,
+    isActive: a.isCurrent && !a.loggedOutAt,
+  }));
+
+  res.json({ success: true, data: { activities: mapped } });
+});
+
+/**
+ * @route   DELETE /api/mfa/sessions/:sessionId
+ * @desc    Revoke a specific session
+ * @access  Private
+ */
+export const revokeSession = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  const { sessionId } = req.params;
+  if (!userId) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
+
+  const session = await LoginActivity.findOne({ _id: sessionId, userId });
+  if (!session) { res.status(404).json({ success: false, message: 'Session not found' }); return; }
+
+  session.isCurrent = false;
+  session.loggedOutAt = new Date();
+  await session.save();
+
+  // If session's token matches a user's refreshToken, invalidate it
+  const user = await User.findById(userId).select('+refreshToken');
+  if (user && user.refreshToken === session.sessionToken) {
+    user.refreshToken = undefined as any;
+    await user.save();
+  }
+
+  res.json({ success: true, message: 'Session revoked' });
+});
+
+/**
+ * @route   POST /api/mfa/sessions/revoke-all
+ * @desc    Revoke all other sessions except current
+ * @access  Private
+ */
+export const revokeAllOtherSessions = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  if (!userId) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
+
+  // Get current user's refresh token hash to exclude current session
+  const user = await User.findById(userId).select('+refreshToken');
+  const currentHash = user?.refreshToken;
+
+  const result = await LoginActivity.updateMany(
+    { userId, isCurrent: true, sessionToken: { $ne: currentHash } },
+    { $set: { isCurrent: false, loggedOutAt: new Date() } }
+  );
+
+  res.json({ success: true, message: `${result.modifiedCount} session(s) revoked` });
+});
+
 export default {
   getMFAStatus,
   generateTOTPSecret,
@@ -363,4 +547,12 @@ export default {
   getTrustedDevices,
   removeTrustedDevice,
   checkTrustedDevice,
+  enableEmailOTP,
+  verifyAndEnableEmailOTP,
+  sendSMSSetupOTP,
+  verifyAndEnableSMSOTP,
+  sendLoginOTP,
+  getLoginActivity,
+  revokeSession,
+  revokeAllOtherSessions,
 };

@@ -773,6 +773,74 @@ class EmailService {
       </div>
     `;
   }
+
+  /**
+   * Send a login notification email (like Google / Microsoft "New sign-in" alerts)
+   */
+  async sendLoginNotification(
+    email: string,
+    name: string,
+    details: {
+      browser: string;
+      os: string;
+      ipAddress: string;
+      time: Date;
+      isNewDevice: boolean;
+      deviceType: string;
+    }
+  ): Promise<void> {
+    if (!this.isConfigured || !this.transporter) {
+      logger.warn('Email service not configured — skipping login notification');
+      return;
+    }
+
+    const timeStr = details.time.toLocaleString('en-US', {
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+    });
+
+    const deviceIcon = details.deviceType === 'mobile' ? '📱' : details.deviceType === 'tablet' ? '📱' : '💻';
+    const alertColor = details.isNewDevice ? '#dc2626' : '#2563eb';
+    const alertTitle = details.isNewDevice
+      ? 'New device sign-in to your account'
+      : 'New sign-in to your account';
+
+    const html = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto">
+        <div style="background:${alertColor};color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="margin:0;font-size:18px">${alertTitle}</h2>
+        </div>
+        <div style="background:#fff;padding:24px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 8px 8px">
+          <p style="margin:0 0 16px;color:#374151">Hi ${name},</p>
+          <p style="margin:0 0 20px;color:#374151">We noticed a new sign-in to your Fuel Order System account.</p>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+            <tr><td style="padding:8px 0;color:#6b7280;width:120px">${deviceIcon} Device</td><td style="padding:8px 0;color:#111827;font-weight:500">${details.browser} on ${details.os}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b7280">🌐 IP Address</td><td style="padding:8px 0;color:#111827;font-weight:500">${details.ipAddress}</td></tr>
+            <tr><td style="padding:8px 0;color:#6b7280">🕐 Time</td><td style="padding:8px 0;color:#111827;font-weight:500">${timeStr}</td></tr>
+          </table>
+          ${details.isNewDevice ? '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:12px 16px;margin-bottom:16px"><p style="margin:0;color:#991b1b;font-size:13px"><strong>⚠️ This is the first time this device has been used to sign in.</strong> If this wasn\'t you, change your password immediately and contact your administrator.</p></div>' : ''}
+          <p style="margin:0;color:#6b7280;font-size:13px">If this was you, no further action is needed.</p>
+        </div>
+        <div style="text-align:center;padding:16px;color:#9ca3af;font-size:11px">
+          Fuel Order Management System — Security Notification
+        </div>
+      </div>
+    `;
+
+    try {
+      await this.transporter.sendMail({
+        from: this.currentConfig?.from
+          ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
+          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`,
+        to: email,
+        subject: alertTitle,
+        html,
+      });
+      logger.info(`Login notification sent to ${email}`);
+    } catch (error) {
+      logger.error('Failed to send login notification:', error);
+    }
+  }
 }
 
 // Export singleton instance

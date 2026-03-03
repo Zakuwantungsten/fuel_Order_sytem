@@ -5,6 +5,7 @@ import { MFA, IMFA } from '../models/MFA';
 import UserMFA from '../models/UserMFA';
 import { User } from '../models/User';
 import { SystemConfig } from '../models/SystemConfig';
+import PendingOTP from '../models/PendingOTP';
 import emailService from '../services/emailService';
 import { sendSMS } from '../services/smsService';
 
@@ -106,56 +107,95 @@ class MFAService {
   /**
    * Generate and send OTP via email
    */
-  async sendEmailOTP(userId: string, email: string): Promise<string> {
-    // Generate 6-digit OTP
+  async sendEmailOTP(userId: string, email: string): Promise<void> {
     const otp = crypto.randomInt(100000, 999999).toString();
-    
-    // Store OTP in cache with 5-minute expiry
-    const cacheKey = `email_otp:${userId}`;
     const hashedOTP = await bcrypt.hash(otp, 10);
-    
-    // TODO: Store in Redis/cache (for now, return for testing)
-    // await cacheService.set(cacheKey, hashedOTP, 300);
-    
-    // Send email
-    await emailService.sendCriticalEmail({
-      subject: 'Your verification code',
-      message: `Your verification code is: <strong>${otp}</strong><br/>This code will expire in 5 minutes.`,
-      priority: 'high',
-      additionalRecipients: [email],
-    });
-    
-    return hashedOTP; // Return for storage in session/cache
+
+    // Upsert: replace any existing pending email OTP for this user
+    await PendingOTP.findOneAndUpdate(
+      { userId, type: 'email' },
+      { hashedOTP, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
+      { upsert: true }
+    );
+
+    await emailService.sendNotification(
+      email,
+      'Your verification code',
+      `<p style="font-size:24px;font-weight:bold;letter-spacing:6px;text-align:center;padding:16px 0">${otp}</p>
+       <p style="text-align:center;color:#666">This code will expire in 5 minutes.<br/>If you did not request this, you can safely ignore this email.</p>`
+    );
   }
   
   /**
    * Generate and send OTP via SMS
    */
-  async sendSMSOTP(userId: string, phoneNumber: string): Promise<string> {
-    // Generate 6-digit OTP
+  async sendSMSOTP(userId: string, phoneNumber: string): Promise<void> {
     const otp = crypto.randomInt(100000, 999999).toString();
-    
-    // Store OTP in cache with 5-minute expiry
-    const cacheKey = `sms_otp:${userId}`;
     const hashedOTP = await bcrypt.hash(otp, 10);
-    
-    // TODO: Store in Redis/cache (for now, return for testing)
-    // await cacheService.set(cacheKey, hashedOTP, 300);
-    
-    // Send SMS
+
+    await PendingOTP.findOneAndUpdate(
+      { userId, type: 'sms' },
+      { hashedOTP, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
+      { upsert: true }
+    );
+
     await sendSMS({
       to: phoneNumber,
       message: `Your verification code is: ${otp}. Valid for 5 minutes.`,
     });
-    
-    return hashedOTP; // Return for storage in session/cache
   }
   
   /**
-   * Verify OTP (email or SMS)
+   * Verify a pending OTP (email or SMS) stored in MongoDB
    */
-  async verifyOTP(hashedOTP: string, code: string): Promise<boolean> {
-    return bcrypt.compare(code, hashedOTP);
+  async verifyPendingOTP(userId: string, type: 'email' | 'sms', code: string): Promise<boolean> {
+    const pending = await PendingOTP.findOne({ userId, type });
+    if (!pending || pending.expiresAt < new Date()) return false;
+
+    const valid = await bcrypt.compare(code, pending.hashedOTP);
+    if (valid) {
+      await PendingOTP.deleteOne({ _id: pending._id });
+    }
+    return valid;
+  }
+
+  /**
+   * Enable Email OTP for user
+   */
+  async enableEmailOTP(userId: string): Promise<void> {
+    const mfa = await this.getMFASettings(userId);
+    mfa.emailEnabled = true;
+    mfa.emailVerified = true;
+    if (!mfa.totpEnabled && !mfa.smsEnabled) {
+      mfa.preferredMethod = 'email';
+    }
+    mfa.isEnabled = true;
+
+    if (mfa.backupCodes.length === 0) {
+      const { hashedCodes } = await this.generateBackupCodes();
+      mfa.backupCodes = hashedCodes;
+    }
+    await mfa.save();
+  }
+
+  /**
+   * Enable SMS OTP for user
+   */
+  async enableSMSOTP(userId: string, phoneNumber: string): Promise<void> {
+    const mfa = await this.getMFASettings(userId);
+    mfa.smsEnabled = true;
+    mfa.phoneNumber = phoneNumber;
+    mfa.phoneVerified = true;
+    if (!mfa.totpEnabled) {
+      mfa.preferredMethod = 'sms';
+    }
+    mfa.isEnabled = true;
+
+    if (mfa.backupCodes.length === 0) {
+      const { hashedCodes } = await this.generateBackupCodes();
+      mfa.backupCodes = hashedCodes;
+    }
+    await mfa.save();
   }
   
   /**
@@ -259,6 +299,24 @@ class MFAService {
       if (verified) methodUsed = 'totp';
     }
     
+    // Try email OTP
+    if (!verified && (!method || method === 'email') && mfa.emailEnabled) {
+      const emailValid = await this.verifyPendingOTP(userId, 'email', code);
+      if (emailValid) {
+        verified = true;
+        methodUsed = 'email';
+      }
+    }
+
+    // Try SMS OTP
+    if (!verified && (!method || method === 'sms') && mfa.smsEnabled) {
+      const smsValid = await this.verifyPendingOTP(userId, 'sms', code);
+      if (smsValid) {
+        verified = true;
+        methodUsed = 'sms';
+      }
+    }
+
     // Try backup codes if TOTP failed or backup method specified
     if (!verified && (!method || method === 'backup')) {
       const backupResult = await this.verifyBackupCode(mfa.backupCodes, code);
