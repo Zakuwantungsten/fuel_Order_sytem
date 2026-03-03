@@ -17,55 +17,37 @@ import {
 } from 'lucide-react';
 import { systemAdminAPI, trashAPI } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
-import DatabaseMonitorTab from './SuperAdmin/DatabaseMonitorTab';
-import UserManagementTab from './SuperAdmin/UserManagementTab';
+// DatabaseMonitorTab merged into MonitoringUnifiedTab
+import UserManagementUnifiedTab from './SuperAdmin/UserManagementUnifiedTab';
 import FuelStationsTab from './SuperAdmin/FuelStationsTab';
 import RoutesTab from './SuperAdmin/RoutesTab';
-import ConfigurationTab from './SuperAdmin/ConfigurationTab';
 import AuditLogsTab from './SuperAdmin/AuditLogsTab';
-import SecurityTab from './SuperAdmin/SecurityTab';
+import SecurityUnifiedTab from './SuperAdmin/SecurityUnifiedTab';
 import BackupRecoveryTab from './SuperAdmin/BackupRecoveryTab';
 import AnalyticsTab from './SuperAdmin/AnalyticsTab';
 import TrashManagementTab from './SuperAdmin/TrashManagementTab';
 import ArchivalManagementTab from './SuperAdmin/ArchivalManagementTab';
-import SystemConfigDashboard from './SuperAdmin/SystemConfigDashboard';
-import AnnouncementsTab from './SuperAdmin/AnnouncementsTab';
-import IPRulesTab from './SuperAdmin/IPRulesTab';
-import SessionsTab from './SuperAdmin/SessionsTab';
-import ConfigDiffTab from './SuperAdmin/ConfigDiffTab';
+// SystemConfigDashboard, ConfigDiffTab, ConfigVersionHistoryTab, CronJobsTab, MaintenanceModeTab,
+// RateLimitConfigTab, DbIndexExplorerTab, WebhookManagerTab, FeatureFlagsTab, NotificationCenterConfigTab,
+// AnnouncementsTab, ExcelImport merged into SystemUnifiedTab
+import SystemUnifiedTab from './SuperAdmin/SystemUnifiedTab';
 import FuelPriceTab from './SuperAdmin/FuelPriceTab';
-import CronJobsTab from './SuperAdmin/CronJobsTab';
 import DataExportTab from './SuperAdmin/DataExportTab';
-import FeatureFlagsTab from './SuperAdmin/FeatureFlagsTab';
-import SystemHealthTab from './SuperAdmin/SystemHealthTab';
-import MaintenanceModeTab from './SuperAdmin/MaintenanceModeTab';
-import WebhookManagerTab from './SuperAdmin/WebhookManagerTab';
-import RateLimitConfigTab from './SuperAdmin/RateLimitConfigTab';
-import ActivityHeatmapTab from './SuperAdmin/ActivityHeatmapTab';
-import BulkUserManagementTab from './SuperAdmin/BulkUserManagementTab';
 import StorageManagerTab from './SuperAdmin/StorageManagerTab';
-import AlertThresholdsTab from './SuperAdmin/AlertThresholdsTab';
-import EmailLogViewerTab from './SuperAdmin/EmailLogViewerTab';
-import MFAManagementTab from './SuperAdmin/MFAManagementTab';
-import ApiTokenManagerTab from './SuperAdmin/ApiTokenManagerTab';
-import PerformanceMetricsTab from './SuperAdmin/PerformanceMetricsTab';
-import DbIndexExplorerTab from './SuperAdmin/DbIndexExplorerTab';
-import DriverCredentialManagerEnhancedTab from './SuperAdmin/DriverCredentialManagerEnhancedTab';
-import ConfigVersionHistoryTab from './SuperAdmin/ConfigVersionHistoryTab';
+import MonitoringUnifiedTab from './SuperAdmin/MonitoringUnifiedTab';
 import CustomReportBuilderTab from './SuperAdmin/CustomReportBuilderTab';
-import NotificationCenterConfigTab from './SuperAdmin/NotificationCenterConfigTab';
-import SecurityScoreTab from './SuperAdmin/SecurityScoreTab';
-import PrivilegeElevationTab from './SuperAdmin/PrivilegeElevationTab';
-import DLPControlsTab from './SuperAdmin/DLPControlsTab';
-import BreakGlassTab from './SuperAdmin/BreakGlassTab';
-import ThreatDetectionTab from './SuperAdmin/ThreatDetectionTab';
-import SIEMExportTab from './SuperAdmin/SIEMExportTab';
-import SecurityBlocklistTab from './SuperAdmin/SecurityBlocklistTab';
-import SecurityEventsTab from './SuperAdmin/SecurityEventsTab';
+// SecurityScoreTab merged into SecurityUnifiedTab
+// PrivilegeElevationTab merged into UserManagementUnifiedTab
+// DLPControlsTab merged into SecurityUnifiedTab
+// BreakGlassTab merged into SecurityUnifiedTab
+// ThreatDetectionTab merged into SecurityUnifiedTab
+// SIEMExportTab merged into MonitoringUnifiedTab
+// SecurityBlocklistTab merged into SecurityUnifiedTab
+// SecurityEventsTab merged into SecurityUnifiedTab
 
 interface SuperAdminDashboardProps {
   user: any;
-  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'ip_rules' | 'sessions' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'bulk_users' | 'storage' | 'alert_thresholds' | 'email_logs' | 'mfa_management' | 'api_tokens' | 'performance_metrics' | 'db_indexes' | 'driver_credentials_enhanced' | 'config_history' | 'custom_report' | 'notification_config' | 'security_score' | 'privilege_elevation' | 'dlp_controls' | 'break_glass' | 'threat_detection' | 'siem_export' | 'security_blocklist' | 'security_events';
+  section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'storage' | 'alert_thresholds' | 'email_logs' | 'performance_metrics' | 'db_indexes' | 'config_history' | 'custom_report' | 'notification_config' | 'siem_export' | 'monitoring' | 'system';
   onNavigate?: (section: string) => void;
 }
 
@@ -138,6 +120,7 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
     break_glass:                 { group: 'Security',     label: 'Break-Glass Access'   },
     privilege_elevation:         { group: 'Users',        label: 'Privilege Elevation'  },
     siem_export:                 { group: 'Monitoring',   label: 'SIEM Export'          },
+    monitoring:                  { group: 'Monitoring',   label: 'Monitoring'           },
     fuel_stations:               { group: 'Fleet & Fuel', label: 'Fuel Stations'        },
     routes:                      { group: 'Fleet & Fuel', label: 'Routes'               },
     fuel_prices:                 { group: 'Fleet & Fuel', label: 'Fuel Prices'          },
@@ -155,17 +138,9 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
     trash:                       { group: 'Data',         label: 'Trash Management'     },
     storage:                     { group: 'Data',         label: 'Storage Manager'      },
     data_export:                 { group: 'Data',         label: 'Data Export'          },
-    config:                      { group: 'System',       label: 'Configuration'        },
-    config_history:              { group: 'System',       label: 'Config History'       },
-    config_diff:                 { group: 'System',       label: 'Config Diff'          },
-    feature_flags:               { group: 'System',       label: 'Feature Flags'        },
-    cron_jobs:                   { group: 'System',       label: 'Cron Jobs'            },
-    maintenance:                 { group: 'System',       label: 'Maintenance Mode'     },
-    webhooks:                    { group: 'System',       label: 'Webhooks'             },
-    rate_limits:                 { group: 'System',       label: 'Rate Limits'          },
-    db_indexes:                  { group: 'System',       label: 'DB Indexes'           },
-    announcements:               { group: 'System',       label: 'Announcements'        },
-    notification_config:         { group: 'System',       label: 'Notification Config'  },
+    system:                      { group: 'System',       label: 'System'               },
+    // config, config_history, config_diff, feature_flags, cron_jobs, maintenance,
+    // webhooks, rate_limits, db_indexes, announcements, notification_config merged into 'system' tab
   };
 
   const breadcrumb = SECTION_META[section];
@@ -229,11 +204,12 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
                 onNavigate={onNavigate}
               />
             )}
-            {section === 'database' && (
-              <DatabaseMonitorTab onMessage={showMessage} />
+            {section === 'monitoring' && (
+              <MonitoringUnifiedTab onMessage={showMessage} />
             )}
+            {/* database, system_health, performance_metrics, activity_heatmap, alert_thresholds, email_logs, siem_export merged into 'monitoring' tab */}
             {section === 'users' && (
-              <UserManagementTab onMessage={showMessage} />
+              <UserManagementUnifiedTab onMessage={showMessage} />
             )}
             {section === 'fuel_stations' && (
               <FuelStationsTab onMessage={showMessage} />
@@ -241,14 +217,16 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
             {section === 'routes' && (
               <RoutesTab onMessage={showMessage} />
             )}
-            {section === 'config' && (
-              <SystemConfigDashboard onMessage={showMessage} />
+            {section === 'system' && (
+              <SystemUnifiedTab onMessage={showMessage} />
             )}
+            {/* config, config_diff, config_history, cron_jobs, maintenance, webhooks, rate_limits,
+                db_indexes, feature_flags, notification_config, announcements merged into 'system' tab */}
             {section === 'audit' && (
               <AuditLogsTab onMessage={showMessage} />
             )}
             {section === 'security' && (
-              <SecurityTab onMessage={showMessage} />
+              <SecurityUnifiedTab onMessage={showMessage} />
             )}
             {section === 'trash' && (
               <TrashManagementTab onMessage={showMessage} />
@@ -262,105 +240,33 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
             {section === 'analytics' && (
               <AnalyticsTab onMessage={showMessage} />
             )}
-            {section === 'announcements' && (
-              <AnnouncementsTab onMessage={showMessage} />
-            )}
-            {section === 'ip_rules' && (
-              <IPRulesTab onMessage={showMessage} />
-            )}
-            {section === 'sessions' && (
-              <SessionsTab onMessage={showMessage} />
-            )}
-            {section === 'config_diff' && (
-              <ConfigDiffTab onMessage={showMessage} />
-            )}
+            {/* announcements merged into 'system' tab */}
+            {/* ip_rules and sessions merged into 'security' tab */}
+            {/* config_diff merged into 'system' tab */}
             {section === 'fuel_prices' && (
               <FuelPriceTab onMessage={showMessage} />
             )}
-            {section === 'cron_jobs' && (
-              <CronJobsTab onMessage={showMessage} />
-            )}
+            {/* cron_jobs merged into 'system' tab */}
             {section === 'data_export' && (
               <DataExportTab onMessage={showMessage} />
             )}
-            {section === 'feature_flags' && (
-              <FeatureFlagsTab onMessage={showMessage} />
-            )}
-            {section === 'system_health' && (
-              <SystemHealthTab onMessage={showMessage} />
-            )}
-            {section === 'maintenance' && (
-              <MaintenanceModeTab onMessage={showMessage} />
-            )}
-            {section === 'webhooks' && (
-              <WebhookManagerTab onMessage={showMessage} />
-            )}
-            {section === 'rate_limits' && (
-              <RateLimitConfigTab onMessage={showMessage} />
-            )}
-            {section === 'activity_heatmap' && (
-              <ActivityHeatmapTab onMessage={showMessage} />
-            )}
-            {section === 'bulk_users' && (
-              <BulkUserManagementTab />
-            )}
+            {/* feature_flags, maintenance, webhooks, rate_limits merged into 'system' tab */}
+            {/* activity_heatmap merged into 'monitoring' tab */}
+            {/* bulk_users merged into 'users' tab */}
             {section === 'storage' && (
               <StorageManagerTab />
             )}
-            {section === 'alert_thresholds' && (
-              <AlertThresholdsTab />
-            )}
-            {section === 'email_logs' && (
-              <EmailLogViewerTab />
-            )}
-            {section === 'mfa_management' && (
-              <MFAManagementTab />
-            )}
-            {section === 'api_tokens' && (
-              <ApiTokenManagerTab />
-            )}
-            {section === 'performance_metrics' && (
-              <PerformanceMetricsTab />
-            )}
-            {section === 'db_indexes' && (
-              <DbIndexExplorerTab />
-            )}
-            {section === 'driver_credentials_enhanced' && (
-              <DriverCredentialManagerEnhancedTab />
-            )}
-            {section === 'config_history' && (
-              <ConfigVersionHistoryTab />
-            )}
+            {/* alert_thresholds and email_logs merged into 'monitoring' tab */}
+            {/* mfa_management and api_tokens merged into 'security' tab */}
+            {/* performance_metrics merged into 'monitoring' tab */}
+            {/* db_indexes, config_history, notification_config merged into 'system' tab */}
+            {/* driver_credentials_enhanced merged into 'users' tab */}
             {section === 'custom_report' && (
               <CustomReportBuilderTab />
             )}
-            {section === 'notification_config' && (
-              <NotificationCenterConfigTab />
-            )}
-            {section === 'security_score' && (
-              <SecurityScoreTab />
-            )}
-            {section === 'privilege_elevation' && (
-              <PrivilegeElevationTab />
-            )}
-            {section === 'dlp_controls' && (
-              <DLPControlsTab />
-            )}
-            {section === 'break_glass' && (
-              <BreakGlassTab />
-            )}
-            {section === 'threat_detection' && (
-              <ThreatDetectionTab />
-            )}
-            {section === 'siem_export' && (
-              <SIEMExportTab />
-            )}
-            {section === 'security_blocklist' && (
-              <SecurityBlocklistTab />
-            )}
-            {section === 'security_events' && (
-              <SecurityEventsTab />
-            )}
+            {/* security_score, dlp_controls, break_glass, threat_detection merged into 'security' tab */}
+            {/* siem_export merged into 'monitoring' tab */}
+            {/* security_blocklist and security_events merged into 'security' tab */}
           </>
         )}
       </div>

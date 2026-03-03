@@ -32,16 +32,9 @@ import {
   Building2,
   Receipt,
   FileUp,
-  Megaphone,
   Network,
   ShieldAlert,
-  GitCompare,
-  Cpu,
   Download,
-  Flag,
-  Wrench,
-  Webhook,
-  Gauge,
   Zap,
   HardDrive,
   Bell,
@@ -102,8 +95,8 @@ const getInitialTab = (userRole: string): string => {
     if (userRole === 'super_admin') {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports',
-        'sa_overview', 'sa_database', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_config', 
-        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'sa_announcements', 'sa_ip_rules', 'sa_sessions', 'sa_config_diff', 'sa_fuel_prices', 'sa_cron_jobs', 'sa_data_export', 'sa_feature_flags', 'sa_system_health', 'sa_maintenance', 'sa_webhooks', 'sa_rate_limits', 'sa_activity_heatmap', 'sa_bulk_users', 'sa_storage', 'sa_alert_thresholds', 'sa_email_logs', 'sa_mfa_management', 'sa_api_tokens', 'sa_performance_metrics', 'sa_db_indexes', 'sa_driver_credentials_enhanced', 'sa_config_history', 'sa_custom_report', 'sa_notification_config', 'sa_security_score', 'sa_privilege_elevation', 'sa_dlp_controls', 'sa_break_glass', 'sa_threat_detection', 'sa_siem_export', 'sa_security_blocklist', 'sa_security_events', 'driver_credentials', 'excel_import'
+        'sa_overview', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_system', 
+        'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'sa_fuel_prices', 'sa_data_export', 'sa_monitoring', 'sa_storage', 'sa_custom_report', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'admin' || userRole === 'boss') {
@@ -270,62 +263,25 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     // Super Admin gets only super admin specific sections
     if (user.role === 'super_admin') {
       return [
-        { id: 'sa_overview', label: 'Overview', icon: Shield, sectionLabel: 'Super Admin' },
-        // Users & Access
-        { id: 'sa_users', label: 'User Management', icon: Users, sectionLabel: 'Users & Access' },
-        { id: 'sa_bulk_users', label: 'Bulk Users', icon: Users, sectionLabel: 'Users & Access' },
-        { id: 'sa_driver_credentials_enhanced', label: 'Driver Credentials', icon: Key, sectionLabel: 'Users & Access' },
-        { id: 'sa_privilege_elevation', label: 'Privilege Elevation', icon: Shield, sectionLabel: 'Users & Access' },
-        // Security
-        { id: 'sa_security', label: 'Security Settings', icon: Shield, sectionLabel: 'Security' },
-        { id: 'sa_ip_rules', label: 'IP Rules', icon: Network, sectionLabel: 'Security' },
-        { id: 'sa_sessions', label: 'Active Sessions', icon: ShieldAlert, sectionLabel: 'Security' },
-        { id: 'sa_mfa_management', label: '2FA Management', icon: ShieldCheck, sectionLabel: 'Security' },
-        { id: 'sa_api_tokens', label: 'API Tokens', icon: Key, sectionLabel: 'Security' },
-        { id: 'sa_security_score', label: 'Security Score', icon: ShieldCheck, sectionLabel: 'Security' },
-        { id: 'sa_threat_detection', label: 'Threat Detection', icon: Radar, sectionLabel: 'Security' },
-        { id: 'sa_dlp_controls', label: 'DLP Controls', icon: ShieldBan, sectionLabel: 'Security' },
-        { id: 'sa_break_glass', label: 'Break-Glass Access', icon: KeyRound, sectionLabel: 'Security' },
-        { id: 'sa_security_blocklist', label: 'IP Blocklist', icon: ShieldBan, sectionLabel: 'Security' },
-        { id: 'sa_security_events', label: 'Security Events', icon: ShieldAlert, sectionLabel: 'Security' },
-        // Fleet & Fuel
-        { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Building2, sectionLabel: 'Fleet & Fuel' },
-        { id: 'sa_routes', label: 'Routes', icon: Route, sectionLabel: 'Fleet & Fuel' },
-        { id: 'sa_fuel_prices', label: 'Fuel Prices', icon: TrendingUp, sectionLabel: 'Fleet & Fuel' },
-        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation, sectionLabel: 'Fleet & Fuel' },
-        { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned, sectionLabel: 'Fleet & Fuel' },
-        { id: 'driver_credentials', label: 'Driver Access', icon: Key, sectionLabel: 'Fleet & Fuel' },
-        // Monitoring
-        { id: 'sa_database', label: 'Database Monitor', icon: Database, sectionLabel: 'Monitoring' },
-        { id: 'sa_system_health', label: 'System Health', icon: Activity, sectionLabel: 'Monitoring' },
-        { id: 'sa_performance_metrics', label: 'Performance', icon: TrendingUp, sectionLabel: 'Monitoring' },
-        { id: 'sa_activity_heatmap', label: 'Activity Heatmap', icon: Zap, sectionLabel: 'Monitoring' },
-        { id: 'sa_alert_thresholds', label: 'Alert Thresholds', icon: Bell, sectionLabel: 'Monitoring' },
-        { id: 'sa_email_logs', label: 'Email Logs', icon: Mail, sectionLabel: 'Monitoring' },
-        { id: 'sa_siem_export', label: 'SIEM Export', icon: Server, sectionLabel: 'Monitoring' },
-        // Analytics
-        { id: 'sa_analytics', label: 'Analytics & Reports', icon: FileBarChart, sectionLabel: 'Analytics' },
-        { id: 'sa_audit', label: 'Audit Logs', icon: FileSearch, sectionLabel: 'Analytics' },
-        { id: 'sa_custom_report', label: 'Custom Reports', icon: FileBarChart, sectionLabel: 'Analytics' },
-        // Data
-        { id: 'sa_backup', label: 'Backup & Recovery', icon: Database, sectionLabel: 'Data' },
-        { id: 'sa_archival', label: 'Data Archival', icon: Archive, sectionLabel: 'Data' },
-        { id: 'sa_trash', label: 'Trash Management', icon: Trash2, sectionLabel: 'Data' },
-        { id: 'sa_storage', label: 'Storage Manager', icon: HardDrive, sectionLabel: 'Data' },
-        { id: 'sa_data_export', label: 'Data Export', icon: Download, sectionLabel: 'Data' },
-        // System
-        { id: 'sa_config', label: 'Configuration', icon: Settings, sectionLabel: 'System' },
-        { id: 'sa_config_history', label: 'Config History', icon: GitCompare, sectionLabel: 'System' },
-        { id: 'sa_config_diff', label: 'Config Diff', icon: GitCompare, sectionLabel: 'System' },
-        { id: 'sa_feature_flags', label: 'Feature Flags', icon: Flag, sectionLabel: 'System' },
-        { id: 'sa_cron_jobs', label: 'Cron Jobs', icon: Cpu, sectionLabel: 'System' },
-        { id: 'sa_maintenance', label: 'Maintenance Mode', icon: Wrench, sectionLabel: 'System' },
-        { id: 'sa_webhooks', label: 'Webhooks', icon: Webhook, sectionLabel: 'System' },
-        { id: 'sa_rate_limits', label: 'Rate Limits', icon: Gauge, sectionLabel: 'System' },
-        { id: 'sa_db_indexes', label: 'DB Indexes', icon: Database, sectionLabel: 'System' },
-        { id: 'sa_announcements', label: 'Announcements', icon: Megaphone, sectionLabel: 'System' },
-        { id: 'sa_notification_config', label: 'Notification Config', icon: Bell, sectionLabel: 'System' },
-        { id: 'excel_import', label: 'Excel Import', icon: FileUp, sectionLabel: 'System' },
+        { id: 'sa_overview', label: 'Overview', icon: Shield },
+        { id: 'sa_users', label: 'User Management', icon: Users },
+        { id: 'sa_security', label: 'Security', icon: ShieldCheck },
+        { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Building2 },
+        { id: 'sa_routes', label: 'Routes', icon: Route },
+        { id: 'sa_fuel_prices', label: 'Fuel Prices', icon: TrendingUp },
+        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
+        { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
+        { id: 'driver_credentials', label: 'Driver Access', icon: Key },
+        { id: 'sa_monitoring', label: 'Monitoring', icon: Activity },
+        { id: 'sa_analytics', label: 'Analytics', icon: FileBarChart },
+        { id: 'sa_audit', label: 'Audit Logs', icon: FileSearch },
+        { id: 'sa_custom_report', label: 'Custom Reports', icon: FileBarChart },
+        { id: 'sa_backup', label: 'Backup & Recovery', icon: Database },
+        { id: 'sa_archival', label: 'Data Archival', icon: Archive },
+        { id: 'sa_trash', label: 'Trash Management', icon: Trash2 },
+        { id: 'sa_storage', label: 'Storage Manager', icon: HardDrive },
+        { id: 'sa_data_export', label: 'Data Export', icon: Download },
+        { id: 'sa_system', label: 'System', icon: Settings },
       ];
     }
 
@@ -416,16 +372,19 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       // Super Admin sections
       case 'sa_overview':
         return <SuperAdminDashboard user={user} section="overview" onNavigate={setActiveTab} />;
-      case 'sa_database':
-        return <SuperAdminDashboard user={user} section="database" onNavigate={setActiveTab} />;
+      case 'sa_monitoring':
+        return <SuperAdminDashboard user={user} section="monitoring" onNavigate={setActiveTab} />;
       case 'sa_users':
         return <SuperAdminDashboard user={user} section="users" onNavigate={setActiveTab} />;
       case 'sa_fuel_stations':
         return <SuperAdminDashboard user={user} section="fuel_stations" onNavigate={setActiveTab} />;
       case 'sa_routes':
         return <SuperAdminDashboard user={user} section="routes" onNavigate={setActiveTab} />;
-      case 'sa_config':
-        return <SuperAdminDashboard user={user} section="config" onNavigate={setActiveTab} />;
+      case 'sa_system':
+        return <SuperAdminDashboard user={user} section="system" onNavigate={setActiveTab} />;
+      // sa_config, sa_config_history, sa_config_diff, sa_feature_flags, sa_cron_jobs,
+      // sa_maintenance, sa_webhooks, sa_rate_limits, sa_db_indexes, sa_announcements,
+      // sa_notification_config, excel_import (super_admin) merged into sa_system
       case 'sa_audit':
         return <SuperAdminDashboard user={user} section="audit" onNavigate={setActiveTab} />;
       case 'sa_security':
@@ -438,72 +397,15 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <SuperAdminDashboard user={user} section="backup" onNavigate={setActiveTab} />;
       case 'sa_analytics':
         return <SuperAdminDashboard user={user} section="analytics" onNavigate={setActiveTab} />;
-      case 'sa_announcements':
-        return <SuperAdminDashboard user={user} section="announcements" onNavigate={setActiveTab} />;
-      case 'sa_ip_rules':
-        return <SuperAdminDashboard user={user} section="ip_rules" onNavigate={setActiveTab} />;
-      case 'sa_sessions':
-        return <SuperAdminDashboard user={user} section="sessions" onNavigate={setActiveTab} />;
-      case 'sa_config_diff':
-        return <SuperAdminDashboard user={user} section="config_diff" onNavigate={setActiveTab} />;
       case 'sa_fuel_prices':
         return <SuperAdminDashboard user={user} section="fuel_prices" onNavigate={setActiveTab} />;
-      case 'sa_cron_jobs':
-        return <SuperAdminDashboard user={user} section="cron_jobs" onNavigate={setActiveTab} />;
       case 'sa_data_export':
         return <SuperAdminDashboard user={user} section="data_export" onNavigate={setActiveTab} />;
-      case 'sa_feature_flags':
-        return <SuperAdminDashboard user={user} section="feature_flags" onNavigate={setActiveTab} />;
-      case 'sa_system_health':
-        return <SuperAdminDashboard user={user} section="system_health" onNavigate={setActiveTab} />;
-      case 'sa_maintenance':
-        return <SuperAdminDashboard user={user} section="maintenance" onNavigate={setActiveTab} />;
-      case 'sa_webhooks':
-        return <SuperAdminDashboard user={user} section="webhooks" onNavigate={setActiveTab} />;
-      case 'sa_rate_limits':
-        return <SuperAdminDashboard user={user} section="rate_limits" onNavigate={setActiveTab} />;
-      case 'sa_activity_heatmap':
-        return <SuperAdminDashboard user={user} section="activity_heatmap" onNavigate={setActiveTab} />;
-      case 'sa_bulk_users':
-        return <SuperAdminDashboard user={user} section="bulk_users" onNavigate={setActiveTab} />;
       case 'sa_storage':
         return <SuperAdminDashboard user={user} section="storage" onNavigate={setActiveTab} />;
-      case 'sa_alert_thresholds':
-        return <SuperAdminDashboard user={user} section="alert_thresholds" onNavigate={setActiveTab} />;
-      case 'sa_email_logs':
-        return <SuperAdminDashboard user={user} section="email_logs" onNavigate={setActiveTab} />;
-      case 'sa_mfa_management':
-        return <SuperAdminDashboard user={user} section="mfa_management" onNavigate={setActiveTab} />;
-      case 'sa_api_tokens':
-        return <SuperAdminDashboard user={user} section="api_tokens" onNavigate={setActiveTab} />;
-      case 'sa_performance_metrics':
-        return <SuperAdminDashboard user={user} section="performance_metrics" onNavigate={setActiveTab} />;
-      case 'sa_db_indexes':
-        return <SuperAdminDashboard user={user} section="db_indexes" onNavigate={setActiveTab} />;
-      case 'sa_driver_credentials_enhanced':
-        return <SuperAdminDashboard user={user} section="driver_credentials_enhanced" onNavigate={setActiveTab} />;
-      case 'sa_config_history':
-        return <SuperAdminDashboard user={user} section="config_history" onNavigate={setActiveTab} />;
       case 'sa_custom_report':
         return <SuperAdminDashboard user={user} section="custom_report" onNavigate={setActiveTab} />;
-      case 'sa_notification_config':
-        return <SuperAdminDashboard user={user} section="notification_config" onNavigate={setActiveTab} />;
-      case 'sa_security_score':
-        return <SuperAdminDashboard user={user} section="security_score" onNavigate={setActiveTab} />;
-      case 'sa_privilege_elevation':
-        return <SuperAdminDashboard user={user} section="privilege_elevation" onNavigate={setActiveTab} />;
-      case 'sa_dlp_controls':
-        return <SuperAdminDashboard user={user} section="dlp_controls" onNavigate={setActiveTab} />;
-      case 'sa_break_glass':
-        return <SuperAdminDashboard user={user} section="break_glass" onNavigate={setActiveTab} />;
-      case 'sa_threat_detection':
-        return <SuperAdminDashboard user={user} section="threat_detection" onNavigate={setActiveTab} />;
-      case 'sa_siem_export':
-        return <SuperAdminDashboard user={user} section="siem_export" onNavigate={setActiveTab} />;
-      case 'sa_security_blocklist':
-        return <SuperAdminDashboard user={user} section="security_blocklist" onNavigate={setActiveTab} />;
-      case 'sa_security_events':
-        return <SuperAdminDashboard user={user} section="security_events" onNavigate={setActiveTab} />;
+      // sa_siem_export merged into sa_monitoring
       
       // Admin sections (admin/boss roles)
       case 'admin_overview':
@@ -595,8 +497,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               </div>
             )}
             <button
-              onClick={() => user.role !== 'super_admin' && setSidebarOpen(!sidebarOpen)}
-              className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors lg:ml-auto${user.role === 'super_admin' ? ' hidden' : ''}`}
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors lg:ml-auto"
               aria-label={sidebarOpen ? 'Close menu' : 'Toggle menu'}
             >
               {/* On mobile: always show X, on desktop: toggle between X and Menu */}
@@ -635,7 +537,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                 <button
                   onClick={() => {
                     setActiveTab(item.id);
-                    if (user.role !== 'super_admin') setSidebarOpen(false);
+                    setSidebarOpen(false);
                   }}
                   title={!sidebarOpen ? item.label : undefined}
                   className={`w-full flex items-center px-3 py-2 text-left transition-colors ${
