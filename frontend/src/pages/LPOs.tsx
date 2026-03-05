@@ -139,16 +139,21 @@ const LPOs = () => {
   const { data: driverEntries = [] } = useDriverAccountEntries();
   const lpoEntries: LPOEntry[] = lpoQuery.data?.lpos ?? [];
   // Merge server-paginated LPO entries with cached driver account entries
-  // Apply client-side status filter to driver account entries
+  // Apply client-side station + status filters to driver account entries
   const orders = useMemo(() => {
     let filteredDriverEntries = driverEntries;
+    if (stationFilter) {
+      filteredDriverEntries = filteredDriverEntries.filter(
+        e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase()
+      );
+    }
     if (statusFilter === 'active') {
-      filteredDriverEntries = driverEntries.filter(e => !e.isCancelled);
+      filteredDriverEntries = filteredDriverEntries.filter(e => !e.isCancelled);
     } else if (statusFilter === 'cancelled') {
-      filteredDriverEntries = driverEntries.filter(e => e.isCancelled);
+      filteredDriverEntries = filteredDriverEntries.filter(e => e.isCancelled);
     }
     return [...lpoEntries, ...filteredDriverEntries];
-  }, [lpoEntries, driverEntries, statusFilter]);
+  }, [lpoEntries, driverEntries, stationFilter, statusFilter]);
   const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
   const loading = lpoQuery.isLoading;
