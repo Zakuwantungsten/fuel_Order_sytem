@@ -65,6 +65,7 @@ const LPOs = () => {
   }, [selectedYear]);
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
   const [stationFilter, setStationFilter] = usePersistedState('lpo:stationFilter', '');
+  const [statusFilter, setStatusFilter] = usePersistedState('lpo:statusFilter', 'all');
   const [dateFilter, setDateFilter] = usePersistedState('lpo:dateFilter', '');
   // Period filter — {year, month} pairs, same as DO management
   const [selectedPeriods, setSelectedPeriods] = usePersistedState<Array<{year: number; month: number}>>(
@@ -133,18 +134,28 @@ const LPOs = () => {
     dateTo: dateRange.dateTo,
     sort: 'createdAt',
     order: 'desc',
+    status: statusFilter !== 'all' ? statusFilter : undefined,
   });
   const { data: driverEntries = [] } = useDriverAccountEntries();
   const lpoEntries: LPOEntry[] = lpoQuery.data?.lpos ?? [];
   // Merge server-paginated LPO entries with cached driver account entries
-  const orders = useMemo(() => [...lpoEntries, ...driverEntries], [lpoEntries, driverEntries]);
+  // Apply client-side status filter to driver account entries
+  const orders = useMemo(() => {
+    let filteredDriverEntries = driverEntries;
+    if (statusFilter === 'active') {
+      filteredDriverEntries = driverEntries.filter(e => !e.isCancelled);
+    } else if (statusFilter === 'cancelled') {
+      filteredDriverEntries = driverEntries.filter(e => e.isCancelled);
+    }
+    return [...lpoEntries, ...filteredDriverEntries];
+  }, [lpoEntries, driverEntries, statusFilter]);
   const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
   const loading = lpoQuery.isLoading;
 
   const { data: workbooks = [] } = useLPOWorkbooks();
   const { data: hookYears = [] } = useLPOAvailableYears();
-  const { data: filtersData } = useLPOAvailableFilters();
+  const { data: filtersData } = useLPOAvailableFilters(dateRange);
 
   const availablePeriods = useMemo(() => {
     return (filtersData?.periods ?? []).sort((a: {year: number; month: number}, b: {year: number; month: number}) =>
@@ -153,8 +164,13 @@ const LPOs = () => {
   }, [filtersData]);
 
   const availableStations: string[] = useMemo(() => {
-    return (filtersData?.stations ?? []).sort();
-  }, [filtersData]);
+    const serverStations = filtersData?.stations ?? [];
+    // Include stations from driver account entries so they appear in the filter
+    const driverStations = driverEntries
+      .map(e => (e.dieselAt || '').trim().toUpperCase())
+      .filter(s => s);
+    return [...new Set([...serverStations, ...driverStations])].sort();
+  }, [filtersData, driverEntries]);
 
   const availableYears = useMemo(() => {
     const yearsFromPeriods = availablePeriods.map((p: {year: number}) => p.year);
@@ -669,49 +685,63 @@ const LPOs = () => {
     }
   }, [orders, loading, filtersInitialized, availablePeriods]);
 
-  // Add month-based serial numbers to LPOs
+  // Assign serial numbers to LPOs
+  // - Single month selected: per-month sequential SN (1, 2, 3… within that month)
+  // - Multiple months / all periods: continuous global SN, offset by pagination
   const lposWithMonthlySerialNumbers = useMemo(() => {
-    const groupedByMonth: { [key: string]: LPOEntry[] } = {};
-    
-    orders.forEach(lpo => {
-      const month = getMonthFromDate(lpo.date);
-      const year = getEffectiveYear(lpo);
-      const key = `${year}-${month}`;
-      
-      if (!groupedByMonth[key]) {
-        groupedByMonth[key] = [];
-      }
-      groupedByMonth[key].push(lpo);
-    });
-    
-    const lposWithSN: LPOEntry[] = [];
-    Object.keys(groupedByMonth).forEach(monthKey => {
-      const monthLpos = groupedByMonth[monthKey];
-      monthLpos.sort((a, b) => {
-        const aSn = a.sn || 0;
-        const bSn = b.sn || 0;
-        if (aSn !== bSn) return aSn - bSn;
-        const aNum = parseInt((String(a.lpoNo).match(/(\d+)/) || ['0','0'])[1]);
-        const bNum = parseInt((String(b.lpoNo).match(/(\d+)/) || ['0','0'])[1]);
-        return aNum - bNum;
+    const isSingleMonth = selectedPeriods.length === 1;
+
+    if (isSingleMonth) {
+      // Group by month and assign per-month sequential SN
+      const groupedByMonth: { [key: string]: LPOEntry[] } = {};
+
+      orders.forEach(lpo => {
+        const month = getMonthFromDate(lpo.date);
+        const year = getEffectiveYear(lpo);
+        const key = `${year}-${month}`;
+        if (!groupedByMonth[key]) groupedByMonth[key] = [];
+        groupedByMonth[key].push(lpo);
       });
-      
-      monthLpos.forEach((lpo, index) => {
-        lposWithSN.push({
-          ...lpo,
-          sn: index + 1
+
+      const lposWithSN: LPOEntry[] = [];
+      Object.keys(groupedByMonth).forEach(monthKey => {
+        const monthLpos = groupedByMonth[monthKey];
+        monthLpos.sort((a, b) => {
+          const aSn = a.sn || 0;
+          const bSn = b.sn || 0;
+          if (aSn !== bSn) return aSn - bSn;
+          const aNum = parseInt((String(a.lpoNo).match(/(\d+)/) || ['0', '0'])[1]);
+          const bNum = parseInt((String(b.lpoNo).match(/(\d+)/) || ['0', '0'])[1]);
+          return aNum - bNum;
+        });
+        monthLpos.forEach((lpo, index) => {
+          lposWithSN.push({ ...lpo, sn: index + 1 });
         });
       });
-    });
-    
-    lposWithSN.sort((a, b) => {
-      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bDate - aDate;
-    });
-    
-    return lposWithSN;
-  }, [orders]);
+
+      lposWithSN.sort((a, b) => {
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bDate - aDate;
+      });
+
+      return lposWithSN;
+    } else {
+      // Multi-month: sort by date desc (matches server order), then assign
+      // continuous SN offset by current page so it never resets between months
+      const sorted = [...orders].sort((a, b) => {
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bDate - aDate;
+      });
+
+      const pageOffset = (currentPage - 1) * itemsPerPage;
+      return sorted.map((lpo, index) => ({
+        ...lpo,
+        sn: pageOffset + index + 1,
+      }));
+    }
+  }, [orders, selectedPeriods, currentPage, itemsPerPage]);
 
   // Server already paginates — use the serial-numbered list directly
   const paginatedLpos = lposWithMonthlySerialNumbers;
@@ -804,22 +834,9 @@ const LPOs = () => {
 
   // Handle row click to open LPO sheet
   const handleRowClick = async (lpo: LPOEntry) => {
-    // Driver account entries have id starting with 'da-'
-    const isDriverAccount = typeof lpo.id === 'string' && lpo.id.startsWith('da-');
-    
-    if (isDriverAccount) {
-      // For driver account entries, derive year from the entry date
-      const entryDate = new Date(lpo.date);
-      const year = !isNaN(entryDate.getTime()) ? entryDate.getFullYear() : new Date().getFullYear();
-      setSelectedLpoNo(lpo.lpoNo);
-      setSelectedYear(year);
-      setSelectedWorkbookId(year);
-      setViewMode('workbook');
-      return;
-    }
-    
     try {
-      // Fetch the LPO document to get its year
+      // Fetch the LPO document to get its year (works for both regular and driver account LPOs
+      // since driver account creation also creates an LPOSummary document)
       const lpoDoc = await lpoDocumentsAPI.getByLpoNo(lpo.lpoNo);
       const year = lpoDoc.year || new Date().getFullYear();
       
@@ -1421,11 +1438,22 @@ const LPOs = () => {
             onChange={(e) => setDateFilter(e.target.value)}
             className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
           <button
             onClick={() => {
               setSearchTerm('');
               setStationFilter('');
               setDateFilter('');
+              setStatusFilter('all');
               setSelectedPeriods(
                 availablePeriods.length > 0
                   ? [availablePeriods[0]]
@@ -1461,14 +1489,19 @@ const LPOs = () => {
                     key={rowKey}
                     data-lpo-number={lpo.lpoNo}
                     onClick={() => handleRowClick(lpo)}
-                    className="border border-gray-200 dark:border-gray-600 rounded-xl p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-all cursor-pointer"
+                    className={`border rounded-xl p-4 transition-all cursor-pointer ${
+                      lpo.isCancelled
+                        ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
+                        : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50'
+                    }`}
                   >
                     {/* Header */}
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs text-gray-500 dark:text-gray-400">#{lpo.sn}</span>
-                          <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{lpo.lpoNo}</span>
+                          <span className={`text-sm font-bold ${lpo.isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-blue-600 dark:text-blue-400'}`}>{lpo.lpoNo}</span>
+                          {lpo.isCancelled && <span className="px-1.5 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{lpo.date}</p>
                       </div>
@@ -1637,7 +1670,11 @@ const LPOs = () => {
                       <tr 
                         key={rowKey}
                         data-lpo-number={lpo.lpoNo}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+                        className={`cursor-pointer transition-colors ${
+                          lpo.isCancelled
+                            ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        }`}
                         onClick={() => handleRowClick(lpo)}
                       >
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900 dark:text-gray-100">
@@ -1647,7 +1684,8 @@ const LPOs = () => {
                           {lpo.date}
                         </td>
                         <td className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 underline">
-                          {lpo.lpoNo}
+                          <span className={lpo.isCancelled ? 'line-through text-red-500 dark:text-red-400' : ''}>{lpo.lpoNo}</span>
+                          {lpo.isCancelled && <span className="ml-1 px-1 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.dieselAt}

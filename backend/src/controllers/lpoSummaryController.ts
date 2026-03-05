@@ -757,12 +757,6 @@ const syncLPOEntriesToList = async (
 
     // Create LPOEntry records for each entry in the LPOSummary
     for (const entry of lpoSummary.entries) {
-      // Skip cancelled entries - they shouldn't appear in list view
-      if (entry.isCancelled) {
-        logger.info(`Skipping LPOEntry creation for cancelled entry: ${entry.truckNo}`);
-        continue;
-      }
-
       // Determine payment mode
       let paymentMode: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' = 'STATION';
       if (entry.isDriverAccount) {
@@ -771,17 +765,17 @@ const syncLPOEntriesToList = async (
         paymentMode = 'CASH';
       }
 
-      // Create the LPOEntry record
+      // Create the LPOEntry record (including cancelled entries with flag)
       await LPOEntry.create({
         sn: nextSn++,
         date: formattedDate,
         lpoNo: lpoSummary.lpoNo,
         dieselAt: station,
-        doSdo: entry.doNo || 'PENDING',
+        doSdo: entry.isCancelled ? 'CANCELLED' : (entry.doNo || 'PENDING'),
         truckNo: entry.truckNo,
         ltrs: entry.liters,
         pricePerLtr: entry.rate,
-        destinations: entry.dest || 'PENDING',
+        destinations: entry.isCancelled ? 'CANCELLED' : (entry.dest || 'PENDING'),
         originalLtrs: entry.originalLiters || null,
         amendedAt: entry.amendedAt || null,
         // New fields for driver account / cash tracking
@@ -789,6 +783,8 @@ const syncLPOEntriesToList = async (
         referenceDo: entry.referenceDo || null,
         paymentMode,
         currency: (lpoSummary as any).currency || 'TZS',
+        isCancelled: entry.isCancelled || false,
+        cancelledAt: entry.cancelledAt || null,
       });
     }
 
@@ -834,11 +830,6 @@ const syncLPOEntriesOnUpdate = async (
 
     // Recreate LPOEntry records from updated entries
     for (const entry of entries) {
-      // Skip cancelled entries
-      if (entry.isCancelled) {
-        continue;
-      }
-
       // Resolve currency from station name for updated entries
       let entryCurrency: 'USD' | 'TZS' = 'TZS';
       const stationCfg = await FuelStationConfig.findOne({ stationName: station, isActive: true }).lean();
@@ -854,14 +845,16 @@ const syncLPOEntriesOnUpdate = async (
         date: formattedDate,
         lpoNo: lpoNo,
         dieselAt: station,
-        doSdo: entry.doNo || 'PENDING',
+        doSdo: entry.isCancelled ? 'CANCELLED' : (entry.doNo || 'PENDING'),
         truckNo: entry.truckNo,
         ltrs: entry.liters,
         pricePerLtr: entry.rate,
-        destinations: entry.dest || 'PENDING',
+        destinations: entry.isCancelled ? 'CANCELLED' : (entry.dest || 'PENDING'),
         originalLtrs: entry.originalLiters || null,
         amendedAt: entry.amendedAt || null,
         currency: entryCurrency,
+        isCancelled: entry.isCancelled || false,
+        cancelledAt: entry.cancelledAt || null,
       });
     }
 
@@ -877,7 +870,7 @@ const syncLPOEntriesOnUpdate = async (
  */
 const syncDriverAccountEntriesOnUpdate = async (lpoSummary: any): Promise<void> => {
   try {
-    const driverEntries = lpoSummary.entries.filter((e: any) => e.isDriverAccount && !e.isCancelled);
+    const driverEntries = lpoSummary.entries.filter((e: any) => e.isDriverAccount);
     
     for (const entry of driverEntries) {
       // Find matching DriverAccountEntry by lpoNo and truckNo
@@ -887,12 +880,22 @@ const syncDriverAccountEntriesOnUpdate = async (lpoSummary: any): Promise<void> 
       });
       
       if (existing) {
-        existing.liters = entry.liters;
-        existing.rate = entry.rate;
-        existing.amount = entry.liters * entry.rate;
-        existing.station = lpoSummary.station;
-        await existing.save();
-        logger.info(`Synced DriverAccountEntry for ${lpoSummary.lpoNo} / ${entry.truckNo}: ${entry.liters}L @ ${entry.rate}`);
+        if (entry.isCancelled) {
+          // Mark the driver account entry as cancelled
+          existing.isCancelled = true;
+          existing.cancelledAt = entry.cancelledAt || new Date();
+          await existing.save();
+          logger.info(`Marked DriverAccountEntry as cancelled for ${lpoSummary.lpoNo} / ${entry.truckNo}`);
+        } else {
+          existing.liters = entry.liters;
+          existing.rate = entry.rate;
+          existing.amount = entry.liters * entry.rate;
+          existing.station = lpoSummary.station;
+          existing.isCancelled = false;
+          existing.cancelledAt = undefined;
+          await existing.save();
+          logger.info(`Synced DriverAccountEntry for ${lpoSummary.lpoNo} / ${entry.truckNo}: ${entry.liters}L @ ${entry.rate}`);
+        }
       }
     }
   } catch (error: any) {

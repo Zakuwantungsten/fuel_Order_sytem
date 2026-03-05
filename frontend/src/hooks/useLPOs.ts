@@ -33,6 +33,7 @@ export interface LPOFilters {
   dateTo?: string;
   sort?: string;
   order?: 'asc' | 'desc';
+  status?: string; // 'all' | 'active' | 'cancelled'
 }
 
 /** Convert selectedPeriods to dateFrom/dateTo */
@@ -62,6 +63,7 @@ export function useLPOList(filters: LPOFilters, enabled = true) {
   if (filters.station) queryParams.station = filters.station;
   if (filters.dateFrom) queryParams.dateFrom = filters.dateFrom;
   if (filters.dateTo) queryParams.dateTo = filters.dateTo;
+  if (filters.status && filters.status !== 'all') queryParams.status = filters.status;
 
   return useQuery({
     queryKey: lpoKeys.list(queryParams),
@@ -108,6 +110,8 @@ export function useDriverAccountEntries() {
           pricePerLtr: entry.rate,
           destinations: 'NIL',
           createdAt: entry.createdAt,
+          isCancelled: entry.isCancelled || false,
+          cancelledAt: entry.cancelledAt || null,
         } as LPOEntry;
       });
     },
@@ -143,10 +147,10 @@ export function useLPOAvailableYears() {
 // ---------------------------------------------------------------------------
 // Available filters (periods + stations) for the filter dropdowns
 // ---------------------------------------------------------------------------
-export function useLPOAvailableFilters() {
+export function useLPOAvailableFilters(dateRange?: { dateFrom?: string; dateTo?: string }) {
   return useQuery({
-    queryKey: lpoKeys.availableFilters(),
-    queryFn: () => lposAPI.getAvailableFilters(),
+    queryKey: [...lpoKeys.availableFilters(), dateRange?.dateFrom, dateRange?.dateTo] as const,
+    queryFn: () => lposAPI.getAvailableFilters(dateRange),
     staleTime: 5 * 60 * 1000,
   });
 }

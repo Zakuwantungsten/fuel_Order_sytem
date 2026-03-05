@@ -64,6 +64,10 @@ export interface LPOEntry {
   // Amendment tracking
   originalLtrs?: number | null;
   amendedAt?: string | null;
+  // Cancellation tracking
+  isCancelled?: boolean;
+  cancelledAt?: string | null;
+  createdAt?: string;
 }
 
 // LPO Detail format (from LPOS 2025.csv)
@@ -635,6 +639,8 @@ export interface DriverAccountEntry {
   paybillOrMobile?: string;  // Paybill number or mobile number for mobile payments
   lpoNo: string;          // Reference LPO number
   status?: 'pending' | 'settled' | 'disputed';
+  isCancelled?: boolean;
+  cancelledAt?: string;
   settledAt?: string;
   settledBy?: string;
   approvedBy?: string;    // Name of approver for Driver's Account LPO

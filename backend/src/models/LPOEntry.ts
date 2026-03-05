@@ -88,6 +88,14 @@ const lpoEntrySchema = new Schema<ILPOEntryDocument>(
       enum: ['USD', 'TZS'],
       default: 'TZS',
     },
+    isCancelled: {
+      type: Boolean,
+      default: false,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -826,8 +826,6 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                             <RotateCcw className="w-3 h-3" />
                           </button>
                         </>
-                      ) : isDriverAccount ? (
-                        <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">DRIVER A/C</span>
                       ) : editingRow === index ? (
                         <>
                           <button

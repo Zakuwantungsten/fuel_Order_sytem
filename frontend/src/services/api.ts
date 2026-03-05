@@ -520,8 +520,8 @@ export const lposAPI = {
     };
   },
 
-  getAvailableFilters: async (): Promise<{ periods: Array<{ year: number; month: number }>; stations: string[] }> => {
-    const response = await apiClient.get('/lpo-entries/available-filters');
+  getAvailableFilters: async (params?: { dateFrom?: string; dateTo?: string }): Promise<{ periods: Array<{ year: number; month: number }>; stations: string[] }> => {
+    const response = await apiClient.get('/lpo-entries/available-filters', { params });
     return response.data || { periods: [], stations: [] };
   },
   

@@ -13,10 +13,17 @@ import { emitDataChange } from '../services/websocket';
 export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, lpoNo, truckNo, station, search } = req.query;
+    const { dateFrom, dateTo, lpoNo, truckNo, station, search, status } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
+
+    // Status filter: 'active' = non-cancelled, 'cancelled' = cancelled only, default = all
+    if (status === 'active') {
+      filter.$or = [{ isCancelled: false }, { isCancelled: { $exists: false } }];
+    } else if (status === 'cancelled') {
+      filter.isCancelled = true;
+    }
 
     // Restrict drivers to their own truck's records (least-privilege)
     if (req.user?.role === 'driver') {
@@ -201,8 +208,31 @@ export const getAvailableFilters = async (req: AuthRequest, res: Response): Prom
       b.year !== a.year ? b.year - a.year : b.month - a.month
     );
 
-    // Stations via distinct
-    const stations = await LPOEntry.distinct('dieselAt', { ...filter, dieselAt: { $nin: [null, ''] } });
+    // Stations via distinct — optionally scoped to the requested date range
+    const { dateFrom, dateTo } = req.query;
+    const stationsFilter: any = { ...filter, dieselAt: { $nin: [null, ''] } };
+    if (dateFrom || dateTo) {
+      const dateFilter: any = {};
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        dateFilter.$gte = fromDate;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        dateFilter.$lte = toDate;
+      }
+      stationsFilter.$and = [
+        {
+          $or: [
+            { actualDate: dateFilter },
+            { actualDate: { $exists: false }, createdAt: dateFilter },
+          ],
+        },
+      ];
+    }
+    const stations = await LPOEntry.distinct('dieselAt', stationsFilter);
     const sortedStations = (stations as string[])
       .filter(s => s && s.trim())
       .map(s => s.trim().toUpperCase())

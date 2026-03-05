@@ -139,6 +139,14 @@ const driverAccountEntrySchema = new Schema<IDriverAccountEntryDocument>(
     deletedAt: {
       type: Date,
     },
+    isCancelled: {
+      type: Boolean,
+      default: false,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

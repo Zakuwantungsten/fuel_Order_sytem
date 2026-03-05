@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Plus, X, FileSpreadsheet, Trash2, 
   Copy, User, AlertTriangle, FileDown, Search,
-  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download, Check, MessageSquare
+  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download, Check, MessageSquare, Loader2
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary, FuelStationConfig } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
@@ -45,6 +46,9 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
   const [availableYears, setAvailableYears] = useState<number[]>([new Date().getFullYear()]);
   
+  const [downloadingPdf, setDownloadingPdf] = useState<string | number | null>(null);
+  const [downloadingImage, setDownloadingImage] = useState<string | number | null>(null);
+
   // Dropdown states for main component
   const [showYearDropdown, setShowYearDropdown] = useState(false);
   
@@ -463,11 +467,19 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     }).format(amount);
   };
 
+  // Format date to D-MMM format to match regular LPO entries
+  const formatEntryDate = (dateStr: string): string => {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = d.getDate();
+    const month = d.toLocaleDateString('en-US', { month: 'short' });
+    return `${day}-${month}`;
+  };
+
   // Convert driver account entry to LPO Summary format for image/PDF generation
   // Bundles all entries with the same LPO number together
   const convertToLPOSummary = (entry: DriverAccountEntry): LPOSummary => {
-    const entryDate = new Date(entry.date);
-    const formattedDate = entryDate.toISOString().split('T')[0];
+    const formattedDate = formatEntryDate(entry.date);
 
     // Find all entries sharing the same LPO number
     const sameLpoEntries = (workbook?.entries || []).filter(e => e.lpoNo === entry.lpoNo);
@@ -501,37 +513,107 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       const success = await copyLPOImageToClipboard(lpoSummary, user?.username, entry.approvedBy);
       
       if (success) {
-        alert('✓ Driver Account LPO image copied to clipboard!\nYou can now paste it anywhere.');
+        toast.success(`Image copied: LPO ${entry.lpoNo}`, { autoClose: 4000 });
       } else {
-        alert('Failed to copy image to clipboard. Please try again.');
+        toast.error('Failed to copy image to clipboard.', { autoClose: 6000 });
       }
     } catch (error) {
       console.error('Error copying image:', error);
-      alert('Failed to copy image. Your browser may not support this feature.');
+      toast.error('Failed to copy image. Browser may not support this feature.', { autoClose: 6000 });
+    }
+  };
+
+  // Handle copy for WhatsApp
+  const handleCopyWhatsApp = async (entry: DriverAccountEntry) => {
+    try {
+      const lpoSummary = convertToLPOSummary(entry);
+      const success = await copyLPOForWhatsApp(lpoSummary);
+      if (success) {
+        toast.success(`WhatsApp text copied: LPO ${entry.lpoNo}`, { autoClose: 4000 });
+      } else {
+        toast.error('Failed to copy WhatsApp text.', { autoClose: 6000 });
+      }
+    } catch (error) {
+      console.error('Error copying WhatsApp text:', error);
+      toast.error('Failed to copy WhatsApp text.', { autoClose: 6000 });
+    }
+  };
+
+  // Handle copy as CSV text
+  const handleCopyCsvText = async (entry: DriverAccountEntry) => {
+    try {
+      const lpoSummary = convertToLPOSummary(entry);
+      const success = await copyLPOTextToClipboard(lpoSummary);
+      if (success) {
+        toast.success(`CSV text copied: LPO ${entry.lpoNo}`, { autoClose: 4000 });
+      } else {
+        toast.error('Failed to copy CSV text.', { autoClose: 6000 });
+      }
+    } catch (error) {
+      console.error('Error copying CSV text:', error);
+      toast.error('Failed to copy CSV text.', { autoClose: 6000 });
     }
   };
 
   // Handle download as PDF for a single entry
   const handleDownloadEntryPDF = async (entry: DriverAccountEntry) => {
+    const lpoKey = entry.id || entry.lpoNo;
+    setDownloadingPdf(lpoKey);
+    const toastId = toast.loading(`Preparing PDF — LPO ${entry.lpoNo}...`, {
+      style: { background: '#0284c7', color: '#fff' },
+    });
     try {
       const lpoSummary = convertToLPOSummary(entry);
       await downloadLPOPDF(lpoSummary, undefined, user?.username, entry.approvedBy);
-      alert('✓ Driver Account LPO PDF downloaded successfully!');
-    } catch (error) {
+      toast.update(toastId, {
+        render: `PDF downloaded: LPO ${entry.lpoNo}`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 4000,
+        style: undefined,
+      });
+    } catch (error: any) {
       console.error('Error downloading PDF:', error);
-      alert('Failed to download PDF. Please try again.');
+      toast.update(toastId, {
+        render: `PDF download failed: ${error?.message || 'Unknown error'}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 6000,
+        style: undefined,
+      });
+    } finally {
+      setDownloadingPdf(null);
     }
   };
 
   // Handle download as Image for a single entry  
   const handleDownloadEntryImage = async (entry: DriverAccountEntry) => {
+    const lpoKey = entry.id || entry.lpoNo;
+    setDownloadingImage(lpoKey);
+    const toastId = toast.loading(`Preparing image — LPO ${entry.lpoNo}...`, {
+      style: { background: '#0284c7', color: '#fff' },
+    });
     try {
       const lpoSummary = convertToLPOSummary(entry);
       await downloadLPOImage(lpoSummary, undefined, user?.username, entry.approvedBy);
-      alert('✓ Driver Account LPO image downloaded successfully!');
-    } catch (error) {
+      toast.update(toastId, {
+        render: `Image downloaded: LPO ${entry.lpoNo}`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 4000,
+        style: undefined,
+      });
+    } catch (error: any) {
       console.error('Error downloading image:', error);
-      alert('Failed to download image. Please try again.');
+      toast.update(toastId, {
+        render: `Image download failed: ${error?.message || 'Unknown error'}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 6000,
+        style: undefined,
+      });
+    } finally {
+      setDownloadingImage(null);
     }
   };
 
@@ -836,7 +918,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
               {filteredEntries.map((entry, index) => (
                 <div
                   key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`}
-                  className="border rounded-lg p-3 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 cursor-pointer"
+                  className={`border rounded-lg p-3 cursor-pointer ${entry.isCancelled ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'}`}
                   onClick={() => {
                     if (onNavigateToSheet && entry.lpoNo) {
                       const entryDate = new Date(entry.date);
@@ -850,7 +932,8 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 text-[10px] font-bold text-red-700 dark:text-red-300">{index + 1}</span>
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{entry.truckNo}</p>
+                        <p className={`text-sm font-bold truncate ${entry.isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.truckNo}</p>
+                        {entry.isCancelled && <span className="px-1.5 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
                         {entry.driverName && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{entry.driverName}</p>}
                       </div>
                     </div>
@@ -866,6 +949,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                       <div className="relative">
                         <button
                           onClick={(e) => {
+                            e.stopPropagation();
                             const rect = e.currentTarget.getBoundingClientRect();
                             const DROPDOWN_HEIGHT = 200;
                             const spaceBelow = window.innerHeight - rect.bottom;
@@ -883,22 +967,33 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                         </button>
                         {openEntryDropdown === entry.id && (
                           <div
-                            className="fixed w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50"
+                            className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
                             style={{ top: entryDropdownPosition.top !== undefined ? `${entryDropdownPosition.top}px` : 'auto', bottom: entryDropdownPosition.bottom !== undefined ? `${entryDropdownPosition.bottom}px` : 'auto', left: `${entryDropdownPosition.left}px`, maxWidth: 'calc(100vw - 20px)' }}
                           >
-                            <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
-                              <Image className="w-4 h-4 mr-2 text-green-600" />Copy as Image
-                            </button>
-                            <button onClick={() => { handleDownloadEntryPDF(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
-                              <Download className="w-4 h-4 mr-2 text-blue-600" />Download PDF
-                            </button>
-                            <button onClick={() => { handleDownloadEntryImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
-                              <FileDown className="w-4 h-4 mr-2 text-purple-600" />Download Image
-                            </button>
-                            <div className="border-t border-gray-200 dark:border-gray-600" />
-                            <button onClick={() => { deleteEntry(entry.id!); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
-                              <Trash2 className="w-4 h-4 mr-2" />Delete Entry
-                            </button>
+                            <div className="py-1">
+                              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Copy Options</div>
+                              <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <Image className="w-4 h-4 mr-2" />Copy as Image
+                              </button>
+                              <button onClick={() => { handleCopyWhatsApp(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <MessageSquare className="w-4 h-4 mr-2" />Copy for WhatsApp
+                              </button>
+                              <button onClick={() => { handleCopyCsvText(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <FileSpreadsheet className="w-4 h-4 mr-2" />Copy as CSV Text
+                              </button>
+                              <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
+                              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Download Options</div>
+                              <button onClick={() => { handleDownloadEntryPDF(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <FileDown className="w-4 h-4 mr-2 text-red-600" />Download as PDF
+                              </button>
+                              <button onClick={() => { handleDownloadEntryImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <Download className="w-4 h-4 mr-2 text-green-600" />Download as Image
+                              </button>
+                              <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
+                              <button onClick={() => { deleteEntry(entry.id!); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                <Trash2 className="w-4 h-4 mr-2" />Delete Entry
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -907,7 +1002,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
 
                   {/* Metadata row */}
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                    <div><span className="text-gray-400 dark:text-gray-500">Date: </span><span className="text-gray-700 dark:text-gray-300">{entry.date}</span></div>
+                    <div><span className="text-gray-400 dark:text-gray-500">Date: </span><span className="text-gray-700 dark:text-gray-300">{formatEntryDate(entry.date)}</span></div>
                     <div><span className="text-gray-400 dark:text-gray-500">Station: </span><span className="text-gray-700 dark:text-gray-300">{entry.station}</span></div>
                     <div><span className="text-gray-400 dark:text-gray-500">DO: </span><span className="text-orange-600 dark:text-orange-400">NIL <span className="text-gray-400">({entry.originalDoNo || entry.doNo || 'N/A'})</span></span></div>
                     <div><span className="text-gray-400 dark:text-gray-500">LPO: </span><span className="text-gray-700 dark:text-gray-300">{entry.lpoNo || '—'}</span></div>
@@ -947,7 +1042,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                   {filteredEntries.map((entry, index) => (
                     <tr
                       key={entry.id || `${entry.lpoNo}-${entry.date}-${entry.truckNo}-${index}`}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                      className={`transition-colors cursor-pointer ${entry.isCancelled ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
                       onClick={() => {
                         if (onNavigateToSheet && entry.lpoNo) {
                           const entryDate = new Date(entry.date);
@@ -957,8 +1052,11 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                       }}
                     >
                       <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900 dark:text-gray-100">{index + 1}</td>
-                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.date}</td>
-                      <td className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400">{entry.lpoNo}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{formatEntryDate(entry.date)}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400">
+                        <span className={entry.isCancelled ? 'line-through' : ''}>{entry.lpoNo}</span>
+                        {entry.isCancelled && <span className="ml-1 px-1 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
+                      </td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.station}</td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">NIL</td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.truckNo}</td>
@@ -966,11 +1064,12 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.rate.toFixed(2)}</td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">NIL</td>
                       <td className="px-3 py-2 text-xs font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(entry.amount)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
                         <div className="flex space-x-2 relative">
                           <div className="relative">
                             <button
                               onClick={(e) => {
+                                e.stopPropagation();
                                 const rect = e.currentTarget.getBoundingClientRect();
                                 const DROPDOWN_HEIGHT = 280;
                                 const spaceBelow = window.innerHeight - rect.bottom;
@@ -996,12 +1095,34 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                                 <div className="py-1">
                                   <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Copy Options</div>
                                   <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><Image className="w-4 h-4 mr-2" />Copy as Image</button>
-                                  <button onClick={() => { const lpoSummary = convertToLPOSummary(entry); copyLPOForWhatsApp(lpoSummary); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><MessageSquare className="w-4 h-4 mr-2" />Copy for WhatsApp</button>
-                                  <button onClick={() => { const lpoSummary = convertToLPOSummary(entry); copyLPOTextToClipboard(lpoSummary); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><FileSpreadsheet className="w-4 h-4 mr-2" />Copy as CSV Text</button>
+                                  <button onClick={() => { handleCopyWhatsApp(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><MessageSquare className="w-4 h-4 mr-2" />Copy for WhatsApp</button>
+                                  <button onClick={() => { handleCopyCsvText(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><FileSpreadsheet className="w-4 h-4 mr-2" />Copy as CSV Text</button>
                                   <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
                                   <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Download Options</div>
-                                  <button onClick={() => { handleDownloadEntryPDF(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><FileDown className="w-4 h-4 mr-2 text-red-600" />Download as PDF</button>
-                                  <button onClick={() => { handleDownloadEntryImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><Download className="w-4 h-4 mr-2 text-green-600" />Download as Image</button>
+                                  <button
+                                    onClick={() => { handleDownloadEntryPDF(entry); setOpenEntryDropdown(null); }}
+                                    disabled={downloadingPdf === (entry.id || entry.lpoNo)}
+                                    className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {downloadingPdf === (entry.id || entry.lpoNo) ? (
+                                      <Loader2 className="w-4 h-4 mr-2 text-red-600 animate-spin" />
+                                    ) : (
+                                      <FileDown className="w-4 h-4 mr-2 text-red-600" />
+                                    )}
+                                    {downloadingPdf === (entry.id || entry.lpoNo) ? 'Downloading...' : 'Download as PDF'}
+                                  </button>
+                                  <button
+                                    onClick={() => { handleDownloadEntryImage(entry); setOpenEntryDropdown(null); }}
+                                    disabled={downloadingImage === (entry.id || entry.lpoNo)}
+                                    className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {downloadingImage === (entry.id || entry.lpoNo) ? (
+                                      <Loader2 className="w-4 h-4 mr-2 text-green-600 animate-spin" />
+                                    ) : (
+                                      <Download className="w-4 h-4 mr-2 text-green-600" />
+                                    )}
+                                    {downloadingImage === (entry.id || entry.lpoNo) ? 'Downloading...' : 'Download as Image'}
+                                  </button>
                                   <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
                                   <button onClick={() => { deleteEntry(entry.id!); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4 mr-2" />Delete Entry</button>
                                 </div>
