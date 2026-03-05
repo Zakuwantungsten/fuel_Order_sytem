@@ -36,12 +36,13 @@ import { formatTruckNumber } from '../utils/dataCleanup';
 import Pagination from './Pagination';
 import PendingConfigurations from '../pages/PendingConfigurations';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import FuelPriceTab from './SuperAdmin/FuelPriceTab';
 
 interface AdminDashboardProps {
   user: any;
 }
 
-type TabType = 'overview' | 'stations' | 'routes' | 'trucks' | 'allocations' | 'users' | 'pending';
+type TabType = 'overview' | 'stations' | 'routes' | 'trucks' | 'allocations' | 'users' | 'pending' | 'fuel_prices';
 
 export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -264,6 +265,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'pending', label: 'Pending Config', icon: Lock },
     { id: 'stations', label: 'Fuel Stations', icon: Fuel },
+    { id: 'fuel_prices', label: 'Fuel Prices', icon: DollarSign },
     { id: 'routes', label: 'Routes', icon: MapPin },
     { id: 'trucks', label: 'Truck Batches', icon: Truck },
     { id: 'allocations', label: 'Allocations', icon: Settings },
@@ -400,6 +402,9 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
                   />
                 )}
                 {activeTab === 'pending' && <PendingConfigurations />}
+                {activeTab === 'fuel_prices' && (
+                  <FuelPriceTab onMessage={(msg, type) => showMessage(type ?? 'success', msg)} />
+                )}
                 {activeTab === 'users' && (
                   <>
                     <UsersTab

@@ -8,6 +8,11 @@ interface IMFA extends Document {
   userId: mongoose.Types.ObjectId;
   isEnabled: boolean;
   
+  // Admin policy flags (consolidated from UserMFA)
+  isMandatory: boolean;     // Force-require MFA for this user
+  isExempt: boolean;        // Exempt from role-based MFA policy
+  allowedMethods: string[] | null;  // Per-user method override (null = inherit)
+  
   // TOTP (Authenticator App)
   totpEnabled: boolean;
   totpSecret: string; // Encrypted
@@ -90,6 +95,20 @@ const MFASchema = new Schema<IMFA>(
     isEnabled: {
       type: Boolean,
       default: false,
+    },
+    
+    // Admin policy flags (consolidated from UserMFA)
+    isMandatory: {
+      type: Boolean,
+      default: false,
+    },
+    isExempt: {
+      type: Boolean,
+      default: false,
+    },
+    allowedMethods: {
+      type: [String],
+      default: null,
     },
     
     // TOTP Settings

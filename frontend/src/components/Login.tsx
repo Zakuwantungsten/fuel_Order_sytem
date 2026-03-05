@@ -22,12 +22,14 @@ const Login: React.FC = () => {
     userId: string;
     tempSessionToken: string;
     preferredMethod: 'totp' | 'sms' | 'email';
+    mfaMethods?: { totp: boolean; sms: boolean; email: boolean };
   } | null>(null);
 
   // MFA Setup State (when admin requires MFA but user hasn't set it up)
   const [mfaSetupChallenge, setMfaSetupChallenge] = useState<{
     userId: string;
     tempSessionToken: string;
+    allowedMethods?: string[];
   } | null>(null);
 
   const { login, isLoading, error, clearError, completeLogin } = useAuth();
@@ -135,6 +137,7 @@ const Login: React.FC = () => {
           userId: result.data.userId,
           tempSessionToken: result.data.tempSessionToken,
           preferredMethod: result.data.preferredMethod || 'totp',
+          mfaMethods: result.data.mfaMethods,
         });
         return;
       }
@@ -142,6 +145,7 @@ const Login: React.FC = () => {
         setMfaSetupChallenge({
           userId: result.data.userId,
           tempSessionToken: result.data.tempSessionToken,
+          allowedMethods: result.data.allowedMethods,
         });
         return;
       }
@@ -181,6 +185,7 @@ const Login: React.FC = () => {
         <MFASetupLogin
           userId={mfaSetupChallenge.userId}
           tempSessionToken={mfaSetupChallenge.tempSessionToken}
+          allowedMethods={mfaSetupChallenge.allowedMethods}
           onSuccess={handleMFASuccess}
           onCancel={handleMFASetupCancel}
         />
@@ -196,6 +201,7 @@ const Login: React.FC = () => {
           userId={mfaChallenge.userId}
           tempSessionToken={mfaChallenge.tempSessionToken}
           preferredMethod={mfaChallenge.preferredMethod}
+          mfaMethods={mfaChallenge.mfaMethods}
           onSuccess={handleMFASuccess}
           onCancel={handleMFACancel}
         />

@@ -5,6 +5,7 @@ import { RouteConfig } from '../models/RouteConfig';
 import { SystemConfig } from '../models/SystemConfig';
 import { AuditLog } from '../models/AuditLog';
 import { FuelRecord } from '../models';
+import { FuelPriceHistory } from '../models/FuelPrice';
 import { emitDataChange } from '../services/websocket';
 import { autoResolveNotifications } from './notificationController';
 import logger from '../utils/logger';
@@ -409,6 +410,14 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
 
     updates.updatedBy = req.user?.username || 'system';
 
+    // Capture old rate before update for price history
+    const existingStation = await FuelStationConfig.findById(id).lean();
+    if (!existingStation) {
+      res.status(404).json({ success: false, message: 'Fuel station not found' });
+      return;
+    }
+    const oldRate: number = existingStation.defaultRate;
+
     // Build update operation
     const updateOperation: any = { $set: updates };
     if (Object.keys(unsetFields).length > 0) {
@@ -427,6 +436,19 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
         message: 'Fuel station not found',
       });
       return;
+    }
+
+    // Record price history when defaultRate changed
+    if (updates.defaultRate !== undefined && updates.defaultRate !== oldRate) {
+      await FuelPriceHistory.create({
+        stationId: id,
+        stationName: station.stationName,
+        oldPrice: oldRate,
+        newPrice: updates.defaultRate,
+        changedBy: req.user?.username || 'system',
+        changedAt: new Date(),
+        reason: 'Rate updated from Stations tab',
+      });
     }
 
     // Audit log

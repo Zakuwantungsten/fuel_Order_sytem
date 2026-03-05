@@ -103,7 +103,7 @@ const getInitialTab = (userRole: string): string => {
     if (userRole === 'admin' || userRole === 'boss') {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'fleet_tracking',
-        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_routes', 'admin_reports', 'driver_credentials', 'excel_import'
+        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_fuel_prices', 'admin_routes', 'admin_reports', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'fuel_order_maker') {
@@ -302,6 +302,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'admin_data', label: 'Data Management', icon: FolderOpen },
         { id: 'admin_users', label: 'User Support', icon: Users },
         { id: 'admin_fuel_stations', label: 'Fuel Stations', icon: Building2 },
+        { id: 'admin_fuel_prices', label: 'Fuel Prices', icon: TrendingUp },
         { id: 'admin_routes', label: 'Routes', icon: Route },
         { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
         { id: 'admin_reports', label: 'Admin Reports', icon: TrendingUp },
@@ -418,6 +419,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <StandardAdminDashboard user={user} section="users" />;
       case 'admin_fuel_stations':
         return <StandardAdminDashboard user={user} section="fuel_stations" />;
+      case 'admin_fuel_prices':
+        return <StandardAdminDashboard user={user} section="fuel_prices" />;
       case 'admin_routes':
         return <StandardAdminDashboard user={user} section="routes" />;
       case 'admin_reports':

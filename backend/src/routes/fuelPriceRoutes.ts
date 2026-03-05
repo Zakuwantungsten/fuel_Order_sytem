@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import { asyncHandler } from '../middleware/errorHandler';
 import {
   getPriceHistory,
   updatePrice,
@@ -14,14 +15,14 @@ const router = Router();
 
 router.use(authenticate, authorize('super_admin', 'admin', 'boss'));
 
-router.get('/current', getCurrentPrices);
-router.get('/history', getPriceHistory);
-router.get('/schedules', getSchedules);
+router.get('/current', asyncHandler(getCurrentPrices));
+router.get('/history', asyncHandler(getPriceHistory));
+router.get('/schedules', asyncHandler(getSchedules));
 
-// Admin write actions — super_admin only
-router.post('/update', authorize('super_admin'), updatePrice);
-router.post('/schedules', authorize('super_admin'), createSchedule);
-router.delete('/schedules/:id', authorize('super_admin'), cancelSchedule);
-router.post('/schedules/apply-due', authorize('super_admin'), applyDueSchedules);
+// Write actions — super_admin and admin
+router.post('/update', authorize('super_admin', 'admin'), asyncHandler(updatePrice));
+router.post('/schedules', authorize('super_admin', 'admin'), asyncHandler(createSchedule));
+router.delete('/schedules/:id', authorize('super_admin', 'admin'), asyncHandler(cancelSchedule));
+router.post('/schedules/apply-due', authorize('super_admin', 'admin'), asyncHandler(applyDueSchedules));
 
 export default router;

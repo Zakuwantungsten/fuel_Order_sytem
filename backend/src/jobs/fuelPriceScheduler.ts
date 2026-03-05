@@ -4,7 +4,7 @@
  */
 
 import { FuelPriceSchedule, FuelPriceHistory } from '../models/FuelPrice';
-import { SystemConfig } from '../models';
+import { FuelStationConfig } from '../models/FuelStationConfig';
 import { emitDataChange } from '../services/websocket';
 import logger from '../utils/logger';
 import { jobRegistry } from './jobRegistry';
@@ -22,22 +22,16 @@ export async function applyDueFuelPriceSchedules(): Promise<void> {
     return;
   }
 
-  let config = await SystemConfig.findOne({ configType: 'fuel_stations', isDeleted: false });
-  if (!config) {
-    logger.warn('[FuelPriceScheduler] No fuel_stations config found; skipping');
-    return;
-  }
-
   const applied: string[] = [];
 
   for (const schedule of dueSchedules) {
-    const stationIdx = config.fuelStations?.findIndex((s: any) => s.id === schedule.stationId);
-    if (stationIdx === undefined || stationIdx === -1) {
+    const station = await FuelStationConfig.findById(schedule.stationId);
+    if (!station) {
       logger.warn(`[FuelPriceScheduler] Station ${schedule.stationId} not found; skipping`);
       continue;
     }
 
-    const oldPrice = config.fuelStations![stationIdx].pricePerLiter;
+    const oldPrice = station.defaultRate;
 
     await FuelPriceHistory.create({
       stationId: schedule.stationId,
@@ -49,7 +43,9 @@ export async function applyDueFuelPriceSchedules(): Promise<void> {
       reason: schedule.reason ? `Scheduled: ${schedule.reason}` : 'Scheduled price change',
     });
 
-    config.fuelStations![stationIdx].pricePerLiter = schedule.newPrice;
+    station.defaultRate = schedule.newPrice;
+    station.updatedBy = 'scheduler';
+    await station.save();
     schedule.isApplied = true;
     schedule.appliedAt = now;
     await schedule.save();
@@ -57,8 +53,6 @@ export async function applyDueFuelPriceSchedules(): Promise<void> {
   }
 
   if (applied.length > 0) {
-    config.lastUpdatedBy = 'scheduler';
-    await config.save();
     emitDataChange('fuel_stations', 'update');
     logger.info(`[FuelPriceScheduler] Applied ${applied.length} scheduled fuel price change(s): ${applied.join(', ')}`);
   }

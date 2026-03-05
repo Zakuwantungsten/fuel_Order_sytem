@@ -7,6 +7,8 @@ export interface IUserMFA extends Document {
   // MFA Status
   isEnabled: boolean;
   isMandatory: boolean;  // Set by admin for specific roles
+  isExempt: boolean;  // Exempt from role-based MFA policy (set when admin explicitly disables MFA)
+  allowedMethods: string[] | null;  // Per-user override: null = inherit global policy
   
   // TOTP (Time-based One-Time Password)
   totpSecret: string | null;  // Encrypted secret for authenticator apps
@@ -68,6 +70,16 @@ const UserMFASchema = new Schema<IUserMFA>(
     isMandatory: {
       type: Boolean,
       default: false,
+    },
+    
+    isExempt: {
+      type: Boolean,
+      default: false,
+    },
+    
+    allowedMethods: {
+      type: [String],
+      default: null,
     },
     
     // TOTP Settings

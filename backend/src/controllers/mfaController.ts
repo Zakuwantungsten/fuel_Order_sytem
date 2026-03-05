@@ -67,6 +67,19 @@ export const generateTOTPSecret = asyncHandler(async (req: AuthRequest, res: Res
     return;
   }
   
+  // Check if user already has a TOTP secret (e.g. MFA was disabled then re-enabled)
+  const hasExisting = await mfaService.hasExistingTOTPSecret(userId);
+  if (hasExisting) {
+    res.json({
+      success: true,
+      message: 'TOTP already configured. Enter your authenticator code to re-enable.',
+      data: {
+        alreadyConfigured: true,
+      },
+    });
+    return;
+  }
+  
   // Generate TOTP secret and QR code
   const totpData = await mfaService.generateTOTPSecret(
     userId,
@@ -102,16 +115,31 @@ export const verifyAndEnableTOTP = asyncHandler(async (req: AuthRequest, res: Re
     return;
   }
   
-  if (!secret || !code) {
+  if (!code) {
     res.status(400).json({
       success: false,
-      message: 'Secret and verification code are required',
+      message: 'Verification code is required',
     });
     return;
   }
   
+  // If no secret provided, use existing secret from database (re-enable flow)
+  let totpSecret = secret;
+  if (!totpSecret) {
+    const mfa = await mfaService.getMFASettings(userId);
+    if (mfa.totpSecret) {
+      totpSecret = mfa.totpSecret;
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Secret is required. Please generate a new TOTP secret first.',
+      });
+      return;
+    }
+  }
+  
   // Enable TOTP
-  const result = await mfaService.enableTOTP(userId, secret, code);
+  const result = await mfaService.enableTOTP(userId, totpSecret, code);
   
   if (!result.success) {
     res.status(400).json({
@@ -445,7 +473,8 @@ export const sendLoginOTP = asyncHandler(async (req: AuthRequest, res: Response)
   const mfa = await MFA.findOne({ userId });
   if (!mfa) { res.status(400).json({ success: false, message: 'MFA not configured' }); return; }
 
-  if (method === 'email' && mfa.emailEnabled) {
+  if (method === 'email') {
+    // Email OTP is always available as a fallback for any MFA-enabled user
     await mfaService.sendEmailOTP(userId, user.email);
     res.json({ success: true, message: 'Code sent to your email' });
   } else if (method === 'sms' && mfa.smsEnabled) {

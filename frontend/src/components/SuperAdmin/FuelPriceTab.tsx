@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import ConfirmModal from './ConfirmModal';
 import Pagination from '../Pagination';
 import {
@@ -16,14 +17,16 @@ interface Props {
   onMessage: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-const STATION_COLORS: Record<string, string> = {
-  lake_ndola: '#6366f1',
-  lake_kapiri: '#10b981',
-  cash: '#f59e0b',
-};
+const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16'];
 
-function formatPrice(p: number) {
-  return `K${p.toLocaleString('en-ZM', { minimumFractionDigits: 0 })}`;
+function stationColor(id: string, stations: FuelStation[]): string {
+  const idx = stations.findIndex((s) => s.id === id);
+  return PALETTE[idx >= 0 ? idx % PALETTE.length : 0];
+}
+
+function formatPrice(p: number, currency?: 'USD' | 'TZS') {
+  if (currency === 'USD') return `$${p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `TZS ${p.toLocaleString('en-TZ', { maximumFractionDigits: 0 })}`;
 }
 
 function formatDate(d: string) {
@@ -56,7 +59,6 @@ function ScheduleSlideOver({
   const [stationId, setStationId] = useState(stations[0]?.id ?? '');
   const [newPrice, setNewPrice] = useState('');
   const [effectiveAt, setEffectiveAt] = useState('');
-  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -80,7 +82,6 @@ function ScheduleSlideOver({
         stationId,
         newPrice: price,
         effectiveAt: new Date(effectiveAt).toISOString(),
-        reason: reason.trim() || undefined,
       });
       onSaved();
     } catch (err: any) {
@@ -119,21 +120,28 @@ function ScheduleSlideOver({
             </select>
             {selectedStation && (
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Current price: <span className="font-medium">{formatPrice(selectedStation.pricePerLiter)}</span> / L
+                Current price: <span className="font-medium">{formatPrice(selectedStation.pricePerLiter, selectedStation.currency)}</span> / L
               </p>
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">New Price (ZMW / L)</label>
-            <input
-              type="number"
-              min="1"
-              step="any"
-              value={newPrice}
-              onChange={(e) => setNewPrice(e.target.value)}
-              placeholder="e.g. 1650"
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              New Price <span className="text-gray-400 font-normal">({selectedStation?.currency ?? 'TZS'} / L)</span>
+            </label>
+            <div className="flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
+              <span className="px-3 py-2.5 text-sm font-bold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-r border-gray-300 dark:border-gray-600 select-none">
+                {selectedStation?.currency === 'USD' ? '$' : 'TZS'}
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={newPrice}
+                onChange={(e) => setNewPrice(e.target.value)}
+                placeholder="0.00"
+                className="flex-1 px-3 py-2.5 text-sm bg-transparent outline-none text-gray-900 dark:text-white placeholder:text-gray-400"
+              />
+              <span className="pr-3 text-xs text-gray-400 select-none">/ L</span>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Effective From</label>
@@ -142,16 +150,6 @@ function ScheduleSlideOver({
               value={effectiveAt}
               onChange={(e) => setEffectiveAt(e.target.value)}
               className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reason (optional)</label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              placeholder="Reason for price adjustment…"
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
             />
           </div>
           <button
@@ -167,30 +165,32 @@ function ScheduleSlideOver({
   );
 }
 
-/* ─── Quick-edit Price Row ─── */
-function StationRow({
+/* ─── Edit Price Modal ─── */
+function EditPriceModal({
   station,
-  onUpdated,
+  onClose,
+  onSaved,
   onMessage,
 }: {
   station: FuelStation;
-  onUpdated: () => void;
+  onClose: () => void;
+  onSaved: () => void;
   onMessage: Props['onMessage'];
 }) {
-  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(station.pricePerLiter));
-  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const [sameError, setSameError] = useState(false);
 
   async function save() {
     const price = parseFloat(value);
     if (isNaN(price) || price <= 0) { onMessage('Enter a valid price', 'error'); return; }
+    if (price === station.pricePerLiter) { setSameError(true); return; }
+    setSameError(false);
     setSaving(true);
     try {
-      await fuelPriceService.updatePrice({ stationId: station.id, newPrice: price, reason: reason.trim() || undefined });
-      onMessage(`${station.name} price updated to ${formatPrice(price)}/L`, 'success');
-      setEditing(false);
-      onUpdated();
+      await fuelPriceService.updatePrice({ stationId: station.id, newPrice: price });
+      onMessage(`${station.name} updated to ${formatPrice(price, station.currency)}/L`, 'success');
+      onSaved();
     } catch (err: any) {
       onMessage(err?.response?.data?.message ?? 'Update failed', 'error');
     } finally {
@@ -199,58 +199,108 @@ function StationRow({
   }
 
   return (
-    <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-3">
-        <span
-          className="w-3 h-10 rounded-full"
-          style={{ backgroundColor: STATION_COLORS[station.id] ?? '#94a3b8' }}
-        />
-        <div>
-          <p className="font-semibold text-gray-900 dark:text-white text-sm">{station.name}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{station.location}</p>
-        </div>
-      </div>
-
-      {editing ? (
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col gap-1">
-            <input
-              type="number"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              className="w-28 text-right border border-indigo-400 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              autoFocus
-            />
-            <input
-              type="text"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Reason…"
-              className="w-28 text-xs border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-400"
-            />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-xs bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center flex-shrink-0">
+              <Edit3 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{station.name}</p>
+              <p className="text-xs text-gray-400 leading-tight">{station.location}</p>
+            </div>
           </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {/* Body */}
+        <div className="px-4 py-4 space-y-3">
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+            <span className="text-xs text-gray-500 dark:text-gray-400">Current price</span>
+            <span className="text-sm font-bold text-gray-800 dark:text-gray-200 tabular-nums">
+              {formatPrice(station.pricePerLiter, station.currency)}<span className="text-xs font-normal text-gray-400 ml-1">/ L</span>
+            </span>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">New Price</label>
+            <div className="flex items-center rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden focus-within:border-indigo-500 transition-colors">
+              <span className="px-3 py-2.5 text-sm font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border-r border-gray-200 dark:border-gray-700 select-none">
+                {station.currency === 'USD' ? '$' : 'TZS'}
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => { setValue(e.target.value); setSameError(false); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose(); }}
+                placeholder="0.00"
+                autoFocus
+                className="flex-1 px-3 py-2.5 text-base font-semibold bg-transparent outline-none text-gray-900 dark:text-white placeholder:text-gray-300 dark:placeholder:text-gray-600 tabular-nums"
+              />
+              <span className="pr-3 text-xs text-gray-400 select-none">/ L</span>
+            </div>
+            {sameError && (
+              <p className="mt-1.5 text-xs text-red-500 font-medium">New price must differ from the current price.</p>
+            )}
+          </div>
+        </div>
+        {/* Footer */}
+        <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-800/60 border-t border-gray-100 dark:border-gray-800">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
           <button
             onClick={save}
             disabled={saving}
-            className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5"
           >
-            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-          </button>
-          <button onClick={() => { setEditing(false); setValue(String(station.pricePerLiter)); }} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-            <X className="w-4 h-4 text-gray-500" />
+            {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+            {saving ? 'Saving…' : 'Update Price'}
           </button>
         </div>
-      ) : (
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-gray-900 dark:text-white">{formatPrice(station.pricePerLiter)}<span className="text-xs font-normal text-gray-400 ml-1">/L</span></span>
-          <button
-            onClick={() => { setEditing(true); setValue(String(station.pricePerLiter)); setReason(''); }}
-            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-indigo-600"
-          >
-            <Edit3 className="w-4 h-4" />
-          </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Station Row ─── */
+function StationRow({
+  station,
+  color,
+  onEdit,
+}: {
+  station: FuelStation;
+  color: string;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-indigo-200 dark:hover:border-indigo-800 hover:shadow-sm transition-all group">
+      <div className="flex items-center gap-2.5">
+        <span className="w-2 h-6 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+        <div>
+          <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight">{station.name}</p>
+          <p className="text-xs text-gray-400 leading-tight">{station.location}</p>
         </div>
-      )}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
+          {formatPrice(station.pricePerLiter, station.currency)}<span className="text-xs font-normal text-gray-400 ml-0.5">/L</span>
+        </span>
+        <button
+          onClick={onEdit}
+          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-xs font-semibold transition-all"
+        >
+          <Edit3 className="w-3 h-3" />
+          Edit
+        </button>
+      </div>
     </div>
   );
 }
@@ -269,6 +319,7 @@ export default function FuelPriceTab({ onMessage }: Props) {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; name: string } | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [editingStation, setEditingStation] = useState<FuelStation | null>(null);
   const HIST_LIMIT = 20;
 
   const loadAll = useCallback(async () => {
@@ -291,6 +342,7 @@ export default function FuelPriceTab({ onMessage }: Props) {
   }, [histPage, onMessage]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+  useRealtimeSync(['fuel_stations'], loadAll);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -359,7 +411,15 @@ export default function FuelPriceTab({ onMessage }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {editingStation && (
+        <EditPriceModal
+          station={editingStation}
+          onClose={() => setEditingStation(null)}
+          onSaved={() => { setEditingStation(null); loadAll(); }}
+          onMessage={onMessage}
+        />
+      )}
       {showSchedulePanel && (
         <ScheduleSlideOver
           stations={stations}
@@ -371,8 +431,8 @@ export default function FuelPriceTab({ onMessage }: Props) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Fuel Prices</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Manage pricing, view history and schedule future changes</p>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Fuel Prices</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Manage pricing, view history and schedule future changes</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -403,53 +463,53 @@ export default function FuelPriceTab({ onMessage }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <DollarSign className="w-4 h-4 text-indigo-500" />
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <DollarSign className="w-3.5 h-3.5 text-indigo-500" />
             <span className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Stations</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{stations.filter((s) => s.isActive).length}</p>
-          <p className="text-xs text-gray-400 mt-0.5">active pricing points</p>
+          <p className="text-xl font-bold text-gray-900 dark:text-white">{stations.filter((s) => s.isActive).length}</p>
+          <p className="text-xs text-gray-400">active</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="w-4 h-4 text-amber-500" />
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <Clock className="w-3.5 h-3.5 text-amber-500" />
             <span className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Pending</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{pendingSchedules.length}</p>
-          <p className="text-xs text-gray-400 mt-0.5">scheduled changes</p>
+          <p className="text-xl font-bold text-gray-900 dark:text-white">{pendingSchedules.length}</p>
+          <p className="text-xs text-gray-400">scheduled</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="w-4 h-4 text-green-500" />
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <TrendingUp className="w-3.5 h-3.5 text-green-500" />
             <span className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Changes</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{histTotal}</p>
-          <p className="text-xs text-gray-400 mt-0.5">total price updates</p>
+          <p className="text-xl font-bold text-gray-900 dark:text-white">{histTotal}</p>
+          <p className="text-xs text-gray-400">total updates</p>
         </div>
       </div>
 
       {/* Current Prices */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">Current Prices</h3>
-        <div className="space-y-2">
+        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Current Prices</h3>
+        <div className="space-y-1">
           {stations.map((s) => (
-            <StationRow key={s.id} station={s} onUpdated={loadAll} onMessage={onMessage} />
+            <StationRow key={s.id} station={s} color={stationColor(s.id, stations)} onEdit={() => setEditingStation(s)} />
           ))}
         </div>
       </div>
 
       {/* Price Trend Chart */}
       {chartData.length > 1 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 uppercase tracking-wide">Price Trend</h3>
-          <ResponsiveContainer width="100%" height={220}>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Price Trend</h3>
+          <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} domain={['auto', 'auto']} tickFormatter={(v) => `K${v}`} />
-              <Tooltip formatter={(v: number | undefined) => [`K${(v ?? 0).toLocaleString()}`, '']} />
+              <YAxis tick={{ fontSize: 11 }} domain={['auto', 'auto']} tickFormatter={(v) => (v as number).toLocaleString()} />
+              <Tooltip formatter={(v: number | undefined) => [(v ?? 0).toLocaleString(), '']} />
               <Legend />
               {stations.map((s) => (
                 <Line
@@ -457,7 +517,7 @@ export default function FuelPriceTab({ onMessage }: Props) {
                   type="monotone"
                   dataKey={s.id}
                   name={s.name}
-                  stroke={STATION_COLORS[s.id] ?? '#94a3b8'}
+                  stroke={stationColor(s.id, stations)}
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   connectNulls
@@ -471,23 +531,23 @@ export default function FuelPriceTab({ onMessage }: Props) {
       {/* Pending Schedules */}
       {pendingSchedules.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">Pending Schedules</h3>
-          <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Pending Schedules</h3>
+          <div className="space-y-1">
             {pendingSchedules.map((s) => {
               const isPast = new Date(s.effectiveAt) <= new Date();
               return (
-                <div key={s._id} className={`flex items-center justify-between p-4 rounded-xl border ${isPast ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700' : 'border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700'}`}>
+                <div key={s._id} className={`flex items-center justify-between px-3 py-2 rounded-lg border ${isPast ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700' : 'border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700'}`}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: STATION_COLORS[s.stationId] ?? '#94a3b8' }} />
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stationColor(s.stationId, stations) }} />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.stationName}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatPrice(s.currentPrice)} → <span className={s.newPrice > s.currentPrice ? 'text-red-500' : 'text-green-500'}>{formatPrice(s.newPrice)}</span> · {formatDate(s.effectiveAt)}
+                        {formatPrice(s.currentPrice, stations.find((st) => st.id === s.stationId)?.currency)} → <span className={s.newPrice > s.currentPrice ? 'text-red-500' : 'text-green-500'}>{formatPrice(s.newPrice, stations.find((st) => st.id === s.stationId)?.currency)}</span> · {formatDate(s.effectiveAt)}
                         {isPast && <span className="ml-2 inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium"><Zap className="w-3 h-3" />Overdue</span>}
                         {!isPast && <span className="ml-2 text-gray-400">{timeUntil(s.effectiveAt)}</span>}
                       </p>
                       {s.reason && <p className="text-xs italic text-gray-400 truncate">"{s.reason}"</p>}
-                      <p className="text-xs text-gray-400">by {s.createdBy?.name ?? 'Unknown'}</p>
+                      <p className="text-xs text-gray-400">by {s.createdBy ?? 'Unknown'}</p>
                     </div>
                   </div>
                   <button
@@ -506,7 +566,7 @@ export default function FuelPriceTab({ onMessage }: Props) {
 
       {/* History */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
+        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">
           Change History {histTotal > 0 && <span className="normal-case font-normal text-gray-400">({histTotal} total)</span>}
         </h3>
         {history.length === 0 ? (
@@ -514,31 +574,31 @@ export default function FuelPriceTab({ onMessage }: Props) {
             No price changes recorded yet.
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {history.map((h) => {
               const delta = h.newPrice - h.oldPrice;
               const isExpanded = expandedEntry === h._id;
               return (
-                <div key={h._id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div key={h._id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <button
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
                     onClick={() => setExpandedEntry(isExpanded ? null : h._id)}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: STATION_COLORS[h.stationId] ?? '#94a3b8' }} />
+                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stationColor(h.stationId, stations) }} />
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-white">{h.stationName}</p>
-                        <p className="text-xs text-gray-400">{formatDate(h.changedAt)} · by {h.changedBy?.name ?? 'Unknown'}</p>
+                      <p className="text-xs text-gray-400">{formatDate(h.changedAt)} · by {h.changedBy ?? 'Unknown'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
                       <div className="text-right">
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                          {formatPrice(h.oldPrice)} → {formatPrice(h.newPrice)}
+                          {formatPrice(h.oldPrice, stations.find((st) => st.id === h.stationId)?.currency)} → {formatPrice(h.newPrice, stations.find((st) => st.id === h.stationId)?.currency)}
                         </p>
                         <p className={`text-xs font-medium flex items-center gap-0.5 justify-end ${delta > 0 ? 'text-red-500' : 'text-green-500'}`}>
                           {delta > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          {delta > 0 ? '+' : ''}{formatPrice(Math.abs(delta))}
+                          {delta > 0 ? '+' : ''}{formatPrice(Math.abs(delta), stations.find((st) => st.id === h.stationId)?.currency)}
                           <span className="text-gray-400 font-normal ml-1">({delta > 0 ? '+' : ''}{((delta / h.oldPrice) * 100).toFixed(1)}%)</span>
                         </p>
                       </div>

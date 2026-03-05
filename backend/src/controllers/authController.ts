@@ -2,6 +2,7 @@ import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { User, DriverCredential, SystemConfig } from '../models';
 import { MFA } from '../models/MFA';
+import UserMFA from '../models/UserMFA';
 import LoginActivity from '../models/LoginActivity';
 import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger, createDriverUserId } from '../utils';
@@ -460,16 +461,38 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       user.refreshToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
       await user.save();
 
+      // Read allowed MFA methods: per-user override > per-role override > global default
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+      const mfaPolicy = sysConfig?.securitySettings?.mfa;
+      let allowedMethods: string[] = mfaPolicy?.allowedMethods ?? ['totp', 'email'];
+
+      // Per-role method override (e.g. admins → TOTP-only)
+      const roleOverrides = (mfaPolicy as any)?.roleMethodOverrides;
+      if (roleOverrides && roleOverrides[user.role] && Array.isArray(roleOverrides[user.role]) && roleOverrides[user.role].length > 0) {
+        allowedMethods = roleOverrides[user.role];
+      }
+
+      // Per-user allowed methods override (set by admin in MFA Management) — highest priority
+      // Check both MFA model (consolidated) and UserMFA (legacy) — MFA takes precedence
+      const mfaRecord = await MFA.findOne({ userId: user._id });
+      const userMfaOverride = await UserMFA.findOne({ userId: user._id });
+      if (mfaRecord?.allowedMethods && mfaRecord.allowedMethods.length > 0) {
+        allowedMethods = mfaRecord.allowedMethods;
+      } else if (userMfaOverride?.allowedMethods && userMfaOverride.allowedMethods.length > 0) {
+        allowedMethods = userMfaOverride.allowedMethods;
+      }
+
       logger.info(`User ${username} must set up MFA (required by system policy)`);
 
       res.status(200).json({
         success: true,
         requiresMFASetup: true,
-        message: 'MFA setup is required for your account. Please set up an authenticator app to continue.',
+        message: 'MFA setup is required for your account.',
         data: {
           userId: user._id.toString(),
           tempSessionToken,
           tempSessionExpiry,
+          allowedMethods,
         },
       });
       return;
@@ -737,6 +760,18 @@ export const setupMFAGenerate = async (req: AuthRequest, res: Response): Promise
       throw new ApiError(401, 'Invalid or expired session token');
     }
 
+    // Check if user already has a TOTP secret (e.g. MFA was disabled then re-enabled)
+    const hasExisting = await mfaService.hasExistingTOTPSecret(userId);
+    if (hasExisting) {
+      res.status(200).json({
+        success: true,
+        data: {
+          alreadyConfigured: true,
+        },
+      });
+      return;
+    }
+
     // Generate TOTP secret
     const totpData = await mfaService.generateTOTPSecret(
       userId,
@@ -763,10 +798,10 @@ export const setupMFAGenerate = async (req: AuthRequest, res: Response): Promise
  */
 export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId, tempSessionToken, secret, code } = req.body;
+    const { userId, tempSessionToken, secret, code, trustDevice, deviceId, deviceName } = req.body;
 
-    if (!userId || !tempSessionToken || !secret || !code) {
-      throw new ApiError(400, 'User ID, session token, secret, and verification code are required');
+    if (!userId || !tempSessionToken || !code) {
+      throw new ApiError(400, 'User ID, session token, and verification code are required');
     }
 
     const user = await User.findById(userId).select('+refreshToken');
@@ -780,11 +815,56 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
       throw new ApiError(401, 'Invalid or expired session token');
     }
 
+    // If no secret provided, use existing secret from database (re-enable flow)
+    let totpSecret = secret;
+    if (!totpSecret) {
+      const existingMfa = await mfaService.getMFASettings(userId);
+      if (existingMfa.totpSecret) {
+        totpSecret = existingMfa.totpSecret;
+      } else {
+        throw new ApiError(400, 'Secret is required. Please generate a new TOTP secret first.');
+      }
+    }
+
     // Enable TOTP via MFA service
-    const result = await mfaService.enableTOTP(userId, secret, code);
+    const result = await mfaService.enableTOTP(userId, totpSecret, code);
 
     if (!result.success) {
       throw new ApiError(400, 'Invalid verification code. Please try again.');
+    }
+
+    // Trust device if requested
+    if (trustDevice && deviceId) {
+      const mfaSettings = await MFA.findOne({ userId });
+      if (mfaSettings && typeof (mfaSettings as any).addTrustedDevice === 'function') {
+        (mfaSettings as any).addTrustedDevice(
+          deviceId,
+          req.ip || 'unknown',
+          req.get('user-agent') || 'unknown',
+          deviceName || 'Trusted Device'
+        );
+        await mfaSettings.save();
+        logger.info(`Device ${deviceId} trusted during TOTP MFA setup for user ${user.username}`);
+      }
+    }
+
+    // Auto-clear stale mustChangePassword — user already proved they know
+    // their password at the login endpoint before being redirected here.
+    if (user.mustChangePassword) {
+      let shouldClear = false;
+      if (!user.passwordResetAt) {
+        shouldClear = true;
+      } else {
+        const minutesSincePwdReset = (Date.now() - new Date(user.passwordResetAt).getTime()) / (1000 * 60);
+        if (minutesSincePwdReset > 5) {
+          shouldClear = true;
+        }
+      }
+      if (shouldClear) {
+        user.mustChangePassword = false;
+        user.passwordResetAt = undefined;
+        logger.info(`[AUTO-CLEAR] Cleared stale mustChangePassword for ${user.username} during TOTP MFA setup`);
+      }
     }
 
     logger.info(`User ${user.username} completed mandatory MFA setup`);
@@ -857,6 +937,184 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
       data: {
         ...response,
         backupCodes: result.backupCodes,
+        sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Send email OTP for forced MFA setup during login
+ * Uses tempSessionToken instead of JWT auth
+ */
+export const setupMFAEmailSend = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId, tempSessionToken } = req.body;
+
+    if (!userId || !tempSessionToken) {
+      throw new ApiError(400, 'User ID and session token are required');
+    }
+
+    const user = await User.findById(userId).select('+refreshToken');
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    // Verify temp session token
+    const hashedTempToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
+    if (user.refreshToken !== hashedTempToken) {
+      throw new ApiError(401, 'Invalid or expired session token');
+    }
+
+    // Send email OTP
+    await mfaService.sendEmailOTP(userId, user.email);
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification code sent to your email',
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Verify email OTP, enable email MFA, and complete login for forced MFA setup
+ * Uses tempSessionToken instead of JWT auth
+ */
+export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId, tempSessionToken, code, trustDevice, deviceId, deviceName } = req.body;
+
+    if (!userId || !tempSessionToken || !code) {
+      throw new ApiError(400, 'User ID, session token, and verification code are required');
+    }
+
+    const user = await User.findById(userId).select('+refreshToken');
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    // Verify temp session token
+    const hashedTempToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
+    if (user.refreshToken !== hashedTempToken) {
+      throw new ApiError(401, 'Invalid or expired session token');
+    }
+
+    // Verify the email OTP
+    const valid = await mfaService.verifyPendingOTP(userId, 'email', code);
+    if (!valid) {
+      throw new ApiError(400, 'Invalid or expired verification code');
+    }
+
+    // Enable email MFA
+    await mfaService.enableEmailOTP(userId);
+
+    // Trust device if requested
+    if (trustDevice && deviceId) {
+      const mfaSettings = await MFA.findOne({ userId });
+      if (mfaSettings && typeof (mfaSettings as any).addTrustedDevice === 'function') {
+        (mfaSettings as any).addTrustedDevice(
+          deviceId,
+          req.ip || 'unknown',
+          req.get('user-agent') || 'unknown',
+          deviceName || 'Trusted Device'
+        );
+        await mfaSettings.save();
+        logger.info(`Device ${deviceId} trusted during email MFA setup for user ${user.username}`);
+      }
+    }
+
+    // Auto-clear stale mustChangePassword — user already proved they know
+    // their password at the login endpoint before being redirected here.
+    if (user.mustChangePassword) {
+      let shouldClear = false;
+      if (!user.passwordResetAt) {
+        shouldClear = true;
+      } else {
+        const minutesSincePwdReset = (Date.now() - new Date(user.passwordResetAt).getTime()) / (1000 * 60);
+        if (minutesSincePwdReset > 5) {
+          shouldClear = true;
+        }
+      }
+      if (shouldClear) {
+        user.mustChangePassword = false;
+        user.passwordResetAt = undefined;
+        logger.info(`[AUTO-CLEAR] Cleared stale mustChangePassword for ${user.username} during email MFA setup`);
+      }
+    }
+
+    logger.info(`User ${user.username} completed mandatory MFA setup via email`);
+
+    // Read session config
+    const sessionConfig = await SystemConfig.findOne({ configType: 'system_settings' });
+    const jwtExpiryHours = sessionConfig?.systemSettings?.session?.jwtExpiry;
+    const refreshExpiryDays = sessionConfig?.systemSettings?.session?.refreshTokenExpiry;
+    const accessExpiry = jwtExpiryHours ? `${jwtExpiryHours}h` : undefined;
+    const refreshExpiry = refreshExpiryDays ? `${refreshExpiryDays}d` : undefined;
+    const allowMultipleSessions = sessionConfig?.systemSettings?.session?.allowMultipleSessions ?? true;
+
+    if (!allowMultipleSessions) {
+      emitToUser(user.username, 'session_event', {
+        type: 'force_logout',
+        message: 'You have been logged out because a new session was started from another location.',
+      });
+    }
+
+    // Generate final tokens — user is now fully authenticated
+    const payload: JWTPayload = {
+      userId: user._id.toString(),
+      username: user.username,
+      role: user.role,
+    };
+
+    const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
+
+    user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    user.lastLogin = new Date();
+    await user.save();
+
+    await AuditService.logLogin(
+      user.username,
+      true,
+      req.ip,
+      req.get('user-agent'),
+      user._id.toString()
+    );
+
+    const response: AuthResponse = {
+      user: user.toJSON(),
+      accessToken,
+      refreshToken,
+    };
+
+    // Record login activity & send notification (fire-and-forget)
+    const emailNotifSettings = sessionConfig?.systemSettings?.notifications;
+    const emailDeviceTracking = emailNotifSettings?.deviceTracking !== false;
+    const emailLoginNotifs = emailNotifSettings?.loginNotifications !== false;
+    const emailUA = req.get('user-agent') || '';
+    const emailIP = req.ip || 'unknown';
+    const emailParsed = parseUA(emailUA);
+    if (emailDeviceTracking) {
+      (LoginActivity as any).recordLogin(
+        user._id.toString(), user.refreshToken, emailIP, emailUA, 'email_setup'
+      ).then((activity: any) => {
+        if (emailLoginNotifs) {
+          emailService.sendLoginNotification(user.email, user.firstName || user.username, {
+            browser: emailParsed.browser, os: emailParsed.os, ipAddress: emailIP,
+            time: new Date(), isNewDevice: activity.isNewDevice, deviceType: emailParsed.deviceType,
+          }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
+        }
+      }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Email MFA setup complete. Login successful.',
+      data: {
+        ...response,
         sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
       },
     });

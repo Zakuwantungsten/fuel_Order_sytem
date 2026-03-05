@@ -50,6 +50,19 @@ router.post(
   asyncHandler(authController.setupMFAVerify)
 );
 
+// Email MFA forced setup (alternative to TOTP during forced MFA setup)
+router.post(
+  '/setup-mfa/email/send',
+  mfaSetupRateLimiter,
+  asyncHandler(authController.setupMFAEmailSend)
+);
+
+router.post(
+  '/setup-mfa/email/verify',
+  mfaSetupRateLimiter,
+  asyncHandler(authController.setupMFAEmailVerify)
+);
+
 router.post('/refresh', asyncHandler(authController.refreshToken));
 
 router.post(

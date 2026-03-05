@@ -226,14 +226,14 @@ export const MFASettings: React.FC = () => {
             </h2>
             {status?.isRequired && (
               <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                ⚠️ MFA is required for your role
+                MFA is required for your role
               </p>
             )}
           </div>
           <div>
             {status?.isEnabled ? (
               <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                ✓ Enabled
+                Enabled
               </span>
             ) : (
               <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">
@@ -259,13 +259,13 @@ export const MFASettings: React.FC = () => {
           <div className="space-y-4">
             {status.totpEnabled && (
               <div className="flex items-center gap-2">
-                <span className="text-gray-900 dark:text-white">📱 Authenticator App:</span>
+                <span className="text-gray-900 dark:text-white">Authenticator App:</span>
                 <span className="text-green-600">Active</span>
               </div>
             )}
 
             <div className="flex items-center gap-2">
-              <span className="text-gray-900 dark:text-white">🔑 Backup Codes:</span>
+                <span className="text-gray-900 dark:text-white">Backup Codes:</span>
               <span className="text-gray-600 dark:text-gray-400">
                 {status.backupCodesRemaining} remaining ({status.backupCodesUsed} used)
               </span>

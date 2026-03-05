@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
-import { ShieldCheck, RefreshCw, AlertTriangle, Loader2, X, CheckCircle, Lock, Unlock } from 'lucide-react';
+import { ShieldCheck, RefreshCw, AlertTriangle, Loader2, X, CheckCircle, Lock, Unlock, ShieldOff } from 'lucide-react';
 import apiClient from '../../services/api';
 
 interface UserMFAStatus {
@@ -14,13 +14,17 @@ interface UserMFAStatus {
   totpEnabled: boolean;
   emailEnabled: boolean;
   isMandatory: boolean;
+  isExempt: boolean;
+  roleRequiresMFA: boolean;
   lastVerified?: string;
   failedAttempts: number;
   lockedUntil?: string;
+  allowedMethods?: string[] | null;
 }
 
 export const MFAManagementTab: React.FC = () => {
   const [users, setUsers] = useState<UserMFAStatus[]>([]);
+  const [policy, setPolicy] = useState<{ globalEnabled: boolean; requiredRoles: string[]; allowedMethods: string[]; roleMethodOverrides: Record<string, string[]> } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -36,6 +40,7 @@ export const MFAManagementTab: React.FC = () => {
     try {
       const res = await apiClient.get('/system-admin/mfa-management');
       setUsers(res.data.data);
+      if (res.data.policy) setPolicy(res.data.policy);
     } catch {
       setError('Failed to load MFA status');
     } finally {
@@ -55,7 +60,7 @@ export const MFAManagementTab: React.FC = () => {
     setActionLoading(disableTarget.userId);
     try {
       await apiClient.post(`/system-admin/mfa-management/${disableTarget.userId}/disable`);
-      setSuccess(`MFA disabled for ${disableTarget.username}`);
+      setSuccess(`MFA disabled for ${disableTarget.username}. User is now exempt from role-based MFA policy.`);
       setDisableTarget(null);
       await fetchData();
     } catch {
@@ -74,6 +79,33 @@ export const MFAManagementTab: React.FC = () => {
       await fetchData();
     } catch {
       setError('Failed to update MFA requirement');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleUserMethod = async (userId: string, username: string, method: string, currentMethods: string[] | null, role?: string) => {
+    const globalMethods = policy?.allowedMethods ?? ['totp', 'email'];
+    const roleMethods = role ? policy?.roleMethodOverrides?.[role] : undefined;
+    const baseMethods = roleMethods && roleMethods.length > 0 ? roleMethods : globalMethods;
+    const effective = currentMethods && currentMethods.length > 0 ? currentMethods : baseMethods;
+    let updated: string[];
+    if (effective.includes(method)) {
+      updated = effective.filter(m => m !== method);
+      if (updated.length === 0) {
+        setError('At least one verification method must remain enabled');
+        return;
+      }
+    } else {
+      updated = [...effective, method];
+    }
+    setActionLoading(userId + '_methods');
+    try {
+      await apiClient.post(`/system-admin/mfa-management/${userId}/allowed-methods`, { allowedMethods: updated });
+      setSuccess(`Allowed methods updated for ${username}`);
+      await fetchData();
+    } catch {
+      setError('Failed to update allowed methods');
     } finally {
       setActionLoading(null);
     }
@@ -104,6 +136,25 @@ export const MFAManagementTab: React.FC = () => {
 
       {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}<button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button></div>}
       {success && <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm"><CheckCircle className="h-4 w-4 shrink-0" />{success}<button onClick={() => setSuccess(null)} className="ml-auto"><X className="h-4 w-4" /></button></div>}
+
+      {/* Policy info banner */}
+      {policy && (
+        <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm text-blue-700 dark:text-blue-300">
+          <strong>Policy:</strong> MFA is {policy.globalEnabled ? 'enforced' : 'not enforced'}
+          {policy.globalEnabled && policy.requiredRoles.length > 0 && (
+            <> for {policy.requiredRoles.map(r => r.replace(/_/g, ' ')).join(', ')}</>
+          )}
+          {policy.globalEnabled && (
+            <> &middot; Default methods: {policy.allowedMethods.map(m => m === 'totp' ? 'Authenticator App' : m === 'email' ? 'Email' : m).join(', ')}</>
+          )}
+          {policy.globalEnabled && policy.roleMethodOverrides && Object.keys(policy.roleMethodOverrides).length > 0 && (
+            <> &middot; Role overrides: {Object.entries(policy.roleMethodOverrides).map(([role, methods]) =>
+              `${role.replace(/_/g, ' ')} → ${methods.map(m => m === 'totp' ? 'TOTP' : m === 'email' ? 'Email' : m).join('+')}`
+            ).join(', ')}</>
+          )}
+          {!policy.globalEnabled && '. Configure in Security Settings tab.'}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
@@ -138,7 +189,7 @@ export const MFAManagementTab: React.FC = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750">
-                  {['User', 'Role', 'MFA Status', 'Methods', 'Mandatory', 'Failed Attempts', 'Actions'].map((h) => (
+                  {['User', 'Role', 'MFA Status', 'Methods', 'Allowed Methods', 'Policy', 'Failed Attempts', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">{h}</th>
                   ))}
                 </tr>
@@ -163,9 +214,55 @@ export const MFAManagementTab: React.FC = () => {
                       {!u.totpEnabled && !u.emailEnabled && '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-medium ${u.isMandatory ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
-                        {u.isMandatory ? 'Required' : 'Optional'}
-                      </span>
+                      {u.role !== 'super_admin' ? (
+                        <div className="flex flex-col gap-1">
+                          {(['totp', 'email'] as const).map(method => {
+                            const globalMethods = policy?.allowedMethods ?? ['totp', 'email'];
+                            const roleMethods = policy?.roleMethodOverrides?.[u.role];
+                            const baseMethods = roleMethods && roleMethods.length > 0 ? roleMethods : globalMethods;
+                            const effective = u.allowedMethods && u.allowedMethods.length > 0 ? u.allowedMethods : baseMethods;
+                            const isEnabled = effective.includes(method);
+                            const hasUserOverride = u.allowedMethods && u.allowedMethods.length > 0;
+                            const hasRoleOverride = !hasUserOverride && roleMethods && roleMethods.length > 0;
+                            const sourceLabel = hasUserOverride ? '' : hasRoleOverride ? ' (role)' : ' (global)';
+                            return (
+                              <label key={method} className="inline-flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isEnabled}
+                                  onChange={() => handleToggleUserMethod(u.userId, u.username, method, u.allowedMethods ?? null, u.role)}
+                                  disabled={actionLoading === u.userId + '_methods'}
+                                  className="h-3.5 w-3.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span className={`text-xs ${!hasUserOverride ? 'text-gray-400 dark:text-gray-500 italic' : 'text-gray-700 dark:text-gray-300'}`}>
+                                  {method === 'totp' ? 'Authenticator' : 'Email'}
+                                  {sourceLabel}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">All</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        {u.isMandatory && (
+                          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Required (per-user)</span>
+                        )}
+                        {u.roleRequiresMFA && !u.isMandatory && (
+                          <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Required (role policy)</span>
+                        )}
+                        {u.isExempt && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 dark:text-orange-400">
+                            <ShieldOff className="h-3 w-3" />Exempt
+                          </span>
+                        )}
+                        {!u.isMandatory && !u.roleRequiresMFA && !u.isExempt && (
+                          <span className="text-xs text-gray-400">Optional</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{u.failedAttempts}</td>
                     <td className="px-4 py-3">
@@ -204,7 +301,7 @@ export const MFAManagementTab: React.FC = () => {
       <ConfirmModal
         open={disableTarget !== null}
         title="Disable MFA"
-        message={`Disable MFA for ${disableTarget?.username}? They will no longer be required to verify their identity with a second factor.`}
+        message={`Disable MFA for ${disableTarget?.username}? They will be exempt from any role-based MFA policy and will not be forced to set up MFA again until you re-require it.`}
         variant="warning"
         confirmLabel="Disable MFA"
         loading={disabling}

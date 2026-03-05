@@ -1,9 +1,26 @@
 import React, { useState, useEffect } from 'react';
 
+/** Read the XSRF-TOKEN cookie set by the backend */
+const getCsrfToken = (): string | undefined => {
+  const match = decodeURIComponent(document.cookie)
+    .split(';')
+    .map(c => c.trim())
+    .find(c => c.startsWith('XSRF-TOKEN='));
+  return match ? match.substring('XSRF-TOKEN='.length) : undefined;
+};
+
+const jsonHeaders = (): Record<string, string> => {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  const csrf = getCsrfToken();
+  if (csrf) h['X-XSRF-TOKEN'] = csrf;
+  return h;
+};
+
 interface MFAVerificationProps {
   userId: string;
   tempSessionToken: string;
   preferredMethod: 'totp' | 'sms' | 'email';
+  mfaMethods?: { totp: boolean; sms: boolean; email: boolean };
   onSuccess: (tokens: { accessToken: string; refreshToken: string; user: any }) => void;
   onCancel: () => void;
 }
@@ -12,11 +29,26 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
   userId,
   tempSessionToken,
   preferredMethod,
+  mfaMethods,
   onSuccess,
   onCancel,
 }) => {
+  // Determine the initial method - prefer the user's chosen method if available, fall back to first enabled method
+  const getInitialMethod = (): 'totp' | 'backup' | 'sms' | 'email' => {
+    if (mfaMethods) {
+      if (preferredMethod === 'totp' && mfaMethods.totp) return 'totp';
+      if (preferredMethod === 'email' && mfaMethods.email) return 'email';
+      if (preferredMethod === 'sms' && mfaMethods.sms) return 'sms';
+      // Fallback: first enabled method
+      if (mfaMethods.totp) return 'totp';
+      if (mfaMethods.email) return 'email';
+      if (mfaMethods.sms) return 'sms';
+    }
+    return preferredMethod;
+  };
+
   const [code, setCode] = useState('');
-  const [method, setMethod] = useState<'totp' | 'backup' | 'sms' | 'email'>(preferredMethod);
+  const [method, setMethod] = useState<'totp' | 'backup' | 'sms' | 'email'>(getInitialMethod());
   const [trustDevice, setTrustDevice] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,10 +63,11 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
     setDeviceName(`${browser} on ${os}`);
   }, []);
 
-  // Auto-send OTP if preferred method is email or sms
+  // Auto-send OTP if initial method is email or sms
   useEffect(() => {
-    if (preferredMethod === 'email' || preferredMethod === 'sms') {
-      sendOTP(preferredMethod);
+    const m = getInitialMethod();
+    if (m === 'email' || m === 'sms') {
+      sendOTP(m);
     }
   }, [preferredMethod]);
 
@@ -44,7 +77,8 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
     try {
       const response = await fetch('/api/v1/mfa/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: jsonHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ userId, method: otpMethod }),
       });
       const data = await response.json();
@@ -104,9 +138,8 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
 
       const response = await fetch('/api/auth/verify-mfa', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: jsonHeaders(),
+        credentials: 'include',
         body: JSON.stringify({
           userId,
           tempSessionToken,
@@ -142,9 +175,14 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
   };
 
   const handleCodeChange = (value: string) => {
-    // Only allow digits and limit to 6-8 characters
-    const cleaned = value.replace(/\D/g, '');
-    setCode(cleaned.slice(0, 8));
+    if (method === 'backup') {
+      // Backup codes can contain letters, digits, and dashes
+      setCode(value.slice(0, 20));
+    } else {
+      // Only allow digits for OTP/TOTP codes
+      const cleaned = value.replace(/\D/g, '');
+      setCode(cleaned.slice(0, 8));
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -174,6 +212,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
           Verification Method
         </label>
         <div className="space-y-2">
+          {(!mfaMethods || mfaMethods.totp) && (
           <button
             onClick={() => handleMethodSelect('totp')}
             className={`w-full p-3 text-left border-2 rounded-lg transition-colors ${
@@ -182,12 +221,14 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
                 : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
             }`}
           >
-            <span className="font-semibold">📱 Authenticator App</span>
+            <span className="font-semibold">Authenticator App</span>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               6-digit code from your app
             </p>
           </button>
+          )}
 
+          {(!mfaMethods || mfaMethods.email) && (
           <button
             onClick={() => handleMethodSelect('email')}
             className={`w-full p-3 text-left border-2 rounded-lg transition-colors ${
@@ -196,12 +237,14 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
                 : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
             }`}
           >
-            <span className="font-semibold">📧 Email Code</span>
+            <span className="font-semibold">Email Code</span>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               {sendingOtp && method === 'email' ? 'Sending code...' : 'Get a code sent to your email'}
             </p>
           </button>
+          )}
 
+          {(!mfaMethods || mfaMethods.sms) && (
           <button
             onClick={() => handleMethodSelect('sms')}
             className={`w-full p-3 text-left border-2 rounded-lg transition-colors ${
@@ -210,11 +253,12 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
                 : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
             }`}
           >
-            <span className="font-semibold">💬 SMS Code</span>
+            <span className="font-semibold">SMS Code</span>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               {sendingOtp && method === 'sms' ? 'Sending code...' : 'Get a code sent via SMS'}
             </p>
           </button>
+          )}
 
           <button
             onClick={() => handleMethodSelect('backup')}
@@ -224,7 +268,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
                 : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
             }`}
           >
-            <span className="font-semibold">🔑 Backup Code</span>
+            <span className="font-semibold">Backup Code</span>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Use one of your backup codes
             </p>
@@ -236,7 +280,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
       {otpSent && (method === 'email' || method === 'sms') && (
         <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
           <p className="text-sm text-green-800 dark:text-green-200">
-            {method === 'email' ? '📧 Code sent to your email' : '💬 Code sent via SMS'}
+            {method === 'email' ? 'Code sent to your email' : 'Code sent via SMS'}
           </p>
           <button
             onClick={() => sendOTP(method)}

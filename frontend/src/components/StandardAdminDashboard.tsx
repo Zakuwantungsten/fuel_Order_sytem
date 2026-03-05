@@ -13,11 +13,12 @@ import UserSupportTab from './StandardAdmin/UserSupportTab';
 import BasicReportsTab from './StandardAdmin/BasicReportsTab';
 import FuelStationsTab from './SuperAdmin/FuelStationsTab';
 import RoutesTab from './SuperAdmin/RoutesTab';
+import FuelPriceTab from './SuperAdmin/FuelPriceTab';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface StandardAdminDashboardProps {
   user: any;
-  section?: 'overview' | 'data' | 'users' | 'fuel_stations' | 'routes' | 'reports';
+  section?: 'overview' | 'data' | 'users' | 'fuel_stations' | 'fuel_prices' | 'routes' | 'reports';
 }
 
 export default function StandardAdminDashboard({ user, section = 'overview' }: StandardAdminDashboardProps) {
@@ -142,6 +143,7 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
             {section === 'data' && <DataManagementTab user={user} showMessage={showMessage} />}
             {section === 'users' && <UserSupportTab user={user} showMessage={showMessage} />}
             {section === 'fuel_stations' && <FuelStationsTab onMessage={showMessage} />}
+            {section === 'fuel_prices' && <FuelPriceTab onMessage={showMessage} />}
             {section === 'routes' && <RoutesTab onMessage={showMessage} />}
             {section === 'reports' && <BasicReportsTab user={user} showMessage={showMessage} />}
           </>

@@ -170,12 +170,16 @@ class MFAService {
       mfa.preferredMethod = 'email';
     }
     mfa.isEnabled = true;
+    mfa.isExempt = false;  // Clear exempt flag on consolidated model
 
     if (mfa.backupCodes.length === 0) {
       const { hashedCodes } = await this.generateBackupCodes();
       mfa.backupCodes = hashedCodes;
     }
     await mfa.save();
+    
+    // Clear exempt flag on legacy UserMFA model too
+    await UserMFA.findOneAndUpdate({ userId }, { $set: { isExempt: false } });
   }
 
   /**
@@ -202,7 +206,7 @@ class MFAService {
    * Get or create MFA settings for user
    */
   async getMFASettings(userId: string): Promise<IMFA> {
-    let mfa = await MFA.findOne({ userId });
+    let mfa = await MFA.findOne({ userId }).select('+backupCodes');
     
     if (!mfa) {
       mfa = await MFA.create({ userId });
@@ -244,8 +248,12 @@ class MFAService {
     mfa.preferredMethod = 'totp';
     mfa.backupCodes = hashedCodes;
     mfa.backupCodesUsed = 0;
+    mfa.isExempt = false;  // Clear exempt flag on consolidated model
     
     await mfa.save();
+    
+    // Clear exempt flag on legacy UserMFA model too
+    await UserMFA.findOneAndUpdate({ userId }, { $set: { isExempt: false } });
     
     return { success: true, backupCodes: codes };
   }
@@ -263,8 +271,17 @@ class MFAService {
     mfa.emailEnabled = false;
     mfa.backupCodes = [];
     mfa.backupCodesUsed = 0;
+    // Note: totpSecret is preserved so re-enabling doesn't force QR code re-scan
     
     await mfa.save();
+  }
+
+  /**
+   * Check if user has an existing TOTP secret (for re-enable without QR scan)
+   */
+  async hasExistingTOTPSecret(userId: string): Promise<boolean> {
+    const mfa = await MFA.findOne({ userId });
+    return !!(mfa?.totpSecret);
   }
   
   /**
@@ -299,8 +316,8 @@ class MFAService {
       if (verified) methodUsed = 'totp';
     }
     
-    // Try email OTP
-    if (!verified && (!method || method === 'email') && mfa.emailEnabled) {
+    // Try email OTP (always available as fallback for any MFA-enabled user)
+    if (!verified && (!method || method === 'email')) {
       const emailValid = await this.verifyPendingOTP(userId, 'email', code);
       if (emailValid) {
         verified = true;
@@ -368,9 +385,15 @@ class MFAService {
     const user = await User.findById(userId);
     if (!user) return false;
     
-    // Check per-user mandatory flag (set by admin in MFA Management tab)
+    // Check consolidated MFA model first, then fall back to UserMFA for backward compat
+    const mfa = await MFA.findOne({ userId });
     const userMfa = await UserMFA.findOne({ userId });
-    if (userMfa?.isMandatory) return true;
+    
+    // Per-user mandatory flag (either model — MFA model takes precedence)
+    if (mfa?.isMandatory || userMfa?.isMandatory) return true;
+    
+    // If admin explicitly exempted this user (e.g. disabled their MFA), skip role-based check
+    if (mfa?.isExempt || userMfa?.isExempt) return false;
     
     // Read MFA enforcement config from SystemConfig (Security Tab global settings)
     const config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });

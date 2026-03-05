@@ -169,7 +169,7 @@ const applyCsrfProtection = (basePath: string) => {
       return;
     }
     // Skip CSRF for login/register routes (initial auth)
-    if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/refresh' || req.path === '/auth/first-login-password' || req.path === '/auth/verify-mfa' || req.path === '/auth/setup-mfa/generate' || req.path === '/auth/setup-mfa/verify') {
+    if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/refresh' || req.path === '/auth/first-login-password' || req.path === '/auth/verify-mfa' || req.path === '/auth/setup-mfa/generate' || req.path === '/auth/setup-mfa/verify' || req.path === '/auth/setup-mfa/email/send' || req.path === '/auth/setup-mfa/email/verify' || req.path === '/mfa/send-otp') {
       return next();
     }
     // Apply CSRF protection

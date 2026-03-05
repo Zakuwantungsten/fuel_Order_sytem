@@ -39,7 +39,7 @@ interface Props {
 
 const DEFAULT_SESSION = { sessionTimeout: 30, jwtExpiry: 24, refreshTokenExpiry: 7, maxLoginAttempts: 5, lockoutDuration: 15, allowMultipleSessions: true };
 const DEFAULT_PASSWORD = { minLength: 12, requireUppercase: true, requireLowercase: true, requireNumbers: true, requireSpecialChars: true, historyCount: 5 };
-const DEFAULT_MFA = { globalEnabled: false, requiredRoles: [] as string[] };
+const DEFAULT_MFA = { globalEnabled: false, requiredRoles: [] as string[], allowedMethods: ['totp', 'email'] as string[], roleMethodOverrides: {} as Record<string, string[]> };
 const DEFAULT_NOTIFICATIONS = { loginNotifications: true, newDeviceAlerts: true, deviceTracking: true };
 
 const ALL_ROLES = [
@@ -194,6 +194,44 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
       ...prev,
       requiredRoles: prev.requiredRoles.includes(role) ? prev.requiredRoles.filter(r => r !== role) : [...prev.requiredRoles, role],
     }));
+  };
+
+  const toggleMFAMethod = (method: string) => {
+    setMfaSettings(prev => {
+      const methods = prev.allowedMethods.includes(method)
+        ? prev.allowedMethods.filter(m => m !== method)
+        : [...prev.allowedMethods, method];
+      if (methods.length === 0) return prev;
+      return { ...prev, allowedMethods: methods };
+    });
+  };
+
+  const toggleRoleMethodOverride = (role: string, method: string) => {
+    setMfaSettings(prev => {
+      const overrides = { ...prev.roleMethodOverrides };
+      const current = overrides[role] ?? [...prev.allowedMethods];
+      const updated = current.includes(method)
+        ? current.filter(m => m !== method)
+        : [...current, method];
+      if (updated.length === 0) return prev;
+      // If override matches global default, remove it
+      const globalSorted = [...prev.allowedMethods].sort().join(',');
+      const updatedSorted = [...updated].sort().join(',');
+      if (globalSorted === updatedSorted) {
+        delete overrides[role];
+      } else {
+        overrides[role] = updated;
+      }
+      return { ...prev, roleMethodOverrides: overrides };
+    });
+  };
+
+  const clearRoleOverride = (role: string) => {
+    setMfaSettings(prev => {
+      const overrides = { ...prev.roleMethodOverrides };
+      delete overrides[role];
+      return { ...prev, roleMethodOverrides: overrides };
+    });
   };
 
   /* ── Email ── */
@@ -417,6 +455,74 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
               {mfaSettings.requiredRoles.length === 0 && (
                 <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">⚠ MFA is enabled but no roles are selected.</p>
               )}
+            </div>
+          )}
+
+          {/* Allowed methods */}
+          {mfaSettings.globalEnabled && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Allowed verification methods:</label>
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { value: 'totp', label: 'Authenticator App (TOTP)', desc: 'Google Authenticator, Authy, etc.' },
+                  { value: 'email', label: 'Email Verification', desc: 'One-time code sent via email' },
+                ].map(({ value, label, desc }) => (
+                  <label key={value}
+                    className={`flex items-start gap-2 p-3 rounded-lg cursor-pointer border transition-colors flex-1 min-w-[180px] ${
+                      mfaSettings.allowedMethods.includes(value)
+                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    }`}>
+                    <input type="checkbox" checked={mfaSettings.allowedMethods.includes(value)}
+                      onChange={() => toggleMFAMethod(value)} className="w-4 h-4 rounded text-indigo-600 mt-0.5" />
+                    <div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{label}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{desc}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {mfaSettings.allowedMethods.length === 1 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">At least one method must remain enabled.</p>
+              )}
+            </div>
+          )}
+
+          {/* Per-role method overrides */}
+          {mfaSettings.globalEnabled && mfaSettings.requiredRoles.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Per-role method overrides:</label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Optionally restrict which methods specific roles may use. Roles without overrides inherit the global default above.</p>
+              <div className="space-y-2">
+                {mfaSettings.requiredRoles.map(role => {
+                  const roleLabel = ALL_ROLES.find(r => r.value === role)?.label ?? role;
+                  const hasOverride = !!mfaSettings.roleMethodOverrides[role];
+                  const effective = mfaSettings.roleMethodOverrides[role] ?? mfaSettings.allowedMethods;
+                  return (
+                    <div key={role} className={`flex items-center gap-3 p-2 rounded-lg border ${hasOverride ? 'border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 min-w-[120px]">{roleLabel}</span>
+                      <div className="flex items-center gap-3 flex-1">
+                        {[{ value: 'totp', label: 'TOTP' }, { value: 'email', label: 'Email' }].map(m => (
+                          <label key={m.value} className="inline-flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" checked={effective.includes(m.value)}
+                              onChange={() => toggleRoleMethodOverride(role, m.value)}
+                              className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">{m.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {hasOverride && (
+                        <button onClick={() => clearRoleOverride(role)} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">
+                          Reset to global
+                        </button>
+                      )}
+                      {!hasOverride && (
+                        <span className="text-xs text-gray-400 italic">Global default</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

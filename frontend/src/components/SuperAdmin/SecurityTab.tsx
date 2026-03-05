@@ -28,6 +28,7 @@ const DEFAULT_PASSWORD = {
 const DEFAULT_MFA = {
   globalEnabled: false,
   requiredRoles: [] as string[],
+  allowedMethods: ['totp', 'email'] as string[],
 };
 
 const ALL_ROLES = [
@@ -132,6 +133,17 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
         ? prev.requiredRoles.filter((r) => r !== role)
         : [...prev.requiredRoles, role],
     }));
+  };
+
+  const toggleMFAMethod = (method: string) => {
+    setMfaSettings((prev) => {
+      const methods = prev.allowedMethods.includes(method)
+        ? prev.allowedMethods.filter((m) => m !== method)
+        : [...prev.allowedMethods, method];
+      // Must have at least one method
+      if (methods.length === 0) return prev;
+      return { ...prev, allowedMethods: methods };
+    });
   };
 
   const testEmailConnection = async () => {
@@ -309,7 +321,7 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-5 flex items-start gap-2">
           <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            When enabled, users in the selected roles will be <strong>required</strong> to set up MFA (authenticator app) before they can access the system. Users not in the selected roles can still optionally enable MFA from their profile.
+            When enabled, users in the selected roles will be <strong>required</strong> to set up MFA before they can access the system. You can choose which verification methods are available. Users not in the selected roles can still optionally enable MFA from their profile.
           </p>
         </div>
 
@@ -366,7 +378,44 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
               </div>
               {mfaSettings.requiredRoles.length === 0 && (
                 <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
-                  ⚠ MFA is enabled but no roles are selected — select at least one role to enforce MFA.
+                  MFA is enabled but no roles are selected — select at least one role to enforce MFA.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Allowed Methods */}
+          {mfaSettings.globalEnabled && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Allowed verification methods:
+              </label>
+              <div className="flex gap-4">
+                {[
+                  { value: 'totp', label: 'Authenticator App (TOTP)' },
+                  { value: 'email', label: 'Email Verification' },
+                ].map(({ value, label }) => (
+                  <label
+                    key={value}
+                    className={`flex items-center gap-2 p-3 rounded-lg cursor-pointer border transition-colors ${
+                      mfaSettings.allowedMethods.includes(value)
+                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={mfaSettings.allowedMethods.includes(value)}
+                      onChange={() => toggleMFAMethod(value)}
+                      className="w-4 h-4 rounded text-indigo-600"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+                  </label>
+                ))}
+              </div>
+              {mfaSettings.allowedMethods.length === 1 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  At least one method must remain enabled.
                 </p>
               )}
             </div>

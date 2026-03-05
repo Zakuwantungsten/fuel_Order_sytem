@@ -142,6 +142,8 @@ export interface ISystemSettings {
 export interface IMFASettings {
   globalEnabled: boolean;
   requiredRoles: string[];
+  allowedMethods: string[];  // e.g. ['totp', 'email'] — global default methods
+  roleMethodOverrides: Record<string, string[]>;  // per-role overrides e.g. { admin: ['totp'] }
 }
 
 // Security Settings
@@ -351,6 +353,8 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       mfa: {
         globalEnabled: { type: Boolean, default: false },
         requiredRoles: { type: [String], default: [] },
+        allowedMethods: { type: [String], default: ['totp', 'email'] },
+        roleMethodOverrides: { type: Schema.Types.Mixed, default: {} },
       },
       autoblock: {
         ipBlockingEnabled: { type: Boolean, default: true },

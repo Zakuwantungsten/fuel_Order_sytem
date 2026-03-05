@@ -8,6 +8,7 @@ export interface FuelStation {
   name: string;
   location: string;
   pricePerLiter: number;
+  currency: 'USD' | 'TZS';
   isActive: boolean;
 }
 
@@ -17,7 +18,7 @@ export interface FuelPriceHistoryEntry {
   stationName: string;
   oldPrice: number;
   newPrice: number;
-  changedBy: { _id: string; name: string; email: string };
+  changedBy: string;
   changedAt: string;
   reason?: string;
 }
@@ -29,7 +30,7 @@ export interface FuelPriceScheduleEntry {
   currentPrice: number;
   newPrice: number;
   effectiveAt: string;
-  createdBy: { _id: string; name: string; email: string };
+  createdBy: string;
   isApplied: boolean;
   appliedAt?: string;
   isCancelled: boolean;

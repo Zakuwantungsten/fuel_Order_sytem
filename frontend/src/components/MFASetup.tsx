@@ -17,6 +17,7 @@ type Step = 'method' | 'totp-scan' | 'totp-verify' | 'email-verify' | 'sms-phone
 export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
   const [step, setStep] = useState<Step>('method');
   const [totpData, setTotpData] = useState<TOTPSetupData | null>(null);
+  const [alreadyConfigured, setAlreadyConfigured] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
@@ -49,14 +50,23 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
       const res = await fetch('/api/mfa/setup/totp/generate', { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to generate TOTP secret');
-      setTotpData(data.data);
-      setStep('totp-scan');
+      if (data.data.alreadyConfigured) {
+        setAlreadyConfigured(true);
+        setStep('totp-verify');
+      } else {
+        setTotpData(data.data);
+        setStep('totp-scan');
+      }
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false); }
   };
 
   const handleVerifyTOTP = async () => {
-    if (!totpData || !verificationCode) {
+    if (!alreadyConfigured && !totpData) {
+      setError('Please generate a TOTP secret first');
+      return;
+    }
+    if (!verificationCode) {
       setError('Please enter the verification code');
       return;
     }
@@ -72,7 +82,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
           'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
         },
         body: JSON.stringify({
-          secret: totpData.secret,
+          secret: alreadyConfigured ? undefined : totpData!.secret,
           code: verificationCode,
         }),
       });
@@ -199,7 +209,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
             className="w-full p-4 text-left border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
           >
             <h3 className="font-semibold text-gray-900 dark:text-white">
-              📱 Authenticator App (Recommended)
+              Authenticator App (Recommended)
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Use Google Authenticator, Authy, or similar apps
@@ -212,7 +222,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
             className="w-full p-4 text-left border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
           >
             <h3 className="font-semibold text-gray-900 dark:text-white">
-              📧 Email
+              Email
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Receive codes via email
@@ -225,7 +235,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
             className="w-full p-4 text-left border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
           >
             <h3 className="font-semibold text-gray-900 dark:text-white">
-              💬 SMS
+              SMS
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Receive codes via text message
@@ -317,7 +327,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
       {step === 'backup-codes' && (
         <div className="space-y-4">
           <div className="p-4 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded">
-            <p className="font-semibold">⚠️ Important: Save Your Backup Codes</p>
+            <p className="font-semibold">Important: Save Your Backup Codes</p>
             <p className="text-sm mt-1">
               Store these codes in a safe place. You can use them to access your account if you lose your authenticator device.
             </p>
@@ -338,7 +348,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
               onClick={handleCopyBackupCodes}
               className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded hover:bg-gray-300 dark:hover:bg-gray-600"
             >
-              {copiedBackupCodes ? '✓ Copied!' : 'Copy Codes'}
+              {copiedBackupCodes ? 'Copied!' : 'Copy Codes'}
             </button>
             <button
               onClick={handleDownloadBackupCodes}
@@ -362,7 +372,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
         <div className="space-y-4">
           <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              📧 We sent a 6-digit verification code to your email. Check your inbox.
+              We sent a 6-digit verification code to your email. Check your inbox.
             </p>
           </div>
           <input
@@ -433,7 +443,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
         <div className="space-y-4">
           <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
             <p className="text-sm text-green-800 dark:text-green-200">
-              💬 Code sent to {phoneNumber}
+              Code sent to {phoneNumber}
             </p>
           </div>
           <input

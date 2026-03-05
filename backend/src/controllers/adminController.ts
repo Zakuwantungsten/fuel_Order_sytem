@@ -2187,6 +2187,7 @@ export const getSecuritySettings = async (req: AuthRequest, res: Response): Prom
     const mfa = config?.securitySettings?.mfa || {
       globalEnabled: false,
       requiredRoles: [],
+      allowedMethods: ['totp', 'email'],
     };
 
     const notifications = config?.systemSettings?.notifications || {
@@ -2248,9 +2249,13 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       config.markModified('securitySettings');
     } else if (type === 'mfa') {
       if (!config.securitySettings) config.securitySettings = {} as any;
-      if (!config.securitySettings!.mfa) config.securitySettings!.mfa = { globalEnabled: false, requiredRoles: [] };
+      if (!config.securitySettings!.mfa) config.securitySettings!.mfa = { globalEnabled: false, requiredRoles: [], allowedMethods: ['totp', 'email'], roleMethodOverrides: {} };
       if (settings.globalEnabled !== undefined) config.securitySettings!.mfa!.globalEnabled = settings.globalEnabled;
       if (Array.isArray(settings.requiredRoles)) config.securitySettings!.mfa!.requiredRoles = settings.requiredRoles;
+      if (Array.isArray(settings.allowedMethods)) config.securitySettings!.mfa!.allowedMethods = settings.allowedMethods;
+      if (settings.roleMethodOverrides && typeof settings.roleMethodOverrides === 'object') {
+        (config.securitySettings!.mfa as any).roleMethodOverrides = settings.roleMethodOverrides;
+      }
       config.markModified('securitySettings');
     } else if (type === 'notifications') {
       if (!config.systemSettings) config.systemSettings = {} as any;
