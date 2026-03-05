@@ -418,6 +418,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
                       isOpen={showCreateUser}
                       onClose={() => setShowCreateUser(false)}
                       onUserCreated={loadData}
+                      restrictedRoles={['super_admin', 'admin']}
                     />
                   </>
                 )}

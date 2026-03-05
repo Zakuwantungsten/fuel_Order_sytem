@@ -252,6 +252,7 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
             showMessage('success', 'User created successfully');
           }}
           onError={(msg) => showMessage('error', msg)}
+          restrictedRoles={['super_admin', 'admin']}
         />
       )}
     </div>

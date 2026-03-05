@@ -109,6 +109,11 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
   try {
     const { username, email, firstName, lastName, role, department, station, yard, truckNo } = req.body;
 
+    // Prevent admins from creating users with equal or higher privilege roles
+    if (req.user?.role === 'admin' && (role === 'super_admin' || role === 'admin')) {
+      throw new ApiError(403, 'Admins cannot create users with super_admin or admin roles');
+    }
+
     // Format truck number to standard format
     const formattedTruckNo = truckNo ? formatTruckNumber(truckNo) : undefined;
 
@@ -203,6 +208,16 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
     const existingUser = await User.findOne({ _id: id, isDeleted: false });
     if (!existingUser) {
       throw new ApiError(404, 'User not found');
+    }
+
+    // Prevent admins from modifying super_admin or admin accounts, or elevating roles to those levels
+    if (req.user?.role === 'admin') {
+      if (existingUser.role === 'super_admin' || existingUser.role === 'admin') {
+        throw new ApiError(403, 'Admins cannot modify super_admin or admin accounts');
+      }
+      if (updateData.role && (updateData.role === 'super_admin' || updateData.role === 'admin')) {
+        throw new ApiError(403, 'Admins cannot assign super_admin or admin roles');
+      }
     }
 
     // Check for duplicate email if email is being updated
