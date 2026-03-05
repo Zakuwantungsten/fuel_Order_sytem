@@ -1304,7 +1304,7 @@ const LPOs = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 mb-6 transition-colors">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <div>
             <input
               type="text"

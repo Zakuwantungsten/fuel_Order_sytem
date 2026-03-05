@@ -36,6 +36,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const [stationFilter, setStationFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedPeriods, setSelectedPeriods] = useState<Array<{year: number; month: number}>>([
     { year: new Date().getFullYear(), month: new Date().getMonth() + 1 }
   ]);
@@ -329,7 +330,13 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     const matchesDateFrom = !dateFilter.from || entry.date >= dateFilter.from;
     const matchesDateTo = !dateFilter.to || entry.date <= dateFilter.to;
 
-    return matchesSearch && matchesStation && matchesPeriod && matchesDateFrom && matchesDateTo;
+    // Status filter
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && !entry.isCancelled) ||
+      (statusFilter === 'cancelled' && entry.isCancelled);
+
+    return matchesSearch && matchesStation && matchesPeriod && matchesDateFrom && matchesDateTo && matchesStatus;
   }) || [];
 
   // Auto-fallback: if the default current period has no data, switch to most recent period
@@ -750,7 +757,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
 
         {/* Filters - matching LPO management layout */}
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 mb-3 transition-colors">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div>
               <input
                 type="text"
@@ -879,12 +886,24 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
               onChange={(e) => setDateFilter(prev => ({ ...prev, from: e.target.value }))}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
+
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
             
             {/* Clear Filters */}
             <button
               onClick={() => {
                 setSearchTerm('');
                 setStationFilter('');
+                setStatusFilter('all');
                 setDateFilter({ from: '', to: '' });
                 setSelectedPeriods(
                   availablePeriods.length > 0
