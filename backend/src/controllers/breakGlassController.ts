@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { BreakGlassAccount } from '../models/BreakGlassAccount';
 import { AuditService } from '../utils/auditService';
+import { securityAlertService } from '../services/securityAlertService';
 
 /**
  * Break-Glass Emergency Access Controller
@@ -119,6 +120,19 @@ export const toggleAccount = async (req: Request, res: Response): Promise<void> 
       message: `Break-glass account ${account.isActive ? 'activated' : 'deactivated'}`,
       data: { isActive: account.isActive },
     });
+
+    // Raise security alert when a break-glass account is activated
+    if (account.isActive) {
+      securityAlertService.raiseAlert({
+        severity: 'critical',
+        type: 'break_glass_used',
+        title: `Break-glass account "${account.username}" activated`,
+        message: `Break-glass emergency account "${account.username}" was activated by ${currentUser.username} from IP ${req.ip || 'unknown'}`,
+        metadata: { breakGlassUsername: account.username, activatedBy: currentUser.username },
+        relatedIP: req.ip || undefined,
+        relatedUsername: currentUser.username,
+      }).catch(() => {});
+    }
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

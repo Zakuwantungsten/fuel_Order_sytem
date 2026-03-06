@@ -4,6 +4,7 @@ import { User, DriverCredential, SystemConfig } from '../models';
 import { MFA } from '../models/MFA';
 import UserMFA from '../models/UserMFA';
 import LoginActivity from '../models/LoginActivity';
+import { KnownDevice } from '../models/KnownDevice';
 import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger, createDriverUserId } from '../utils';
 import { AuditService } from '../utils/auditService';
@@ -564,6 +565,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       (LoginActivity as any).recordLogin(
         user._id.toString(), user.refreshToken, ip, ua
       ).then((activity: any) => {
+        (KnownDevice as any).recordDevice(user._id.toString(), user.username, parsed.browser, parsed.os, parsed.deviceType, ip).catch(() => {});
         if (loginNotifsEnabled) {
           emailService.sendLoginNotification(user.email, user.firstName || user.username, {
             browser: parsed.browser, os: parsed.os, ipAddress: ip,
@@ -715,6 +717,7 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
       (LoginActivity as any).recordLogin(
         user._id.toString(), user.refreshToken, mfaIP, mfaUA, verificationResult.methodUsed
       ).then((activity: any) => {
+        (KnownDevice as any).recordDevice(user._id.toString(), user.username, mfaParsed.browser, mfaParsed.os, mfaParsed.deviceType, mfaIP).catch(() => {});
         if (mfaLoginNotifs) {
           emailService.sendLoginNotification(user.email, user.firstName || user.username, {
             browser: mfaParsed.browser, os: mfaParsed.os, ipAddress: mfaIP,
@@ -922,6 +925,7 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
       (LoginActivity as any).recordLogin(
         user._id.toString(), user.refreshToken, setupIP, setupUA, 'totp_setup'
       ).then((activity: any) => {
+        (KnownDevice as any).recordDevice(user._id.toString(), user.username, setupParsed.browser, setupParsed.os, setupParsed.deviceType, setupIP).catch(() => {});
         if (setupLoginNotifs) {
           emailService.sendLoginNotification(user.email, user.firstName || user.username, {
             browser: setupParsed.browser, os: setupParsed.os, ipAddress: setupIP,
@@ -1101,6 +1105,7 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
       (LoginActivity as any).recordLogin(
         user._id.toString(), user.refreshToken, emailIP, emailUA, 'email_setup'
       ).then((activity: any) => {
+        (KnownDevice as any).recordDevice(user._id.toString(), user.username, emailParsed.browser, emailParsed.os, emailParsed.deviceType, emailIP).catch(() => {});
         if (emailLoginNotifs) {
           emailService.sendLoginNotification(user.email, user.firstName || user.username, {
             browser: emailParsed.browser, os: emailParsed.os, ipAddress: emailIP,

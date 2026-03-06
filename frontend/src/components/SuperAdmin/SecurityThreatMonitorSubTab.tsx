@@ -1,28 +1,35 @@
 import { useState, useEffect } from 'react';
 import {
   Shield, ShieldAlert, Radar, BarChart3, Activity,
-  Loader2, RefreshCw, AlertTriangle, CheckCircle,
+  Loader2, RefreshCw, AlertTriangle, CheckCircle, Globe,
 } from 'lucide-react';
 import SecurityEventsTab from './SecurityEventsTab';
 import ThreatDetectionTab from './ThreatDetectionTab';
 import SecurityScoreTab from './SecurityScoreTab';
+import GeoAccessMap from './GeoAccessMap';
+import ComplianceDashboard from './ComplianceDashboard';
+import { Sparkline, SeverityDonutChart } from './SecurityCharts';
 
 /* ───────── Types ───────── */
 
-type Section = 'overview' | 'events' | 'threats' | 'score';
+type Section = 'overview' | 'events' | 'threats' | 'score' | 'geo' | 'compliance';
 
 interface QuickStats {
   securityScore: number;
   threatLevel: string;
   totalEvents24h: number;
   highRiskUsers: number;
+  eventSeverity: { name: string; value: number }[];
+  scoreTrend: number[];
 }
 
-const SECTIONS: { id: Section; label: string; icon: React.ReactNode }[] = [
-  { id: 'overview', label: 'Overview',         icon: <Activity className="w-4 h-4" /> },
-  { id: 'events',   label: 'Security Events',  icon: <ShieldAlert className="w-4 h-4" /> },
-  { id: 'threats',  label: 'Threat Detection',  icon: <Radar className="w-4 h-4" /> },
-  { id: 'score',    label: 'Security Score',    icon: <Shield className="w-4 h-4" /> },
+const SECTIONS: { id: Section; label: string; shortLabel: string; icon: React.ReactNode }[] = [
+  { id: 'overview',    label: 'Overview',          shortLabel: 'Overview',    icon: <Activity className="w-4 h-4" /> },
+  { id: 'events',      label: 'Security Events',   shortLabel: 'Events',      icon: <ShieldAlert className="w-4 h-4" /> },
+  { id: 'threats',     label: 'Threat Detection',  shortLabel: 'Threats',     icon: <Radar className="w-4 h-4" /> },
+  { id: 'score',       label: 'Security Score',    shortLabel: 'Score',       icon: <Shield className="w-4 h-4" /> },
+  { id: 'geo',         label: 'Geo Access',         shortLabel: 'Geo',         icon: <Globe className="w-4 h-4" /> },
+  { id: 'compliance',  label: 'Compliance',         shortLabel: 'Comply',      icon: <Shield className="w-4 h-4" /> },
 ];
 
 const THREAT_STYLES: Record<string, { bg: string; text: string; border: string }> = {
@@ -46,17 +53,21 @@ export default function SecurityThreatMonitorSubTab() {
   const loadOverview = async () => {
     setLoading(true);
     try {
-      const [scoreRes, threatRes, eventsRes] = await Promise.all([
+      const [scoreRes, threatRes, eventsRes, historyRes] = await Promise.all([
         fetch('/api/v1/system-admin/security-score', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
         fetch('/api/v1/system-admin/threat-detection/anomalies?days=7', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
         fetch('/api/v1/system-admin/security-events/stats?hours=24', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch('/api/v1/system-admin/security-score/history?days=14', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
       ]);
 
+      const sevData = eventsRes?.data?.bySeverity ?? {};
       setStats({
         securityScore: scoreRes?.data?.overallScore ?? 0,
         threatLevel: threatRes?.data?.threatLevel ?? 'unknown',
         totalEvents24h: eventsRes?.data?.totalEvents ?? 0,
         highRiskUsers: threatRes?.data?.highRiskUsers?.length ?? 0,
+        eventSeverity: Object.entries(sevData).map(([name, value]) => ({ name, value: value as number })),
+        scoreTrend: (historyRes?.data?.snapshots ?? []).map((s: any) => s.overallScore as number),
       });
     } catch {
       // Non-critical overview stats
@@ -87,19 +98,20 @@ export default function SecurityThreatMonitorSubTab() {
 
   return (
     <div className="space-y-6">
-      {/* ── Section Navigation (Pills) ── */}
+      {/* Section Navigation (Pills) */}
       <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
         {SECTIONS.map(s => (
           <button
             key={s.id}
             onClick={() => setSection(s.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all flex-1 justify-center ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all flex-1 justify-center ${
               section === s.id
                 ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
             }`}>
             {s.icon}
-            <span className="hidden sm:inline">{s.label}</span>
+            <span className="hidden lg:inline">{s.label}</span>
+            <span className="lg:hidden hidden sm:inline">{s.shortLabel}</span>
           </button>
         ))}
       </div>
@@ -161,21 +173,21 @@ export default function SecurityThreatMonitorSubTab() {
 
                   {/* Quick stat cards */}
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-900/20 dark:to-indigo-900/10 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                       <div className="flex items-center gap-2 mb-1">
                         <BarChart3 className="w-3.5 h-3.5 text-indigo-500" />
                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Events (24h)</span>
                       </div>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalEvents24h.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{stats.totalEvents24h.toLocaleString()}</p>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-900/20 dark:to-orange-900/10 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                       <div className="flex items-center gap-2 mb-1">
                         <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />
                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400">High-Risk Users</span>
                       </div>
                       <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.highRiskUsers}</p>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                    <div className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-900/20 dark:to-green-900/10 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                       <div className="flex items-center gap-2 mb-1">
                         <CheckCircle className="w-3.5 h-3.5 text-green-500" />
                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Score Grade</span>
@@ -184,6 +196,26 @@ export default function SecurityThreatMonitorSubTab() {
                         {stats.securityScore >= 80 ? 'A' : stats.securityScore >= 60 ? 'B' : stats.securityScore >= 40 ? 'C' : 'D'}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Mini charts row */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Severity breakdown mini */}
+                    {stats.eventSeverity.length > 0 && (
+                      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Event Severity (24h)</p>
+                        <SeverityDonutChart data={stats.eventSeverity} height={100} />
+                      </div>
+                    )}
+                    {/* Score trend sparkline */}
+                    {stats.scoreTrend.length >= 2 && (
+                      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex flex-col">
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Score Trend (14d)</p>
+                        <div className="flex-1 flex items-center justify-center">
+                          <Sparkline data={stats.scoreTrend} width={180} height={50} />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Quick links */}
@@ -242,6 +274,12 @@ export default function SecurityThreatMonitorSubTab() {
 
       {/* ═══════ Security Score ═══════ */}
       {section === 'score' && <SecurityScoreTab />}
+
+      {/* ═══════ Geographic Access ═══════ */}
+      {section === 'geo' && <GeoAccessMap />}
+
+      {/* ═══════ Compliance Dashboard ═══════ */}
+      {section === 'compliance' && <ComplianceDashboard />}
     </div>
   );
 }

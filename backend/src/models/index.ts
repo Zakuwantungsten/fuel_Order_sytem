@@ -20,6 +20,11 @@ export { FeatureFlag, IFeatureFlag } from './FeatureFlag';
 export { default as Webhook, IWebhook, WEBHOOK_EVENTS } from './Webhook';
 export { PendingOTP, IPendingOTP } from './PendingOTP';
 export { LoginActivity, ILoginActivity } from './LoginActivity';
+export { SecurityScoreSnapshot, ISecurityScoreSnapshot } from './SecurityScoreSnapshot';
+export { SecurityAlert, ISecurityAlertDocument } from './SecurityAlert';
+export { KnownDevice, IKnownDeviceDocument } from './KnownDevice';
+export { SecurityIncident, ISecurityIncidentDocument } from './SecurityIncident';
+export { ConditionalAccessPolicy, IConditionalAccessPolicyDocument } from './ConditionalAccessPolicy';
 
 // Export fleet tracking models
 export { Checkpoint, ICheckpoint } from './Checkpoint';

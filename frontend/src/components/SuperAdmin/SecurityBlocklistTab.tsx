@@ -16,7 +16,9 @@ import {
   Save,
   ToggleLeft,
   ToggleRight,
+  Download,
 } from 'lucide-react';
+import { useSecurityExport } from '../../hooks/useSecurityExport';
 
 /* ───────── Types ───────── */
 
@@ -151,6 +153,7 @@ function relativeTime(iso: string): string {
 /* ───────── Component ───────── */
 
 export default function SecurityBlocklistTab() {
+  const { exporting, exportClientCSV } = useSecurityExport();
   const [tab, setTab] = useState<'active' | 'suspicious' | 'history'>('active');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -291,6 +294,16 @@ export default function SecurityBlocklistTab() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
             <Plus className="w-4 h-4" /> Block IP
+          </button>
+          <button
+            onClick={() => exportClientCSV(
+              filteredBlocked.map(b => ({ ip: b.ip, reason: b.reason, blockedAt: b.blockedAt, expiresAt: b.expiresAt || 'permanent', permanent: !b.expiresAt })),
+              'security-blocklist'
+            )}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            <Download className="w-4 h-4" /> Export
           </button>
           <button
             onClick={fetchData}

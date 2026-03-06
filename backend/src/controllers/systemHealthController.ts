@@ -28,7 +28,7 @@ export const getSystemHealth = async (_req: AuthRequest, res: Response): Promise
       /* fail gracefully */
     }
 
-    const sessions = activeSessionTracker.getActive();
+    const sessions = await activeSessionTracker.getActive();
     const jobs = jobRegistry.listJobs().map(({ id, name, status, isEnabled, lastRunAt, lastRunStatus }) => ({
       id, name, status, isEnabled, lastRunAt, lastRunStatus,
     }));

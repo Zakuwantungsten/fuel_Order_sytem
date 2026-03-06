@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
 import { subscribeToSecurityEvents, unsubscribeFromSecurityEvents } from '../../services/websocket';
+import SecurityChangeLog from './SecurityChangeLog';
+import SecurityTemplates from './SecurityTemplates';
 
 /* ───────── Types ───────── */
 
@@ -38,7 +40,7 @@ interface Props {
 /* ───────── Constants ───────── */
 
 const DEFAULT_SESSION = { sessionTimeout: 30, jwtExpiry: 24, refreshTokenExpiry: 7, maxLoginAttempts: 5, lockoutDuration: 15, allowMultipleSessions: true };
-const DEFAULT_PASSWORD = { minLength: 12, requireUppercase: true, requireLowercase: true, requireNumbers: true, requireSpecialChars: true, historyCount: 5 };
+const DEFAULT_PASSWORD = { minLength: 12, requireUppercase: true, requireLowercase: true, requireNumbers: true, requireSpecialChars: true, historyCount: 5, expirationDays: 0, expirationWarningDays: 7, expirationGraceDays: 3, expirationExemptRoles: [] as string[] };
 const DEFAULT_MFA = { globalEnabled: false, requiredRoles: [] as string[], allowedMethods: ['totp', 'email'] as string[], roleMethodOverrides: {} as Record<string, string[]> };
 const DEFAULT_NOTIFICATIONS = { loginNotifications: true, newDeviceAlerts: true, deviceTracking: true };
 
@@ -310,6 +312,17 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
         </div>
       )}
 
+      {/* ── Security Templates ── */}
+      <SecurityTemplates
+        currentSession={sessionSettings}
+        currentPassword={passwordPolicy}
+        currentMfa={mfaSettings}
+        onApplied={async () => {
+          try { applySettings(await systemAdminAPI.getSecuritySettings()); } catch {}
+        }}
+        onMessage={onMessage}
+      />
+
       {/* ── Stats Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
@@ -400,6 +413,63 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
           </div>
           <InputField label="Password History (count)" hint="Prevent reuse of the last N passwords (0 = disabled)"
             value={passwordPolicy.historyCount} onChange={v => setPasswordPolicy(p => ({ ...p, historyCount: parseInt(v) || 5 }))} cls={inputCls} />
+
+          {/* Password Expiration */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Password Expiration</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expiration Interval</label>
+                <select
+                  value={passwordPolicy.expirationDays}
+                  onChange={e => setPasswordPolicy(p => ({ ...p, expirationDays: parseInt(e.target.value) }))}
+                  className={inputCls}
+                >
+                  <option value={0}>Never</option>
+                  <option value={30}>30 days</option>
+                  <option value={60}>60 days</option>
+                  <option value={90}>90 days</option>
+                  <option value={180}>180 days</option>
+                  <option value={365}>365 days</option>
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Force users to change password after this period</p>
+              </div>
+              {passwordPolicy.expirationDays > 0 && (
+                <>
+                  <InputField label="Warning Period (days)" hint="Warn users this many days before expiry"
+                    value={passwordPolicy.expirationWarningDays} onChange={v => setPasswordPolicy(p => ({ ...p, expirationWarningDays: Math.max(0, parseInt(v) || 7) }))} cls={inputCls} />
+                  <InputField label="Grace Period (days)" hint="Allow login for this many days after expiry before hard lock"
+                    value={passwordPolicy.expirationGraceDays} onChange={v => setPasswordPolicy(p => ({ ...p, expirationGraceDays: Math.max(0, parseInt(v) || 3) }))} cls={inputCls} />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Exempt Roles</label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">These roles are excluded from password expiration</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {ALL_ROLES.map(r => {
+                        const active = passwordPolicy.expirationExemptRoles?.includes(r.value);
+                        return (
+                          <button key={r.value} type="button"
+                            onClick={() => setPasswordPolicy(p => ({
+                              ...p,
+                              expirationExemptRoles: active
+                                ? (p.expirationExemptRoles || []).filter(v => v !== r.value)
+                                : [...(p.expirationExemptRoles || []), r.value],
+                            }))}
+                            className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                              active
+                                ? 'bg-indigo-100 dark:bg-indigo-900/40 border-indigo-400 text-indigo-700 dark:text-indigo-300'
+                                : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-indigo-300'
+                            }`}
+                          >
+                            {r.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
         <div className="flex justify-end">
           <SaveBtn label="Save Password Policy" saving={savingPassword} onClick={savePassword} />
@@ -742,6 +812,9 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
           </div>
         )}
       </SectionCard>
+
+      {/* Recent Security Changes */}
+      <SecurityChangeLog />
     </div>
   );
 }

@@ -10,12 +10,12 @@ export interface PasswordPolicy {
 }
 
 const DEFAULT_POLICY: PasswordPolicy = {
-  minLength: 8,
-  requireUppercase: false,
-  requireLowercase: false,
-  requireNumbers: false,
-  requireSpecialChars: false,
-  historyCount: 0,
+  minLength: 12,
+  requireUppercase: true,
+  requireLowercase: true,
+  requireNumbers: true,
+  requireSpecialChars: true,
+  historyCount: 5,
 };
 
 /**

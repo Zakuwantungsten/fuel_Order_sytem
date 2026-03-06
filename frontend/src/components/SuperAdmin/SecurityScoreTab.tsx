@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Shield, CheckCircle, AlertTriangle, XCircle, RefreshCw, ChevronRight, Info } from 'lucide-react';
+import { Shield, CheckCircle, AlertTriangle, XCircle, RefreshCw, ChevronRight, Info, Download } from 'lucide-react';
+import { ScoreTrendChart } from './SecurityCharts';
+import { useSecurityExport } from '../../hooks/useSecurityExport';
 
 interface SecurityCheck {
   id: string;
@@ -38,10 +40,13 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function SecurityScoreTab() {
+  const { exporting, exportClientCSV } = useSecurityExport();
   const [data, setData] = useState<SecurityScoreData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [trendData, setTrendData] = useState<{ date: string; score: number }[]>([]);
+  const [trendDays, setTrendDays] = useState(30);
 
   const fetchScore = async () => {
     setLoading(true);
@@ -61,7 +66,21 @@ export default function SecurityScoreTab() {
     }
   };
 
+  const fetchTrend = async () => {
+    try {
+      const token = sessionStorage.getItem('fuel_order_token');
+      const res = await fetch(`/api/v1/system-admin/security-score/history?days=${trendDays}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.success && json.data?.snapshots) {
+        setTrendData(json.data.snapshots.map((s: any) => ({ date: s.date, score: s.overallScore })));
+      }
+    } catch { /* non-critical */ }
+  };
+
   useEffect(() => { fetchScore(); }, []);
+  useEffect(() => { fetchTrend(); }, [trendDays]);
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600 dark:text-green-400';
@@ -126,9 +145,21 @@ export default function SecurityScoreTab() {
             Last assessed: {new Date(data.generatedAt).toLocaleString()}
           </p>
         </div>
-        <button onClick={fetchScore} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
-          <RefreshCw className="w-4 h-4" /> Recalculate
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportClientCSV(
+              data.checks.map(c => ({ category: c.category, title: c.title, status: c.status, score: c.score, weight: c.weight })),
+              'security-score'
+            )}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 text-sm"
+          >
+            <Download className="w-4 h-4" /> Export
+          </button>
+          <button onClick={fetchScore} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+            <RefreshCw className="w-4 h-4" /> Recalculate
+          </button>
+        </div>
       </div>
 
       {/* Score Ring + Summary */}
@@ -182,6 +213,35 @@ export default function SecurityScoreTab() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Score Trend */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Score Trend</h3>
+          <div className="flex items-center gap-1.5">
+            {[7, 30, 90].map(d => (
+              <button
+                key={d}
+                onClick={() => setTrendDays(d)}
+                className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
+                  trendDays === d
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+        {trendData.length >= 2 ? (
+          <ScoreTrendChart data={trendData} height={180} gradientId="scoreTabTrend" />
+        ) : (
+          <div className="flex items-center justify-center h-32 text-sm text-gray-400 dark:text-gray-500">
+            Trend data will appear after daily score snapshots are collected
+          </div>
+        )}
       </div>
 
       {/* Improvement Priority */}

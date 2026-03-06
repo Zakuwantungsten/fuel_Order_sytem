@@ -53,6 +53,15 @@ import siemRoutes from './siemRoutes';
 import threatDetectionRoutes from './threatDetectionRoutes';
 import securityBlocklistRoutes from './securityBlocklistRoutes';
 import securityEventsRoutes from './securityEventsRoutes';
+import securityAlertRoutes from './securityAlertRoutes';
+import securityAuditRoutes from './securityAuditRoutes';
+import rolePermissionRoutes from './rolePermissionRoutes';
+import knownDeviceRoutes from './knownDeviceRoutes';
+import geoAccessRoutes from './geoAccessRoutes';
+import sessionAnomalyRoutes from './sessionAnomalyRoutes';
+import securityIncidentRoutes from './securityIncidentRoutes';
+import complianceRoutes from './complianceRoutes';
+import conditionalAccessRoutes from './conditionalAccessRoutes';
 
 const router = Router();
 
@@ -117,5 +126,14 @@ router.use('/system-admin/siem', siemRoutes); // SIEM export / audit event strea
 router.use('/system-admin/threat-detection', threatDetectionRoutes); // UEBA threat detection
 router.use('/system-admin/security-blocklist', securityBlocklistRoutes); // IP reputation / auto-blocklist
 router.use('/system-admin/security-events', securityEventsRoutes); // Security event log viewer
+router.use('/system-admin/security-alerts', securityAlertRoutes); // Security alert queue
+router.use('/system-admin/security-audit-log', securityAuditRoutes); // Security change audit log
+router.use('/system-admin/role-permissions', rolePermissionRoutes); // Role permission matrix
+router.use('/system-admin/known-devices', knownDeviceRoutes); // Device trust & management
+router.use('/system-admin/geo-access', geoAccessRoutes); // Geographic access map
+router.use('/system-admin/session-anomalies', sessionAnomalyRoutes); // Session anomaly detection
+router.use('/system-admin/incidents', securityIncidentRoutes); // Security incident workflow
+router.use('/system-admin/compliance', complianceRoutes); // Compliance & regulatory dashboard
+router.use('/system-admin/conditional-access', conditionalAccessRoutes); // Conditional access policies
 
 export default router;

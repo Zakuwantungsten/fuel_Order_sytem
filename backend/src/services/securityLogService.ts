@@ -12,6 +12,7 @@
 import { SecurityEvent, SecurityEventType, SecuritySeverity } from '../models/SecurityEvent';
 import { config } from '../config';
 import logger from '../utils/logger';
+import { securityAlertService } from './securityAlertService';
 
 export interface SecurityEventInput {
   ip: string;
@@ -59,6 +60,27 @@ class SecurityLogService {
         userId: input.userId,
         username: input.username,
       });
+
+      // Auto-raise alert for high/critical severity events
+      const sev = input.severity || 'medium';
+      if (sev === 'high' || sev === 'critical') {
+        const EVENT_LABELS: Record<string, string> = {
+          path_blocked: 'Blocked Path Access', ip_blocked: 'IP Blocked',
+          auth_failure: 'Authentication Failure', suspicious_404: 'Suspicious 404 Pattern',
+          honeypot_hit: 'Honeypot Triggered', ua_blocked: 'User-Agent Blocked',
+          rate_limited: 'Rate Limit Exceeded', csrf_failure: 'CSRF Failure', jwt_failure: 'JWT Failure',
+        };
+        securityAlertService.raiseAlert({
+          severity: sev,
+          type: input.eventType === 'ip_blocked' ? 'autoblock_trigger' : 'security_event',
+          title: `${EVENT_LABELS[input.eventType] || input.eventType}: ${input.ip}`,
+          message: `${EVENT_LABELS[input.eventType] || input.eventType} detected from IP ${input.ip} on ${input.url}`,
+          metadata: { ...input.metadata, url: input.url, method: input.method },
+          relatedIP: input.ip,
+          relatedUserId: input.userId,
+          relatedUsername: input.username,
+        }).catch(() => { /* fail-open */ });
+      }
     } catch (err) {
       logger.error('[SecurityLogService] Failed to persist security event:', err);
     }

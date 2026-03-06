@@ -99,7 +99,8 @@ export async function calculateSecurityScore(): Promise<SecurityScoreResult> {
     });
 
     // 5. Account lockout policy
-    const lockoutThreshold = security?.accountLockout?.maxAttempts || 5;
+    const sessionSettings = (config as any)?.systemSettings?.session;
+    const lockoutThreshold = sessionSettings?.maxLoginAttempts || 5;
     checks.push({
       id: 'auth_lockout_policy',
       category: 'authentication',
@@ -277,12 +278,12 @@ export async function calculateSecurityScore(): Promise<SecurityScoreResult> {
     });
 
     // 16. Session management
-    const sessionConfig = security?.session;
+    const sessionMgmt = (config as any)?.systemSettings?.session;
     checks.push({
       id: 'compliance_session_mgmt',
       category: 'compliance',
       title: 'Session management configured',
-      description: `JWT expiry: ${sessionConfig?.jwtExpiry || '30m'}, auto-logout on inactivity`,
+      description: `Session timeout: ${sessionMgmt?.sessionTimeout || 30}min, JWT expiry: ${sessionMgmt?.jwtExpiry || 24}h`,
       status: 'pass',
       weight: 4,
       score: 4,

@@ -10,7 +10,10 @@ import {
   Globe,
   Filter,
   TrendingUp,
+  Download,
 } from 'lucide-react';
+import { EventTimelineChart, SeverityDonutChart, DistributionBarChart } from './SecurityCharts';
+import { useSecurityExport } from '../../hooks/useSecurityExport';
 
 /* ───────── Types ───────── */
 
@@ -121,6 +124,7 @@ function relativeTime(iso: string): string {
 /* ───────── Component ───────── */
 
 export default function SecurityEventsTab() {
+  const { exporting, exportSecurityEvents } = useSecurityExport();
   const [view, setView] = useState<'events' | 'stats'>('stats');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -184,8 +188,7 @@ export default function SecurityEventsTab() {
     else fetchEvents();
   }, [view, fetchStats, fetchEvents]);
 
-  // Simple bar chart using CSS
-  const maxTimelineCount = Math.max(1, ...timeline.map(t => t.count));
+  // Simple bar chart using CSS (unused, timeline is now Recharts)
 
   /* ───────── Render ───────── */
 
@@ -217,6 +220,14 @@ export default function SecurityEventsTab() {
               <Clock className="w-4 h-4 inline mr-1" /> Events
             </button>
           </div>
+          <button
+            onClick={() => exportSecurityEvents(24)}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+            title="Export events (last 24h) as CSV"
+          >
+            <Download className="w-4 h-4" /> Export
+          </button>
           <button
             onClick={() => (view === 'stats' ? fetchStats() : fetchEvents())}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
@@ -268,57 +279,49 @@ export default function SecurityEventsTab() {
             ))}
           </div>
 
-          {/* Timeline chart */}
-          {timeline.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" /> Event Timeline
-              </h3>
-              <div className="flex items-end gap-[2px] h-24">
-                {timeline.map((bucket, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 bg-indigo-500 dark:bg-indigo-400 rounded-t-sm hover:bg-indigo-600 dark:hover:bg-indigo-300 transition-colors group relative"
-                    style={{ height: `${(bucket.count / maxTimelineCount) * 100}%`, minHeight: bucket.count > 0 ? '2px' : '0' }}
-                    title={`${new Date(bucket.time).toLocaleTimeString()}: ${bucket.count} events`}
-                  />
-                ))}
+          {/* Timeline chart + Severity breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Timeline chart */}
+            {timeline.length > 0 && (
+              <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" /> Event Timeline
+                </h3>
+                <EventTimelineChart
+                  data={timeline.map(b => ({ time: b.time, count: b.count }))}
+                  height={160}
+                />
               </div>
-              <div className="flex justify-between mt-1 text-[10px] text-gray-400">
-                <span>{timeline.length > 0 ? new Date(timeline[0].time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                <span>{timeline.length > 0 ? new Date(timeline[timeline.length - 1].time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+            )}
+
+            {/* Severity donut */}
+            {stats && Object.keys(stats.bySeverity).length > 0 && (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Severity Breakdown</h3>
+                <SeverityDonutChart
+                  data={Object.entries(stats.bySeverity).map(([name, value]) => ({ name, value }))}
+                  height={160}
+                />
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Two-column: By Type + Top IPs */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* By type */}
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Events by Type</h3>
-              <div className="space-y-2">
-                {Object.entries(stats.byType)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([type, count]) => {
-                    const pct = stats.totalEvents > 0 ? (count / stats.totalEvents) * 100 : 0;
-                    return (
-                      <div key={type}>
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${EVENT_TYPE_COLORS[type] || 'bg-gray-100 dark:bg-gray-700'}`}>
-                            {EVENT_TYPE_LABELS[type] || type}
-                          </span>
-                          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{count}</span>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                {Object.keys(stats.byType).length === 0 && (
-                  <p className="text-xs text-gray-400">No events in this period</p>
-                )}
-              </div>
+              {Object.keys(stats.byType).length === 0 ? (
+                <p className="text-xs text-gray-400">No events in this period</p>
+              ) : (
+                <DistributionBarChart
+                  data={Object.entries(stats.byType)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([name, value]) => ({ name: EVENT_TYPE_LABELS[name] || name, value }))}
+                  height={200}
+                  layout="horizontal"
+                />
+              )}
             </div>
 
             {/* Top IPs */}

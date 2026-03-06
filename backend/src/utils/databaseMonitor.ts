@@ -187,7 +187,7 @@ export class DatabaseMonitor extends EventEmitter {
    * This works on all MongoDB Atlas tiers (no admin commands required).
    */
   async getActiveConnections(): Promise<IActiveConnection[]> {
-    const sessions = activeSessionTracker.getActive();
+    const sessions = await activeSessionTracker.getActive();
     const now = Date.now();
 
     return sessions.map((s) => ({

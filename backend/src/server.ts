@@ -108,6 +108,7 @@ import { startArchivalScheduler } from './jobs/archivalScheduler';
 // Import fuel price scheduler (registers itself with jobRegistry on import)
 import './jobs/fuelPriceScheduler';
 import './jobs/securityEventRetention';
+import './jobs/securityScoreSnapshot';
 import { jobRegistry } from './jobs/jobRegistry';
 
 // Enforce HTTPS only in production

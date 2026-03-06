@@ -155,6 +155,10 @@ export interface ISecuritySettings {
     requireNumbers: boolean;
     requireSpecialChars: boolean;
     historyCount: number;
+    expirationDays: number;        // 0 = never
+    expirationWarningDays: number; // days before expiry to warn
+    expirationGraceDays: number;   // grace period after expiry
+    expirationExemptRoles: string[];
   };
   session?: {
     timeoutMinutes: number;
@@ -345,6 +349,10 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         requireNumbers: { type: Boolean, default: true },
         requireSpecialChars: { type: Boolean, default: true },
         historyCount: { type: Number, default: 5 },
+        expirationDays: { type: Number, default: 0 },
+        expirationWarningDays: { type: Number, default: 7 },
+        expirationGraceDays: { type: Number, default: 3 },
+        expirationExemptRoles: { type: [String], default: [] },
       },
       session: {
         timeoutMinutes: { type: Number, default: 30 },

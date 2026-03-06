@@ -6,6 +6,7 @@ import {
   getTopIPs,
   getTimeline,
 } from '../controllers/securityEventsController';
+import { exportSecurityEvents } from '../controllers/securityAuditController';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.get('/', getSecurityEvents);
 router.get('/stats', getSecurityEventStats);
 router.get('/top-ips', getTopIPs);
 router.get('/timeline', getTimeline);
+router.get('/export', exportSecurityEvents);
 
 export default router;

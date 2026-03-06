@@ -10,7 +10,7 @@ import AuditService from '../utils/auditService';
  * Returns all currently active sessions (super_admin only)
  */
 export const getActiveSessions = async (req: AuthRequest, res: Response): Promise<void> => {
-  const sessions = activeSessionTracker.getActive();
+  const sessions = await activeSessionTracker.getActive();
   res.status(200).json({ success: true, data: sessions, total: sessions.length });
 };
 
@@ -26,7 +26,7 @@ export const terminateSession = async (req: AuthRequest, res: Response): Promise
       throw new ApiError(400, 'You cannot terminate your own session');
     }
 
-    const sessions = activeSessionTracker.getActive();
+    const sessions = await activeSessionTracker.getActive();
     const target = sessions.find((s) => s.userId === userId);
     if (!target) {
       throw new ApiError(404, 'Session not found or already expired');

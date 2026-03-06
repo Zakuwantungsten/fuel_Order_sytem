@@ -1,3 +1,5 @@
+import { SystemConfig } from '../models';
+
 /**
  * Active Session Tracker
  *
@@ -9,7 +11,26 @@
  * request within the last SESSION_TTL_MS milliseconds.
  */
 
-const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes of inactivity = session ends
+const DEFAULT_SESSION_TTL_MS = 30 * 60 * 1000; // fallback: 30 minutes
+let sessionTtlMs = DEFAULT_SESSION_TTL_MS;
+let lastConfigLoad = 0;
+const CONFIG_CACHE_TTL = 60_000; // re-read config at most every 60 s
+
+async function loadSessionTtl(): Promise<number> {
+  const now = Date.now();
+  if (now - lastConfigLoad < CONFIG_CACHE_TTL) return sessionTtlMs;
+  try {
+    const config = await SystemConfig.findOne({ configType: 'system_settings' }).lean();
+    const timeout = (config as any)?.systemSettings?.session?.sessionTimeout;
+    if (typeof timeout === 'number' && timeout > 0) {
+      sessionTtlMs = timeout * 60 * 1000; // stored in minutes, convert to ms
+    }
+    lastConfigLoad = now;
+  } catch {
+    // keep current value on error
+  }
+  return sessionTtlMs;
+}
 
 export interface ActiveSession {
   userId: string;
@@ -45,12 +66,13 @@ class ActiveSessionTracker {
     }
   }
 
-  getActive(): ActiveSession[] {
+  async getActive(): Promise<ActiveSession[]> {
+    const ttl = await loadSessionTtl();
     const now = Date.now();
     const active: ActiveSession[] = [];
 
     for (const [userId, session] of this.sessions) {
-      if (now - session.lastSeen.getTime() > SESSION_TTL_MS) {
+      if (now - session.lastSeen.getTime() > ttl) {
         this.sessions.delete(userId);
       } else {
         active.push(session);
@@ -69,7 +91,7 @@ class ActiveSessionTracker {
     this.sessions.delete(userId);
     this.terminated.add(userId);
     // Auto-clear termination flag after TTL so relogins work normally
-    setTimeout(() => this.terminated.delete(userId), SESSION_TTL_MS);
+    setTimeout(() => this.terminated.delete(userId), sessionTtlMs);
   }
 
   /** Terminate ALL active sessions except the specified userId */

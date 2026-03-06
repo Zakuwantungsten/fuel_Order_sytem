@@ -2,12 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Users, LogOut, Loader2, RefreshCw, MapPin, Clock, Activity,
   ShieldAlert, AlertTriangle, Zap, ShieldCheck, Lock, Unlock,
-  X, CheckCircle, Search,
+  X, CheckCircle, Search, Download,
 } from 'lucide-react';
 import { sessionService, ActiveSession } from '../../services/sessionService';
 import { useAuth } from '../../contexts/AuthContext';
 import apiClient from '../../services/api';
 import ConfirmModal from './ConfirmModal';
+import DeviceManagementPanel from './DeviceManagementPanel';
+import SessionAnomalyPanel from './SessionAnomalyPanel';
+import { useSecurityExport } from '../../hooks/useSecurityExport';
 
 /* ───────── Types ───────── */
 
@@ -53,6 +56,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function SecuritySessionsSubTab({ onMessage }: Props) {
   const { user: currentUser } = useAuth();
+  const { exporting, exportClientCSV } = useSecurityExport();
 
   /* Sessions state */
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
@@ -191,6 +195,18 @@ export default function SecuritySessionsSubTab({ onMessage }: Props) {
       )}
 
       {/* ── Stats Cards ── */}
+      <div className="flex items-center justify-end -mb-3">
+        <button
+          onClick={() => exportClientCSV(
+            sessions.map(s => ({ user: s.username, ip: s.ip, role: s.role, firstSeen: s.firstSeen, lastSeen: s.lastSeen, requests: s.requestCount })),
+            'active-sessions'
+          )}
+          disabled={exporting || sessions.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
+        >
+          <Download className="w-4 h-4" /> Export Sessions
+        </button>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
@@ -402,6 +418,25 @@ export default function SecuritySessionsSubTab({ onMessage }: Props) {
             )}
           </div>
         )}
+      </div>
+
+      {/* ═══════ Session Anomaly Detection ═══════ */}
+      <SessionAnomalyPanel />
+
+      {/* ═══════ Device Trust & Management ═══════ */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+            <ShieldAlert className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Device Trust & Management</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Known devices across all users</p>
+          </div>
+        </div>
+        <div className="p-5">
+          <DeviceManagementPanel onMessage={onMessage} />
+        </div>
       </div>
 
       {/* ═══════ Modals ═══════ */}
