@@ -243,6 +243,9 @@ router.get('/audit-logs/export', authorize('super_admin'), asyncHandler(adminCon
 // System Statistics
 router.get('/system-stats', authorize('super_admin'), asyncHandler(adminController.getSystemStats));
 
+// Overview Dashboard — single aggregated endpoint for the SuperAdmin Overview tab
+router.get('/overview-stats', authorize('super_admin'), asyncHandler(adminController.getOverviewStats));
+
 // Session Management
 router.get('/sessions/active', authorize('super_admin'), asyncHandler(adminController.getActiveSessions));
 router.post('/sessions/:userId/force-logout', authorize('super_admin'), asyncHandler(adminController.forceLogout));

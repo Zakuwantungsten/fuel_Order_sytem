@@ -1431,6 +1431,12 @@ export const adminAPI = {
 
 // System Admin API (accessed through admin endpoints, Super Admin only)
 export const systemAdminAPI = {
+  // Overview Dashboard — single aggregated endpoint
+  getOverviewStats: async () => {
+    const response = await apiClient.get('/admin/overview-stats');
+    return response.data.data;
+  },
+
   // Database Monitoring
   getDatabaseMetrics: async () => {
     const response = await apiClient.get('/admin/database/metrics');

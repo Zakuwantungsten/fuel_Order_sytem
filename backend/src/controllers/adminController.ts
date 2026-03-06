@@ -2437,3 +2437,352 @@ export const clearUserPasswordChangeFlag = async (req: AuthRequest, res: Respons
     throw error;
   }
 };
+
+/**
+ * GET /admin/overview-stats
+ * Single aggregated endpoint for the SuperAdmin Overview dashboard.
+ * Collects platform health, security signals, financial KPIs, pending items,
+ * backup status, role distribution, and recent activity in one round-trip.
+ * Restricted to super_admin role.
+ */
+export const getOverviewStats = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const now          = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sixtyDaysAgo  = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const today         = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Lazy-import Backup model (not part of the barrel export)
+    let BackupModel: any = null;
+    try {
+      const m = await import('../models/Backup');
+      BackupModel = m.default;
+    } catch { /* model unavailable */ }
+
+    const [
+      userFacet,
+      doFacet,
+      lpoFacet,
+      fuelFacet,
+      yardFacet,
+      driverPendingArr,
+      auditStatsResult,
+      criticalEvents,
+      activeSessionCount,
+      pendingYardCount,
+      currentRevenueArr,
+      currentFuelArr,
+      prevRevenueArr,
+      prevFuelArr,
+      lastBackup,
+      dbHealthy,
+      dbStatusResult,
+      maintenanceCfg,
+      recentLogs,
+    ] = await Promise.all([
+      // ── User facet
+      User.aggregate([{
+        $facet: {
+          total:  [{ $match: { isDeleted: false } },                          { $count: 'count' }],
+          active: [{ $match: { isDeleted: false, isActive: true  } },         { $count: 'count' }],
+          locked: [{ $match: { isDeleted: false, isActive: false } },         { $count: 'count' }],
+          byRole: [
+            { $match: { isDeleted: false } },
+            { $group: { _id: '$role', count: { $sum: 1 } } },
+            { $sort:  { count: -1 } },
+          ],
+        },
+      }]),
+
+      // ── Delivery Order facet
+      DeliveryOrder.aggregate([{
+        $facet: {
+          total: [{ $match: { isDeleted: false } },                                         { $count: 'count' }],
+          today: [{ $match: { isDeleted: false, createdAt: { $gte: today } } },             { $count: 'count' }],
+        },
+      }]),
+
+      // ── LPO facet
+      LPOEntry.aggregate([{
+        $facet: {
+          total: [{ $match: { isDeleted: false } },                                         { $count: 'count' }],
+          today: [{ $match: { isDeleted: false, createdAt: { $gte: today } } },             { $count: 'count' }],
+        },
+      }]),
+
+      // ── Fuel Record facet
+      FuelRecord.aggregate([{
+        $facet: {
+          total:       [{ $match: { isDeleted: false } },                                                                                      { $count: 'count' }],
+          today:       [{ $match: { isDeleted: false, createdAt: { $gte: today } } },                                                          { $count: 'count' }],
+          activeTrips: [{ $match: { isDeleted: false, isCancelled: { $ne: true }, journeyStatus: { $in: ['active', 'queued'] } } }, { $count: 'count' }],
+        },
+      }]),
+
+      // ── Yard Fuel facet
+      YardFuelDispense.aggregate([{
+        $facet: {
+          total: [{ $match: { isDeleted: false } },                                         { $count: 'count' }],
+          today: [{ $match: { isDeleted: false, createdAt: { $gte: today } } },             { $count: 'count' }],
+        },
+      }]),
+
+      // ── Pending driver accounts
+      (async () => {
+        try {
+          const { DriverAccountEntry } = await import('../models');
+          return DriverAccountEntry.aggregate([{
+            $facet: {
+              pending: [{ $match: { isDeleted: false, status: 'pending' } }, { $count: 'count' }],
+            },
+          }]);
+        } catch {
+          return [{ pending: [] }];
+        }
+      })(),
+
+      // ── Audit security signals
+      AuditService.getStatsSummary(),
+
+      // ── Last 5 critical/high audit events
+      AuditService.getRecentCriticalEvents(5),
+
+      // ── Active sessions (last-login within 24 h with a live refresh token)
+      User.countDocuments({
+        isDeleted:    false,
+        isActive:     true,
+        refreshToken: { $ne: null, $exists: true },
+        lastLogin:    { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+      }),
+
+      // ── Pending yard fuel dispenses
+      YardFuelDispense.countDocuments({ isDeleted: false, status: 'pending' }),
+
+      // ── Current 30-day LPO revenue
+      LPOEntry.aggregate([
+        { $match: { isDeleted: false, createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { _id: null, total: { $sum: { $multiply: ['$ltrs', '$pricePerLtr'] } } } },
+      ]),
+
+      // ── Current 30-day fuel liters dispensed
+      FuelRecord.aggregate([
+        { $match: { isDeleted: false, isCancelled: { $ne: true }, createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { _id: null, total: { $sum: '$totalLts' } } },
+      ]),
+
+      // ── Previous 30-day LPO revenue (for period-over-period trend)
+      LPOEntry.aggregate([
+        { $match: { isDeleted: false, createdAt: { $gte: sixtyDaysAgo, $lt: thirtyDaysAgo } } },
+        { $group: { _id: null, total: { $sum: { $multiply: ['$ltrs', '$pricePerLtr'] } } } },
+      ]),
+
+      // ── Previous 30-day fuel liters
+      FuelRecord.aggregate([
+        { $match: { isDeleted: false, isCancelled: { $ne: true }, createdAt: { $gte: sixtyDaysAgo, $lt: thirtyDaysAgo } } },
+        { $group: { _id: null, total: { $sum: '$totalLts' } } },
+      ]),
+
+      // ── Last completed backup
+      BackupModel
+        ? BackupModel.findOne({ status: 'completed' }).sort({ createdAt: -1 }).lean()
+        : Promise.resolve(null),
+
+      // ── Database health
+      databaseMonitor.healthCheck(),
+      databaseMonitor.getStatus(),
+
+      // ── Maintenance mode setting
+      SystemConfig.findOne({ configType: 'system_settings', isDeleted: false })
+        .select('systemSettings')
+        .lean(),
+
+      // ── Recent audit log entries for activity feed
+      AuditLog.find({})
+        .sort({ timestamp: -1 })
+        .limit(8)
+        .select('timestamp username action resourceType severity outcome')
+        .lean(),
+    ]);
+
+    // ── Helper: extract count from a $facet sub-pipeline
+    const fc = (facetArr: any[], key: string): number =>
+      facetArr?.[0]?.[key]?.[0]?.count ?? 0;
+
+    // ── Financial KPIs
+    const currentRevenue = (currentRevenueArr as any[])?.[0]?.total ?? 0;
+    const prevRevenue    = (prevRevenueArr    as any[])?.[0]?.total ?? 0;
+    const currentFuel    = (currentFuelArr    as any[])?.[0]?.total ?? 0;
+    const prevFuel       = (prevFuelArr       as any[])?.[0]?.total ?? 0;
+    const pctChange = (curr: number, prev: number): number =>
+      prev > 0 ? parseFloat((((curr - prev) / prev) * 100).toFixed(1)) : 0;
+
+    // ── Backup freshness
+    const backupAgeHours: number | null = lastBackup
+      ? Math.floor((now.getTime() - new Date((lastBackup as any).createdAt).getTime()) / 3_600_000)
+      : null;
+
+    // ── Maintenance mode
+    const maintenanceModeOn =
+      ((maintenanceCfg as any)?.systemSettings?.maintenance?.enabled) === true;
+
+    // ── Composite health score (0–100)
+    let healthScore = 0;
+    type HealthStatus = 'healthy' | 'degraded' | 'critical';
+    const healthComponents: { name: string; status: HealthStatus; detail: string }[] = [];
+
+    // Database (30 pts)
+    if (dbHealthy) {
+      healthScore += 30;
+      healthComponents.push({ name: 'Database', status: 'healthy', detail: (dbStatusResult as any)?.status ?? 'connected' });
+    } else {
+      healthComponents.push({ name: 'Database', status: 'critical', detail: (dbStatusResult as any)?.status ?? 'unavailable' });
+    }
+
+    // Backup (25 pts)
+    if (backupAgeHours === null) {
+      healthComponents.push({ name: 'Backup', status: 'critical', detail: 'No backup on record' });
+    } else if (backupAgeHours <= 24) {
+      healthScore += 25;
+      healthComponents.push({ name: 'Backup', status: 'healthy', detail: `${backupAgeHours}h ago` });
+    } else if (backupAgeHours <= 72) {
+      healthScore += 12;
+      healthComponents.push({ name: 'Backup', status: 'degraded', detail: `${backupAgeHours}h ago` });
+    } else {
+      healthComponents.push({ name: 'Backup', status: 'critical', detail: `${Math.floor(backupAgeHours / 24)} days ago` });
+    }
+
+    // Security (25 pts)
+    const auditS = auditStatsResult as {
+      todayFailedLogins: number; todayCritical: number; todayAccessDenied: number;
+      highRiskCount: number; last24hFailures: number;
+    };
+    const secDeduct = Math.min(25, auditS.todayCritical * 6 + auditS.todayFailedLogins * 2);
+    healthScore += Math.max(0, 25 - secDeduct);
+    if (auditS.todayCritical > 0) {
+      healthComponents.push({ name: 'Security', status: 'critical', detail: `${auditS.todayCritical} critical events today` });
+    } else if (auditS.todayFailedLogins > 5) {
+      healthComponents.push({ name: 'Security', status: 'degraded', detail: `${auditS.todayFailedLogins} failed logins today` });
+    } else {
+      healthComponents.push({ name: 'Security', status: 'healthy', detail: 'No active threats detected' });
+    }
+
+    // Maintenance (20 pts)
+    if (!maintenanceModeOn) {
+      healthScore += 20;
+      healthComponents.push({ name: 'Maintenance', status: 'healthy', detail: 'System operational' });
+    } else {
+      healthComponents.push({ name: 'Maintenance', status: 'degraded', detail: 'Maintenance mode active' });
+    }
+
+    const pendingDriverAccounts = fc(driverPendingArr as any[], 'pending');
+    const totalPending          = pendingDriverAccounts + (pendingYardCount as number);
+
+    // ── Format recent activity
+    const nowMs = Date.now();
+    const formatActivity = (log: any) => {
+      const ms   = nowMs - new Date(log.timestamp).getTime();
+      const mins = Math.floor(ms / 60_000);
+      const hrs  = Math.floor(ms / 3_600_000);
+      const days = Math.floor(ms / 86_400_000);
+      const timeAgo =
+        mins < 1  ? 'Just now' :
+        mins < 60 ? `${mins}m ago` :
+        hrs  < 24 ? `${hrs}h ago` :
+                    `${days}d ago`;
+
+      const actionLabels: Record<string, string> = {
+        CREATE:           'Created',
+        UPDATE:           'Updated',
+        DELETE:           'Deleted',
+        RESTORE:          'Restored',
+        PERMANENT_DELETE: 'Purged',
+        LOGIN:            'Login',
+        LOGOUT:           'Logout',
+        FAILED_LOGIN:     'Failed Login',
+        ACCESS_DENIED:    'Access Denied',
+        EXPORT:           'Export',
+        BULK_OPERATION:   'Bulk Op',
+      };
+
+      return {
+        id:           String(log._id),
+        action:       log.action as string,
+        actionLabel:  actionLabels[log.action] ?? log.action,
+        username:     log.username as string,
+        resourceType: log.resourceType as string,
+        severity:     (log.severity as string) ?? 'low',
+        outcome:      (log.outcome  as string) ?? 'SUCCESS',
+        timestamp:    log.timestamp as Date,
+        timeAgo,
+      };
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        healthScore:      Math.min(100, healthScore),
+        healthComponents,
+        maintenanceMode:  maintenanceModeOn,
+        system: {
+          users: {
+            total:  fc(userFacet, 'total'),
+            active: fc(userFacet, 'active'),
+            locked: fc(userFacet, 'locked'),
+            byRole: (userFacet?.[0]?.byRole ?? []) as { _id: string; count: number }[],
+          },
+          deliveryOrders: { total: fc(doFacet,   'total'), today: fc(doFacet,   'today') },
+          lpoEntries:     { total: fc(lpoFacet,  'total'), today: fc(lpoFacet,  'today') },
+          fuelRecords:    {
+            total:       fc(fuelFacet, 'total'),
+            today:       fc(fuelFacet, 'today'),
+            activeTrips: fc(fuelFacet, 'activeTrips'),
+          },
+          yardDispenses:  { total: fc(yardFacet, 'total'), today: fc(yardFacet, 'today') },
+        },
+        security: {
+          failedLoginsToday:   auditS.todayFailedLogins,
+          criticalEventsToday: auditS.todayCritical,
+          accessDeniedToday:   auditS.todayAccessDenied,
+          highRiskEventCount:  auditS.highRiskCount,
+          last24hFailures:     auditS.last24hFailures,
+          lockedAccounts:      fc(userFacet, 'locked'),
+          recentCriticalEvents: (criticalEvents as any[]).map(e => ({
+            id:           String(e._id),
+            action:       e.action,
+            username:     e.username,
+            resourceType: e.resourceType,
+            severity:     e.severity,
+            timestamp:    e.timestamp,
+          })),
+        },
+        sessions:   { activeLast24h: activeSessionCount as number },
+        financials: {
+          revenue30d:    currentRevenue,
+          revenueTrend:  pctChange(currentRevenue, prevRevenue),
+          fuelLiters30d: currentFuel,
+          fuelTrend:     pctChange(currentFuel, prevFuel),
+        },
+        pending: {
+          total:          totalPending,
+          driverAccounts: pendingDriverAccounts,
+          yardDispenses:  pendingYardCount as number,
+        },
+        backup: lastBackup ? {
+          status:    (lastBackup as any).status,
+          createdAt: (lastBackup as any).createdAt,
+          fileSize:  (lastBackup as any).fileSize,
+          type:      (lastBackup as any).type,
+          ageHours:  backupAgeHours,
+        } : null,
+        database: {
+          healthy: dbHealthy as boolean,
+          status:  (dbStatusResult as any)?.status ?? 'unknown',
+        },
+        recentActivity: (recentLogs as any[]).map(formatActivity),
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error getting overview stats:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

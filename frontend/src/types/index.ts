@@ -798,6 +798,85 @@ export interface DashboardAnalytics {
   };
 }
 
+// SuperAdmin Overview Dashboard — aggregated stats from a single endpoint
+export interface OverviewHealthComponent {
+  name: string;
+  status: 'healthy' | 'degraded' | 'critical';
+  detail: string;
+}
+
+export interface OverviewCriticalEvent {
+  id: string;
+  action: string;
+  username: string;
+  resourceType: string;
+  severity: string;
+  timestamp: string;
+}
+
+export interface OverviewActivityItem {
+  id: string;
+  action: string;
+  actionLabel: string;
+  username: string;
+  resourceType: string;
+  severity: string;
+  outcome: string;
+  timestamp: string;
+  timeAgo: string;
+}
+
+export interface OverviewStats {
+  healthScore: number;
+  healthComponents: OverviewHealthComponent[];
+  maintenanceMode: boolean;
+  system: {
+    users: {
+      total: number;
+      active: number;
+      locked: number;
+      byRole: Array<{ _id: string; count: number }>;
+    };
+    deliveryOrders: { total: number; today: number };
+    lpoEntries:     { total: number; today: number };
+    fuelRecords:    { total: number; today: number; activeTrips: number };
+    yardDispenses:  { total: number; today: number };
+  };
+  security: {
+    failedLoginsToday:    number;
+    criticalEventsToday:  number;
+    accessDeniedToday:    number;
+    highRiskEventCount:   number;
+    last24hFailures:      number;
+    lockedAccounts:       number;
+    recentCriticalEvents: OverviewCriticalEvent[];
+  };
+  sessions: { activeLast24h: number };
+  financials: {
+    revenue30d:    number;
+    revenueTrend:  number;
+    fuelLiters30d: number;
+    fuelTrend:     number;
+  };
+  pending: {
+    total:          number;
+    driverAccounts: number;
+    yardDispenses:  number;
+  };
+  backup: {
+    status:    string;
+    createdAt: string;
+    fileSize:  number;
+    type:      string;
+    ageHours:  number;
+  } | null;
+  database: {
+    healthy: boolean;
+    status:  string;
+  };
+  recentActivity: OverviewActivityItem[];
+}
+
 export interface RevenueReport {
   revenueData: Array<{
     _id: any;
