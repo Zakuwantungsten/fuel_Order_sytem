@@ -151,6 +151,30 @@ const userSchema = new Schema<IUserDocument>(
       type: Date,
       default: null,
     },
+    // ── Extended admin-management fields ───────────────────────────────────
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [2000, 'Notes cannot exceed 2000 characters'],
+    },
+    createdBy: {
+      type: String,
+      trim: true,
+    },
+    lastModifiedBy: {
+      type: String,
+      trim: true,
+    },
+    lastModifiedAt: {
+      type: Date,
+    },
+    accountExpiresAt: {
+      type: Date,
+    },
+    pendingActivation: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -161,6 +185,7 @@ const userSchema = new Schema<IUserDocument>(
 // Note: username and email already have unique indexes from schema definition
 userSchema.index({ role: 1 });
 userSchema.index({ isDeleted: 1 });
+userSchema.index({ accountExpiresAt: 1 }, { sparse: true });
 
 // Hash password before saving
 userSchema.pre('save', async function (next) {

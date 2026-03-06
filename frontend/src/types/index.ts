@@ -418,10 +418,10 @@ export interface User {
   lastName: string;
   role: UserRole;
   department?: string;
-  station?: string; // For station personnel
-  yard?: string; // For yard personnel
-  truckNo?: string; // For drivers
-  currentDO?: string; // For drivers - current delivery order
+  station?: string;
+  yard?: string;
+  truckNo?: string;
+  currentDO?: string;
   isActive: boolean;
   isBanned?: boolean;
   bannedAt?: string;
@@ -430,8 +430,53 @@ export interface User {
   lastLogin?: string;
   mustChangePassword?: boolean;
   theme?: 'light' | 'dark';
+  // ── Extended admin-management fields ──────────────────────────────────────
+  notes?: string;
+  createdBy?: string;
+  lastModifiedBy?: string;
+  lastModifiedAt?: string;
+  accountExpiresAt?: string;
+  pendingActivation?: boolean;
+  failedLoginAttempts?: number;
+  lockedUntil?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Detailed user profile returned by GET /users/:id/detail
+export interface UserDetail {
+  user: User;
+  mfaStatus: {
+    enabled: boolean;
+    totpEnrolled: boolean;
+    emailEnrolled: boolean;
+    isMandatory: boolean;
+    isExempt: boolean;
+    lastVerified: string | null;
+    failedAttempts: number;
+    lockedUntil: string | null;
+  };
+  loginHistory: Array<{
+    _id: string;
+    timestamp: string;
+    action: 'LOGIN' | 'FAILED_LOGIN';
+    outcome: 'SUCCESS' | 'FAILURE';
+    ipAddress?: string;
+    userAgent?: string;
+  }>;
+}
+
+// Paginated API response wrapper
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
 }
 
 export interface AuthUser extends User {

@@ -218,6 +218,19 @@ export interface IUser {
   passwordHistory?: string[];
   isDeleted: boolean;
   deletedAt?: Date;
+  // ── Extended admin-management fields ─────────────────────────────────────
+  /** Free-text notes visible only to administrators */
+  notes?: string;
+  /** Username of the admin who created this account */
+  createdBy?: string;
+  /** Username of the admin who last modified this account */
+  lastModifiedBy?: string;
+  /** Timestamp of the most recent admin modification */
+  lastModifiedAt?: Date;
+  /** When set, the account is automatically deactivated after this date */
+  accountExpiresAt?: Date;
+  /** True until the user completes their first successful login */
+  pendingActivation?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

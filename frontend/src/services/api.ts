@@ -967,6 +967,22 @@ export const authAPI = {
 
 // Users Management API (Admin only)
 export const usersAPI = {
+  /**
+   * Paginated, server-side search. Returns full PaginatedResponse wrapper.
+   */
+  getPaginated: async (params: {
+    page?: number;
+    limit?: number;
+    sort?: string;
+    order?: 'asc' | 'desc';
+    role?: string;
+    isActive?: string;
+    q?: string;
+  }): Promise<{ data: User[]; pagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } }> => {
+    const response = await apiClient.get('/users', { params });
+    return response.data.data;
+  },
+
   getAll: async (filters?: any): Promise<User[]> => {
     const response = await apiClient.get('/users', { params: filters });
     return response.data.data?.data || response.data.data || [];
@@ -974,6 +990,11 @@ export const usersAPI = {
 
   getById: async (id: string | number): Promise<User> => {
     const response = await apiClient.get(`/users/${id}`);
+    return response.data.data;
+  },
+
+  getDetail: async (id: string | number): Promise<{ user: User; mfaStatus: any; loginHistory: any[] }> => {
+    const response = await apiClient.get(`/users/${id}/detail`);
     return response.data.data;
   },
 
@@ -985,6 +1006,10 @@ export const usersAPI = {
   update: async (id: string | number, data: Partial<User>): Promise<User> => {
     const response = await apiClient.put(`/users/${id}`, data);
     return response.data.data;
+  },
+
+  updateNotes: async (id: string | number, notes: string): Promise<void> => {
+    await apiClient.patch(`/users/${id}/notes`, { notes });
   },
 
   delete: async (id: string | number): Promise<void> => {
@@ -1008,6 +1033,31 @@ export const usersAPI = {
 
   unban: async (id: string | number): Promise<User> => {
     const response = await apiClient.post(`/users/${id}/unban`);
+    return response.data.data;
+  },
+
+  bulkDelete: async (userIds: string[]): Promise<{ deleted: number }> => {
+    const response = await apiClient.post('/users/bulk/delete', { userIds });
+    return response.data.data;
+  },
+
+  bulkResetPasswords: async (userIds: string[]): Promise<{ success: number; failed: number }> => {
+    const response = await apiClient.post('/users/bulk/reset-passwords', { userIds });
+    return response.data.data;
+  },
+
+  exportCSV: async (params?: { role?: string; isActive?: string; q?: string }): Promise<Blob> => {
+    const response = await apiClient.get('/users/export', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  importCSV: async (csvText: string): Promise<{ created: number; skipped: number; errors: Array<{ row: number; reason: string }> }> => {
+    const response = await apiClient.post('/users/import', csvText, {
+      headers: { 'Content-Type': 'text/plain' },
+    });
     return response.data.data;
   },
 };

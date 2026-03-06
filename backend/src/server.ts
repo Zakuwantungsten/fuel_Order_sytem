@@ -88,6 +88,7 @@ app.use(requestId);
 // Body parser middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.text({ type: ['text/plain', 'text/csv', 'application/octet-stream'], limit: '5mb' }));
 
 // Remove MongoDB operator characters from inputs
 app.use(

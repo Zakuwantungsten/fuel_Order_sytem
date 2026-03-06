@@ -23,7 +23,7 @@ import { systemAdminAPI } from '../services/api';
 import { OverviewStats } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 // DatabaseMonitorTab merged into MonitoringUnifiedTab
-import UserManagementUnifiedTab from './SuperAdmin/UserManagementUnifiedTab';
+import { UserManagementPage } from './SuperAdmin/UserManagement';
 import FuelStationsTab from './SuperAdmin/FuelStationsTab';
 import RoutesTab from './SuperAdmin/RoutesTab';
 import AuditLogsTab from './SuperAdmin/AuditLogsTab';
@@ -42,7 +42,7 @@ import StorageManagerTab from './SuperAdmin/StorageManagerTab';
 import MonitoringUnifiedTab from './SuperAdmin/MonitoringUnifiedTab';
 import CustomReportBuilderTab from './SuperAdmin/CustomReportBuilderTab';
 // SecurityScoreTab merged into SecurityUnifiedTab
-// PrivilegeElevationTab merged into UserManagementUnifiedTab
+// PrivilegeElevationTab merged into UserManagement module
 // DLPControlsTab merged into SecurityUnifiedTab
 // BreakGlassTab merged into SecurityUnifiedTab
 // ThreatDetectionTab merged into SecurityUnifiedTab
@@ -199,7 +199,7 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
             )}
             {/* database, system_health, performance_metrics, activity_heatmap, alert_thresholds, email_logs, siem_export merged into 'monitoring' tab */}
             {section === 'users' && (
-              <UserManagementUnifiedTab onMessage={showMessage} />
+              <UserManagementPage onMessage={showMessage} />
             )}
             {section === 'fuel_stations' && (
               <FuelStationsTab onMessage={showMessage} />
