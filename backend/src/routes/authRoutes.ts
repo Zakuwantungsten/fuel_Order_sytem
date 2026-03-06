@@ -81,6 +81,10 @@ router.post(
   asyncHandler(authController.resetPassword)
 );
 
+// Public — returns the active password policy so the reset-password UI can
+// display live requirement hints (no auth required, no sensitive data exposed)
+router.get('/password-policy', asyncHandler(authController.getPasswordPolicyPublic));
+
 // Protected routes
 router.post('/logout', authenticate, asyncHandler(authController.logout));
 router.get('/me', authenticate, asyncHandler(authController.getProfile));

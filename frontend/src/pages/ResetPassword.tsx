@@ -1,27 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader, ArrowLeft } from 'lucide-react';
+﻿import React, { useState, useEffect } from 'react';
+import { Lock, Eye, EyeOff, CheckCircle, XCircle, AlertCircle, Loader, ArrowLeft } from 'lucide-react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
 
+interface PasswordPolicy {
+  minLength: number;
+  requireUppercase: boolean;
+  requireLowercase: boolean;
+  requireNumbers: boolean;
+  requireSpecialChars: boolean;
+}
+
+interface Requirement {
+  label: string;
+  met: boolean;
+}
+
+const DEFAULT_POLICY: PasswordPolicy = {
+  minLength: 8,
+  requireUppercase: false,
+  requireLowercase: false,
+  requireNumbers: false,
+  requireSpecialChars: false,
+};
+
+function buildRequirements(password: string, confirmPassword: string, policy: PasswordPolicy): Requirement[] {
+  const reqs: Requirement[] = [
+    { label: `At least ${policy.minLength} characters`, met: password.length >= policy.minLength },
+  ];
+  if (policy.requireUppercase) {
+    reqs.push({ label: 'One uppercase letter (A-Z)', met: /[A-Z]/.test(password) });
+  }
+  if (policy.requireLowercase) {
+    reqs.push({ label: 'One lowercase letter (a-z)', met: /[a-z]/.test(password) });
+  }
+  if (policy.requireNumbers) {
+    reqs.push({ label: 'One number (0-9)', met: /[0-9]/.test(password) });
+  }
+  if (policy.requireSpecialChars) {
+    reqs.push({ label: 'One special character (@, #, $, !, %, ...)', met: /[^A-Za-z0-9]/.test(password) });
+  }
+  if (confirmPassword) {
+    reqs.push({ label: 'Passwords match', met: password === confirmPassword });
+  }
+  return reqs;
+}
+
 const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  
+
   const [formData, setFormData] = useState({
     email: searchParams.get('email') || '',
     token: searchParams.get('token') || '',
     newPassword: '',
     confirmPassword: '',
   });
-  
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_POLICY);
+  const [policyLoaded, setPolicyLoaded] = useState(false);
 
   // Validate token and email are present
   useEffect(() => {
@@ -30,28 +74,20 @@ const ResetPassword: React.FC = () => {
     }
   }, [formData.token, formData.email]);
 
-  // Password strength validation
+  // Fetch the active password policy from the server
   useEffect(() => {
-    if (formData.newPassword) {
-      const errors: string[] = [];
-      if (formData.newPassword.length < 6) {
-        errors.push('Password must be at least 6 characters long');
-      }
-      if (formData.confirmPassword && formData.newPassword !== formData.confirmPassword) {
-        errors.push('Passwords do not match');
-      }
-      setValidationErrors(errors);
-    } else {
-      setValidationErrors([]);
-    }
-  }, [formData.newPassword, formData.confirmPassword]);
+    authAPI.getPasswordPolicy()
+      .then(p => { setPolicy(p); setPolicyLoaded(true); })
+      .catch(() => { setPolicy(DEFAULT_POLICY); setPolicyLoaded(true); });
+  }, []);
+
+  const requirements = buildRequirements(formData.newPassword, formData.confirmPassword, policy);
+  const allRequirementsMet = formData.newPassword.length > 0 && requirements.every(r => r.met);
+  const showChecklist = policyLoaded && formData.newPassword.length > 0;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
     setError(null);
   };
 
@@ -59,19 +95,13 @@ const ResetPassword: React.FC = () => {
     e.preventDefault();
     setError(null);
 
-    // Validation
     if (!formData.newPassword || !formData.confirmPassword) {
       setError('Please fill in all fields');
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
-
-    if (formData.newPassword !== formData.confirmPassword) {
-      setError('Passwords do not match');
+    if (!allRequirementsMet) {
+      setError('Please meet all password requirements before submitting.');
       return;
     }
 
@@ -83,10 +113,9 @@ const ResetPassword: React.FC = () => {
         token: formData.token,
         newPassword: formData.newPassword,
       });
-      
+
       setSuccess(true);
-      
-      // Redirect to login after 3 seconds
+
       setTimeout(() => {
         navigate('/login');
       }, 3000);
@@ -124,7 +153,7 @@ const ResetPassword: React.FC = () => {
               <div>
                 <h4 className="text-sm font-medium text-green-800 dark:text-green-300">Password Reset Successful!</h4>
                 <p className="text-sm text-green-700 dark:text-green-400 mt-1">
-                  Your password has been updated. Redirecting to login...
+                  Your password has been updated. Redirecting to loginâ€¦
                 </p>
               </div>
             </div>
@@ -138,21 +167,6 @@ const ResetPassword: React.FC = () => {
                 <h4 className="text-sm font-medium text-red-800 dark:text-red-300">Error</h4>
                 <p className="text-sm text-red-700 dark:text-red-400 mt-1">{error}</p>
               </div>
-            </div>
-          )}
-
-          {/* Validation Errors */}
-          {validationErrors.length > 0 && !error && (
-            <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <h4 className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-2">Password Requirements:</h4>
-              <ul className="space-y-1">
-                {validationErrors.map((err, idx) => (
-                  <li key={idx} className="text-sm text-amber-700 dark:text-amber-400 flex items-start">
-                    <span className="mr-2">•</span>
-                    {err}
-                  </li>
-                ))}
-              </ul>
             </div>
           )}
 
@@ -213,6 +227,29 @@ const ResetPassword: React.FC = () => {
                     )}
                   </button>
                 </div>
+
+                {/* Live password requirements checklist */}
+                {showChecklist && (
+                  <ul className="mt-3 space-y-1.5 px-1">
+                    {requirements.map((req, idx) => (
+                      <li
+                        key={idx}
+                        className={`flex items-center gap-2 text-sm transition-colors duration-200 ${
+                          req.met
+                            ? 'text-green-600 dark:text-green-400'
+                            : 'text-gray-400 dark:text-gray-500'
+                        }`}
+                      >
+                        {req.met ? (
+                          <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                        ) : (
+                          <XCircle className="w-4 h-4 flex-shrink-0" />
+                        )}
+                        {req.label}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {/* Confirm Password */}
@@ -257,7 +294,7 @@ const ResetPassword: React.FC = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isLoading || validationErrors.length > 0}
+                disabled={isLoading || (formData.newPassword.length > 0 && !allRequirementsMet)}
                 className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg
                          shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700
                          dark:bg-primary-500 dark:hover:bg-primary-600

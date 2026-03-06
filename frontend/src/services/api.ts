@@ -952,6 +952,17 @@ export const authAPI = {
     const response = await apiClient.post('/auth/first-login-password', data);
     return response.data.data; // Extract the inner data object with tokens
   },
+
+  getPasswordPolicy: async (): Promise<{
+    minLength: number;
+    requireUppercase: boolean;
+    requireLowercase: boolean;
+    requireNumbers: boolean;
+    requireSpecialChars: boolean;
+  }> => {
+    const response = await apiClient.get('/auth/password-policy');
+    return response.data.data;
+  },
 };
 
 // Users Management API (Admin only)

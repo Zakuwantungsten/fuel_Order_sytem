@@ -1731,3 +1731,36 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
+/**
+ * Public endpoint — returns the active password policy so the frontend
+ * can display live requirement hints without requiring authentication.
+ * No sensitive data is exposed (only policy flags, no user data).
+ */
+export const getPasswordPolicyPublic = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const policy = await getPasswordPolicy();
+    res.status(200).json({
+      success: true,
+      data: {
+        minLength: policy.minLength,
+        requireUppercase: policy.requireUppercase,
+        requireLowercase: policy.requireLowercase,
+        requireNumbers: policy.requireNumbers,
+        requireSpecialChars: policy.requireSpecialChars,
+      },
+    });
+  } catch {
+    // Fallback to safe defaults so the UI always renders something
+    res.status(200).json({
+      success: true,
+      data: {
+        minLength: 8,
+        requireUppercase: false,
+        requireLowercase: false,
+        requireNumbers: false,
+        requireSpecialChars: false,
+      },
+    });
+  }
+};
+
