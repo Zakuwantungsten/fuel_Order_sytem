@@ -146,7 +146,7 @@ function MaintenancePage({ message, onLogout }: { message: string; onLogout: () 
 
 // App content with authentication
 function AppContent() {
-  const { isAuthenticated, isLoading, user, logout, clearMustChangePassword } = useAuth();
+  const { isAuthenticated, isLoading, isRestoringSession, user, logout, clearMustChangePassword } = useAuth();
 
   const [maintenanceMode, setMaintenanceMode] = useState<{
     enabled: boolean;
@@ -230,6 +230,25 @@ function AppContent() {
   // This prevents the dashboard (and its data requests) from ever rendering if
   // the system is actually in maintenance mode.
   if (isAuthenticated && maintenanceChecking) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center transition-colors">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 max-w-md w-full mx-4">
+          <div className="flex items-center justify-center space-x-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            <span className="text-gray-700 dark:text-gray-200 font-medium">Loading...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Prevent the login screen from flashing on page refresh.
+  // isRestoringSession is true only during the brief async window where
+  // AuthContext is verifying an existing sessionStorage session. Once it
+  // resolves (success → isAuthenticated=true, failure → show login) this
+  // guard is cleared. This is intentionally checked BEFORE !isAuthenticated
+  // so the Login component is never rendered (and then immediately torn down).
+  if (isRestoringSession) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center transition-colors">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 max-w-md w-full mx-4">

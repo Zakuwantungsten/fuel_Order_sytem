@@ -14,7 +14,10 @@ type AuthAction =
   | { type: 'AUTH_LOGOUT' }
   | { type: 'AUTH_CLEAR_ERROR' }
   | { type: 'SET_THEME'; payload: 'light' | 'dark' }
-  | { type: 'CLEAR_MUST_CHANGE_PASSWORD' };
+  | { type: 'CLEAR_MUST_CHANGE_PASSWORD' }
+  // Fired once the initial async session-restore on page load finishes
+  // (regardless of success/failure) so the UI can stop showing the splash spinner.
+  | { type: 'SESSION_RESTORE_DONE' };
 
 // Helper function to get user-specific theme key
 const getUserThemeKey = (userId?: string | number): string => {
@@ -45,6 +48,9 @@ const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
   isLoading: hasStoredSession,
+  // True only while the async session-restore on page load is running.
+  // Lets AppContent show a splash spinner instead of flashing the login page.
+  isRestoringSession: hasStoredSession,
   error: null,
   theme: getInitialTheme(),
 };
@@ -62,6 +68,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
       return {
         ...state,
         isLoading: false,
+        isRestoringSession: false,
         isAuthenticated: true,
         user: action.payload,
         error: null,
@@ -70,6 +77,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
       return {
         ...state,
         isLoading: false,
+        isRestoringSession: false,
         isAuthenticated: false,
         user: null,
         error: action.payload,
@@ -77,6 +85,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
     case 'AUTH_LOGOUT':
       return {
         ...initialState,
+        isRestoringSession: false,
         // Theme will be set separately after logout
       };
     case 'AUTH_CLEAR_ERROR':
@@ -84,6 +93,11 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         ...state,
         isLoading: false,
         error: null,
+      };
+    case 'SESSION_RESTORE_DONE':
+      return {
+        ...state,
+        isRestoringSession: false,
       };
     case 'SET_THEME':
       return {
@@ -164,6 +178,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               sessionStorage.removeItem('fuel_order_auth');
               sessionStorage.removeItem('fuel_order_token');
               dispatch({ type: 'AUTH_ERROR', payload: '' });
+              dispatch({ type: 'SESSION_RESTORE_DONE' });
               return;
             }
           }
@@ -182,11 +197,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
           
           // Apply user-specific theme
           dispatch({ type: 'SET_THEME', payload: userTheme });
+          dispatch({ type: 'SESSION_RESTORE_DONE' });
+        } else {
+          // No stored session — nothing to restore, clear the flag immediately.
+          dispatch({ type: 'SESSION_RESTORE_DONE' });
         }
       } catch (error) {
         console.error('Error checking existing session:', error);
         sessionStorage.removeItem('fuel_order_auth');
         dispatch({ type: 'AUTH_ERROR', payload: '' });
+        dispatch({ type: 'SESSION_RESTORE_DONE' });
       }
     };
 

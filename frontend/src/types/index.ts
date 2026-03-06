@@ -456,6 +456,11 @@ export interface AuthState {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** True only during the initial async session-restore on page load/refresh.
+   *  Distinct from isLoading (which also covers in-progress login calls).
+   *  Used by AppContent to show a full-page spinner instead of flashing
+   *  the login screen while sessionStorage is being verified. */
+  isRestoringSession: boolean;
   error: string | null;
   theme: 'light' | 'dark';
 }
