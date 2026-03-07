@@ -26,7 +26,12 @@ import BlocklistService from './services/blocklistService';
 import { requestId } from './middleware/requestId';
 
 // Validate environment variables
-validateEnv();
+try {
+  validateEnv();
+} catch (err: any) {
+  console.error('STARTUP ERROR (validateEnv):', err.message);
+  process.exit(1);
+}
 
 // Create Express app
 const app: Application = express();
@@ -256,6 +261,7 @@ const startServer = async () => {
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
+    console.error('FAILED TO START SERVER:', error);
     process.exit(1);
   }
 };
@@ -263,6 +269,7 @@ const startServer = async () => {
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('UNHANDLED REJECTION:', reason);
   // Close server & exit process
   process.exit(1);
 });
@@ -270,6 +277,7 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 // Handle uncaught exceptions
 process.on('uncaughtException', (error: Error) => {
   logger.error('Uncaught Exception:', error);
+  console.error('UNCAUGHT EXCEPTION:', error.message, error.stack);
   process.exit(1);
 });
 
