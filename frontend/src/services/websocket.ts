@@ -27,8 +27,13 @@ const _reconnectCallbacks = new Map<string, () => void>();
  * Initialize WebSocket connection
  */
 export const initializeWebSocket = (token: string): Socket => {
-  // Use actual backend URL for WebSocket (not the proxy)
-  const WS_URL = 'http://localhost:5000';
+  // Derive backend origin from the same env var used by the API client.
+  // VITE_API_BASE_URL is e.g. "https://fuelordersytem-production.up.railway.app/api/v1"
+  // so we strip the path to get just the origin.
+  const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
+  const WS_URL = apiBase
+    ? apiBase.replace(/\/api\/v1\/?$/, '')
+    : 'http://localhost:5000';
 
   // Guard against creating multiple socket instances.
   // Check for ANY existing socket (connected OR still connecting) so that
