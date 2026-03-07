@@ -168,18 +168,26 @@ app.use(
 
 // CSRF Protection - Apply to state-changing routes
 // GET requests to provide CSRF token to frontend
+// Return token in response body so cross-origin clients (e.g. Firebase-hosted
+// frontend talking to Railway backend) can read it without accessing cookies.
 app.get(`${apiBasePath}/csrf-token`, provideCsrfToken, (_req, res) => {
-  res.json({ success: true, message: 'CSRF token set' });
+  res.json({ success: true, csrfToken: res.locals.csrfToken });
 });
 
 app.get(`${legacyApiBasePath}/csrf-token`, provideCsrfToken, (_req, res) => {
   res.setHeader('Deprecation', 'true');
   res.setHeader('Sunset', 'Wed, 30 Sep 2026 23:59:59 GMT');
-  res.json({ success: true, message: 'CSRF token set' });
+  res.json({ success: true, csrfToken: res.locals.csrfToken });
 });
 
 const applyCsrfProtection = (basePath: string) => {
   app.use(basePath, (req, res, next) => {
+    // The legacy /api mount matches /api/v1/* paths too (req.path starts with
+    // /v1/). Those are already handled by the /api/v1 mount above, so skip
+    // them here to avoid double-processing with a mismatched exclusion list.
+    if (basePath === legacyApiBasePath && req.path.startsWith('/v1')) {
+      return next();
+    }
     // Skip CSRF for GET, HEAD, OPTIONS
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       // Provide CSRF token for GET requests

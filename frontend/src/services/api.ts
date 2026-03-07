@@ -29,28 +29,40 @@ const apiClient = axios.create({
   withCredentials: true, // Enable cookies for CSRF
 });
 
-// Function to get CSRF token from cookie
+// CSRF token storage key in sessionStorage
+const CSRF_STORAGE_KEY = 'xsrf_token';
+
+// Function to get CSRF token
+// Cross-origin deployments (Firebase frontend + Railway backend) cannot read
+// cookies set by a different domain, so we store the token from the response
+// body in sessionStorage and read it from there.
 const getCsrfToken = (): string | null => {
+  // Primary: sessionStorage (works cross-origin)
+  const stored = sessionStorage.getItem(CSRF_STORAGE_KEY);
+  if (stored) return stored;
+
+  // Fallback: same-origin cookie read (works when frontend and backend share a domain)
   const name = 'XSRF-TOKEN=';
   const decodedCookie = decodeURIComponent(document.cookie);
-  const cookieArray = decodedCookie.split(';');
-  
-  for (let i = 0; i < cookieArray.length; i++) {
-    let cookie = cookieArray[i].trim();
-    if (cookie.indexOf(name) === 0) {
-      const token = cookie.substring(name.length, cookie.length);
-      return token;
+  for (const part of decodedCookie.split(';')) {
+    const cookie = part.trim();
+    if (cookie.startsWith(name)) {
+      return cookie.substring(name.length);
     }
   }
-  
+
   return null;
 };
 
-// Function to fetch CSRF token from server
+// Function to fetch CSRF token from server and store it
 const fetchCsrfToken = async (): Promise<void> => {
   try {
     const response = await apiClient.get('/csrf-token');
-    return response.data;
+    // Server returns token in body for cross-origin clients
+    const token = response.data?.csrfToken;
+    if (token) {
+      sessionStorage.setItem(CSRF_STORAGE_KEY, token);
+    }
   } catch (error) {
     console.error('[CSRF] Failed to fetch CSRF token:', error);
     throw error;

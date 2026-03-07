@@ -47,20 +47,20 @@ export const provideCsrfToken = (req: Request, res: Response, next: NextFunction
       path: '/', // Ensure cookie is available for all paths
     };
     
-    // In production, use strict and secure settings
+    // In production use SameSite=none so the cookie is sent in cross-origin
+    // requests (frontend on Firebase, backend on Railway). The double-submit
+    // pattern remains secure because JS on a different origin cannot READ the
+    // cookie value to forge the matching header.
     if (config.nodeEnv === 'production') {
       cookieOptions.secure = true;
-      cookieOptions.sameSite = 'strict';
+      cookieOptions.sameSite = 'none';
     }
     // In development, omit sameSite and secure to allow cross-port localhost
     
     res.cookie(CSRF_COOKIE_NAME, token, cookieOptions);
-    logger.info(`[CSRF] Set cookie with options:`, { 
-      cookieName: CSRF_COOKIE_NAME,
-      options: cookieOptions,
-      path: req.path,
-      nodeEnv: config.nodeEnv
-    });
+    // Expose token to the response handler so it can be sent in the body
+    // (cross-origin clients cannot read cookies from a different domain)
+    res.locals.csrfToken = token;
     
     next();
   } catch (error) {
