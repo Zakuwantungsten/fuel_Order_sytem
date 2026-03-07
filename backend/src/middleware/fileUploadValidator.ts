@@ -11,7 +11,6 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
-import { fileTypeFromBuffer } from 'file-type';
 import logger from '../utils/logger';
 
 /**
@@ -76,20 +75,32 @@ function checkMagicBytes(buffer: Buffer, type: keyof typeof ALLOWED_FILE_TYPES):
 }
 
 /**
- * Get file extension from buffer using file-type library
+ * Get file extension from buffer using magic bytes (no external ESM dependency)
  */
 async function detectFileType(buffer: Buffer): Promise<{ ext: string; mime: string } | null> {
-  try {
-    const fileTypeResult = await fileTypeFromBuffer(buffer);
-    if (fileTypeResult) {
+  // Check binary types by magic bytes
+  for (const [key, config] of Object.entries(ALLOWED_FILE_TYPES)) {
+    if (key === 'csv') continue;
+    const magicBytes = (config as any).magicBytes as number[] | undefined;
+    if (!magicBytes) continue;
+    if (magicBytes.every((byte: number, index: number) => buffer[index] === byte)) {
       return {
-        ext: `.${fileTypeResult.ext}`,
-        mime: fileTypeResult.mime,
+        ext: config.extensions[0],
+        mime: config.mimeTypes[0],
       };
     }
-  } catch (error) {
-    logger.warn('Error detecting file type:', error);
   }
+
+  // Fallback: text-based files (CSV) — no null bytes
+  try {
+    const sample = buffer.toString('utf8', 0, Math.min(512, buffer.length));
+    if (!sample.includes('\x00')) {
+      return { ext: '.csv', mime: 'text/csv' };
+    }
+  } catch {
+    // not readable as text
+  }
+
   return null;
 }
 
