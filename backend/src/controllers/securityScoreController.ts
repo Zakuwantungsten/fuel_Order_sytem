@@ -66,9 +66,9 @@ export const getSecurityScoreHistory = async (req: Request, res: Response) => {
       }
     }
 
-    res.json({ success: true, data: { days, snapshots } });
+    return res.json({ success: true, data: { days, snapshots } });
   } catch (error: any) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch score history',
       error: error.message,

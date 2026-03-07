@@ -311,6 +311,8 @@ export interface ILPOEntry {
   referenceDo?: string;       // Reference DO for NIL entries to link to a journey
   paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';  // Payment method
   currency?: string;          // Currency for this entry (USD or TZS)
+  isCancelled?: boolean;
+  cancelledAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -411,6 +413,8 @@ export interface IDriverAccountEntry {
   lpoSummaryId?: string;
   isDeleted: boolean;
   deletedAt?: Date;
+  isCancelled?: boolean;
+  cancelledAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
