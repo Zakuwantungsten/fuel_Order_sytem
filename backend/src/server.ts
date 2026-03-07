@@ -54,6 +54,17 @@ app.use(helmet({
 // ✅ SECURITY: Strip technology-revealing response headers
 app.use(fingerprintObfuscationMiddleware);
 
+// Health check route registered EARLY — before HTTPS enforcement and all security
+// middleware so Railway's internal HTTP health probe (no x-forwarded-proto header)
+// is never blocked by the HTTPS-only or IP-filtering middleware.
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Server is healthy',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 if (config.nodeEnv === 'production') {
   app.use(
     helmet.hsts({
@@ -203,15 +214,6 @@ app.get('/', (_req, res) => {
   res.json({
     success: true,
     message: 'API is running',
-  });
-});
-
-// Health check route (no uptime / version leaks)
-app.get('/api/health', (_req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Server is healthy',
-    timestamp: new Date().toISOString(),
   });
 });
 
