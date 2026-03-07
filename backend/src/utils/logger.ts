@@ -68,13 +68,11 @@ const logger = winston.createLogger({
   ],
 });
 
-// Add console transport in development
-if (config.nodeEnv !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: consoleFormat,
-    })
-  );
-}
+// Always log to console so Railway/cloud platforms can capture logs
+logger.add(
+  new winston.transports.Console({
+    format: consoleFormat,
+  })
+);
 
 export default logger;
