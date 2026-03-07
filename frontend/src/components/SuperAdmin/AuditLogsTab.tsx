@@ -293,7 +293,7 @@ function IntegrityPanel({ onClose }: { onClose: () => void }) {
         className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50"
       >
         {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-        {loading ? 'Verifyingâ€¦' : 'Run Integrity Check'}
+        {loading ? 'Verifying...' : 'Run Integrity Check'}
       </button>
 
       {report && (
@@ -462,7 +462,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
             className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
-            {exporting ? 'Exportingâ€¦' : 'Export CSV'}
+            {exporting ? 'Exporting...' : 'Export CSV'}
           </button>
         </div>
       </div>
@@ -494,7 +494,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
             <input
               type="text" value={filters.username}
               onChange={e => updateFilter('username', e.target.value)}
-              placeholder="Filter by userâ€¦"
+              placeholder="Filter by user..."
               className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
           </div>
@@ -543,7 +543,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">Loadingâ€¦</td></tr>
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">Loading...</td></tr>
               ) : logs.length === 0 ? (
                 <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">No audit logs found</td></tr>
               ) : logs.map((log, i) => (
@@ -567,7 +567,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
                   <td className="px-4 py-3">
                     <p className="text-gray-900 dark:text-gray-100">{log.resourceType}</p>
                     {log.resourceId && (
-                      <p className="font-mono text-xs text-gray-400">{String(log.resourceId).slice(0, 10)}â€¦</p>
+                      <p className="font-mono text-xs text-gray-400">{String(log.resourceId).slice(0, 10)}...</p>
                     )}
                   </td>
                   <td className="px-4 py-3">
