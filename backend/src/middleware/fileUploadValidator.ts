@@ -10,7 +10,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { fileTypeFromBuffer } from 'file-type';
 import logger from '../utils/logger';
 
@@ -246,7 +246,7 @@ export const validateFileUpload = (allowedTypes: (keyof typeof ALLOWED_FILE_TYPE
       // Step 6: Create safe filename with UUID
       // Format: {uuid}_{original-filename-sanitized}.{detected-extension}
       const sanitized = sanitizeFilename(originalFilename.replace(/\.[^/.]+$/, '')); // Remove extension
-      const uuid = uuidv4();
+      const uuid = randomUUID();
       const safeFilename = `${uuid}_${sanitized || 'file'}${detectedType.ext}`;
 
       // Step 7: Add validation results to request
