@@ -24,6 +24,21 @@ const jsonHeaders = (): Record<string, string> => {
   return h;
 };
 
+/** Safely parse a fetch response as JSON. If the response is not JSON
+ * (e.g. HTML from Firebase's SPA fallback when the API is unreachable),
+ * throw a user-friendly error instead of "Unexpected token '<'". */
+const safeJson = async (response: Response): Promise<any> => {
+  const ct = response.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    throw new Error(
+      response.ok
+        ? 'Received an unexpected response from the server. Please try again.'
+        : `Server error (${response.status}). Please check your connection or contact your administrator.`
+    );
+  }
+  return response.json();
+};
+
 interface MFAVerificationProps {
   userId: string;
   tempSessionToken: string;
@@ -89,7 +104,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
         credentials: 'include',
         body: JSON.stringify({ userId, method: otpMethod }),
       });
-      const data = await response.json();
+      const data = await safeJson(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Failed to send verification code');
       }
@@ -163,7 +178,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
         }),
       });
 
-      const data = await response.json();
+      const data = await safeJson(response);
 
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Invalid verification code');

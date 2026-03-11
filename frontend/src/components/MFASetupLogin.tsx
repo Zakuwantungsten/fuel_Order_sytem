@@ -25,6 +25,21 @@ const jsonHeaders = (): Record<string, string> => {
   return h;
 };
 
+/** Safely parse a fetch response as JSON. If the response is not JSON
+ * (e.g. HTML from Firebase's SPA fallback when the API is unreachable),
+ * throw a user-friendly error instead of "Unexpected token '<'". */
+const safeJson = async (response: Response): Promise<any> => {
+  const ct = response.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    throw new Error(
+      response.ok
+        ? 'Received an unexpected response from the server. Please try again.'
+        : `Server error (${response.status}). Please check your connection or contact your administrator.`
+    );
+  }
+  return response.json();
+};
+
 interface MFASetupLoginProps {
   userId: string;
   tempSessionToken: string;
@@ -83,7 +98,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
         credentials: 'include',
         body: JSON.stringify({ userId, tempSessionToken }),
       });
-      const data = await response.json();
+      const data = await safeJson(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Failed to generate MFA secret');
       }
@@ -130,7 +145,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
           deviceName: trustDevice ? deviceName : undefined,
         }),
       });
-      const data = await response.json();
+      const data = await safeJson(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Invalid verification code');
       }
@@ -159,7 +174,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
         credentials: 'include',
         body: JSON.stringify({ userId, tempSessionToken }),
       });
-      const data = await response.json();
+      const data = await safeJson(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Failed to send email code');
       }
@@ -195,7 +210,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
           deviceName: trustDevice ? deviceName : undefined,
         }),
       });
-      const data = await response.json();
+      const data = await safeJson(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Invalid verification code');
       }
