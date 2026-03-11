@@ -38,7 +38,11 @@ const CSRF_STORAGE_KEY = 'xsrf_token';
 const getCsrfToken = (): string | null => {
   // Primary: sessionStorage (works cross-origin)
   const stored = sessionStorage.getItem(CSRF_STORAGE_KEY);
-  if (stored) return stored;
+  // Discard '[REDACTED]' placeholder that was stored when the backend was
+  // incorrectly sanitizing the /csrf-token response body (now fixed). Keeping
+  // it would cause every POST to fail once with 403 before the retry succeeds.
+  if (stored && stored !== '[REDACTED]') return stored;
+  if (stored === '[REDACTED]') sessionStorage.removeItem(CSRF_STORAGE_KEY);
 
   // Fallback: same-origin cookie read (works when frontend and backend share a domain)
   const name = 'XSRF-TOKEN=';
