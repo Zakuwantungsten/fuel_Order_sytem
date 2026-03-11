@@ -293,11 +293,12 @@ export const updatePasswordPolicy = async (req: AuthRequest, res: Response): Pro
     if (!systemConfig.securitySettings) {
       (systemConfig as any).securitySettings = {};
     }
-    if (!systemConfig.securitySettings.password) {
-      (systemConfig as any).securitySettings.password = {};
+    const secSettings = systemConfig.securitySettings as NonNullable<typeof systemConfig.securitySettings>;
+    if (!secSettings.password) {
+      (secSettings as any).password = {};
     }
 
-    const pw = systemConfig.securitySettings.password!;
+    const pw = secSettings.password!;
     if (minLength          !== undefined) pw.minLength          = minLength;
     if (requireUppercase   !== undefined) pw.requireUppercase   = requireUppercase;
     if (requireLowercase   !== undefined) pw.requireLowercase   = requireLowercase;
