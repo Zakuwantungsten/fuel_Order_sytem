@@ -160,10 +160,10 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800 transition-colors">
       {/* Workbook Header */}
-      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <FileSpreadsheet className="w-6 h-6 text-green-600 dark:text-green-400" />
+      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 p-2 sm:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
+            <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400 flex-shrink-0" />
             {isRenamingWorkbook ? (
               <div className="flex items-center space-x-2">
                 <input
@@ -181,7 +181,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
               </div>
             ) : (
               <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{workbook.name}</h1>
+                <h1 className="text-sm sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">{workbook.name}</h1>
                 <button
                   onClick={() => setIsRenamingWorkbook(true)}
                   className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -192,25 +192,25 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
             )}
           </div>
           
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
             <button
               onClick={handleSaveWorkbook}
-              className="flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              className="flex items-center px-2 sm:px-3 py-1.5 sm:py-1 bg-blue-600 text-white rounded hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-xs sm:text-sm"
             >
-              <Save className="w-4 h-4 mr-1" />
-              Save
+              <Save className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">Save</span>
             </button>
             <button
               onClick={handleExportWorkbook}
               disabled={exporting}
-              className={`flex items-center px-3 py-1 text-white rounded ${
+              className={`flex items-center px-2 sm:px-3 py-1.5 sm:py-1 text-white rounded text-xs sm:text-sm ${
                 exporting 
                   ? 'bg-green-400 dark:bg-green-500 cursor-not-allowed' 
                   : 'bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600'
               }`}
             >
-              <Download className="w-4 h-4 mr-1" />
-              {exporting ? 'Exporting...' : 'Export'}
+              <Download className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Export'}</span>
             </button>
             {onClose && (
               <button
@@ -226,7 +226,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
 
       {/* Sheet Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
-        <div className="flex items-center">
+        <div className="flex items-center overflow-x-auto">
           {canGoPrev && (
             <button
               onClick={() => setTabPageStart(prev => Math.max(0, prev - TABS_PER_PAGE))}
@@ -240,7 +240,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
             <div key={sheet.id || `sheet-${sheet.lpoNo}-${tabPageStart + index}`} className="flex items-center">
               <button
                 onClick={() => sheet.id && setActiveSheetId(sheet.id)}
-                className={`px-4 py-2 text-sm font-medium border-r border-gray-300 dark:border-gray-600 whitespace-nowrap ${
+                className={`px-3 sm:px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium border-r border-gray-300 dark:border-gray-600 whitespace-nowrap ${
                   activeSheetId === sheet.id
                     ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                     : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600'

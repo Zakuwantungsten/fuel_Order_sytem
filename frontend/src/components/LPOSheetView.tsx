@@ -465,70 +465,70 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors">
       {/* Sheet Header - LPO Header Info */}
       <div className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2">
-        {/* Single Row: LPO details on left, buttons on right */}
-        <div className="flex items-center justify-between gap-x-4">
-          {/* Left side: LPO details */}
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-1">
-            <div className="flex items-center space-x-2">
+        {/* Desktop: single row | Mobile: stacked */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-x-4">
+          {/* LPO details - wrap on mobile */}
+          <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5">
+            <div className="flex items-center space-x-1.5">
               <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">LPO No.:</span>
               {isEditing ? (
                 <input
                   type="text"
                   value={editedSheet.lpoNo}
                   onChange={(e) => handleHeaderEdit('lpoNo', e.target.value)}
-                  className="px-2 py-0.5 border dark:border-gray-600 rounded font-bold text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-20"
+                  className="px-2 py-1 border dark:border-gray-600 rounded font-bold text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-20"
                 />
               ) : (
                 <span className="font-bold text-sm text-blue-600 dark:text-blue-400">{editedSheet.lpoNo}</span>
               )}
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1.5">
               <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">Station:</span>
               {isEditing ? (
                 <input
                   type="text"
                   value={editedSheet.station}
                   onChange={(e) => handleHeaderEdit('station', e.target.value)}
-                  className="px-2 py-0.5 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  className="px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
                 />
               ) : (
                 <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{editedSheet.station}</span>
               )}
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1.5">
               <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">Date:</span>
               {isEditing ? (
                 <input
                   type="date"
                   value={editedSheet.date}
                   onChange={(e) => handleHeaderEdit('date', e.target.value)}
-                  className="px-2 py-0.5 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  className="px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
                 />
               ) : (
                 <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{new Date(editedSheet.date).toLocaleDateString()}</span>
               )}
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1.5">
               <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">Order of:</span>
               {isEditing ? (
                 <input
                   type="text"
                   value={editedSheet.orderOf}
                   onChange={(e) => handleHeaderEdit('orderOf', e.target.value)}
-                  className="px-2 py-0.5 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  className="px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
                 />
               ) : (
                 <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{editedSheet.orderOf}</span>
               )}
             </div>
             
-            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium border-l border-gray-300 dark:border-gray-600 pl-4">KINDLY SUPPLY THE FOLLOWING LITERS</span>
+            <span className="hidden lg:inline text-xs text-gray-600 dark:text-gray-400 font-medium border-l border-gray-300 dark:border-gray-600 pl-4">KINDLY SUPPLY THE FOLLOWING LITERS</span>
           </div>
 
-          {/* Right side: Action Buttons */}
+          {/* Action Buttons */}
           <div className="flex items-center space-x-1.5 flex-shrink-0">
             {isEditing ? (
               <>
@@ -705,9 +705,129 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       )}
 
       {/* Sheet Content - Excel-like Table */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-2 sm:p-6">
         <div className="max-w-6xl mx-auto">
           <div className="border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+
+            {/* ===== MOBILE CARD VIEW (lg:hidden) ===== */}
+            <div className="lg:hidden">
+              {editedSheet.entries.map((entry, index) => {
+                const displayData = formatEntryForDisplay(entry);
+                const isCancelled = entry.isCancelled;
+                const isDriverAccount = entry.isDriverAccount;
+                const cardBg = isCancelled
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                  : isDriverAccount
+                    ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+                    : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700';
+
+                return (
+                  <div key={index} className={`${cardBg} border-b p-3`}>
+                    {/* Card header: truck + actions */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <span className={`font-bold text-sm ${isCancelled ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                          {entry.truckNo}
+                        </span>
+                        {isCancelled && <span className="text-xs font-medium text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded">CANCELLED</span>}
+                        {isDriverAccount && <span className="text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/40 px-1.5 py-0.5 rounded">Driver A/C</span>}
+                      </div>
+                      <div className="flex items-center space-x-2 flex-shrink-0">
+                        {isCancelled ? (
+                          <button onClick={() => handleUncancelEntry(index)} className="p-2 text-green-600 hover:text-green-800 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20" title="Restore Entry">
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        ) : editingRow === index ? (
+                          <>
+                            <button onClick={() => handleRowSave(index)} className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20" title="Save">
+                              <Save className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleRowCancel(index)} className="p-2 text-gray-600 hover:text-gray-800 dark:text-gray-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="Cancel Edit">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => setEditingRow(index)} className="p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit Entry">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => openCancelModal(index)} className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20" title="Cancel Entry">
+                              <Ban className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card body: fields */}
+                    {editingRow === index ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500 dark:text-gray-400">DO No.</label>
+                          <input type="text" value={entry.doNo} onChange={(e) => handleEntryEdit(index, 'doNo', e.target.value)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 dark:text-gray-400">Truck No.</label>
+                          <input type="text" value={entry.truckNo} onChange={(e) => handleEntryEdit(index, 'truckNo', e.target.value)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 dark:text-gray-400">Liters</label>
+                          <input type="number" value={entry.liters} onChange={(e) => handleEntryEdit(index, 'liters', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 dark:text-gray-400">Rate</label>
+                          <input type="number" step="0.1" value={entry.rate} onChange={(e) => handleEntryEdit(index, 'rate', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-xs text-gray-500 dark:text-gray-400">Destination</label>
+                          <input type="text" value={entry.dest} onChange={(e) => handleEntryEdit(index, 'dest', e.target.value)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500 dark:text-gray-400">DO:</span>
+                          <span className={displayData.displayClass}>{isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500 dark:text-gray-400">Dest:</span>
+                          <span className={displayData.displayClass}>{isCancelled ? entry.dest : isDriverAccount ? 'NIL' : entry.dest}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500 dark:text-gray-400">Liters:</span>
+                          <span className={`font-medium ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.liters}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500 dark:text-gray-400">Rate:</span>
+                          <span className={`${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.rate}</span>
+                        </div>
+                        <div className="col-span-2 flex justify-between pt-1 border-t border-gray-100 dark:border-gray-700/50 mt-1">
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">Amount:</span>
+                          <span className={`font-bold ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{formatCurrency(entry.amount)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Mobile Locked Notice */}
+              <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-gray-300 dark:border-gray-700">
+                <div className="px-3 py-2.5 flex items-center justify-center text-amber-700 dark:text-amber-300">
+                  <Lock className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="text-xs font-medium text-center">Sheet locked - Only editing existing entries allowed</span>
+                </div>
+              </div>
+
+              {/* Mobile Total */}
+              <div className="bg-blue-100 dark:bg-blue-900/40 px-3 py-3 flex items-center justify-between font-semibold">
+                <span className="text-gray-900 dark:text-gray-100">TOTAL</span>
+                <span className="text-lg font-bold text-blue-900 dark:text-blue-300">{formatCurrency(editedSheet.total)}</span>
+              </div>
+            </div>
+
+            {/* ===== DESKTOP TABLE VIEW (hidden lg:block) ===== */}
+            <div className="hidden lg:block">
             {/* Table Header */}
             <div className="bg-blue-50 dark:bg-blue-900/30 border-b border-gray-300 dark:border-gray-700">
               <div className="grid grid-cols-7 gap-0">
@@ -894,25 +1014,27 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 </div>
               </div>
             </div>
+            </div>
+            {/* End desktop table wrapper */}
           </div>
 
           {/* Summary Statistics */}
-          <div className="mt-6 grid grid-cols-3 gap-4">
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total Entries</div>
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{editedSheet.entries.length}</div>
+          <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 sm:p-4 rounded-lg">
+              <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Entries</div>
+              <div className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">{editedSheet.entries.length}</div>
             </div>
             
-            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total Liters</div>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+            <div className="bg-green-50 dark:bg-green-900/20 p-3 sm:p-4 rounded-lg">
+              <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Liters</div>
+              <div className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
                 {editedSheet.entries.reduce((sum, entry) => sum + entry.liters, 0)}
               </div>
             </div>
             
-            <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total Amount</div>
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+            <div className="bg-purple-50 dark:bg-purple-900/20 p-3 sm:p-4 rounded-lg">
+              <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Amount</div>
+              <div className="text-xl sm:text-2xl font-bold text-purple-600 dark:text-purple-400">
                 {formatCurrency(editedSheet.total)}
               </div>
             </div>
