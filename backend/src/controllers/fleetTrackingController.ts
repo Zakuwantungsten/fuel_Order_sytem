@@ -150,9 +150,7 @@ export const getAllSnapshots = async (req: AuthRequest, res: Response): Promise<
 
     const { limit = 20, skip = 0 } = req.query;
 
-    const isAdmin = ['super_admin', 'admin'].includes(user.role);
-    const baseFilter: any = { isDeleted: false };
-    if (!isAdmin) baseFilter.uploadedById = user.userId;
+    const baseFilter: any = { isDeleted: false, uploadedById: user.userId };
 
     const snapshots = await FleetSnapshot.find(baseFilter)
       .sort({ timestamp: -1 })
@@ -189,11 +187,7 @@ export const getLatestSnapshot = async (req: AuthRequest, res: Response): Promis
       throw new ApiError(403, 'Unauthorized');
     }
 
-    const isAdmin = ['super_admin', 'admin'].includes(user.role);
-    const baseFilter: any = { isDeleted: false };
-    if (!isAdmin) baseFilter.uploadedById = user.userId;
-
-    const snapshot = await FleetSnapshot.findOne(baseFilter).sort({ timestamp: -1 });
+    const snapshot = await FleetSnapshot.findOne({ isDeleted: false, uploadedById: user.userId }).sort({ timestamp: -1 });
 
     if (!snapshot) {
       throw new ApiError(404, 'No fleet snapshots found');
@@ -222,13 +216,10 @@ export const getTruckPositions = async (req: AuthRequest, res: Response): Promis
 
     const { snapshotId, checkpoint, direction, fleetGroup, search } = req.query;
 
-    // If no snapshotId, use latest for this user (or global for admins)
+    // If no snapshotId, use latest for this user
     let targetSnapshotId = snapshotId;
     if (!targetSnapshotId) {
-      const isAdmin = ['super_admin', 'admin'].includes(user.role);
-      const latestFilter: any = { isDeleted: false };
-      if (!isAdmin) latestFilter.uploadedById = user.userId;
-      const latestSnapshot = await FleetSnapshot.findOne(latestFilter).sort({ timestamp: -1 });
+      const latestSnapshot = await FleetSnapshot.findOne({ isDeleted: false, uploadedById: user.userId }).sort({ timestamp: -1 });
       if (!latestSnapshot) {
         throw new ApiError(404, 'No fleet snapshots found');
       }
@@ -293,13 +284,10 @@ export const getTrucksAtCheckpoint = async (req: AuthRequest, res: Response): Pr
     const { name } = req.params;
     const { snapshotId } = req.query;
 
-    // If no snapshotId, use latest for this user (or global for admins)
+    // If no snapshotId, use latest for this user
     let targetSnapshotId = snapshotId;
     if (!targetSnapshotId) {
-      const isAdmin = ['super_admin', 'admin'].includes(user.role);
-      const latestFilter: any = { isDeleted: false };
-      if (!isAdmin) latestFilter.uploadedById = user.userId;
-      const latestSnapshot = await FleetSnapshot.findOne(latestFilter).sort({ timestamp: -1 });
+      const latestSnapshot = await FleetSnapshot.findOne({ isDeleted: false, uploadedById: user.userId }).sort({ timestamp: -1 });
       if (!latestSnapshot) {
         throw new ApiError(404, 'No fleet snapshots found');
       }
@@ -349,13 +337,10 @@ export const getCopyableTruckList = async (req: AuthRequest, res: Response): Pro
     const { name } = req.params;
     const { snapshotId, direction, format = 'comma' } = req.query;
 
-    // If no snapshotId, use latest for this user (or global for admins)
+    // If no snapshotId, use latest for this user
     let targetSnapshotId = snapshotId;
     if (!targetSnapshotId) {
-      const isAdmin = ['super_admin', 'admin'].includes(user.role);
-      const latestFilter: any = { isDeleted: false };
-      if (!isAdmin) latestFilter.uploadedById = user.userId;
-      const latestSnapshot = await FleetSnapshot.findOne(latestFilter).sort({ timestamp: -1 });
+      const latestSnapshot = await FleetSnapshot.findOne({ isDeleted: false, uploadedById: user.userId }).sort({ timestamp: -1 });
       if (!latestSnapshot) {
         throw new ApiError(404, 'No fleet snapshots found');
       }
@@ -430,7 +415,7 @@ export const deleteSnapshot = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // fuel_order_maker can only delete their own snapshots
-    if (user.role === 'fuel_order_maker' && snapshot.uploadedById?.toString() !== user.userId) {
+    if (snapshot.uploadedById?.toString() !== user.userId) {
       throw new ApiError(403, 'You can only delete your own snapshots');
     }
 
