@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
-// Derive the backend origin from VITE_API_BASE_URL so that raw fetch() calls
-// work in production (Firebase frontend + Railway backend) where there is no
-// Vite proxy.  In development VITE_API_BASE_URL is undefined, so API_ORIGIN
-// is '' and the relative /api/v1/* paths are handled by the Vite proxy.
-const API_ORIGIN = (() => {
-  const base = import.meta.env.VITE_API_BASE_URL as string;
-  if (!base) return '';
-  try { return new URL(base).origin; } catch { return ''; }
-})();
+// Use the same base URL as api.ts so fetch() calls reach the backend in
+// both development (Vite proxy) and production (cross-origin Railway).
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 /** Read the XSRF-TOKEN from sessionStorage (cross-origin safe) or cookie */
 const getCsrfToken = (): string | undefined => {
@@ -89,7 +83,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
     setSendingOtp(true);
     setError('');
     try {
-      const response = await fetch(`${API_ORIGIN}/api/v1/mfa/send-otp`, {
+      const response = await fetch(`${API_BASE}/mfa/send-otp`, {
         method: 'POST',
         headers: jsonHeaders(),
         credentials: 'include',
@@ -150,7 +144,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
       const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
       localStorage.setItem('device_id', deviceId);
 
-      const response = await fetch(`${API_ORIGIN}/api/v1/auth/verify-mfa`, {
+      const response = await fetch(`${API_BASE}/auth/verify-mfa`, {
         method: 'POST',
         headers: jsonHeaders(),
         credentials: 'include',

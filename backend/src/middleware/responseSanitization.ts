@@ -34,6 +34,8 @@ export const responseSanitizationMiddleware = (
     '/auth/first-login-password',
     '/auth/setup-mfa/generate',
     '/auth/setup-mfa/verify',
+    '/auth/setup-mfa/email/send',
+    '/auth/setup-mfa/email/verify',
     '/csrf-token',
   ];
 

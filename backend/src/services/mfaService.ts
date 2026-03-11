@@ -67,7 +67,7 @@ class MFAService {
     const hashedCodes: string[] = [];
     
     for (let i = 0; i < count; i++) {
-      // Generate 8-character alphanumeric code
+      // Generate 8-character alphanumeric code with dash for readability
       const code = crypto
         .randomBytes(4)
         .toString('hex')
@@ -77,8 +77,10 @@ class MFAService {
       
       codes.push(code);
       
-      // Hash the code before storage
-      const hashedCode = await bcrypt.hash(code, 10);
+      // Hash the NORMALIZED (no dashes) form so verification works whether
+      // the user enters the code with or without dashes.
+      const normalized = code.replace(/[-\s]/g, '');
+      const hashedCode = await bcrypt.hash(normalized, 10);
       hashedCodes.push(hashedCode);
     }
     
@@ -95,9 +97,20 @@ class MFAService {
     const normalizedCode = code.replace(/[-\s]/g, '').toUpperCase();
     
     for (let i = 0; i < hashedCodes.length; i++) {
+      // Try normalized (no dashes) first — matches newly generated hashes
       const isMatch = await bcrypt.compare(normalizedCode, hashedCodes[i]);
       if (isMatch) {
         return { valid: true, codeIndex: i };
+      }
+      // Backward compat: old hashes were created from codes WITH dashes.
+      // If the user entered the code with dashes, normalizedCode already
+      // stripped them, so also try the raw uppercased input.
+      const rawCode = code.toUpperCase();
+      if (rawCode !== normalizedCode) {
+        const rawMatch = await bcrypt.compare(rawCode, hashedCodes[i]);
+        if (rawMatch) {
+          return { valid: true, codeIndex: i };
+        }
       }
     }
     
