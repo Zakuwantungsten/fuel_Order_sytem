@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from 'react';
 
-/** Read the XSRF-TOKEN cookie set by the backend */
+// Derive the backend origin from VITE_API_BASE_URL so that raw fetch() calls
+// work in production (Firebase frontend + Railway backend) where there is no
+// Vite proxy.  In development VITE_API_BASE_URL is undefined, so API_ORIGIN
+// is '' and the relative /api/v1/* paths are handled by the Vite proxy.
+const API_ORIGIN = (() => {
+  const base = import.meta.env.VITE_API_BASE_URL as string;
+  if (!base) return '';
+  try { return new URL(base).origin; } catch { return ''; }
+})();
+
+/** Read the XSRF-TOKEN from sessionStorage (cross-origin safe) or cookie */
 const getCsrfToken = (): string | undefined => {
+  // Primary: sessionStorage (written by api.ts fetchCsrfToken — works cross-origin)
+  const stored = sessionStorage.getItem('xsrf_token');
+  if (stored && stored !== '[REDACTED]') return stored;
+  // Fallback: cookie (works only when frontend and backend share the same domain)
   const match = decodeURIComponent(document.cookie)
     .split(';')
     .map(c => c.trim())
@@ -75,7 +89,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
     setSendingOtp(true);
     setError('');
     try {
-      const response = await fetch('/api/v1/mfa/send-otp', {
+      const response = await fetch(`${API_ORIGIN}/api/v1/mfa/send-otp`, {
         method: 'POST',
         headers: jsonHeaders(),
         credentials: 'include',
@@ -136,7 +150,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
       const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
       localStorage.setItem('device_id', deviceId);
 
-      const response = await fetch('/api/auth/verify-mfa', {
+      const response = await fetch(`${API_ORIGIN}/api/v1/auth/verify-mfa`, {
         method: 'POST',
         headers: jsonHeaders(),
         credentials: 'include',
@@ -260,19 +274,6 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
           </button>
           )}
 
-          <button
-            onClick={() => handleMethodSelect('backup')}
-            className={`w-full p-3 text-left border-2 rounded-lg transition-colors ${
-              method === 'backup'
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
-            }`}
-          >
-            <span className="font-semibold">Backup Code</span>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Use one of your backup codes
-            </p>
-          </button>
         </div>
       </div>
 
@@ -289,6 +290,14 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
           >
             {sendingOtp ? 'Sending...' : 'Resend code'}
           </button>
+        </div>
+      )}
+
+      {/* Backup code mode banner */}
+      {method === 'backup' && (
+        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+          <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Using a backup code</p>
+          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">Each backup code can only be used once.</p>
         </div>
       )}
 
@@ -352,8 +361,26 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
       <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-400">
         <p className="font-semibold mb-1">Can't access your verification method?</p>
         <p>
-          Try another method above, or use a backup code. If you're locked out, contact your administrator.
+          Try another method above.{' '}
+          {method !== 'backup' ? (
+            <button
+              type="button"
+              onClick={() => { setMethod('backup'); setCode(''); setError(''); setOtpSent(false); }}
+              className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+            >
+              Use a backup code
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setMethod(getInitialMethod()); setCode(''); setError(''); }}
+              className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+            >
+              Use another method
+            </button>
+          )}
         </p>
+        <p className="mt-1">If you're locked out, contact your administrator.</p>
       </div>
     </div>
   );

@@ -1,8 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
 
-/** Read the XSRF-TOKEN cookie set by the backend */
+// Derive the backend origin from VITE_API_BASE_URL so that raw fetch() calls
+// work in production (Firebase frontend + Railway backend) where there is no
+// Vite proxy.  In development VITE_API_BASE_URL is undefined, so API_ORIGIN
+// is '' and the relative /api/v1/* paths are handled by the Vite proxy.
+const API_ORIGIN = (() => {
+  const base = import.meta.env.VITE_API_BASE_URL as string;
+  if (!base) return '';
+  try { return new URL(base).origin; } catch { return ''; }
+})();
+
+/** Read the XSRF-TOKEN from sessionStorage (cross-origin safe) or cookie */
 const getCsrfToken = (): string | undefined => {
+  // Primary: sessionStorage (written by api.ts fetchCsrfToken — works cross-origin)
+  const stored = sessionStorage.getItem('xsrf_token');
+  if (stored && stored !== '[REDACTED]') return stored;
+  // Fallback: cookie (works only when frontend and backend share the same domain)
   const match = decodeURIComponent(document.cookie)
     .split(';')
     .map(c => c.trim())
@@ -69,7 +83,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/auth/setup-mfa/generate', {
+      const response = await fetch(`${API_ORIGIN}/api/v1/auth/setup-mfa/generate`, {
         method: 'POST',
         headers: jsonHeaders(),
         credentials: 'include',
@@ -108,7 +122,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
       const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
       localStorage.setItem('device_id', deviceId);
 
-      const response = await fetch('/api/auth/setup-mfa/verify', {
+      const response = await fetch(`${API_ORIGIN}/api/v1/auth/setup-mfa/verify`, {
         method: 'POST',
         headers: jsonHeaders(),
         credentials: 'include',
@@ -145,7 +159,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/auth/setup-mfa/email/send', {
+      const response = await fetch(`${API_ORIGIN}/api/v1/auth/setup-mfa/email/send`, {
         method: 'POST',
         headers: jsonHeaders(),
         credentials: 'include',
@@ -174,7 +188,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
       const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
       localStorage.setItem('device_id', deviceId);
 
-      const response = await fetch('/api/auth/setup-mfa/email/verify', {
+      const response = await fetch(`${API_ORIGIN}/api/v1/auth/setup-mfa/email/verify`, {
         method: 'POST',
         headers: jsonHeaders(),
         credentials: 'include',
