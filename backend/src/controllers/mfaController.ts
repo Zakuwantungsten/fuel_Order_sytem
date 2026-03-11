@@ -494,14 +494,14 @@ export const getLoginActivity = asyncHandler(async (req: AuthRequest, res: Respo
   const userId = req.user?.userId;
   if (!userId) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
 
-  const activities = await LoginActivity.find({ userId })
+  const activities = await LoginActivity.find({ userId, loggedOutAt: { $exists: false } })
     .sort({ loginAt: -1 })
     .limit(50)
     .lean();
 
   // The most recent active (non-logged-out) session is likely the current one
   const mapped = activities.map((a, index) => ({
-    id: a._id,
+    _id: a._id,
     browser: a.browser,
     os: a.os,
     deviceType: a.deviceType,
@@ -563,7 +563,7 @@ export const revokeAllOtherSessions = asyncHandler(async (req: AuthRequest, res:
     { $set: { isCurrent: false, loggedOutAt: new Date() } }
   );
 
-  res.json({ success: true, message: `${result.modifiedCount} session(s) revoked` });
+  res.json({ success: true, data: { revokedCount: result.modifiedCount }, message: `${result.modifiedCount} session(s) revoked` });
 });
 
 export default {

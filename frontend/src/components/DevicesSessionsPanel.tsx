@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   RefreshCw,
   CheckCircle,
+  X,
 } from 'lucide-react';
 import apiClient from '../services/api';
 
@@ -45,6 +46,12 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
   const [revokingAll, setRevokingAll] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(''), 4000);
+    return () => clearTimeout(timer);
+  }, [success]);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -141,20 +148,13 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={fetchSessions}
-              disabled={loading}
-              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
             {onClose && (
               <button
                 onClick={onClose}
+                aria-label="Close"
                 className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -267,7 +267,7 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
                         </div>
                         <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                           <span>{session.ipAddress}</span>
-                          <span>{formatTime(session.loginAt)}</span>
+                          <span>{formatTime(session.lastActiveAt || session.loginAt)}</span>
                           {session.mfaMethod && (
                             <span className="text-blue-500">MFA: {session.mfaMethod}</span>
                           )}
@@ -279,7 +279,7 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
                         className="px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
                       >
                         <LogOut className="w-3.5 h-3.5" />
-                        {revoking === session._id ? '...' : 'Sign out'}
+                        {revoking === session._id ? 'Signing out...' : 'Sign out'}
                       </button>
                     </div>
                   ))}
