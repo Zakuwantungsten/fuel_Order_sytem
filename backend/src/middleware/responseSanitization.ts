@@ -23,6 +23,9 @@ export const responseSanitizationMiddleware = (
   // Auth endpoints MUST return tokens (accessToken, refreshToken) to the client.
   // The sanitizer redacts any key containing "token", which corrupts JWTs and
   // breaks authentication.  Skip body sanitization for these routes.
+  // /csrf-token must also be exempt: the response body contains `csrfToken` which
+  // ends with "token" and gets redacted, causing every state-changing request to
+  // fail CSRF validation with CSRF_VALIDATION_FAILED.
   const AUTH_TOKEN_ROUTES = [
     '/auth/login',
     '/auth/register',
@@ -31,6 +34,7 @@ export const responseSanitizationMiddleware = (
     '/auth/first-login-password',
     '/auth/setup-mfa/generate',
     '/auth/setup-mfa/verify',
+    '/csrf-token',
   ];
 
   const isTokenRoute = AUTH_TOKEN_ROUTES.some((route) => req.path.endsWith(route));
