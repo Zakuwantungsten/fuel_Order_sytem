@@ -1511,10 +1511,14 @@ const LPOs = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                          ${(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
+                          {lpo.currency === 'USD'
+                            ? `$ ${(lpo.ltrs * lpo.pricePerLtr).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : `TZS ${(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}`}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {lpo.ltrs.toLocaleString()}L @ ${lpo.pricePerLtr.toFixed(2)}
+                          {lpo.currency === 'USD'
+                            ? `${lpo.ltrs.toLocaleString()}L @ $${lpo.pricePerLtr.toFixed(2)}`
+                            : `${lpo.ltrs.toLocaleString()}L @ TZS ${lpo.pricePerLtr.toLocaleString()}`}
                         </p>
                       </div>
                     </div>

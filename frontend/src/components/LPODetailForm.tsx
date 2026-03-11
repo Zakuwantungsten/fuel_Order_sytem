@@ -17,26 +17,6 @@ import ForwardLPOModal from './ForwardLPOModal';
 import { downloadLPOPDF } from '../utils/lpoImageGenerator';
 import { toast } from 'react-toastify';
 
-// Station defaults mapping based on direction
-// Correct rates: USD stations = 1.2, TZS stations have specific rates
-const STATION_DEFAULTS: Record<string, { going?: number; returning?: number; rate: number; currency: 'USD' | 'TZS' }> = {
-  // Zambia stations (USD)
-  'LAKE CHILABOMBWE': { going: 260, returning: 0, rate: 1.2, currency: 'USD' },
-  'LAKE NDOLA': { going: 0, returning: 50, rate: 1.2, currency: 'USD' },  // Return: 50L for Zambia Return split
-  'LAKE KAPIRI': { going: 0, returning: 350, rate: 1.2, currency: 'USD' }, // Return: 350L for Zambia Return split
-  'LAKE KITWE': { going: 260, returning: 0, rate: 1.2, currency: 'USD' },
-  'LAKE KABANGWA': { going: 260, returning: 0, rate: 1.2, currency: 'USD' },
-  'LAKE CHINGOLA': { going: 260, returning: 0, rate: 1.2, currency: 'USD' },
-  // Tanzania stations (TZS)
-  'LAKE TUNDUMA': { going: 0, returning: 100, rate: 2875, currency: 'TZS' }, // Tunduma Return
-  'INFINITY': { going: 450, returning: 400, rate: 2757, currency: 'TZS' },   // Mbeya (both directions)
-  'GBP MOROGORO': { going: 0, returning: 100, rate: 2710, currency: 'TZS' }, // Morogoro Return
-  'GBP KANGE': { going: 0, returning: 70, rate: 2730, currency: 'TZS' },     // Tanga Return (70L for Mombasa/MSA)
-  'GPB KANGE': { going: 0, returning: 70, rate: 2730, currency: 'TZS' },     // Typo version - Tanga Return
-  // Cash payment (variable rate)
-  'CASH': { going: 0, returning: 0, rate: 0, currency: 'TZS' }, // Rate entered manually
-};
-
 // STATIONS array removed - now using dynamic stations from database
 // CASH and CUSTOM are always available in the dropdown
 
@@ -1201,7 +1181,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const getStationDefaults = (
     station: string, 
     direction: 'going' | 'returning',
-    destination?: string,
+    _destination?: string,
     totalLiters?: number,
     extraLiters?: number,
     balance?: number
@@ -1274,34 +1254,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return { liters, rate: dynamicStation.defaultRate };
     }
     
-    // Fall back to hardcoded STATION_DEFAULTS for backward compatibility and CASH/CUSTOM stations
-    const defaults = STATION_DEFAULTS[stationUpper];
-    const dest = destination?.toLowerCase() || '';
-    
-    if (defaults) {
-      let liters = direction === 'going' ? (defaults.going || 0) : (defaults.returning || 0);
-      
-      // Special destination-based adjustments for Zambia Going stations
-      if (direction === 'going' && stationUpper.includes('LAKE') && !stationUpper.includes('TUNDUMA')) {
-        if (dest.includes('lusaka')) {
-          liters = 60;  // Lusaka: 60L
-        } else if (dest.includes('lubumbashi')) {
-          liters = 260; // Lubumbashi: 260L
-        }
-      }
-      
-      // GBP KANGE for Mombasa/MSA is 70L (Tanga Return)
-      if ((stationUpper === 'GBP KANGE' || stationUpper === 'GPB KANGE') && direction === 'returning') {
-        if (dest.includes('mombasa') || dest.includes('msa') || dest === '') {
-          liters = 70; // Default Tanga Return for Mombasa/MSA
-        }
-      }
-      
-      return { liters, rate: defaults.rate };
-    }
-    
-    // Default values if station not found
-    return { liters: 350, rate: 1.2 };
+    // Station not found in DB — CASH and CUSTOM have no defaults; user enters values manually
+    return { liters: 0, rate: 0 };
   };
 
   // Zambia Return Split: Same trucks get fuel at TWO stations in sequence
@@ -2645,7 +2599,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   {formData.station && (() => {
                     const station = availableStations.find(s => s.stationName === formData.station);
                     if (station) {
-                      const currency = station.defaultRate < 10 ? 'USD' : 'TZS';
+                      const currency = station.currency ?? (station.defaultRate < 10 ? 'USD' : 'TZS');
                       return (
                         <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                           Default: Going {station.defaultLitersGoing}L, Returning {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
@@ -3626,8 +3580,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               <span className="text-2xl font-bold text-primary-700 dark:text-primary-400">
                 {(() => {
                   const stationUpper = (formData.station || '').toUpperCase();
-                  const stationDefaults = STATION_DEFAULTS[stationUpper];
-                  const currency = stationDefaults?.currency || (stationUpper.startsWith('LAKE') && !stationUpper.includes('TUNDUMA') ? 'USD' : 'TZS');
+                  const stationConfig = availableStations.find(s => s.stationName.toUpperCase() === stationUpper);
+                  const currency = stationConfig?.currency ?? 'TZS';
                   const total = formData.total || 0;
                   return currency === 'USD'
                     ? `$ ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
