@@ -8,6 +8,8 @@ import { config } from '../config';
 import { emitMaintenanceEvent, emitGeneralSettingsEvent, emitSecuritySettingsEvent } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
 import { isSafeUrl } from '../utils/ssrfGuard';
+import { encryptData, decryptData } from '../utils/cryptoUtils';
+import { isEncrypted, getFieldEncryptionKey } from '../utils/fieldEncryption';
 
 /**
  * Get all system settings
@@ -719,13 +721,25 @@ export const updateEmailConfiguration = async (req: AuthRequest, res: Response):
       systemConfig.systemSettings = {};
     }
 
+    // Encrypt password before storing — never store credentials in plaintext
+    const encKey = getFieldEncryptionKey();
+    const existingPassword = systemConfig.systemSettings.email?.password || '';
+    const incomingPassword = password || '';
+    let storedPassword = existingPassword; // keep existing encrypted value if no new password sent
+    if (incomingPassword) {
+      // Encrypt the new plaintext password using FIELD_ENCRYPTION_KEY (AES-256-GCM)
+      storedPassword = encKey
+        ? `encrypted:${encryptData(incomingPassword, encKey)}`
+        : incomingPassword;
+    }
+
     // Update email configuration
     systemConfig.systemSettings.email = {
       host,
       port: port || 587,
       secure: secure || false,
       user,
-      password: password || systemConfig.systemSettings.email?.password || '',
+      password: storedPassword,
       from,
       fromName: fromName || 'Fuel Order System',
     };

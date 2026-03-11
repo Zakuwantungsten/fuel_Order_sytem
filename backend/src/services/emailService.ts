@@ -2,6 +2,8 @@ import nodemailer from 'nodemailer';
 import { User, SystemConfig } from '../models';
 import logger from '../utils/logger';
 import { config as appConfig } from '../config';
+import { decryptData } from '../utils/cryptoUtils';
+import { isEncrypted } from '../utils/fieldEncryption';
 
 interface EmailConfig {
   host: string;
@@ -56,13 +58,20 @@ class EmailService {
       });
 
       if (systemConfig?.systemSettings?.email?.host && systemConfig?.systemSettings?.email?.user) {
+        // Decrypt password if it was stored encrypted (AES-256-GCM via FIELD_ENCRYPTION_KEY)
+        const storedPassword = systemConfig.systemSettings.email.password || '';
+        const fieldKey = process.env.FIELD_ENCRYPTION_KEY || '';
+        const plainPassword = isEncrypted(storedPassword) && fieldKey
+          ? decryptData(storedPassword.substring(10), fieldKey)
+          : storedPassword;
+
         return {
           host: systemConfig.systemSettings.email.host,
           port: systemConfig.systemSettings.email.port || 587,
           secure: systemConfig.systemSettings.email.secure || false,
           auth: {
             user: systemConfig.systemSettings.email.user,
-            pass: systemConfig.systemSettings.email.password,
+            pass: plainPassword,
           },
           from: systemConfig.systemSettings.email.from,
           fromName: systemConfig.systemSettings.email.fromName || 'Fuel Order System',

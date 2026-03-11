@@ -17,6 +17,7 @@
     "seed:admins": "ts-node src/scripts/seedAdmins.ts",
     "seed:all": "ts-node src/scripts/seedAllRoles.ts",
     "seed:super": "ts-node src/scripts/seedSuperAdmin.ts",
+    "seed:email": "ts-node --transpile-only src/scripts/seedEmailConfig.ts",
     "seed:checkpoints": "ts-node --transpile-only src/scripts/seedCheckpoints.ts",
     "setup-driver-credentials": "ts-node src/scripts/setupDriverCredentials.ts",
     "archival:test": "ts-node src/scripts/testArchival.js",
