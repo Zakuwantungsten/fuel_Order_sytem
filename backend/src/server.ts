@@ -125,6 +125,7 @@ import { startArchivalScheduler } from './jobs/archivalScheduler';
 import './jobs/fuelPriceScheduler';
 import './jobs/securityEventRetention';
 import './jobs/securityScoreSnapshot';
+import './jobs/fleetDailyCleanup';
 import { jobRegistry } from './jobs/jobRegistry';
 
 // Enforce HTTPS only in production

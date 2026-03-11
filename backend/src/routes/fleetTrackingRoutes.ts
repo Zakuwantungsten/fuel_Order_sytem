@@ -29,7 +29,7 @@ router.get('/checkpoint/:name', asyncHandler(fleetTrackingController.getTrucksAt
 // Get copyable truck list for specific checkpoint (KEY FEATURE!)
 router.get('/checkpoint/:name/copy', asyncHandler(fleetTrackingController.getCopyableTruckList));
 
-// Delete snapshot (Admin only)
-router.delete('/snapshots/:id', authorize('super_admin', 'admin'), asyncHandler(fleetTrackingController.deleteSnapshot));
+// Delete snapshot (own snapshot for fuel_order_maker; any for admins)
+router.delete('/snapshots/:id', authorize('super_admin', 'admin', 'fuel_order_maker'), asyncHandler(fleetTrackingController.deleteSnapshot));
 
 export default router;

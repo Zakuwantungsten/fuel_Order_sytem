@@ -30,6 +30,7 @@ export interface IFleetSnapshot extends Document {
   reportDate: Date;
   reportType: 'IMPORT' | 'NO_ORDER';
   uploadedBy: string;
+  uploadedById: mongoose.Types.ObjectId;
   
   // File metadata
   fileName: string;
@@ -98,6 +99,11 @@ const fleetSnapshotSchema = new Schema<IFleetSnapshot>(
     uploadedBy: {
       type: String,
       required: true,
+    },
+    uploadedById: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
     },
     fileName: {
       type: String,

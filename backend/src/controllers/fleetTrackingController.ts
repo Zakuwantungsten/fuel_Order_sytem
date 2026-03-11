@@ -73,6 +73,7 @@ export const uploadFleetReport = async (req: AuthRequest, res: Response): Promis
       reportDate: parsedData.reportDate,
       reportType: parsedData.reportType,
       uploadedBy: user.username,
+      uploadedById: user.userId,
       fileName: safeFilename, // ✅ Use safe filename
       fileSize: file.size,
       processedAt: new Date(),
@@ -149,13 +150,17 @@ export const getAllSnapshots = async (req: AuthRequest, res: Response): Promise<
 
     const { limit = 20, skip = 0 } = req.query;
 
-    const snapshots = await FleetSnapshot.find({ isDeleted: false })
+    const isAdmin = ['super_admin', 'admin'].includes(user.role);
+    const baseFilter: any = { isDeleted: false };
+    if (!isAdmin) baseFilter.uploadedById = user.userId;
+
+    const snapshots = await FleetSnapshot.find(baseFilter)
       .sort({ timestamp: -1 })
       .limit(Number(limit))
       .skip(Number(skip))
-      .select('-fleetGroups'); // Exclude detailed data for list view
+      .select('-fleetGroups');
 
-    const total = await FleetSnapshot.countDocuments({ isDeleted: false });
+    const total = await FleetSnapshot.countDocuments(baseFilter);
 
     res.status(200).json({
       success: true,
@@ -184,7 +189,11 @@ export const getLatestSnapshot = async (req: AuthRequest, res: Response): Promis
       throw new ApiError(403, 'Unauthorized');
     }
 
-    const snapshot = await FleetSnapshot.findOne({ isDeleted: false }).sort({ timestamp: -1 });
+    const isAdmin = ['super_admin', 'admin'].includes(user.role);
+    const baseFilter: any = { isDeleted: false };
+    if (!isAdmin) baseFilter.uploadedById = user.userId;
+
+    const snapshot = await FleetSnapshot.findOne(baseFilter).sort({ timestamp: -1 });
 
     if (!snapshot) {
       throw new ApiError(404, 'No fleet snapshots found');
@@ -213,10 +222,13 @@ export const getTruckPositions = async (req: AuthRequest, res: Response): Promis
 
     const { snapshotId, checkpoint, direction, fleetGroup, search } = req.query;
 
-    // If no snapshotId, use latest
+    // If no snapshotId, use latest for this user (or global for admins)
     let targetSnapshotId = snapshotId;
     if (!targetSnapshotId) {
-      const latestSnapshot = await FleetSnapshot.findOne({ isDeleted: false }).sort({ timestamp: -1 });
+      const isAdmin = ['super_admin', 'admin'].includes(user.role);
+      const latestFilter: any = { isDeleted: false };
+      if (!isAdmin) latestFilter.uploadedById = user.userId;
+      const latestSnapshot = await FleetSnapshot.findOne(latestFilter).sort({ timestamp: -1 });
       if (!latestSnapshot) {
         throw new ApiError(404, 'No fleet snapshots found');
       }
@@ -281,10 +293,13 @@ export const getTrucksAtCheckpoint = async (req: AuthRequest, res: Response): Pr
     const { name } = req.params;
     const { snapshotId } = req.query;
 
-    // If no snapshotId, use latest
+    // If no snapshotId, use latest for this user (or global for admins)
     let targetSnapshotId = snapshotId;
     if (!targetSnapshotId) {
-      const latestSnapshot = await FleetSnapshot.findOne({ isDeleted: false }).sort({ timestamp: -1 });
+      const isAdmin = ['super_admin', 'admin'].includes(user.role);
+      const latestFilter: any = { isDeleted: false };
+      if (!isAdmin) latestFilter.uploadedById = user.userId;
+      const latestSnapshot = await FleetSnapshot.findOne(latestFilter).sort({ timestamp: -1 });
       if (!latestSnapshot) {
         throw new ApiError(404, 'No fleet snapshots found');
       }
@@ -334,10 +349,13 @@ export const getCopyableTruckList = async (req: AuthRequest, res: Response): Pro
     const { name } = req.params;
     const { snapshotId, direction, format = 'comma' } = req.query;
 
-    // If no snapshotId, use latest
+    // If no snapshotId, use latest for this user (or global for admins)
     let targetSnapshotId = snapshotId;
     if (!targetSnapshotId) {
-      const latestSnapshot = await FleetSnapshot.findOne({ isDeleted: false }).sort({ timestamp: -1 });
+      const isAdmin = ['super_admin', 'admin'].includes(user.role);
+      const latestFilter: any = { isDeleted: false };
+      if (!isAdmin) latestFilter.uploadedById = user.userId;
+      const latestSnapshot = await FleetSnapshot.findOne(latestFilter).sort({ timestamp: -1 });
       if (!latestSnapshot) {
         throw new ApiError(404, 'No fleet snapshots found');
       }
@@ -409,6 +427,11 @@ export const deleteSnapshot = async (req: AuthRequest, res: Response): Promise<v
     const snapshot = await FleetSnapshot.findById(id);
     if (!snapshot) {
       throw new ApiError(404, 'Snapshot not found');
+    }
+
+    // fuel_order_maker can only delete their own snapshots
+    if (user.role === 'fuel_order_maker' && snapshot.uploadedById?.toString() !== user.userId) {
+      throw new ApiError(403, 'You can only delete your own snapshots');
     }
 
     snapshot.isDeleted = true;
