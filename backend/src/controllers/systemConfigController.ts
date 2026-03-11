@@ -632,7 +632,7 @@ export const getEmailConfiguration = async (req: AuthRequest, res: Response): Pr
   try {
     // Get from SystemConfig first, fallback to env vars
     const systemConfig = await SystemConfig.findOne({
-      configType: 'system',
+      configType: 'system_settings',
       isDeleted: false,
     });
 
@@ -702,14 +702,14 @@ export const updateEmailConfiguration = async (req: AuthRequest, res: Response):
     }
 
     let systemConfig = await SystemConfig.findOne({
-      configType: 'system',
+      configType: 'system_settings',
       isDeleted: false,
     });
 
     if (!systemConfig) {
       // Create default config if it doesn't exist
       systemConfig = new SystemConfig({
-        configType: 'system',
+        configType: 'system_settings',
         lastUpdatedBy: req.user?.username || 'system',
       });
     }

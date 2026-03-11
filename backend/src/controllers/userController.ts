@@ -178,6 +178,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
     });
 
     // Send welcome email with credentials
+    let emailSent = false;
     try {
       await emailService.sendWelcomeEmail(
         email,
@@ -185,6 +186,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
         username,
         temporaryPassword
       );
+      emailSent = true;
       logger.info(`Welcome email sent to ${email}`);
     } catch (emailError: any) {
       logger.error(`Failed to send welcome email to ${email}:`, emailError);
@@ -208,9 +210,12 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
 
     res.status(201).json({
       success: true,
-      message: 'User created successfully. Welcome email sent with login credentials.',
+      message: emailSent
+        ? 'User created successfully. Welcome email sent with login credentials.'
+        : 'User created successfully. Welcome email could not be sent — check email configuration.',
       data: userResponse,
-      emailSent: true,
+      emailSent,
+      ...(emailSent ? {} : { temporaryPassword }), // surface password in response if email failed
     });
     emitDataChange('users', 'create');
   } catch (error: any) {

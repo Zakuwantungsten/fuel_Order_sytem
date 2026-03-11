@@ -51,7 +51,7 @@ class EmailService {
     try {
       // Try to get config from database first
       const systemConfig = await SystemConfig.findOne({ 
-        configType: 'system',
+        configType: 'system_settings',
         isDeleted: false,
       });
 
@@ -219,6 +219,11 @@ class EmailService {
    * Send password reset email
    */
   async sendPasswordResetEmail(options: PasswordResetEmailOptions): Promise<void> {
+    // Lazy reinit — covers the async startup race and the case where SMTP was
+    // configured via the admin UI after the service first initialized.
+    if (!this.isConfigured || !this.transporter) {
+      await this.reinitialize();
+    }
     if (!this.isConfigured || !this.transporter) {
       logger.warn('Email service not configured - cannot send password reset email');
       throw new Error('Email service is not configured');
@@ -674,6 +679,11 @@ class EmailService {
    * Send welcome email with login credentials to new user
    */
   async sendWelcomeEmail(email: string, name: string, username: string, temporaryPassword: string): Promise<void> {
+    // Lazy reinit — covers the async startup race and the case where SMTP was
+    // configured via the admin UI after the service first initialized.
+    if (!this.isConfigured || !this.transporter) {
+      await this.reinitialize();
+    }
     if (!this.isConfigured || !this.transporter) {
       logger.warn('Email service not configured - cannot send welcome email');
       throw new Error('Email service is not configured');
