@@ -124,6 +124,16 @@ export interface ProfilingSettings {
   slowQueryThreshold: number;
 }
 
+export interface PasswordPolicySettings {
+  minLength: number;
+  requireUppercase: boolean;
+  requireLowercase: boolean;
+  requireNumbers: boolean;
+  requireSpecialChars: boolean;
+  historyCount: number;
+  expirationDays: number;
+}
+
 export const systemConfigAPI = {
   // ===== System Settings Management =====
 
@@ -152,6 +162,23 @@ export const systemConfigAPI = {
   updateSecuritySettings: async (settings: SystemSettings['session']) => {
     const response = await apiClient.put('/system-admin/config/settings/security', settings);
     return response.data;
+  },
+
+  /**
+   * Get password policy
+   * GET /api/system-admin/config/settings/security/password-policy
+   */
+  getPasswordPolicy: async (): Promise<PasswordPolicySettings> => {
+    const response = await apiClient.get('/system-admin/config/settings/security/password-policy');
+    return response.data.data;
+  },
+
+  /**
+   * Update password policy
+   * PUT /api/system-admin/config/settings/security/password-policy
+   */
+  updatePasswordPolicy: async (policy: PasswordPolicySettings): Promise<void> => {
+    await apiClient.put('/system-admin/config/settings/security/password-policy', policy);
   },
 
   /**

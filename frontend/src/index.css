@@ -78,6 +78,18 @@ html.dark body {
 *, *::before, *::after {
   transition-property: background-color, border-color, color, fill, stroke, box-shadow;
   transition-duration: 200ms;
+
+/* ─── System Admin Panel — Design System ─────────────────────────── */
+.system-admin-wrap,
+.system-admin-wrap *:not(.font-mono):not([class*="font-mono"]):not(code):not(pre) {
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+.system-admin-wrap code,
+.system-admin-wrap pre,
+.system-admin-wrap .font-mono,
+.system-admin-wrap [class*="font-mono"] {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 

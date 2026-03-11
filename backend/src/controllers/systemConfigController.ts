@@ -223,6 +223,121 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
 };
 
 /**
+ * Get password policy
+ * GET /api/system-admin/config/settings/security/password-policy
+ * Super Admin Only
+ */
+export const getPasswordPolicy = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const systemConfig = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    });
+
+    const defaults = {
+      minLength: 12,
+      requireUppercase: true,
+      requireLowercase: true,
+      requireNumbers: true,
+      requireSpecialChars: true,
+      historyCount: 5,
+      expirationDays: 0,
+    };
+
+    const p = systemConfig?.securitySettings?.password;
+    res.status(200).json({
+      success: true,
+      message: 'Password policy retrieved successfully',
+      data: {
+        minLength:          p?.minLength          ?? defaults.minLength,
+        requireUppercase:   p?.requireUppercase   ?? defaults.requireUppercase,
+        requireLowercase:   p?.requireLowercase   ?? defaults.requireLowercase,
+        requireNumbers:     p?.requireNumbers     ?? defaults.requireNumbers,
+        requireSpecialChars: p?.requireSpecialChars ?? defaults.requireSpecialChars,
+        historyCount:       p?.historyCount       ?? defaults.historyCount,
+        expirationDays:     p?.expirationDays     ?? defaults.expirationDays,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error getting password policy:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update password policy
+ * PUT /api/system-admin/config/settings/security/password-policy
+ * Super Admin Only
+ */
+export const updatePasswordPolicy = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const {
+      minLength,
+      requireUppercase,
+      requireLowercase,
+      requireNumbers,
+      requireSpecialChars,
+      historyCount,
+      expirationDays,
+    } = req.body;
+
+    const systemConfig = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    });
+
+    if (!systemConfig) {
+      throw new ApiError(404, 'System configuration not found');
+    }
+
+    if (!systemConfig.securitySettings) {
+      (systemConfig as any).securitySettings = {};
+    }
+    if (!systemConfig.securitySettings.password) {
+      (systemConfig as any).securitySettings.password = {};
+    }
+
+    const pw = systemConfig.securitySettings.password!;
+    if (minLength          !== undefined) pw.minLength          = minLength;
+    if (requireUppercase   !== undefined) pw.requireUppercase   = requireUppercase;
+    if (requireLowercase   !== undefined) pw.requireLowercase   = requireLowercase;
+    if (requireNumbers     !== undefined) pw.requireNumbers     = requireNumbers;
+    if (requireSpecialChars !== undefined) pw.requireSpecialChars = requireSpecialChars;
+    if (historyCount       !== undefined) pw.historyCount       = historyCount;
+    if (expirationDays     !== undefined) pw.expirationDays     = expirationDays;
+
+    systemConfig.markModified('securitySettings');
+    systemConfig.lastUpdatedBy = req.user?.username || 'system';
+    await systemConfig.save();
+
+    await AuditService.log({
+      action: 'UPDATE',
+      resourceType: 'config',
+      resourceId: 'password_policy',
+      userId: req.user?.userId || 'system',
+      username: req.user?.username || 'system',
+      details: JSON.stringify({
+        message: 'Password policy updated',
+        newSettings: systemConfig.securitySettings?.password,
+      }),
+      severity: 'high',
+      ipAddress: req.ip,
+    });
+
+    logger.warn(`Password policy updated by ${req.user?.username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password policy updated successfully',
+      data: systemConfig.securitySettings?.password,
+    });
+  } catch (error: any) {
+    logger.error('Error updating password policy:', error);
+    throw error;
+  }
+};
+
+/**
  * Update data management and retention settings
  * PUT /api/system-config/settings/data-retention
  * Super Admin Only

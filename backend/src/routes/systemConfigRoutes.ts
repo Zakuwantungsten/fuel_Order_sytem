@@ -17,6 +17,8 @@ router.get('/settings', systemConfigController.getSystemSettings);
 // Update specific setting categories
 router.put('/settings/general', systemConfigController.updateGeneralSettings);
 router.put('/settings/security', systemConfigController.updateSecuritySettings);
+router.get('/settings/security/password-policy', systemConfigController.getPasswordPolicy);
+router.put('/settings/security/password-policy', systemConfigController.updatePasswordPolicy);
 router.put('/settings/data-retention', systemConfigController.updateDataRetentionSettings);
 router.put('/settings/notifications', systemConfigController.updateNotificationSettings);
 router.put('/settings/maintenance', systemConfigController.updateMaintenanceMode);

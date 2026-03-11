@@ -5,63 +5,114 @@ import logger from '../utils/logger';
 import SecurityEventLogger from '../utils/securityEventLogger';
 
 /**
- * Custom CSRF Protection using Double Submit Cookie Pattern
- * More secure and modern than deprecated csurf package
+ * CSRF Protection using HMAC-Signed Stateless Tokens
+ *
+ * Strategy:
+ *  - Tokens are HMAC-signed (timestamp.nonce.hmac) so the server can verify
+ *    them by signature without relying on a matching cookie.
+ *  - The signed token is returned in the response BODY of GET /csrf-token so
+ *    cross-origin frontends (e.g. Firebase → Railway) can read and store it in
+ *    sessionStorage.
+ *  - The XSRF-TOKEN cookie is still set (SameSite=None; Secure in prod) as a
+ *    belt-and-suspenders measure for same-origin contexts.
+ *
+ * Validation order on state-changing requests:
+ *  1. HMAC verification of the X-XSRF-TOKEN header (works cross-origin without cookie).
+ *  2. Fallback: double-submit cookie comparison (backward-compat with any old
+ *     random tokens still in client sessionStorage until they expire/refresh).
  */
 
-const CSRF_TOKEN_LENGTH = 32;
+const CSRF_TOKEN_LENGTH = 32; // bytes for the nonce
 const CSRF_COOKIE_NAME = 'XSRF-TOKEN';
 const CSRF_HEADER_NAME = 'X-XSRF-TOKEN';
+const CSRF_TOKEN_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
-/**
- * Generate a cryptographically secure CSRF token
- */
-const generateCsrfToken = (): string => {
-  return crypto.randomBytes(CSRF_TOKEN_LENGTH).toString('hex');
+// Derive a dedicated CSRF signing key from the JWT secret to maintain key separation.
+const getCsrfSigningKey = (): Buffer => {
+  return crypto.createHash('sha256').update(config.jwtSecret + ':csrf-v1').digest();
 };
 
 /**
- * Middleware to provide CSRF token to the client
- * Sets the token as a cookie that JavaScript can read
+ * Generate an HMAC-signed CSRF token: base64url(timestamp.nonce.hmac)
+ * The HMAC covers "timestamp.nonce" using SHA-256.
+ */
+const generateCsrfToken = (): string => {
+  const nonce = crypto.randomBytes(CSRF_TOKEN_LENGTH).toString('hex');
+  const timestamp = Date.now().toString();
+  const payload = `${timestamp}.${nonce}`;
+  const hmac = crypto.createHmac('sha256', getCsrfSigningKey())
+    .update(payload)
+    .digest('hex');
+  return Buffer.from(`${payload}.${hmac}`).toString('base64url');
+};
+
+/**
+ * Verify an HMAC-signed CSRF token returned by generateCsrfToken().
+ * Returns true if the signature is valid and the token is not expired.
+ */
+const verifyCsrfToken = (token: string): boolean => {
+  try {
+    const decoded = Buffer.from(token, 'base64url').toString('utf8');
+    // Format: timestamp.nonce.hmac  (two dots separating three parts)
+    const lastDot = decoded.lastIndexOf('.');
+    if (lastDot === -1) return false;
+    const payload = decoded.substring(0, lastDot);
+    const providedHmac = decoded.substring(lastDot + 1);
+
+    // Validate timestamp before computing HMAC (fail fast)
+    const firstDot = payload.indexOf('.');
+    if (firstDot === -1) return false;
+    const timestamp = parseInt(payload.substring(0, firstDot), 10);
+    if (!Number.isFinite(timestamp)) return false;
+    const ageMs = Date.now() - timestamp;
+    if (ageMs < 0 || ageMs > CSRF_TOKEN_MAX_AGE_MS) return false;
+
+    // Constant-time HMAC comparison
+    const expectedHmac = crypto.createHmac('sha256', getCsrfSigningKey())
+      .update(payload)
+      .digest('hex');
+    if (providedHmac.length !== expectedHmac.length) return false;
+    return crypto.timingSafeEqual(
+      Buffer.from(providedHmac, 'hex'),
+      Buffer.from(expectedHmac, 'hex'),
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Middleware to provide CSRF token to the client.
+ * Sets the signed token as a cookie AND exposes it in res.locals.csrfToken so
+ * the /csrf-token route can return it in the response body (needed for
+ * cross-origin clients that cannot read cookies from a foreign domain).
  */
 export const provideCsrfToken = (req: Request, res: Response, next: NextFunction): void => {
   try {
-    // Check if token already exists in cookie
     let token = req.cookies[CSRF_COOKIE_NAME];
-    
-    // Generate new token if none exists or if explicitly requesting new token
-    if (!token || req.path === '/csrf-token') {
+
+    // Always issue a fresh signed token when the client explicitly requests one,
+    // or when no valid existing cookie is present.
+    if (!token || !verifyCsrfToken(token) || req.path === '/csrf-token') {
       token = generateCsrfToken();
-      logger.info(`[CSRF] Generated new token for ${req.path} from IP ${req.ip}`);
+      logger.info(`[CSRF] Generated new signed token for ${req.path} from IP ${req.ip}`);
     }
-    
-    // Set cookie with token
-    // Use 'lax' in development for localhost cross-port requests
-    // Use 'strict' in production for same-origin only
-    // Cookie options - different for dev vs production
-    // In dev: Don't set sameSite to allow cross-port localhost cookies
-    // In prod: Use strict + secure for maximum security
+
     const cookieOptions: any = {
-      httpOnly: false, // Allow JavaScript to read for sending in headers
-      maxAge: 3600000, // 1 hour
-      path: '/', // Ensure cookie is available for all paths
+      httpOnly: false, // JS must be able to read it for the header
+      maxAge: CSRF_TOKEN_MAX_AGE_MS,
+      path: '/',
     };
-    
-    // In production use SameSite=none so the cookie is sent in cross-origin
-    // requests (frontend on Firebase, backend on Railway). The double-submit
-    // pattern remains secure because JS on a different origin cannot READ the
-    // cookie value to forge the matching header.
+
     if (config.nodeEnv === 'production') {
       cookieOptions.secure = true;
-      cookieOptions.sameSite = 'none';
+      cookieOptions.sameSite = 'none'; // allow cross-origin cookie sending
     }
-    // In development, omit sameSite and secure to allow cross-port localhost
-    
+    // Development: omit sameSite/secure to allow cross-port localhost cookies
+
     res.cookie(CSRF_COOKIE_NAME, token, cookieOptions);
-    // Expose token to the response handler so it can be sent in the body
-    // (cross-origin clients cannot read cookies from a different domain)
     res.locals.csrfToken = token;
-    
+
     next();
   } catch (error) {
     logger.error('CSRF token generation error:', error);
@@ -70,8 +121,14 @@ export const provideCsrfToken = (req: Request, res: Response, next: NextFunction
 };
 
 /**
- * Middleware to validate CSRF token on state-changing requests
- * Uses double-submit cookie pattern
+ * Middleware to validate CSRF token on state-changing requests.
+ *
+ * Validation order:
+ *  1. HMAC signature check on the X-XSRF-TOKEN header value – works for both
+ *     same-origin and cross-origin deployments without depending on the cookie.
+ *  2. Fallback double-submit cookie comparison – handles the transition period
+ *     where an older random token may still be stored in the client's
+ *     sessionStorage before a new signed token is fetched.
  */
 export const csrfProtection = (req: Request, res: Response, next: NextFunction): void => {
   try {
@@ -79,32 +136,26 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction):
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       return next();
     }
-    
-    // Get token from cookie
-    const cookieToken = req.cookies[CSRF_COOKIE_NAME];
-    
-    // Get token from header
-    const headerToken = req.headers[CSRF_HEADER_NAME.toLowerCase()] as string;
-    
-    // Both tokens must exist
-    if (!cookieToken || !headerToken) {
-      logger.warn(`CSRF validation failed: Missing token for ${req.method} ${req.path} from IP ${req.ip}`, {
+
+    const headerToken = req.headers[CSRF_HEADER_NAME.toLowerCase()] as string | undefined;
+    const cookieToken = req.cookies[CSRF_COOKIE_NAME] as string | undefined;
+
+    // No header token at all – reject immediately
+    if (!headerToken) {
+      logger.warn(`CSRF validation failed: Missing X-XSRF-TOKEN header for ${req.method} ${req.path} from IP ${req.ip}`, {
         hasCookie: !!cookieToken,
-        hasHeader: !!headerToken,
         cookies: Object.keys(req.cookies),
-        headers: Object.keys(req.headers).filter(h => h.toLowerCase().includes('xsrf') || h.toLowerCase().includes('csrf'))
       });
-      
-      // Log CSRF failure to audit trail
+
       SecurityEventLogger.logCSRFFailure({
         username: (req as any).user?.username || 'unknown',
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
         endpoint: req.path,
         method: req.method,
-        errorReason: 'Missing CSRF token',
+        errorReason: 'Missing X-XSRF-TOKEN header',
       }).catch(() => {});
-      
+
       res.status(403).json({
         success: false,
         message: 'CSRF token missing. Please refresh the page and try again.',
@@ -112,36 +163,46 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction):
       });
       return;
     }
-    
-    // Tokens must match (timing-safe comparison)
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(cookieToken),
-      Buffer.from(headerToken)
-    );
-    
-    if (!isValid) {
-      logger.warn(`CSRF validation failed: Token mismatch for ${req.method} ${req.path} from IP ${req.ip}`);
-      
-      // Log CSRF failure to audit trail
-      SecurityEventLogger.logCSRFFailure({
-        username: (req as any).user?.username || 'unknown',
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        endpoint: req.path,
-        method: req.method,
-        errorReason: 'Token mismatch',
-      }).catch(() => {});
-      
-      res.status(403).json({
-        success: false,
-        message: 'Invalid CSRF token. Please refresh the page and try again.',
-        code: 'CSRF_VALIDATION_FAILED',
-      });
-      return;
+
+    // PRIMARY: verify the HMAC signature of the token from the header.
+    // This works regardless of whether the cookie is present, making it robust
+    // for cross-origin deployments where third-party cookies may be blocked.
+    if (verifyCsrfToken(headerToken)) {
+      return next();
     }
-    
-    // Valid token - proceed
-    next();
+
+    // FALLBACK: double-submit cookie comparison.
+    // Handles the window where a client still holds an older random-format token
+    // in sessionStorage (before it fetches a new signed one after a 403 retry).
+    if (cookieToken && cookieToken.length === headerToken.length) {
+      const cookieBuf = Buffer.from(cookieToken);
+      const headerBuf = Buffer.from(headerToken);
+      if (cookieBuf.length === headerBuf.length &&
+          crypto.timingSafeEqual(cookieBuf, headerBuf)) {
+        return next();
+      }
+    }
+
+    // Both strategies failed
+    logger.warn(`CSRF validation failed: Invalid token for ${req.method} ${req.path} from IP ${req.ip}`, {
+      hasCookie: !!cookieToken,
+      hmacValid: false,
+    });
+
+    SecurityEventLogger.logCSRFFailure({
+      username: (req as any).user?.username || 'unknown',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      endpoint: req.path,
+      method: req.method,
+      errorReason: 'HMAC verification failed and double-submit mismatch',
+    }).catch(() => {});
+
+    res.status(403).json({
+      success: false,
+      message: 'Invalid CSRF token. Please refresh the page and try again.',
+      code: 'CSRF_VALIDATION_FAILED',
+    });
   } catch (error: any) {
     logger.error('CSRF validation error:', error);
     res.status(403).json({

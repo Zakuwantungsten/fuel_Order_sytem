@@ -1,8 +1,5 @@
-import { useState, useEffect } from 'react';
-import {
-  Webhook, Flag, Bell, RefreshCw, ArrowRight,
-  CheckCircle, ToggleRight,
-} from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Webhook, Flag, Bell, RefreshCw } from 'lucide-react';
 import webhookService from '../../services/webhookService';
 import featureFlagService from '../../services/featureFlagService';
 import apiClient from '../../services/api';
@@ -14,10 +11,42 @@ interface Props {
   onMessage: (type: 'success' | 'error', message: string) => void;
 }
 
-type View = 'overview' | 'webhooks' | 'feature_flags' | 'notifications';
+// ── Shared primitives ────────────────────────────────────────────────────────
+
+function StatTile({ label, value, sub, icon: Icon, iconBg, iconColor }: {
+  label: string; value: string | number; sub?: string;
+  icon: React.ElementType; iconBg: string; iconColor: string;
+}) {
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-[#E4E7EC] dark:border-gray-700 rounded-xl p-4 flex items-center gap-3.5 min-w-0">
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: iconBg }}>
+        <Icon className="w-[18px] h-[18px]" style={{ color: iconColor }} />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[22px] font-extrabold text-[#111827] dark:text-gray-100 leading-none">{value}</div>
+        <div className="text-[12px] text-[#6B7280] dark:text-gray-400 mt-1">{label}</div>
+        {sub && <div className="text-[11px] text-[#9CA3AF] dark:text-gray-500 mt-0.5">{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+function SectionDivider({ label, icon: Icon }: { label: string; icon?: React.ElementType }) {
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <div className="h-px flex-1 bg-[#E4E7EC] dark:bg-gray-700" />
+      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#E4E7EC] dark:border-gray-700 bg-white dark:bg-gray-800">
+        {Icon && <Icon className="w-3 h-3 text-[#9CA3AF] dark:text-gray-500" />}
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF] dark:text-gray-500">{label}</span>
+      </div>
+      <div className="h-px flex-1 bg-[#E4E7EC] dark:bg-gray-700" />
+    </div>
+  );
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
 
 export default function SystemIntegrationsSubTab({ onMessage }: Props) {
-  const [view, setView] = useState<View>('overview');
   const [stats, setStats] = useState<{
     webhookCount: number; webhookActive: number;
     flagCount: number; flagEnabled: number;
@@ -25,14 +54,11 @@ export default function SystemIntegrationsSubTab({ onMessage }: Props) {
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Child tabs use reversed onMessage: (msg, type)
-  const reversedOnMessage = (msg: string, type?: 'success' | 'error' | 'info') => {
+  const fwd = useCallback((msg: string, type?: 'success' | 'error' | 'info') => {
     onMessage((type || 'error') as 'success' | 'error', msg);
-  };
+  }, [onMessage]);
 
-  useEffect(() => { loadOverview(); }, []);
-
-  const loadOverview = async () => {
+  const loadStats = useCallback(async () => {
     setLoading(true);
     try {
       const [whRes, ffRes, notifRes] = await Promise.allSettled([
@@ -40,120 +66,52 @@ export default function SystemIntegrationsSubTab({ onMessage }: Props) {
         featureFlagService.list(),
         apiClient.get('/system-admin/notification-config'),
       ]);
-
-      const webhooks = whRes.status === 'fulfilled' ? whRes.value : [];
-      const flags = ffRes.status === 'fulfilled' ? ffRes.value : [];
+      const webhooks  = whRes.status    === 'fulfilled' ? whRes.value              : [];
+      const flags     = ffRes.status    === 'fulfilled' ? ffRes.value              : [];
       const notifData = notifRes.status === 'fulfilled' ? notifRes.value.data?.data : null;
-
       setStats({
-        webhookCount: Array.isArray(webhooks) ? webhooks.length : 0,
-        webhookActive: Array.isArray(webhooks) ? webhooks.filter((w: any) => w.isEnabled).length : 0,
-        flagCount: Array.isArray(flags) ? flags.length : 0,
-        flagEnabled: Array.isArray(flags) ? flags.filter((f: any) => f.isEnabled).length : 0,
-        notifEnabled: notifData?.emailEnabled ?? false,
+        webhookCount:  Array.isArray(webhooks) ? webhooks.length                                           : 0,
+        webhookActive: Array.isArray(webhooks) ? webhooks.filter((w: any) => w.isEnabled).length           : 0,
+        flagCount:     Array.isArray(flags)    ? flags.length                                               : 0,
+        flagEnabled:   Array.isArray(flags)    ? flags.filter((f: any) => f.isEnabled).length              : 0,
+        notifEnabled:  notifData?.emailEnabled ?? false,
       });
     } catch { /* silent */ } finally { setLoading(false); }
-  };
+  }, []);
 
-  const views: { id: View; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'webhooks', label: 'Webhooks' },
-    { id: 'feature_flags', label: 'Feature Flags' },
-    { id: 'notifications', label: 'Notifications' },
-  ];
+  useEffect(() => { loadStats(); }, [loadStats]);
 
   return (
-    <div className="space-y-5">
-      {/* Pill nav */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {views.map(v => (
-          <button key={v.id} onClick={() => setView(v.id)}
-            className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${
-              view === v.id
-                ? 'bg-teal-600 text-white shadow-sm'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-            }`}>{v.label}</button>
-        ))}
-        {view === 'overview' && (
-          <button onClick={loadOverview} disabled={loading}
-            className="ml-auto p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        )}
-      </div>
-
-      {view === 'overview' && (
-        <div className="space-y-5">
-          {/* Stats */}
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <RefreshCw className="w-6 h-6 text-teal-500 animate-spin" />
-            </div>
-          ) : stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">
-                <Webhook className="w-5 h-5 text-cyan-500 mx-auto mb-2" />
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stats.webhookActive}<span className="text-base font-normal text-gray-400">/{stats.webhookCount}</span>
-                </p>
-                <p className="text-xs text-gray-400 mt-1">Webhooks Active</p>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">
-                <Flag className="w-5 h-5 text-orange-500 mx-auto mb-2" />
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stats.flagEnabled}<span className="text-base font-normal text-gray-400">/{stats.flagCount}</span>
-                </p>
-                <p className="text-xs text-gray-400 mt-1">Flags Enabled</p>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">
-                {stats.notifEnabled
-                  ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto mb-2" />
-                  : <ToggleRight className="w-5 h-5 text-gray-400 mx-auto mb-2" />}
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stats.notifEnabled ? 'ON' : 'OFF'}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">Email Notifications</p>
-              </div>
-            </div>
-          )}
-
-          {/* Quick links */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <QuickLink icon={Webhook} title="Webhooks"
-              description="Create webhook endpoints, manage event subscriptions, test connections, and view delivery logs"
-              color="bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800"
-              iconColor="text-cyan-600 dark:text-cyan-400" onClick={() => setView('webhooks')} />
-            <QuickLink icon={Flag} title="Feature Flags"
-              description="Toggle features, set role restrictions, and manage rollout with flag CRUD"
-              color="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800"
-              iconColor="text-orange-600 dark:text-orange-400" onClick={() => setView('feature_flags')} />
-            <QuickLink icon={Bell} title="Notification Config"
-              description="Email toggles, event triggers, alert recipients, and digest schedule settings"
-              color="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-              iconColor="text-green-600 dark:text-green-400" onClick={() => setView('notifications')} />
-          </div>
+    <div className="p-6 space-y-6">
+      {/* ── Stat tiles ─────────────────────────────────────────────────────────── */}
+      {loading ? (
+        <div className="flex items-center gap-2 py-6">
+          <RefreshCw className="w-4 h-4 text-[#4F46E5] animate-spin" />
+          <span className="text-[13px] text-[#6B7280] dark:text-gray-400">Loading…</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <StatTile label="Active Webhooks"    value={`${stats?.webhookActive ?? 0}/${stats?.webhookCount ?? 0}`}
+            icon={Webhook} iconBg="#ECFEFF" iconColor="#0891B2" sub="Receiving events" />
+          <StatTile label="Feature Flags On"   value={`${stats?.flagEnabled ?? 0}/${stats?.flagCount ?? 0}`}
+            icon={Flag}    iconBg="#FFF7ED" iconColor="#EA580C" sub="Currently enabled" />
+          <StatTile label="Email Notifications" value={stats?.notifEnabled ? 'Enabled' : 'Disabled'}
+            icon={Bell}    iconBg={stats?.notifEnabled ? '#F0FDF4' : '#F9FAFB'}
+            iconColor={stats?.notifEnabled ? '#16A34A' : '#9CA3AF'} />
         </div>
       )}
 
-      {view === 'webhooks' && <WebhookManagerTab onMessage={reversedOnMessage} />}
-      {view === 'feature_flags' && <FeatureFlagsTab onMessage={reversedOnMessage} />}
-      {view === 'notifications' && <NotificationCenterConfigTab />}
-    </div>
-  );
-}
+      {/* ── Webhooks ────────────────────────────────────────────────────────────── */}
+      <SectionDivider label="Webhooks" icon={Webhook} />
+      <WebhookManagerTab onMessage={fwd} />
 
-function QuickLink({ icon: Icon, title, description, color, iconColor, onClick }: {
-  icon: React.ElementType; title: string; description: string; color: string; iconColor: string; onClick: () => void;
-}) {
-  return (
-    <button onClick={onClick}
-      className={`flex items-start gap-4 p-5 rounded-xl border text-left transition-all hover:shadow-md ${color}`}>
-      <Icon className={`w-6 h-6 ${iconColor} shrink-0 mt-0.5`} />
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-900 dark:text-white">{title}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</p>
-      </div>
-      <ArrowRight className="w-4 h-4 text-gray-400 shrink-0 mt-1" />
-    </button>
+      {/* ── Feature Flags ─────────────────────────────────────────────────────── */}
+      <SectionDivider label="Feature Flags" icon={Flag} />
+      <FeatureFlagsTab onMessage={fwd} />
+
+      {/* ── Notification Center ──────────────────────────────────────────────── */}
+      <SectionDivider label="Notification Center" icon={Bell} />
+      <NotificationCenterConfigTab />
+    </div>
   );
 }
