@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Shield,
   ShieldOff,
@@ -227,7 +227,7 @@ export default function IPRulesTab({ onMessage }: Props) {
           { label: 'Allow Rules', count: activeAllowCount, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', dot: 'bg-green-500', icon: Shield },
           { label: 'Block Rules', count: activeBlockCount, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', dot: 'bg-red-500', icon: ShieldOff },
           { label: 'Inactive', count: inactiveCount, color: 'text-gray-500 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800', dot: 'bg-gray-300', icon: ToggleLeft },
-        ].map(({ label, count, color, bg, dot, icon: Icon }) => (
+        ].map(({ label, count, color, bg, dot }) => (
           <div key={label} className={`${bg} rounded-xl p-4 border border-gray-100 dark:border-gray-700`}>
             <div className="flex items-center gap-2 mb-1">
               <span className={`w-2 h-2 rounded-full ${dot}`} />

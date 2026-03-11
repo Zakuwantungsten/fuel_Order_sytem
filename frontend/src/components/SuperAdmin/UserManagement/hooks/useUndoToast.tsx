@@ -66,7 +66,7 @@ export function useUndoToast() {
           // Auto-commit when toast closes (timeout expired and user didn't click undo)
           if (pendingRef.current?.toastId === toastId) {
             clearPending();
-            onCommit().catch(() => {});
+            Promise.resolve(onCommit()).catch(() => {});
           }
         },
       }

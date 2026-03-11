@@ -143,7 +143,7 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
             {section === 'data' && <DataManagementTab user={user} showMessage={showMessage} />}
             {section === 'users' && <UserSupportTab user={user} showMessage={showMessage} />}
             {section === 'fuel_stations' && <FuelStationsTab onMessage={showMessage} />}
-            {section === 'fuel_prices' && <FuelPriceTab onMessage={showMessage} />}
+            {section === 'fuel_prices' && <FuelPriceTab onMessage={(msg, type) => showMessage(type === 'info' ? 'success' : (type ?? 'success'), msg)} />}
             {section === 'routes' && <RoutesTab onMessage={showMessage} />}
             {section === 'reports' && <BasicReportsTab user={user} showMessage={showMessage} />}
           </>

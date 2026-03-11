@@ -1,21 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   GitCompare,
   History,
   Loader2,
   Search,
-  Filter,
   ChevronLeft,
   ChevronRight,
   User,
   Clock,
-  Tag,
   Plus,
   Minus,
   Edit3,
   AlertTriangle,
-  CheckCircle,
-  X,
 } from 'lucide-react';
 import { configDiffService, ConfigChangeEntry } from '../../services/configDiffService';
 

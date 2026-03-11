@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, X } from 'lucide-react';
-import { FuelRecord, LPOEntry } from '../types';
+import { Search, Plus, Download, Edit, Trash2, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { FuelRecord } from '../types';
 import { fuelRecordsAPI, configAPI, StandardAllocations } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
@@ -119,7 +119,7 @@ const FuelRecords = () => {
     } catch { /* ignore */ }
   }, [selectedMonth]);
   
-  const [searchParams] = useSearchParams();
+  const [_searchParams] = useSearchParams();
   
   // Pagination state (server-side)
   const [currentPage, setCurrentPage] = useState(1);
@@ -136,7 +136,7 @@ const FuelRecords = () => {
   const routeFrom = routeFilter ? (routeTypeFilter === 'EXPORT' ? routeFilter.split('-')[0] : undefined) : undefined;
   const routeTo = routeFilter ? (routeTypeFilter === 'IMPORT' ? routeFilter.split('-')[1] : undefined) : undefined;
 
-  const { data: recordsData, isLoading: loading, isFetching } = useFuelRecordsList({
+  const { data: recordsData, isLoading: loading } = useFuelRecordsList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,

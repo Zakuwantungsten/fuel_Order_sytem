@@ -80,7 +80,7 @@ const YardFuel: React.FC = () => {
       await yardFuelService.create({
         ...formData,
         truckNo: formatTruckNumber(formData.truckNo),
-        ...(user?.yard ? { yard: user.yard } : {}),
+        ...(user?.yard ? { yard: user.yard as "DAR YARD" | "TANGA YARD" | "MMSA YARD" } : {}),
       });
       
       toast.success('Fuel dispense recorded successfully!');

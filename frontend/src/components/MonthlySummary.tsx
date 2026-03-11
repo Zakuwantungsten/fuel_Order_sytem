@@ -116,8 +116,8 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
             // Format: D-Mon (e.g., "13-Jan")
             month = parts[1];
             // Try to infer year from order.createdAt or assume current year
-            if (o.createdAt) {
-              year = new Date(o.createdAt).getFullYear();
+            if ((o as any).createdAt) {
+              year = new Date((o as any).createdAt).getFullYear();
             }
           }
         }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GitCompare, RefreshCw, AlertTriangle, Loader2, Plus, ChevronDown, ChevronRight, Camera } from 'lucide-react';
+import { GitCompare, RefreshCw, AlertTriangle, Loader2, ChevronDown, ChevronRight, Camera } from 'lucide-react';
 import Pagination from '../Pagination';
 import apiClient from '../../services/api';
 

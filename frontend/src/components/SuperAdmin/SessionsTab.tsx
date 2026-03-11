@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Users,
   LogOut,
@@ -10,7 +10,6 @@ import {
   Activity,
   ShieldAlert,
   AlertTriangle,
-  X,
   Zap,
 } from 'lucide-react';
 import { sessionService, ActiveSession } from '../../services/sessionService';

@@ -146,7 +146,7 @@ function MaintenancePage({ message, onLogout }: { message: string; onLogout: () 
 
 // App content with authentication
 function AppContent() {
-  const { isAuthenticated, isLoading, isRestoringSession, user, logout, clearMustChangePassword } = useAuth();
+  const { isAuthenticated, isRestoringSession, user, logout, clearMustChangePassword } = useAuth();
 
   const [maintenanceMode, setMaintenanceMode] = useState<{
     enabled: boolean;

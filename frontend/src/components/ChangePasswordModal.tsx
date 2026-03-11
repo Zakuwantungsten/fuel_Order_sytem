@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Eye, EyeOff, Key, Lock, Check, AlertCircle } from 'lucide-react';
+import { X, Eye, EyeOff, Lock, Check, AlertCircle } from 'lucide-react';
 import { authAPI } from '../services/api';
 
 interface ChangePasswordModalProps {

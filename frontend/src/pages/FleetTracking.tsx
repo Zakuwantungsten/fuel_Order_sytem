@@ -230,7 +230,6 @@ const FleetTracking = () => {
 
       const data = uploadResponse.data?.data;
       const totalTrucks = data?.totalTrucks || 0;
-      const fleetGroups = data?.fleetGroups || 0;
       const newSnapshotId = data?.snapshotId;
 
       // Stage 2: fetch only the updated snapshot list (skip re-fetching checkpoints)

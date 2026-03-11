@@ -58,7 +58,7 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
     const loadStations = async () => {
       setLoadingStations(true);
       try {
-        const stations = await configService.getFuelStations();
+        const stations = await configService.getStations();
         setAvailableStations(stations);
       } catch (error) {
         console.error('Error loading fuel stations:', error);

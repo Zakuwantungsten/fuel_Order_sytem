@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../../../../services/api';
 import { PRIVILEGE_STATUS_CONFIG } from '../constants';
-import type { PrivilegeRequest, PrivilegeStatus } from '../types';
+import type { PrivilegeRequest } from '../types';
 import StatCard from './StatCard';
 import AccessibleModal from './AccessibleModal';
 import RoleBadge from './RoleBadge';

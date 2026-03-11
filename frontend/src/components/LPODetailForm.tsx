@@ -462,7 +462,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const needsUpdate = formData.entries.some(entry => entry.rate !== newRate);
     if (!needsUpdate) return;
 
-    const updatedEntries = formData.entries.map((entry, idx) => {
+    const updatedEntries = formData.entries.map((entry, _idx) => {
       const liters = entry.liters || 0;
       return {
         ...entry,

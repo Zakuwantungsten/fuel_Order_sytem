@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Shield, RefreshCw, CheckCircle, AlertTriangle, XCircle,
   Loader2, ChevronDown, ChevronRight, ClipboardCheck,
-  TrendingUp, AlertOctagon,
+  AlertOctagon,
 } from 'lucide-react';
 
 /* ───────── Types ───────── */

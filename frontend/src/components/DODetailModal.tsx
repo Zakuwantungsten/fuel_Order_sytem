@@ -1,4 +1,4 @@
-import { X, Printer, Edit, Ban, Download } from 'lucide-react';
+import { X, Edit, Ban, Download } from 'lucide-react';
 import { formatDate as formatSystemDate } from '../utils/timezone';
 import { DeliveryOrder } from '../types';
 import DeliveryNotePrint from './DeliveryNotePrint';
@@ -43,7 +43,7 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
       
       // Download PDF from backend with authentication
       const response = await axios.get(
-        `${API_BASE_URL}/delivery-orders/${order._id}/pdf`,
+        `${API_BASE_URL}/delivery-orders/${order.id}/pdf`,
         {
           responseType: 'blob',
           withCredentials: true,

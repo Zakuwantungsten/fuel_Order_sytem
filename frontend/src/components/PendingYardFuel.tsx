@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Truck, AlertTriangle, X, CheckCircle } from 'lucide-react';
 import { yardFuelService } from '../services/yardFuelService';
 import { toast } from 'react-toastify';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Key, RefreshCw, AlertTriangle, Loader2, User, Shield, Clock, Activity, Truck } from 'lucide-react';
+import { Key, RefreshCw, AlertTriangle, Loader2, Shield, Clock, Activity, Truck } from 'lucide-react';
 import apiClient from '../../services/api';
 import Pagination from '../Pagination';
 
@@ -107,7 +107,7 @@ export const DriverCredentialManagerEnhancedTab: React.FC = () => {
             <p className="text-sm text-gray-500 dark:text-gray-400">Enhanced view of driver accounts, login status, and access control</p>
           </div>
         </div>
-        <button onClick={fetchData} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
+        <button onClick={() => fetchData()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowRight, Loader2 } from 'lucide-react';
+import { X, ArrowRight } from 'lucide-react';
 import { FuelStationConfig } from '../types';
 import { configService } from '../services/configService';
 
@@ -30,7 +30,7 @@ const StationSelectorModal: React.FC<StationSelectorModalProps> = ({
     const loadStations = async () => {
       setLoadingStations(true);
       try {
-        const stations = await configService.getFuelStations();
+        const stations = await configService.getStations();
         setAvailableStations(stations);
       } catch (error) {
         console.error('Error loading fuel stations:', error);

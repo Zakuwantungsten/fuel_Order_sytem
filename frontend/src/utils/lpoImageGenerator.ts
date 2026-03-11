@@ -63,7 +63,6 @@ export const generateLPOImage = async (data: LPOSummary, preparedBy?: string, ap
   try {
     // Get the actual dimensions of the element
     const elementHeight = element.scrollHeight;
-    const elementWidth = element.scrollWidth;
     
     const canvas = await html2canvas(element, {
       scale: 2, // Higher quality
@@ -142,7 +141,6 @@ export const downloadLPOPDF = async (data: LPOSummary, filename?: string, prepar
   try {
     // Get the actual dimensions of the element
     const elementHeight = element.scrollHeight;
-    const elementWidth = element.scrollWidth;
     
     const canvas = await html2canvas(element, {
       scale: 2,

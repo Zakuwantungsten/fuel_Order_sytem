@@ -106,6 +106,7 @@ export const CANCELLATION_POINT_TO_FUEL_FIELD: Record<CancellationPoint, string>
   'DAR_GOING': 'darGoing',
   'MORO_GOING': 'moroGoing',
   'MBEYA_GOING': 'mbeyaGoing',
+  'INFINITY_GOING': 'mbeyaGoing',
   'TDM_GOING': 'tdmGoing',
   'ZAMBIA_GOING': 'zambiaGoing',
   'CONGO_GOING': 'congoFuel',        // Congo (Going) maps to congoFuel column

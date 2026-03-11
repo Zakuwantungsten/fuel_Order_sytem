@@ -497,38 +497,16 @@ export class FuelConfigService {
   }
 
   /**
-   * Check if two location names match with fuzzy logic
-   * Matches if the strings are at least 50% similar (allowing for typos/variations)
-   */
-  private static isFuzzyMatch(input: string, target: string, threshold: number = 0.5): boolean {
-    const inputClean = input.toUpperCase().trim();
-    const targetClean = target.toUpperCase().trim();
-    
-    // Exact match
-    if (inputClean === targetClean) return true;
-    
-    // Contains match
-    if (inputClean.includes(targetClean) || targetClean.includes(inputClean)) return true;
-    
-    // Levenshtein distance match (allow variations)
-    const maxLength = Math.max(inputClean.length, targetClean.length);
-    const distance = this.levenshteinDistance(inputClean, targetClean);
-    const similarity = 1 - (distance / maxLength);
-    
-    return similarity >= threshold;
-  }
-
-  /**
    * DEPRECATED: Loading point and destination extras are now managed via database
    * Use RouteConfig with destination-specific rules configured in admin panel
    * These methods kept for backward compatibility but return 0
    */
-  static getLoadingPointExtraFuel(loadingPoint: string, config?: FuelConfig): number {
+  static getLoadingPointExtraFuel(_loadingPoint: string, _config?: FuelConfig): number {
     console.warn('⚠️ getLoadingPointExtraFuel is deprecated. Configure extras via admin panel RouteConfig.');
     return 0; // All extras now managed via database
   }
 
-  static getDestinationExtraFuel(destination: string, config?: FuelConfig): number {
+  static getDestinationExtraFuel(_destination: string, _config?: FuelConfig): number {
     console.warn('⚠️ getDestinationExtraFuel is deprecated. Configure extras via admin panel RouteConfig.');
     return 0; // All extras now managed via database
   }
@@ -550,7 +528,8 @@ export class FuelConfigService {
   }> {
     try {
       // Fetch routes from database (optionally filtered by routeType)
-      const dbRoutes = await configService.getRoutes(routeType);
+      const allRoutes = await configService.getRoutes();
+      const dbRoutes = routeType ? allRoutes.filter(r => r.routeType === routeType) : allRoutes;
       const orig = origin?.toUpperCase().trim() || '';
       const dest = destination?.toUpperCase().trim() || '';
       

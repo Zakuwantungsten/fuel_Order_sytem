@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Plus, X, FileSpreadsheet, Trash2, 
-  Copy, User, AlertTriangle, FileDown, Search,
-  Calendar, Fuel, DollarSign, ChevronDown, Truck, MapPin, CreditCard, Image, Download, Check, MessageSquare, Loader2
+  Copy, User, AlertTriangle, FileDown,
+  Calendar, ChevronDown, Truck, MapPin, CreditCard, Image, Download, Check, MessageSquare, Loader2
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary, FuelStationConfig } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
-import { configService } from '../services/configService';
-import { useActiveFuelStations, getActiveStations, fuelStationKeys } from '../hooks/useFuelStations';
+import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
@@ -32,7 +31,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedEntries, setSelectedEntries] = useState<Set<string | number>>(new Set());
+  const [, setSelectedEntries] = useState<Set<string | number>>(new Set());
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const [stationFilter, setStationFilter] = useState('');
@@ -227,22 +226,6 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     } catch (error) {
       console.error('Error deleting entry:', error);
       alert('Failed to delete entry. Please try again.');
-    }
-  };
-
-  const deleteSelectedEntries = async () => {
-    if (!workbook || selectedEntries.size === 0) return;
-    if (!window.confirm(`Delete ${selectedEntries.size} selected entries?`)) return;
-
-    try {
-      for (const entryId of selectedEntries) {
-        await driverAccountAPI.delete(String(entryId));
-      }
-      await loadWorkbook();
-      setSelectedEntries(new Set());
-    } catch (error) {
-      console.error('Error deleting entries:', error);
-      alert('Failed to delete some entries. Please try again.');
     }
   };
 
@@ -1247,7 +1230,7 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
   // Load stations from database using React Query
   const queryClient = useQueryClient();
   const { data: fuelStations, isLoading: loadingStations } = useActiveFuelStations();
-  const availableStations = fuelStations || [];
+  const availableStations: FuelStationConfig[] = fuelStations || [];
 
   // Real-time sync: invalidate React Query cache when stations change
   const invalidateStations = useCallback(() => {

@@ -15,14 +15,12 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
-  Check,
   X,
   Loader2,
   Network,
   Clock,
   UserCheck,
   Globe,
-  Lock,
 } from 'lucide-react';
 
 /* ───────── Types ───────── */

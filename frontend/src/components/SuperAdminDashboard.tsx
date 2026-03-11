@@ -2,18 +2,14 @@ import { useState, useEffect } from 'react';
 import {
   BarChart3,
   Users,
-  Settings,
   FileSearch,
   ChevronRight,
   Database,
   Activity,
-  Trash2,
   RefreshCw,
   AlertTriangle,
   CheckCircle,
   X,
-  Plus,
-  Download,
   Shield,
   TrendingUp,
   TrendingDown,
@@ -56,7 +52,7 @@ interface SuperAdminDashboardProps {
   onNavigate?: (section: string) => void;
 }
 
-export default function SuperAdminDashboard({ user, section = 'overview', onNavigate }: SuperAdminDashboardProps) {
+export default function SuperAdminDashboard({ section = 'overview', onNavigate }: SuperAdminDashboardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -234,11 +230,11 @@ export default function SuperAdminDashboard({ user, section = 'overview', onNavi
             {/* ip_rules and sessions merged into 'security' tab */}
             {/* config_diff merged into 'system' tab */}
             {section === 'fuel_prices' && (
-              <FuelPriceTab onMessage={showMessage} />
+              <FuelPriceTab onMessage={(msg, type) => showMessage(type === 'info' ? 'success' : (type ?? 'success'), msg)} />
             )}
             {/* cron_jobs merged into 'system' tab */}
             {section === 'data_export' && (
-              <DataExportTab onMessage={showMessage} />
+              <DataExportTab onMessage={(msg, type) => showMessage(type === 'info' ? 'success' : (type ?? 'success'), msg)} />
             )}
             {/* feature_flags, maintenance, webhooks, rate_limits merged into 'system' tab */}
             {/* activity_heatmap merged into 'monitoring' tab */}

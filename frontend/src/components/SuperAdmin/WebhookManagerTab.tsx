@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Webhook as WebhookIcon, Plus, Trash2, RefreshCw, Play, Eye, EyeOff,
+  Webhook as WebhookIcon, Plus, Trash2, RefreshCw, Play, Eye,
   CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp, RotateCcw, X,
 } from 'lucide-react';
 import webhookService, { Webhook } from '../../services/webhookService';

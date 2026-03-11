@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import {
-  FileText, 
   Fuel, 
   ClipboardList, 
   BarChart3, 
@@ -32,18 +31,9 @@ import {
   Building2,
   Receipt,
   FileUp,
-  Network,
-  ShieldAlert,
   Download,
-  Zap,
   HardDrive,
-  Bell,
-  Mail,
   ShieldCheck,
-  Radar,
-  Server,
-  ShieldBan,
-  KeyRound,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
@@ -158,7 +148,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [showPendingYardFuel, setShowPendingYardFuel] = useState(false);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [editDoId, setEditDoId] = useState<string | null>(null);
-  const [highlightParam, setHighlightParam] = useState<string | null>(null);
+  const [, setHighlightParam] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { logout, toggleTheme, isDark } = useAuth();
 

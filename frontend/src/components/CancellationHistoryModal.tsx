@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatDate as formatSystemDate } from '../utils/timezone';
-import { X, Clock, Copy, Trash2, AlertTriangle, Search, Calendar } from 'lucide-react';
+import { X, Clock, Copy, Trash2, AlertTriangle, Search } from 'lucide-react';
 import { CancellationReport } from '../types';
 import { getCancellationHistory, clearCancellationHistory } from '../services/cancellationService';
 

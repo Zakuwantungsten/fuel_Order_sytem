@@ -4,7 +4,6 @@ import {
   FileText, 
   Receipt, 
   Fuel,
-  Truck,
   MapPin,
   X,
   Users,
@@ -222,7 +221,7 @@ const Layout = ({ children }: LayoutProps) => {
                     className={`w-5 h-5 object-contain flex-shrink-0 ${shouldShowText ? 'mr-3' : ''}`}
                   />
                 ) : (
-                  <Icon className={`w-5 h-5 ${shouldShowText ? 'mr-3' : ''} flex-shrink-0`} />
+                  Icon ? <Icon className={`w-5 h-5 ${shouldShowText ? 'mr-3' : ''} flex-shrink-0`} /> : null
                 )}
                 {shouldShowText && (
                   <span className="font-medium whitespace-nowrap overflow-hidden">

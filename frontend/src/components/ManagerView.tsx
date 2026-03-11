@@ -2,14 +2,12 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Search, 
   Filter, 
-  Calendar, 
   Fuel, 
   FileText, 
   Truck,
   MapPin,
   DollarSign,
   RefreshCw,
-  Download,
   Eye,
   Building2,
   TrendingUp,
@@ -20,8 +18,6 @@ import {
   Sun,
   Moon,
   LogOut,
-  Wifi,
-  WifiOff,
   Check,
   Key,
   User
@@ -34,8 +30,6 @@ import ChangePasswordModal from './ChangePasswordModal';
 import NotificationBell from './NotificationBell';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
-
-import XLSX from 'xlsx-js-style';
 
 // All valid fuel stations (excluding CASH)
 const ALL_STATIONS = [
@@ -101,9 +95,9 @@ export function ManagerView({ user }: ManagerViewProps) {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<LPODisplayEntry | null>(null);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [, setIsOnline] = useState(navigator.onLine);
+  const [, setLastUpdated] = useState<Date | null>(null);
+  const [, setIsRefreshing] = useState(false);
   
   // Custom dropdown states
   const [showStationDropdown, setShowStationDropdown] = useState(false);
@@ -386,31 +380,6 @@ export function ManagerView({ user }: ManagerViewProps) {
     
     return { totalLPOs, uniqueLPONos, totalLiters, totalAmount, uniqueTrucks, byStation };
   }, [filteredEntries]);
-
-  // Export to Excel
-  const handleExport = () => {
-    const exportData = filteredEntries.map((entry, index) => ({
-      'S/No.': index + 1,
-      'Date': entry.date,
-      'LPO No.': entry.lpoNo,
-      'Diesel @': entry.dieselAt,
-      'DO/SDI': entry.doSdo,
-      'Truck No.': entry.truckNo,
-      'Ltrs': entry.ltrs,
-      'Price per Ltr': entry.pricePerLtr,
-      'Destinations': entry.destinations,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'LPO Summary');
-    
-    const filename = isSuperManager 
-      ? `LPO_Summary_All_Stations.xlsx`
-      : `LPO_Summary_${userStation}.xlsx`;
-    
-    XLSX.writeFile(wb, filename.replace(/\s+/g, '_'));
-  };
 
   // Loading state
   if (loading) {

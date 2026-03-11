@@ -88,7 +88,7 @@ const LPOs = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
-  const [searchParams] = useSearchParams();
+  const [_searchParams] = useSearchParams();
   const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account'] as const;
   type ViewMode = typeof VIEW_MODES[number];
   const [viewMode, setViewMode] = usePersistedState<ViewMode>('lpo:viewMode', 'list');
@@ -959,7 +959,6 @@ const LPOs = () => {
 
   // Calculate totals for display
   const totalLiters = orders.reduce((sum, lpo) => sum + lpo.ltrs, 0);
-  const totalAmount = orders.reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
   const totalAmountTZS = orders
     .filter(lpo => { const u = (lpo.dieselAt || '').toUpperCase(); return !(u.startsWith('LAKE') && !u.includes('TUNDUMA')); })
     .reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);

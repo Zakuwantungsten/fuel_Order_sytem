@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, LogIn, User, Lock, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, LogIn, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { MFAVerification } from './MFAVerification';
 import { MFASetupLogin } from './MFASetupLogin';

@@ -11,7 +11,6 @@ import {
   ReportStats,
   LoginCredentials,
   AuthUser,
-  AuthResponse,
   User,
   YardFuelDispense
 } from '../types';
@@ -255,6 +254,7 @@ export const deliveryOrdersAPI = {
       wasAlreadyLinked?: boolean;
       previousGoingJourney?: { from: string; to: string };
       suggestion?: string;
+      fuelUpdates?: { originalTotalLts: number; exportRouteLiters: number; newTotalLts: number };
     };
   }> => {
     const response = await apiClient.post(`/delivery-orders/${id}/relink-to-fuel-record`);
@@ -1804,6 +1804,7 @@ export const configAPI = {
     fuelRecordFieldReturning?: string;
     formulaGoing?: string;
     formulaReturning?: string;
+    currency?: 'USD' | 'TZS';
   }) => {
     const response = await apiClient.post('/system-config/stations', data);
     return response.data;

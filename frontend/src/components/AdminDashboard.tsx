@@ -403,7 +403,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
                 )}
                 {activeTab === 'pending' && <PendingConfigurations />}
                 {activeTab === 'fuel_prices' && (
-                  <FuelPriceTab onMessage={(msg, type) => showMessage(type ?? 'success', msg)} />
+                  <FuelPriceTab onMessage={(msg, type) => showMessage(type === 'info' ? 'success' : (type ?? 'success'), msg)} />
                 )}
                 {activeTab === 'users' && (
                   <>

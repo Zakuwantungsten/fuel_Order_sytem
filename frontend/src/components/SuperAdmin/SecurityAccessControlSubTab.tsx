@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Shield, Network, Key, KeyRound, Loader2,
-  ShieldBan, Ban, RefreshCw,
+  ShieldBan, Ban,
 } from 'lucide-react';
 import IPRulesTab from './IPRulesTab';
 import SecurityBlocklistTab from './SecurityBlocklistTab';

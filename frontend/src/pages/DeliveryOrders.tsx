@@ -71,8 +71,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const { addAmendedDO, count: amendedDOsCount } = useAmendedDOs();
   
   // React Query hooks - Replace localStorage with API
-  const { data: truckBatches } = useTruckBatches();
-  const { data: routes } = useRoutes();
+  useTruckBatches();
+  useRoutes();
 
   // --- React Query: server-side paginated orders ---
   const dateRange = periodsToDateRange(selectedPeriods);
@@ -548,10 +548,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedOrder(null);
-  };
-
-  const handlePrintOrder = () => {
-    window.print();
   };
 
   const handleNewDO = () => {

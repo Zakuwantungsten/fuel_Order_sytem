@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText, Trash2 } from 'lucide-react';
 import api from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
 import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, subscribeToSessionEvents, unsubscribeFromSessionEvents, subscribeToReconnect, unsubscribeFromReconnect, subscribeToDataChanges, unsubscribeFromDataChanges } from '../services/websocket';
 
 // Convert URL-safe base64 VAPID key to Uint8Array required by pushManager.subscribe
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
@@ -62,7 +61,6 @@ const getNotificationId = (notification: Notification): string => {
 };
 
 export default function NotificationBell({ onNotificationClick, onEditDO, onRelinkDO, onViewPendingYardFuel, onViewAllNotifications }: NotificationBellProps) {
-  const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);

@@ -9,10 +9,9 @@ import {
   User as UserIcon,
   Briefcase,
   Shield,
-  Loader2
 } from 'lucide-react';
 import { usersAPI } from '../services/api';
-import { UserRole, FuelStationConfig } from '../types';
+import { UserRole } from '../types';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { configService } from '../services/configService';
 
