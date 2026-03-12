@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { DeliveryOrder } from '../types';
+import logoUrl from '../assets/logo.png';
 import { cleanDriverName } from '../utils/dataCleanup';
 import { formatDateOnly } from '../utils/timezone';
 
@@ -273,45 +273,11 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
   );
 };
 
-// Logo component with fallback and watermark support
+// Logo component with watermark support
 const LogoComponent = ({ size = 80, isWatermark = false }: { size?: number; isWatermark?: boolean }) => {
-  const [logoError, setLogoError] = useState(false);
-  
-  // Try multiple logo paths for the PNG file
-  const logoSources = [
-    '/assets/logo.png',
-    './assets/logo.png',
-    '../assets/logo.png',
-    '/frontend/assets/logo.png'
-  ];
-  
-  const [currentLogoIndex, setCurrentLogoIndex] = useState(0);
-  
-  if (logoError && currentLogoIndex >= logoSources.length) {
-    return (
-      <div 
-        style={{ 
-          width: isWatermark ? `${size}px` : '100%',
-          height: isWatermark ? `${size}px` : '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center', 
-          fontSize: isWatermark ? '24px' : '14px', 
-          fontWeight: 'bold', 
-          color: '#E67E22', 
-          lineHeight: '1.2',
-          background: 'white'
-        }}
-      >
-        TAHMEED<br/>LOGO
-      </div>
-    );
-  }
-
   return (
     <img 
-      src={logoSources[currentLogoIndex]} 
+      src={logoUrl} 
       alt="Tahmeed Logo" 
       style={{ 
         width: isWatermark ? `${size}px` : '100%',
@@ -320,15 +286,6 @@ const LogoComponent = ({ size = 80, isWatermark = false }: { size?: number; isWa
         background: 'white',
         display: 'block'
       }}
-      onError={(e) => {
-        console.error(`Logo failed to load from: ${e.currentTarget.src}`);
-        if (currentLogoIndex < logoSources.length - 1) {
-          setCurrentLogoIndex(prev => prev + 1);
-        } else {
-          setLogoError(true);
-        }
-      }} 
-      onLoad={() => console.log('Logo loaded successfully from:', logoSources[currentLogoIndex])}
     />
   );
 };

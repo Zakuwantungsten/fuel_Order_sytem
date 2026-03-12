@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { DeliveryOrder } from '../types';
+import logoUrl from '../assets/logo.png';
 import { cleanDriverName } from '../utils/dataCleanup';
 import { formatDateOnly } from '../utils/timezone';
 import { useAuth } from '../contexts/AuthContext';
@@ -250,40 +250,13 @@ const DOSheetView = ({ order, preparedBy }: DOSheetViewProps) => {
   );
 };
 
-// Logo component with fallback
+// Logo component
 const LogoComponent = () => {
-  const [logoError, setLogoError] = useState(false);
-  
-  // Try multiple logo paths for the PNG file
-  const logoSources = [
-    '/assets/logo.png',
-    './assets/logo.png',
-    '../assets/logo.png',
-    '/frontend/assets/logo.png'
-  ];
-  
-  const [currentLogoIndex, setCurrentLogoIndex] = useState(0);
-  
-  if (logoError && currentLogoIndex >= logoSources.length) {
-    return (
-      <div className="w-full h-full flex items-center justify-center text-center text-sm font-bold text-orange-600 leading-tight">
-        TAHMEED<br/>LOGO
-      </div>
-    );
-  }
-
   return (
     <img 
-      src={logoSources[currentLogoIndex]} 
+      src={logoUrl} 
       alt="Tahmeed Logo" 
-      className="w-full h-full object-contain" 
-      onError={() => {
-        if (currentLogoIndex < logoSources.length - 1) {
-          setCurrentLogoIndex(prev => prev + 1);
-        } else {
-          setLogoError(true);
-        }
-      }}
+      className="w-full h-full object-contain"
     />
   );
 };
