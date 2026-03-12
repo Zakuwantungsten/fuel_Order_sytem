@@ -973,7 +973,12 @@ export const setupMFAEmailSend = async (req: AuthRequest, res: Response): Promis
     }
 
     // Send email OTP
-    await mfaService.sendEmailOTP(userId, user.email);
+    try {
+      await mfaService.sendEmailOTP(userId, user.email);
+    } catch (emailErr: any) {
+      logger.error(`Failed to send MFA setup email OTP for user ${userId}: ${emailErr.message}`);
+      throw new ApiError(503, 'Failed to send verification code email. Please try again or contact support.');
+    }
 
     res.status(200).json({
       success: true,

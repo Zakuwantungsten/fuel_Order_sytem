@@ -7,6 +7,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { AuditService } from '../utils/auditService';
 import LoginActivity from '../models/LoginActivity';
 import crypto from 'crypto';
+import logger from '../utils/logger';
 
 /**
  * @route   GET /api/mfa/status
@@ -475,8 +476,13 @@ export const sendLoginOTP = asyncHandler(async (req: AuthRequest, res: Response)
 
   if (method === 'email') {
     // Email OTP is always available as a fallback for any MFA-enabled user
-    await mfaService.sendEmailOTP(userId, user.email);
-    res.json({ success: true, message: 'Code sent to your email' });
+    try {
+      await mfaService.sendEmailOTP(userId, user.email);
+      res.json({ success: true, message: 'Code sent to your email' });
+    } catch (emailErr: any) {
+      logger.error(`Failed to send email OTP to user ${userId}: ${emailErr.message}`);
+      res.status(503).json({ success: false, message: 'Failed to send verification code. Please use the authenticator app instead, or contact support.' });
+    }
   } else if (method === 'sms' && mfa.smsEnabled) {
     await mfaService.sendSMSOTP(userId, mfa.phoneNumber);
     res.json({ success: true, message: 'Code sent via SMS' });

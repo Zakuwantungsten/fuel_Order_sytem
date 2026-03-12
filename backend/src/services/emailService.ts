@@ -106,15 +106,27 @@ class EmailService {
           port: config.port,
           secure: config.secure,
           auth: config.auth,
+          requireTLS: !config.secure, // force STARTTLS upgrade on port 587
           // Explicit timeouts — without these, SMTP connections in cloud environments
           // (Railway, Heroku, etc.) can hang for several minutes before failing
           connectionTimeout: 10000,  // 10s to establish TCP connection
           greetingTimeout: 10000,    // 10s for SMTP server greeting
           socketTimeout: 30000,      // 30s for any single socket operation
+          tls: {
+            // Keep cert validation on; log clearly if it's a cert issue
+            rejectUnauthorized: true,
+          },
         });
         this.currentConfig = config;
         this.isConfigured = true;
-        logger.info('Email service initialized successfully');
+        // Probe the connection immediately so Railway logs surface SMTP errors at startup
+        try {
+          await this.transporter.verify();
+          logger.info(`Email service verified OK (${config.host}:${config.port} secure=${config.secure})`);
+        } catch (verifyErr: any) {
+          logger.error(`Email service SMTP verify failed (${config.host}:${config.port}): ${verifyErr.message}`);
+          // Keep isConfigured=true so send attempts still run (and give their own errors)
+        }
       } catch (error) {
         logger.error('Failed to initialize email service:', error);
         this.isConfigured = false;
