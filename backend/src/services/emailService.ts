@@ -101,7 +101,17 @@ class EmailService {
     // Only initialize if credentials are provided
     if (config.auth.user && config.auth.pass) {
       try {
-        this.transporter = nodemailer.createTransport(config);
+        this.transporter = nodemailer.createTransport({
+          host: config.host,
+          port: config.port,
+          secure: config.secure,
+          auth: config.auth,
+          // Explicit timeouts — without these, SMTP connections in cloud environments
+          // (Railway, Heroku, etc.) can hang for several minutes before failing
+          connectionTimeout: 10000,  // 10s to establish TCP connection
+          greetingTimeout: 10000,    // 10s for SMTP server greeting
+          socketTimeout: 30000,      // 30s for any single socket operation
+        });
         this.currentConfig = config;
         this.isConfigured = true;
         logger.info('Email service initialized successfully');
@@ -487,9 +497,13 @@ class EmailService {
     subject: string,
     message: string
   ): Promise<void> {
+    // Lazy reinit — covers the async startup race and post-startup SMTP configuration
     if (!this.isConfigured || !this.transporter) {
-      logger.warn('Email service not configured - skipping notification');
-      return;
+      await this.reinitialize();
+    }
+    if (!this.isConfigured || !this.transporter) {
+      logger.warn('Email service not configured - cannot send notification');
+      throw new Error('Email service is not configured');
     }
 
     try {
@@ -507,12 +521,14 @@ class EmailService {
       logger.info(`Notification email sent: ${subject}`);
     } catch (error) {
       logger.error('Failed to send notification email:', error);
+      throw error;
     }
   }
 
   /**
    * Test email configuration
    */
+
   async testConnection(): Promise<boolean> {
     if (!this.isConfigured || !this.transporter) {
       return false;
@@ -599,6 +615,9 @@ class EmailService {
    * Send password reset by admin email
    */
   async sendPasswordResetByAdminEmail(email: string, name: string, username: string, temporaryPassword: string): Promise<void> {
+    if (!this.isConfigured || !this.transporter) {
+      await this.reinitialize();
+    }
     if (!this.isConfigured || !this.transporter) {
       logger.warn('Email service not configured - cannot send password reset email');
       throw new Error('Email service is not configured');
