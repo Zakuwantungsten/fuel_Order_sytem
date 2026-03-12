@@ -41,6 +41,10 @@ class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private isConfigured: boolean = false;
   private currentConfig: EmailConfig | null = null;
+  private resendApiKey: string | null = null;
+  private brevoApiKey: string | null = null;
+  private mailjetApiKey: string | null = null;
+  private mailjetApiSecret: string | null = null;
 
   constructor() {
     this.initialize();
@@ -95,9 +99,173 @@ class EmailService {
     };
   }
 
+  /**
+   * Send via Resend HTTP API or SMTP transporter.
+   * Resend is preferred when RESEND_API_KEY is set — it uses HTTPS (port 443)
+   * which works from any cloud platform including Railway.
+   */
+  private async dispatchMail(options: {
+    from: string;
+    to: string | string[];
+    subject: string;
+    html: string;
+    priority?: string;
+  }): Promise<void> {
+    const toArray = Array.isArray(options.to) ? options.to : [options.to];
+
+    if (this.mailjetApiKey && this.mailjetApiSecret) {
+      // Use Mailjet HTTP API — no custom domain required, just a verified sender email
+      const fromMatch = options.from.match(/^"?([^"<]+)"?\s*<([^>]+)>$/);
+      const senderName = fromMatch ? fromMatch[1].trim() : 'Fuel Order System';
+      const senderEmail = fromMatch ? fromMatch[2].trim() : options.from;
+
+      const body = JSON.stringify({
+        Messages: toArray.map(addr => ({
+          From: { Email: senderEmail, Name: senderName },
+          To: [{ Email: addr }],
+          Subject: options.subject,
+          HTMLPart: options.html,
+        })),
+      });
+
+      const credentials = Buffer.from(`${this.mailjetApiKey}:${this.mailjetApiSecret}`).toString('base64');
+      const response = await fetch('https://api.mailjet.com/v3.1/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/json',
+        },
+        body,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Mailjet API error ${response.status}: ${errText}`);
+      }
+      return;
+    }
+
+    if (this.brevoApiKey) {
+      // Use Brevo (Sendinblue) HTTP API — no custom domain required, just a verified sender email
+      // Parse "Name" <email> format into separate sender fields Brevo expects
+      const fromMatch = options.from.match(/^"?([^"<]+)"?\s*<([^>]+)>$/);
+      const senderName = fromMatch ? fromMatch[1].trim() : 'Fuel Order System';
+      const senderEmail = fromMatch ? fromMatch[2].trim() : options.from;
+
+      const body = JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: toArray.map(addr => ({ email: addr })),
+        subject: options.subject,
+        htmlContent: options.html,
+      });
+
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': this.brevoApiKey,
+          'Content-Type': 'application/json',
+        },
+        body,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Brevo API error ${response.status}: ${errText}`);
+      }
+      return;
+    }
+
+    if (this.resendApiKey) {
+      // Use Resend HTTP API — works from any cloud (no SMTP port needed)
+      const body = JSON.stringify({
+        from: options.from,
+        to: toArray,
+        subject: options.subject,
+        html: options.html,
+      });
+
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body,
+        signal: AbortSignal.timeout(30000), // 30s timeout
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Resend API error ${response.status}: ${errText}`);
+      }
+      return;
+    }
+
+    // Fall back to SMTP nodemailer transporter
+    if (!this.transporter) {
+      throw new Error('Email service is not configured');
+    }
+    await this.transporter.sendMail({
+      from: options.from,
+      to: toArray.join(', '),
+      subject: options.subject,
+      html: options.html,
+      ...(options.priority ? { priority: options.priority as any } : {}),
+    });
+  }
+
   private async initialize() {
     const config = await this.getEmailConfig();
 
+    // Priority 1: Mailjet — no custom domain, just verify a sender email address (email link only)
+    const mjKey = process.env.MAILJET_API_KEY || '';
+    const mjSecret = process.env.MAILJET_API_SECRET || '';
+    if (mjKey && mjSecret) {
+      this.mailjetApiKey = mjKey;
+      this.mailjetApiSecret = mjSecret;
+      this.isConfigured = true;
+      if (!config.from) {
+        config.from = config.auth.user;
+        logger.warn(`EMAIL_FROM not set — using ${config.from} as Mailjet sender. Verify this address in Mailjet: Settings → Sender addresses.`);
+      }
+      this.currentConfig = config;
+      logger.info(`Email service initialized with Mailjet HTTP API (from: ${config.from})`);
+      return;
+    }
+
+    // Priority 2: Brevo — no custom domain needed, just verify a sender email address
+    const brevoKey = process.env.BREVO_API_KEY || '';
+    if (brevoKey) {
+      this.brevoApiKey = brevoKey;
+      this.isConfigured = true;
+      // EMAIL_FROM must match a sender address verified in Brevo dashboard
+      if (!config.from) {
+        config.from = config.auth.user; // fall back to SMTP_USER as the sender address
+        logger.warn(`EMAIL_FROM not set — using ${config.from} as Brevo sender. Make sure this address is verified in your Brevo account (Senders & IPs → Senders).`);
+      }
+      this.currentConfig = config;
+      logger.info(`Email service initialized with Brevo HTTP API (from: ${config.from})`);
+      return;
+    }
+
+    // Priority 2: Resend — requires a custom domain verified in Resend dashboard
+    const resendKey = process.env.RESEND_API_KEY || '';
+    if (resendKey) {
+      this.resendApiKey = resendKey;
+      this.isConfigured = true;
+      // Read config so fromName/from address fields are still available
+      if (!config.from) {
+        config.from = 'onboarding@resend.dev';
+        logger.warn('EMAIL_FROM is not set — using onboarding@resend.dev (can only send to your own Resend account email). Set EMAIL_FROM=noreply@yourdomain.com after verifying a domain in Resend.');
+      }
+      this.currentConfig = config;
+      logger.info(`Email service initialized with Resend HTTP API (from: ${config.from})`);
+      return;
+    }
+
+    // Priority 4: SMTP (localhost only — ports blocked on most cloud platforms)
     // Only initialize if credentials are provided
     if (config.auth.user && config.auth.pass) {
       try {
@@ -229,11 +397,13 @@ class EmailService {
         </div>
       `;
 
-      await this.transporter.sendMail({
-        from: this.currentConfig?.from 
+      const fromAddr = this.currentConfig?.from
           ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
-          : `"${this.currentConfig?.fromName || 'Fuel Order System'}" <${this.currentConfig?.auth.user}>`,
-        to: recipients.join(', '),
+          : `"${this.currentConfig?.fromName || 'Fuel Order System'}" <${this.currentConfig?.auth.user}>`;
+
+      await this.dispatchMail({
+        from: fromAddr,
+        to: recipients,
         subject: `${priorityEmoji[options.priority]} [${options.priority.toUpperCase()}] ${options.subject}`,
         html: emailContent,
         priority: options.priority === 'critical' ? 'high' : 'normal',
@@ -322,10 +492,12 @@ class EmailService {
         </div>
       `;
 
-      await this.transporter.sendMail({
-        from: this.currentConfig?.from 
+      const fromAddr = this.currentConfig?.from
           ? `"${this.currentConfig.fromName} - No Reply" <${this.currentConfig.from}>`
-          : `"Fuel Order System - No Reply" <${this.currentConfig?.auth.user}>`,
+          : `"Fuel Order System - No Reply" <${this.currentConfig?.auth.user}>`;
+
+      await this.dispatchMail({
+        from: fromAddr,
         to: options.email,
         subject: '🔐 Password Reset Request - Fuel Order System',
         html: emailContent,
@@ -397,10 +569,12 @@ class EmailService {
         </div>
       `;
 
-      await this.transporter.sendMail({
-        from: this.currentConfig?.from 
+      const fromAddr = this.currentConfig?.from
           ? `"${this.currentConfig.fromName} - Security" <${this.currentConfig.from}>`
-          : `"Fuel Order System - Security" <${this.currentConfig?.auth.user}>`,
+          : `"Fuel Order System - Security" <${this.currentConfig?.auth.user}>`;
+
+      await this.dispatchMail({
+        from: fromAddr,
         to: email,
         subject: '✅ Password Changed Successfully - Fuel Order System',
         html: emailContent,
@@ -443,11 +617,13 @@ class EmailService {
 
       const emailContent = this.generateDailySummaryEmail(stats);
 
-      await this.transporter.sendMail({
-        from: this.currentConfig?.from 
+      const fromAddr = this.currentConfig?.from
           ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
-          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`,
-        to: superAdmins.map((admin) => admin.email).join(', '),
+          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`;
+
+      await this.dispatchMail({
+        from: fromAddr,
+        to: superAdmins.map((admin) => admin.email),
         subject: `📊 Daily Summary - ${new Date().toLocaleDateString()}`,
         html: emailContent,
       });
@@ -520,12 +696,13 @@ class EmailService {
 
     try {
       const recipients = Array.isArray(to) ? to : [to];
-
-      await this.transporter.sendMail({
-        from: this.currentConfig?.from 
+      const fromAddr = this.currentConfig?.from
           ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
-          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`,
-        to: recipients.join(', '),
+          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`;
+
+      await this.dispatchMail({
+        from: fromAddr,
+        to: recipients,
         subject,
         html: this.wrapInTemplate(subject, message),
       });
@@ -701,7 +878,7 @@ class EmailService {
       const from = this.currentConfig?.from || this.currentConfig?.auth.user;
       const fromName = this.currentConfig?.fromName || 'Fuel Order System';
 
-      await this.transporter.sendMail({
+      await this.dispatchMail({
         from: `"${fromName}" <${from}>`,
         to: email,
         subject: 'Your Password Has Been Reset - Action Required',
@@ -794,7 +971,7 @@ class EmailService {
       const from = this.currentConfig?.from || this.currentConfig?.auth.user;
       const fromName = this.currentConfig?.fromName || 'Fuel Order System';
 
-      await this.transporter.sendMail({
+      await this.dispatchMail({
         from: `"${fromName}" <${from}>`,
         to: email,
         subject: 'Welcome to Fuel Order Management System - Your Login Credentials',
@@ -878,10 +1055,12 @@ class EmailService {
     `;
 
     try {
-      await this.transporter.sendMail({
-        from: this.currentConfig?.from
+      const fromAddr = this.currentConfig?.from
           ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
-          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`,
+          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`;
+
+      await this.dispatchMail({
+        from: fromAddr,
         to: email,
         subject: alertTitle,
         html,
