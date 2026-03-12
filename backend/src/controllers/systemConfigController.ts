@@ -58,6 +58,8 @@ export const getSystemSettings = async (req: AuthRequest, res: Response): Promis
             weeklyReport: true,
             slowQueryThreshold: 500,
             storageWarningThreshold: 80,
+            sendCredentialsEmail: true,
+            bypassEmailVerification: false,
           },
           maintenance: {
             enabled: false,
@@ -424,6 +426,8 @@ export const updateNotificationSettings = async (req: AuthRequest, res: Response
       weeklyReport,
       slowQueryThreshold,
       storageWarningThreshold,
+      sendCredentialsEmail,
+      bypassEmailVerification,
     } = req.body;
 
     let systemConfig = await SystemConfig.findOne({
@@ -445,6 +449,8 @@ export const updateNotificationSettings = async (req: AuthRequest, res: Response
       if (weeklyReport !== undefined) systemConfig.systemSettings.notifications.weeklyReport = weeklyReport;
       if (slowQueryThreshold !== undefined) systemConfig.systemSettings.notifications.slowQueryThreshold = slowQueryThreshold;
       if (storageWarningThreshold !== undefined) systemConfig.systemSettings.notifications.storageWarningThreshold = storageWarningThreshold;
+      if (sendCredentialsEmail !== undefined) (systemConfig.systemSettings.notifications as any).sendCredentialsEmail = sendCredentialsEmail;
+      if (bypassEmailVerification !== undefined) (systemConfig.systemSettings.notifications as any).bypassEmailVerification = bypassEmailVerification;
     }
 
     systemConfig.markModified('systemSettings');

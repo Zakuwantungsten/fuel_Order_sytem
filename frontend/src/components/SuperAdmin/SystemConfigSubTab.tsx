@@ -413,6 +413,7 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
                           { key: 'criticalAlerts',      label: 'Critical Alerts',      sub: 'Immediate notifications for system errors' },
                           { key: 'dailySummary',        label: 'Daily Summary',        sub: 'Send summary digest each morning' },
                           { key: 'weeklyReport',        label: 'Weekly Report',        sub: 'Send weekly analytics & activity report' },
+                          { key: 'sendCredentialsEmail', label: 'Send Credentials Email', sub: 'Email username & password to new users on creation' },
                         ].map(f => (
                           <div key={f.key} className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
                             <div>
@@ -423,6 +424,15 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
                               onChange={v => upd('notifications', { [f.key]: v } as any)} />
                           </div>
                         ))}
+                        {/* Bypass Email Verification — warning-styled since it lowers security */}
+                        <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-700 sm:col-span-2">
+                          <div>
+                            <div className="text-[13px] font-medium text-amber-800 dark:text-amber-300">Bypass Email Verification</div>
+                            <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">Skip OTP requirement during email MFA setup — use only while waiting for email domain verification</div>
+                          </div>
+                          <Toggle checked={(settings.notifications as any).bypassEmailVerification ?? false}
+                            onChange={v => upd('notifications', { bypassEmailVerification: v } as any)} />
+                        </div>
                         <div className="flex flex-col gap-1.5">
                           <label className={labelCls}>Slow Query Threshold (ms)</label>
                           <input type="number" min={100} className={inputCls}

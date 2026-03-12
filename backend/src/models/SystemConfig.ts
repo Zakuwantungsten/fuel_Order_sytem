@@ -114,6 +114,8 @@ export interface ISystemSettings {
     loginNotifications: boolean; // Send email on every login
     newDeviceAlerts: boolean; // Extra alert for new device sign-ins
     deviceTracking: boolean; // Track login devices and sessions
+    sendCredentialsEmail: boolean; // Send welcome email with username/password to new users
+    bypassEmailVerification: boolean; // Skip OTP requirement for email MFA setup (use when email service is not yet verified)
   };
   // Email Configuration
   email?: {

@@ -1007,9 +1007,14 @@ export const usersAPI = {
     return response.data.data;
   },
 
-  create: async (data: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<User> => {
+  create: async (data: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ user: User; emailSent: boolean; temporaryPassword?: string; message: string }> => {
     const response = await apiClient.post('/users', data);
-    return response.data.data;
+    return {
+      user: response.data.data,
+      emailSent: response.data.emailSent,
+      temporaryPassword: response.data.temporaryPassword,
+      message: response.data.message,
+    };
   },
 
   update: async (id: string | number, data: Partial<User>): Promise<User> => {

@@ -3,6 +3,7 @@ import { User } from '../models';
 import { AuditLog } from '../models';
 import UserMFA from '../models/UserMFA';
 import { MFA } from '../models/MFA';
+import { SystemConfig } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput } from '../utils';
@@ -177,20 +178,36 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       passwordResetAt: new Date(),
     });
 
-    // Send welcome email with credentials
-    let emailSent = false;
+    // Check whether credentials email is enabled in system settings
+    let sendCredentialsEmail = true; // default ON
     try {
-      await emailService.sendWelcomeEmail(
-        email,
-        `${firstName} ${lastName}`,
-        username,
-        temporaryPassword
-      );
-      emailSent = true;
-      logger.info(`Welcome email sent to ${email}`);
-    } catch (emailError: any) {
-      logger.error(`Failed to send welcome email to ${email}:`, emailError);
-      // Don't fail user creation if email fails, but log it
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+      const notifSettings = sysConfig?.systemSettings?.notifications as any;
+      if (notifSettings?.sendCredentialsEmail === false) {
+        sendCredentialsEmail = false;
+      }
+    } catch {
+      // If config fetch fails, default to sending the email
+    }
+
+    // Send welcome email with credentials (unless disabled by admin)
+    let emailSent = false;
+    if (sendCredentialsEmail) {
+      try {
+        await emailService.sendWelcomeEmail(
+          email,
+          `${firstName} ${lastName}`,
+          username,
+          temporaryPassword
+        );
+        emailSent = true;
+        logger.info(`Welcome email sent to ${email}`);
+      } catch (emailError: any) {
+        logger.error(`Failed to send welcome email to ${email}:`, emailError);
+        // Don't fail user creation if email fails, but log it
+      }
+    } else {
+      logger.info(`Credentials email skipped for ${email} (sendCredentialsEmail disabled by admin)`);
     }
 
     // Remove sensitive data
@@ -212,10 +229,13 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       success: true,
       message: emailSent
         ? 'User created successfully. Welcome email sent with login credentials.'
-        : 'User created successfully. Welcome email could not be sent — check email configuration.',
+        : sendCredentialsEmail
+          ? 'User created successfully. Welcome email could not be sent — check email configuration.'
+          : 'User created successfully. Share the credentials below with the user manually.',
       data: userResponse,
       emailSent,
-      ...(emailSent ? {} : { temporaryPassword }), // surface password in response if email failed
+      // Always surface temporaryPassword when email was not sent (disabled or failed)
+      ...(!emailSent ? { temporaryPassword } : {}),
     });
     emitDataChange('users', 'create');
   } catch (error: any) {

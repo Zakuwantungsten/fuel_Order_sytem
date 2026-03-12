@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   UserPlus, User as UserIcon, Shield, MapPin, Truck,
-  Loader2, Check, AlertCircle, Info,
+  Loader2, Check, AlertCircle, Info, Copy, CheckCheck,
 } from 'lucide-react';
 import { usersAPI } from '../../../../services/api';
 import type { UserRole } from '../../../../types';
@@ -58,6 +58,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
   const [loadingStations, setLoadingStations] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [emailSent, setEmailSent] = useState<boolean | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Set<keyof FormData>>(new Set());
@@ -102,6 +105,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
       setErrors([]);
       setServerError(null);
       setSuccess(false);
+      setEmailSent(null);
+      setCreatedCredentials(null);
+      setCopiedField(null);
       setTouched(new Set());
     }
   }, [isOpen]);
@@ -251,14 +257,60 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
     >
       {/* Success banner */}
       {success && (
-        <div className="flex items-center gap-3 p-4 mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl animate-in fade-in">
-          <div className="w-8 h-8 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center flex-shrink-0">
-            <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-green-800 dark:text-green-300">User created successfully!</p>
-            <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">Login credentials have been sent to the user's email.</p>
-          </div>
+        <div className="mb-4 animate-in fade-in">
+          {emailSent ? (
+            <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl">
+              <div className="w-8 h-8 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center flex-shrink-0">
+                <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-green-800 dark:text-green-300">User created successfully!</p>
+                <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">Login credentials have been sent to the user's email.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 bg-amber-100 dark:bg-amber-900/50 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">User created — share credentials manually</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Email notifications are disabled. Copy and share these credentials with the user securely.</p>
+                </div>
+              </div>
+              {createdCredentials && (
+                <div className="space-y-2">
+                  {([
+                    { label: 'Username', value: createdCredentials.username, field: 'username' as const },
+                    { label: 'Temporary Password', value: createdCredentials.password, field: 'password' as const },
+                  ]).map(({ label, value, field }) => (
+                    <div key={field} className="flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-gray-800 rounded-lg border border-amber-200 dark:border-amber-700">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">{label}</div>
+                        <div className="text-[13px] font-mono font-semibold text-gray-900 dark:text-gray-100 mt-0.5 select-all">{value}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(value);
+                          setCopiedField(field);
+                          setTimeout(() => setCopiedField(null), 2000);
+                        }}
+                        className="flex-shrink-0 p-1.5 rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                        title={`Copy ${label}`}
+                      >
+                        {copiedField === field
+                          ? <CheckCheck className="w-4 h-4 text-green-600 dark:text-green-400" />
+                          : <Copy className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
+                      </button>
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-amber-500 dark:text-amber-500 mt-1">The user must change this password on first login.</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

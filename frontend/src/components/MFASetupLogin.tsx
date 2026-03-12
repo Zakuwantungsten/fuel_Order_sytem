@@ -178,6 +178,25 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Failed to send email code');
       }
+
+      // Admin has enabled bypass — auto-complete email MFA without OTP input
+      if (data.bypassed) {
+        const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
+        localStorage.setItem('device_id', deviceId);
+        const verifyResponse = await fetch(`${API_BASE}/auth/setup-mfa/email/verify`, {
+          method: 'POST',
+          headers: jsonHeaders(),
+          credentials: 'include',
+          body: JSON.stringify({ userId, tempSessionToken, code: '', trustDevice, deviceId, deviceName: trustDevice ? deviceName : undefined }),
+        });
+        const verifyData = await safeJson(verifyResponse);
+        if (!verifyResponse.ok || !verifyData.success) {
+          throw new Error(verifyData.message || 'Email MFA auto-setup failed');
+        }
+        onSuccess({ accessToken: verifyData.data.accessToken, refreshToken: verifyData.data.refreshToken, user: verifyData.data.user });
+        return;
+      }
+
       setStep('email-verify');
     } catch (err: any) {
       setError(err.message);

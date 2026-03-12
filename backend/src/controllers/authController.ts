@@ -972,6 +972,20 @@ export const setupMFAEmailSend = async (req: AuthRequest, res: Response): Promis
       throw new ApiError(401, 'Invalid or expired session token');
     }
 
+    // Check bypass setting — skip OTP entirely when admin has enabled bypass
+    const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    const bypassEmailVerification = (sysConfig?.systemSettings?.notifications as any)?.bypassEmailVerification === true;
+
+    if (bypassEmailVerification) {
+      logger.info(`Email verification bypass active — skipping OTP send for user ${userId}`);
+      res.status(200).json({
+        success: true,
+        message: 'Email verification bypassed by admin settings',
+        bypassed: true,
+      });
+      return;
+    }
+
     // Send email OTP
     try {
       await mfaService.sendEmailOTP(userId, user.email);
@@ -997,8 +1011,8 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
   try {
     const { userId, tempSessionToken, code, trustDevice, deviceId, deviceName } = req.body;
 
-    if (!userId || !tempSessionToken || !code) {
-      throw new ApiError(400, 'User ID, session token, and verification code are required');
+    if (!userId || !tempSessionToken) {
+      throw new ApiError(400, 'User ID and session token are required');
     }
 
     const user = await User.findById(userId).select('+refreshToken');
@@ -1012,10 +1026,21 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
       throw new ApiError(401, 'Invalid or expired session token');
     }
 
-    // Verify the email OTP
-    const valid = await mfaService.verifyPendingOTP(userId, 'email', code);
-    if (!valid) {
-      throw new ApiError(400, 'Invalid or expired verification code');
+    // Check bypass setting — skip OTP validation when admin has enabled bypass
+    const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    const bypassEmailVerification = (sysConfig?.systemSettings?.notifications as any)?.bypassEmailVerification === true;
+
+    if (!bypassEmailVerification) {
+      // Normal flow: require a valid OTP code
+      if (!code) {
+        throw new ApiError(400, 'Verification code is required');
+      }
+      const valid = await mfaService.verifyPendingOTP(userId, 'email', code);
+      if (!valid) {
+        throw new ApiError(400, 'Invalid or expired verification code');
+      }
+    } else {
+      logger.info(`Email verification bypass active — skipping OTP check for user ${userId}`);
     }
 
     // Enable email MFA

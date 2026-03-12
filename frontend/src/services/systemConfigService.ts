@@ -66,6 +66,8 @@ export interface SystemSettings {
     weeklyReport: boolean;
     slowQueryThreshold: number;
     storageWarningThreshold: number;
+    sendCredentialsEmail: boolean;
+    bypassEmailVerification: boolean;
   };
   maintenance: {
     enabled: boolean;
