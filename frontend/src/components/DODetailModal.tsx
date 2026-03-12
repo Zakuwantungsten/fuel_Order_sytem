@@ -42,8 +42,20 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
       }
       
       // Download PDF from backend with authentication
+      const orderId = order.id || (order as any)._id;
+      if (!orderId) {
+        toast.update(toastId, {
+          render: 'Could not determine order ID. Please close and reopen the order.',
+          type: 'error',
+          isLoading: false,
+          autoClose: 5000,
+        });
+        setIsDownloading(false);
+        return;
+      }
+
       const response = await axios.get(
-        `${API_BASE_URL}/delivery-orders/${order.id}/pdf`,
+        `${API_BASE_URL}/delivery-orders/${orderId}/pdf`,
         {
           responseType: 'blob',
           withCredentials: true,
