@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MFASetup } from './MFASetup';
+import { getCsrfToken } from '../services/api';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -39,12 +40,20 @@ export const MFASettings: React.FC = () => {
     fetchTrustedDevices();
   }, []);
 
+  const authHeaders = (includeContentType = false): Record<string, string> => {
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
+    };
+    if (includeContentType) headers['Content-Type'] = 'application/json';
+    const csrf = getCsrfToken();
+    if (csrf) headers['X-XSRF-TOKEN'] = csrf;
+    return headers;
+  };
+
   const fetchMFAStatus = async () => {
     try {
       const response = await fetch(`${API_BASE}/mfa/status`, {
-        headers: {
-          'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-        },
+        headers: authHeaders(),
       });
 
       const data = await response.json();
@@ -62,9 +71,7 @@ export const MFASettings: React.FC = () => {
   const fetchTrustedDevices = async () => {
     try {
       const response = await fetch(`${API_BASE}/mfa/trusted-devices`, {
-        headers: {
-          'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-        },
+        headers: authHeaders(),
       });
 
       const data = await response.json();
@@ -89,10 +96,7 @@ export const MFASettings: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE}/mfa/disable`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-        },
+        headers: authHeaders(true),
         body: JSON.stringify({ password: disablePassword }),
       });
 
@@ -124,9 +128,7 @@ export const MFASettings: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE}/mfa/backup-codes/regenerate`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-        },
+        headers: authHeaders(),
       });
 
       const data = await response.json();
@@ -164,9 +166,7 @@ export const MFASettings: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE}/mfa/trusted-devices/${deviceId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-        },
+        headers: authHeaders(),
       });
 
       const data = await response.json();

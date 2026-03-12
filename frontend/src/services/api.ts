@@ -35,7 +35,7 @@ const CSRF_STORAGE_KEY = 'xsrf_token';
 // Cross-origin deployments (Firebase frontend + Railway backend) cannot read
 // cookies set by a different domain, so we store the token from the response
 // body in sessionStorage and read it from there.
-const getCsrfToken = (): string | null => {
+export const getCsrfToken = (): string | null => {
   // Primary: sessionStorage (works cross-origin)
   const stored = sessionStorage.getItem(CSRF_STORAGE_KEY);
   // Discard '[REDACTED]' placeholder that was stored when the backend was

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import QRCode from 'react-qr-code';
+import { getCsrfToken } from '../services/api';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -27,10 +28,15 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
   const [error, setError] = useState('');
   const [copiedBackupCodes, setCopiedBackupCodes] = useState(false);
 
-  const authHeaders = () => ({
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-  });
+  const authHeaders = () => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
+    };
+    const csrf = getCsrfToken();
+    if (csrf) headers['X-XSRF-TOKEN'] = csrf;
+    return headers;
+  };
 
   const handleMethodSelection = async (method: 'totp' | 'sms' | 'email') => {
     setError('');
@@ -79,10 +85,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
     try {
       const response = await fetch(`${API_BASE}/mfa/setup/totp/verify`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-        },
+        headers: authHeaders(),
         body: JSON.stringify({
           secret: alreadyConfigured ? undefined : totpData!.secret,
           code: verificationCode,
