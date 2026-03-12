@@ -15,7 +15,7 @@ export type PolicyAction = 'allow' | 'block' | 'require_mfa' | 'notify_admin';
 export interface ICondition {
   signal: ConditionSignal;
   operator: ConditionOperator;
-  value: string | string[]; // e.g. ['admin','super_admin'] or '192.168.1.0/24' or '06:00-22:00'
+  value: string | string[]; // e.g. ['admin','super_admin'] or '198.51.100.0/24' or '06:00-22:00'
 }
 
 export interface IConditionalAccessPolicy {

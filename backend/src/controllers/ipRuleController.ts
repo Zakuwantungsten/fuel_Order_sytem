@@ -32,7 +32,7 @@ export const createRule = async (req: AuthRequest, res: Response): Promise<void>
       throw new ApiError(400, 'IP address or CIDR is required');
     }
     if (!isValidIPv4(ip.trim())) {
-      throw new ApiError(400, 'Invalid IP address or CIDR notation (IPv4 only, e.g. 192.168.1.1 or 10.0.0.0/8)');
+      throw new ApiError(400, 'Invalid IP address or CIDR notation (IPv4 only, e.g. 198.51.100.1 or 203.0.113.0/24)');
     }
     if (!type || !['allow', 'block'].includes(type)) {
       throw new ApiError(400, 'Type must be "allow" or "block"');

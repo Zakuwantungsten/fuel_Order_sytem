@@ -269,7 +269,7 @@ export default function ConditionalAccessPolicies() {
           type="text"
           value={val}
           onChange={e => updateCondition(idx, { value: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-          placeholder="192.168.1.0/24, 10.0.0.0/8"
+          placeholder="198.51.100.0/24, 203.0.113.0/24"
           className="mt-1 w-full px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
         />
       );

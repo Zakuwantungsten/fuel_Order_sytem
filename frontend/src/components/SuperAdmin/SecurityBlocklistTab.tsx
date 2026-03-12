@@ -342,7 +342,7 @@ export default function SecurityBlocklistTab() {
                 type="text"
                 value={blockIP}
                 onChange={e => setBlockIP(e.target.value)}
-                placeholder="e.g. 192.168.1.100"
+                placeholder="e.g. 198.51.100.100"
                 required
                 pattern="^[\d.:a-fA-F]+$"
                 className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500"

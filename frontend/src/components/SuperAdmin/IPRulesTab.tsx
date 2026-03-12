@@ -291,7 +291,7 @@ export default function IPRulesTab({ onMessage }: Props) {
             value={testIP}
             onChange={(e) => { setTestIP(e.target.value); setTestResult(null); }}
             onKeyDown={(e) => e.key === 'Enter' && handleTestIP()}
-            placeholder="e.g. 192.168.1.50"
+            placeholder="e.g. 198.51.100.50"
             className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-gray-900 dark:text-gray-100"
           />
           <button
@@ -529,10 +529,10 @@ export default function IPRulesTab({ onMessage }: Props) {
                   type="text"
                   value={form.ip}
                   onChange={(e) => setForm((p) => ({ ...p, ip: e.target.value }))}
-                  placeholder="e.g. 192.168.1.1  or  10.0.0.0/8"
+                  placeholder="e.g. 198.51.100.1  or  203.0.113.0/24"
                   className="w-full px-3 py-2 font-mono text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-gray-900 dark:text-gray-100"
                 />
-                <p className="text-[10px] text-gray-400 mt-1">IPv4 only. CIDR ranges like 10.0.0.0/8 are supported.</p>
+                <p className="text-[10px] text-gray-400 mt-1">IPv4 only. CIDR ranges like 203.0.113.0/24 are supported.</p>
               </div>
 
               {/* Type selector */}

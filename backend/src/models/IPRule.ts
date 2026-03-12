@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IIPRule extends Document {
-  ip: string; // exact IP or CIDR notation, e.g. "192.168.1.1" or "10.0.0.0/8"
+  ip: string; // exact IP or CIDR notation, e.g. "198.51.100.1" or "203.0.113.0/24"
   type: 'allow' | 'block';
   description: string;
   isActive: boolean;
