@@ -1,11 +1,11 @@
 import sharp from 'sharp';
-import { readFileSync, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const SRC_SVG = resolve(ROOT, 'src/assets/tahmeed-logo.svg');
+const SRC_PNG = 'D:/WINDOWS 11/Fuel_Order/icons8-horse-100.png';
 const OUT_DIR = resolve(ROOT, 'public/icons');
 
 mkdirSync(OUT_DIR, { recursive: true });
@@ -28,32 +28,13 @@ const SIZES = [
   { size: 512,  name: 'icon-512x512.png' },
 ];
 
-// Maskable icon needs 10% safe-zone padding (logo fills ~80% of canvas)
+// Maskable icon needs safe-zone padding (logo fills ~80% of canvas)
 const MASKABLE_SIZE = 512;
 const MASKABLE_NAME = 'icon-512x512-maskable.png';
 
-const svgBuffer = readFileSync(SRC_SVG);
-
 async function generateIcon(size, outName) {
-  const padding = Math.round(size * 0.08); // 8% padding on each side
-  const innerSize = size - padding * 2;
-
-  // Render SVG to PNG at inner size (preserve aspect ratio, fit inside square)
-  const rendered = await sharp(svgBuffer)
-    .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
-    .png()
-    .toBuffer();
-
-  // Composite onto white square canvas
-  await sharp({
-    create: {
-      width: size,
-      height: size,
-      channels: 4,
-      background: { r: 255, g: 255, b: 255, alpha: 255 },
-    },
-  })
-    .composite([{ input: rendered, gravity: 'centre' }])
+  await sharp(SRC_PNG)
+    .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toFile(resolve(OUT_DIR, outName));
 
@@ -61,21 +42,16 @@ async function generateIcon(size, outName) {
 }
 
 async function generateMaskable(size, outName) {
-  // Maskable: logo fills 80% of the canvas; outer 10% is the safe zone (brand color bg)
+  // Maskable: 80% inner size with transparent padding for safe zone
   const innerSize = Math.round(size * 0.80);
 
-  const rendered = await sharp(svgBuffer)
-    .resize(innerSize, innerSize, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+  const rendered = await sharp(SRC_PNG)
+    .resize(innerSize, innerSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toBuffer();
 
   await sharp({
-    create: {
-      width: size,
-      height: size,
-      channels: 4,
-      background: { r: 255, g: 255, b: 255, alpha: 255 }, // white background
-    },
+    create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
   })
     .composite([{ input: rendered, gravity: 'centre' }])
     .png()
@@ -85,7 +61,7 @@ async function generateMaskable(size, outName) {
 }
 
 (async () => {
-  console.log('Generating PWA icons from tahmeed-logo.svg...\n');
+  console.log('Generating PWA icons from icons8-horse-100.png...\n');
   for (const { size, name } of SIZES) {
     await generateIcon(size, name);
   }
