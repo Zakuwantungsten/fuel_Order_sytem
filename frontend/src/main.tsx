@@ -1,6 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import '@fontsource-variable/dm-sans';
+import '@fontsource-variable/dm-sans/wght-italic.css';
+import '@fontsource-variable/jetbrains-mono';
 import App from './App.tsx';
 import './index.css';
 
