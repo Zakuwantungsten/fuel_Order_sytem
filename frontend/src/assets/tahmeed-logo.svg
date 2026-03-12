@@ -19,7 +19,6 @@
   
   <!-- Orange body continuation -->
   <path d="M 255 385 Q 300 375 350 375 L 450 380 Q 550 385 650 383 L 750 380 Q 850 375 920 385 L 970 398 Q 1000 410 1020 430 L 1030 460 Q 1020 490 980 510 L 900 530 Q 800 540 700 538 L 600 535 Q 500 530 400 535 L 300 543 Q 220 548 160 540 L 100 525 Q 60 505 50 470 L 55 430 Q 70 400 100 385 Z" fill="#E67E22" stroke="none"/>
-</g>
 
   <!-- TAHMEED Text -->
   <text x="10" y="580" font-family="Arial Black, sans-serif" font-size="120" font-weight="900" fill="#000000" letter-spacing="8">TAHMEED</text>
