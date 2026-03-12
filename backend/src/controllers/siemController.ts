@@ -15,7 +15,7 @@ export const listConfigs = async (_req: Request, res: Response): Promise<void> =
       .lean();
     res.json({ success: true, data: configs });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -70,7 +70,7 @@ export const createConfig = async (req: Request, res: Response): Promise<void> =
       res.status(409).json({ success: false, message: 'A SIEM config with this name already exists' });
       return;
     }
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -103,7 +103,7 @@ export const updateConfig = async (req: Request, res: Response): Promise<void> =
 
     res.json({ success: true, data: config });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -133,7 +133,7 @@ export const deleteConfig = async (req: Request, res: Response): Promise<void> =
 
     res.json({ success: true, message: 'SIEM config deleted' });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -166,7 +166,7 @@ export const toggleConfig = async (req: Request, res: Response): Promise<void> =
 
     res.json({ success: true, data: { isActive: config.isActive } });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -215,6 +215,6 @@ export const testConnection = async (req: Request, res: Response): Promise<void>
       res.json({ success: true, message: 'Configuration validated (live test only for webhook destinations)' });
     }
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

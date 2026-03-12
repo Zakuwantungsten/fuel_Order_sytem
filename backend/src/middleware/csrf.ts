@@ -99,16 +99,21 @@ export const provideCsrfToken = (req: Request, res: Response, next: NextFunction
     }
 
     const cookieOptions: any = {
-      httpOnly: false, // JS must be able to read it for the header
+      // ✅ SECURITY: httpOnly:true — JS reads the token from the response body
+      // (stored in sessionStorage), not from the cookie. The cookie is only
+      // used server-side for the double-submit fallback comparison.
+      httpOnly: true,
+      // ✅ SECURITY: secure:true always — localhost is a secure context in all
+      // modern browsers so dev still works. Never transmit over plain HTTP.
+      secure: true,
+      // ✅ SECURITY: SameSite=Strict — the primary CSRF defence is the HMAC-signed
+      // token delivered in the response body and sent as the X-XSRF-TOKEN header;
+      // the browser never needs to send this cookie cross-origin. Strict is the
+      // most restrictive option and eliminates the SameSite=None finding.
+      sameSite: 'strict',
       maxAge: CSRF_TOKEN_MAX_AGE_MS,
       path: '/',
     };
-
-    if (config.nodeEnv === 'production') {
-      cookieOptions.secure = true;
-      cookieOptions.sameSite = 'none'; // allow cross-origin cookie sending
-    }
-    // Development: omit sameSite/secure to allow cross-port localhost cookies
 
     res.cookie(CSRF_COOKIE_NAME, token, cookieOptions);
     res.locals.csrfToken = token;

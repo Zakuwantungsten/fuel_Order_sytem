@@ -24,7 +24,7 @@ export const createBackup = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to create backup',
+      message: 'Failed to create backup',
     });
   }
 };
@@ -67,7 +67,7 @@ export const getBackups = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch backups',
+      message: 'Failed to fetch backups',
     });
   }
 };
@@ -96,7 +96,7 @@ export const getBackupById = async (req: AuthRequest, res: Response): Promise<vo
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch backup',
+      message: 'Failed to fetch backup',
     });
   }
 };
@@ -149,7 +149,7 @@ export const downloadBackup = async (req: AuthRequest, res: Response): Promise<v
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to download backup',
+      message: 'Failed to download backup',
     });
   }
 };
@@ -184,7 +184,7 @@ export const restoreBackup = async (req: AuthRequest, res: Response): Promise<vo
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to restore backup',
+      message: 'Failed to restore backup',
     });
   }
 };
@@ -237,7 +237,7 @@ export const deleteBackup = async (req: AuthRequest, res: Response): Promise<voi
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to delete backup',
+      message: 'Failed to delete backup',
     });
   }
 };
@@ -257,7 +257,7 @@ export const getBackupStats = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch stats',
+      message: 'Failed to fetch stats',
     });
   }
 };
@@ -277,7 +277,7 @@ export const getBackupSchedules = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch schedules',
+      message: 'Failed to fetch schedules',
     });
   }
 };
@@ -322,7 +322,7 @@ export const createBackupSchedule = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to create schedule',
+      message: 'Failed to create schedule',
     });
   }
 };
@@ -367,7 +367,7 @@ export const updateBackupSchedule = async (req: AuthRequest, res: Response): Pro
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update schedule',
+      message: 'Failed to update schedule',
     });
   }
 };
@@ -408,7 +408,7 @@ export const deleteBackupSchedule = async (req: AuthRequest, res: Response): Pro
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to delete schedule',
+      message: 'Failed to delete schedule',
     });
   }
 };
@@ -443,7 +443,7 @@ export const cleanupBackups = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to cleanup backups',
+      message: 'Failed to cleanup backups',
     });
   }
 };

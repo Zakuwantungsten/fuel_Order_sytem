@@ -226,7 +226,7 @@ export const getFuelStations = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch fuel stations',
+      message: 'Failed to fetch fuel stations',
     });
   }
 };
@@ -335,7 +335,7 @@ export const createFuelStation = async (req: AuthRequest, res: Response): Promis
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to create fuel station',
+      message: 'Failed to create fuel station',
     });
   }
 };
@@ -475,7 +475,7 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
     console.error('Error updating fuel station:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update fuel station',
+      message: 'Failed to update fuel station',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
@@ -520,7 +520,7 @@ export const deleteFuelStation = async (req: AuthRequest, res: Response): Promis
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to delete fuel station',
+      message: 'Failed to delete fuel station',
     });
   }
 };
@@ -549,7 +549,7 @@ export const getRoutes = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch routes',
+      message: 'Failed to fetch routes',
     });
   }
 };
@@ -586,7 +586,7 @@ export const findRouteByDestination = async (req: AuthRequest, res: Response): P
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to find route',
+      message: 'Failed to find route',
     });
   }
 };
@@ -663,7 +663,7 @@ export const createRoute = async (req: AuthRequest, res: Response): Promise<void
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to create route',
+      message: 'Failed to create route',
     });
   }
 };
@@ -719,7 +719,7 @@ export const updateRoute = async (req: AuthRequest, res: Response): Promise<void
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update route',
+      message: 'Failed to update route',
     });
   }
 };
@@ -764,7 +764,7 @@ export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to delete route',
+      message: 'Failed to delete route',
     });
   }
 };
@@ -819,7 +819,7 @@ export const getFormulaVariables = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch formula variables',
+      message: 'Failed to fetch formula variables',
     });
   }
 };
@@ -854,7 +854,7 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch truck batches',
+      message: 'Failed to fetch truck batches',
     });
   }
 };
@@ -895,7 +895,7 @@ export const getYardFuelTimeLimit = async (req: AuthRequest, res: Response): Pro
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch yard fuel time limit settings',
+      message: 'Failed to fetch yard fuel time limit settings',
     });
   }
 };
@@ -991,7 +991,7 @@ export const updateYardFuelTimeLimit = async (req: AuthRequest, res: Response): 
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update yard fuel time limit settings',
+      message: 'Failed to update yard fuel time limit settings',
     });
   }
 };

@@ -36,25 +36,18 @@ const CSRF_STORAGE_KEY = 'xsrf_token';
 // cookies set by a different domain, so we store the token from the response
 // body in sessionStorage and read it from there.
 export const getCsrfToken = (): string | null => {
-  // Primary: sessionStorage (works cross-origin)
+  // Token is fetched from GET /csrf-token response body and stored here.
+  // Cross-origin (Firebase ↔ Railway) means document.cookie cannot read a
+  // cookie set by the backend domain; sessionStorage is the only viable path.
   const stored = sessionStorage.getItem(CSRF_STORAGE_KEY);
   // Discard '[REDACTED]' placeholder that was stored when the backend was
   // incorrectly sanitizing the /csrf-token response body (now fixed). Keeping
   // it would cause every POST to fail once with 403 before the retry succeeds.
-  if (stored && stored !== '[REDACTED]') return stored;
-  if (stored === '[REDACTED]') sessionStorage.removeItem(CSRF_STORAGE_KEY);
-
-  // Fallback: same-origin cookie read (works when frontend and backend share a domain)
-  const name = 'XSRF-TOKEN=';
-  const decodedCookie = decodeURIComponent(document.cookie);
-  for (const part of decodedCookie.split(';')) {
-    const cookie = part.trim();
-    if (cookie.startsWith(name)) {
-      return cookie.substring(name.length);
-    }
+  if (stored === '[REDACTED]') {
+    sessionStorage.removeItem(CSRF_STORAGE_KEY);
+    return null;
   }
-
-  return null;
+  return stored;
 };
 
 // Function to fetch CSRF token from server and store it

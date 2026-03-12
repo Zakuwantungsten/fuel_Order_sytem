@@ -780,7 +780,7 @@ export const updateEmailConfiguration = async (req: AuthRequest, res: Response):
     // ✅ SECURITY: Log error without sensitive config details
     logger.error('Error updating email configuration:', { 
       code: error.code, 
-      message: error.message,
+      message: 'Internal server error',
       username: req.user?.username 
     });
     throw error;

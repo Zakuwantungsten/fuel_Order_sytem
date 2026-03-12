@@ -211,7 +211,7 @@ export const verifyMFACode = asyncHandler(async (req: AuthRequest, res: Response
   } catch (error: any) {
     res.status(429).json({
       success: false,
-      message: error.message,
+      message: 'Internal server error',
     });
   }
 });
@@ -242,7 +242,7 @@ export const regenerateBackupCodes = asyncHandler(async (req: AuthRequest, res: 
   } catch (error: any) {
     res.status(400).json({
       success: false,
-      message: error.message,
+      message: 'Internal server error',
     });
   }
 });

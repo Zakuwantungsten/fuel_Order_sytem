@@ -18,7 +18,7 @@ export const listAccounts = async (_req: Request, res: Response): Promise<void> 
       .lean();
     res.json({ success: true, data: accounts });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -80,7 +80,7 @@ export const createAccount = async (req: Request, res: Response): Promise<void> 
       res.status(409).json({ success: false, message: 'Break-glass username already exists' });
       return;
     }
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -134,7 +134,7 @@ export const toggleAccount = async (req: Request, res: Response): Promise<void> 
       }).catch(() => {});
     }
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -181,7 +181,7 @@ export const rotatePassword = async (req: Request, res: Response): Promise<void>
       message: 'Break-glass password rotated. Store the new password offline securely.',
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -211,6 +211,6 @@ export const deleteAccount = async (req: Request, res: Response): Promise<void> 
 
     res.json({ success: true, message: 'Break-glass account deleted' });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

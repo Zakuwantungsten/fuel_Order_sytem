@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { PrivilegeRequest } from '../models/PrivilegeRequest';
 import { User } from '../models';
 import { AuditService } from '../utils/auditService';
@@ -69,7 +69,7 @@ export const createRequest = async (req: Request, res: Response): Promise<void> 
 
     res.status(201).json({ success: true, data: request });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -96,7 +96,7 @@ export const listRequests = async (req: Request, res: Response): Promise<void> =
       pagination: { total, page: Number(page), limit: Number(limit) },
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -173,7 +173,7 @@ export const approveRequest = async (req: Request, res: Response): Promise<void>
       data: request,
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -215,7 +215,7 @@ export const denyRequest = async (req: Request, res: Response): Promise<void> =>
 
     res.json({ success: true, message: 'Elevation request denied', data: request });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -272,7 +272,7 @@ export const revokeElevation = async (req: Request, res: Response): Promise<void
       data: request,
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -286,6 +286,6 @@ export const getMyRequests = async (req: Request, res: Response): Promise<void> 
       .lean();
     res.json({ success: true, data: requests });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

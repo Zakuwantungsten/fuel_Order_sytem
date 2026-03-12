@@ -43,6 +43,36 @@ const httpServer = createServer(app);
 
 // Security middleware
 app.use(helmet({
+  // ✅ CSP: This is a REST API — no scripts, styles, or media are served.
+  //    Locking down all fetch directives prevents any inadvertent content
+  //    from being interpreted if an API response is ever opened in a browser.
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:     ["'none'"],
+      scriptSrc:      ["'none'"],
+      styleSrc:       ["'none'"],
+      imgSrc:         ["'none'"],
+      connectSrc:     ["'self'"],
+      frameAncestors: ["'none'"],
+      formAction:     ["'self'"],
+      baseUri:        ["'self'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  // ✅ SECURITY: HSTS — always on, not gated on NODE_ENV.
+  //    max-age=31536000 (1 year) + includeSubDomains + preload meets the minimum
+  //    requirements for HSTS preload list submission (RFC 6797 / hstspreload.org).
+  //    Railway and Firebase both terminate TLS before the app sees the request,
+  //    so this header is always served over HTTPS in production.
+  hsts: {
+    maxAge: 31536000,       // 1 year in seconds
+    includeSubDomains: true,
+    preload: true,
+  },
+  // ✅ SECURITY: Explicitly declared (Helmet default) — prevents MIME-sniffing
+  //    on all responses including error pages (401, 403, 500).
+  //    Declared explicitly so it cannot be accidentally removed with a default change.
+  xContentTypeOptions: true,
   dnsPrefetchControl: {
     allow: false, // ✅ Prevent browser DNS prefetch for user-supplied URLs (SSRF defense)
   },
@@ -54,6 +84,17 @@ app.use(helmet({
 // ✅ SECURITY: Strip technology-revealing response headers
 app.use(fingerprintObfuscationMiddleware);
 
+// ✅ SECURITY: Prevent caching of all API responses. Every endpoint returns dynamic,
+//    potentially user-specific data. no-store prevents the browser or any intermediate
+//    proxy from persisting the response. Pragma/Expires provide HTTP/1.0 back-compat
+//    for older proxies and CDN edge nodes.
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 // Health check route registered EARLY — before HTTPS enforcement and all security
 // middleware so Railway's internal HTTP health probe (no x-forwarded-proto header)
 // is never blocked by the HTTPS-only or IP-filtering middleware.
@@ -61,19 +102,10 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({
     success: true,
     message: 'Server is healthy',
-    timestamp: new Date().toISOString(),
+    // ✅ SECURITY: timestamp omitted — exposing server time on a public
+    // unauthenticated endpoint is unnecessary and aids timing/fingerprint attacks.
   });
 });
-
-if (config.nodeEnv === 'production') {
-  app.use(
-    helmet.hsts({
-      maxAge: 31536000, // 1 year
-      includeSubDomains: true,
-      preload: true,
-    })
-  );
-}
 
 // CORS configuration
 app.use(

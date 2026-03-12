@@ -13,14 +13,12 @@ apiClient.interceptors.request.use((config) => {
   if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  const name = 'XSRF-TOKEN=';
-  const decoded = decodeURIComponent(document.cookie);
-  for (const part of decoded.split(';')) {
-    const c = part.trim();
-    if (c.startsWith(name)) {
-      config.headers['X-XSRF-TOKEN'] = c.substring(name.length);
-      break;
-    }
+  // ✅ SECURITY: Read CSRF token from sessionStorage (set via GET /csrf-token
+  // response body). The XSRF-TOKEN cookie is now httpOnly, so document.cookie
+  // cannot access it — sessionStorage is the correct source.
+  const csrfToken = sessionStorage.getItem('xsrf_token');
+  if (csrfToken && csrfToken !== '[REDACTED]') {
+    config.headers['X-XSRF-TOKEN'] = csrfToken;
   }
   return config;
 });

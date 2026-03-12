@@ -340,8 +340,8 @@ export class DatabaseMonitor extends EventEmitter {
     return {
       status: stateMap[state] || 'unknown',
       details: {
-        host: mongoose.connection.host,
-        port: mongoose.connection.port,
+        // ✅ SECURITY: host and port omitted — internal DB hostnames / private IPs
+        // must never be returned to clients (OWASP info-leakage).
         name: mongoose.connection.name,
         readyState: state,
       },

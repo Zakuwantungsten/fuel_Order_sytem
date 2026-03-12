@@ -12,7 +12,7 @@ export const listRules = async (req: Request, res: Response): Promise<void> => {
     const rules = await DLPRule.find().sort({ createdAt: -1 }).lean();
     res.json({ success: true, data: rules });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -63,7 +63,7 @@ export const createRule = async (req: Request, res: Response): Promise<void> => 
       res.status(409).json({ success: false, message: 'A DLP rule with this name already exists' });
       return;
     }
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -99,7 +99,7 @@ export const updateRule = async (req: Request, res: Response): Promise<void> => 
 
     res.json({ success: true, data: rule });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -129,7 +129,7 @@ export const deleteRule = async (req: Request, res: Response): Promise<void> => 
 
     res.json({ success: true, message: 'DLP rule deleted' });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -163,7 +163,7 @@ export const toggleRule = async (req: Request, res: Response): Promise<void> => 
 
     res.json({ success: true, data: rule });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -184,6 +184,6 @@ export const getStats = async (_req: Request, res: Response): Promise<void> => {
       data: { totalRules, activeRules, totalTriggers, rulesByType },
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

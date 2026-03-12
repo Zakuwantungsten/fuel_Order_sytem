@@ -73,7 +73,7 @@ export const getDeletedItems = async (req: AuthRequest, res: Response): Promise<
     });
   } catch (error: any) {
     logger.error('Error getting deleted items:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -110,7 +110,7 @@ export const getTrashStats = async (req: AuthRequest, res: Response): Promise<vo
     });
   } catch (error: any) {
     logger.error('Error getting trash stats:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -156,7 +156,7 @@ export const restoreItem = async (req: AuthRequest, res: Response): Promise<void
     emitDataChange(type, 'update');
   } catch (error: any) {
     logger.error('Error restoring item:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -210,7 +210,7 @@ export const bulkRestore = async (req: AuthRequest, res: Response): Promise<void
     emitDataChange(type, 'update');
   } catch (error: any) {
     logger.error('Error bulk restoring items:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -266,7 +266,7 @@ export const permanentDelete = async (req: AuthRequest, res: Response): Promise<
     emitDataChange(type, 'delete');
   } catch (error: any) {
     logger.error('Error permanently deleting item:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -313,7 +313,7 @@ export const bulkPermanentDelete = async (req: AuthRequest, res: Response): Prom
     emitDataChange(type, 'delete');
   } catch (error: any) {
     logger.error('Error bulk permanent deleting items:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -359,7 +359,7 @@ export const emptyTrash = async (req: AuthRequest, res: Response): Promise<void>
     emitDataChange(type, 'delete');
   } catch (error: any) {
     logger.error('Error emptying trash:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -388,7 +388,7 @@ export const getRetentionSettings = async (req: AuthRequest, res: Response): Pro
     });
   } catch (error: any) {
     logger.error('Error getting retention settings:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -453,6 +453,6 @@ export const updateRetentionSettings = async (req: AuthRequest, res: Response): 
     });
   } catch (error: any) {
     logger.error('Error updating retention settings:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

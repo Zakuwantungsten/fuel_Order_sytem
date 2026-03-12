@@ -85,7 +85,7 @@ export const getDashboardAnalytics = async (req: AuthRequest, res: Response) => 
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch analytics',
+      message: 'Failed to fetch analytics',
     });
   }
 };
@@ -173,7 +173,7 @@ export const getRevenueReport = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch revenue report',
+      message: 'Failed to fetch revenue report',
     });
   }
 };
@@ -286,7 +286,7 @@ export const getFuelReport = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch fuel report',
+      message: 'Failed to fetch fuel report',
     });
   }
 };
@@ -388,7 +388,7 @@ export const getUserActivityReport = async (req: AuthRequest, res: Response) => 
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch user activity report',
+      message: 'Failed to fetch user activity report',
     });
   }
 };
@@ -423,7 +423,7 @@ export const getSystemPerformance = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch system performance',
+      message: 'Failed to fetch system performance',
     });
   }
 };
@@ -485,7 +485,7 @@ export const exportAnalyticsReport = async (req: AuthRequest, res: Response): Pr
     if (!res.headersSent) {
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to export report',
+        message: 'Failed to export report',
       });
     } else {
       logger.error('Error after headers sent in exportAnalyticsReport:', error);

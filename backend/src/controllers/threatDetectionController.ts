@@ -133,7 +133,7 @@ export const getAnomalies = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('Threat detection query failed:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -192,6 +192,6 @@ export const getUserBaseline = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

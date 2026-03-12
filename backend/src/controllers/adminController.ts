@@ -1150,7 +1150,7 @@ export const getDatabaseMetrics = async (req: AuthRequest, res: Response): Promi
     });
   } catch (error: any) {
     logger.error('Error getting database metrics:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1173,7 +1173,9 @@ export const getDatabaseHealth = async (req: AuthRequest, res: Response): Promis
     });
   } catch (error: any) {
     logger.error('Error checking database health:', error);
-    res.status(500).json({ success: false, message: error.message });
+    // ✅ SECURITY: Do not echo error.message — Mongoose connection errors can
+    // contain internal hostnames / private IPs (info-leakage, OWASP A05).
+    res.status(500).json({ success: false, message: 'Database health check failed' });
   }
 };
 
@@ -1211,7 +1213,7 @@ export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<voi
     });
   } catch (error: any) {
     logger.error('Error getting audit logs:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1229,7 +1231,7 @@ export const getActivitySummary = async (req: AuthRequest, res: Response): Promi
     });
   } catch (error: any) {
     logger.error('Error getting activity summary:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1247,7 +1249,7 @@ export const getCriticalEvents = async (req: AuthRequest, res: Response): Promis
     });
   } catch (error: any) {
     logger.error('Error getting critical events:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1262,7 +1264,7 @@ export const getAuditStats = async (req: AuthRequest, res: Response): Promise<vo
     res.status(200).json({ success: true, data: stats });
   } catch (error: any) {
     logger.error('Error getting audit stats:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1299,7 +1301,7 @@ export const verifyAuditIntegrity = async (req: AuthRequest, res: Response): Pro
     res.status(200).json({ success: true, data: report });
   } catch (error: any) {
     logger.error('Error verifying audit integrity:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1432,7 +1434,7 @@ export const exportAuditLogs = async (req: AuthRequest, res: Response): Promise<
     res.end();
   } catch (error: any) {
     logger.error('Error exporting audit logs:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1593,7 +1595,7 @@ export const getSystemStats = async (req: AuthRequest, res: Response): Promise<v
     });
   } catch (error: any) {
     logger.error('Error getting system stats:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1618,7 +1620,7 @@ export const getActiveSessions = async (req: AuthRequest, res: Response): Promis
     });
   } catch (error: any) {
     logger.error('Error getting active sessions:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1671,7 +1673,7 @@ export const forceLogout = async (req: AuthRequest, res: Response): Promise<void
     });
   } catch (error: any) {
     logger.error('Error forcing logout:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1708,7 +1710,7 @@ export const enableProfiling = async (req: AuthRequest, res: Response): Promise<
     });
   } catch (error: any) {
     logger.error('Error enabling profiling:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1729,7 +1731,7 @@ export const getActivityFeed = async (req: AuthRequest, res: Response): Promise<
     });
   } catch (error: any) {
     logger.error('Error getting activity feed:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1753,7 +1755,7 @@ export const testEmailConfig = async (req: AuthRequest, res: Response): Promise<
     }
   } catch (error: any) {
     logger.error('Error testing email config:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1778,7 +1780,7 @@ export const sendTestEmail = async (req: AuthRequest, res: Response): Promise<vo
     });
   } catch (error: any) {
     logger.error('Error sending test email:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1795,7 +1797,7 @@ export const sendDailySummary = async (req: AuthRequest, res: Response): Promise
     });
   } catch (error: any) {
     logger.error('Error sending daily summary:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1812,7 +1814,7 @@ export const sendWeeklySummary = async (req: AuthRequest, res: Response): Promis
     });
   } catch (error: any) {
     logger.error('Error sending weekly summary:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -1924,7 +1926,7 @@ export const getRecentActivity = async (req: AuthRequest, res: Response): Promis
     });
   } catch (error: any) {
     logger.error('Error getting recent activity:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -2203,7 +2205,7 @@ export const getSecuritySettings = async (req: AuthRequest, res: Response): Prom
     });
   } catch (error: any) {
     logger.error('Error getting security settings:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -2783,6 +2785,6 @@ export const getOverviewStats = async (req: AuthRequest, res: Response): Promise
     });
   } catch (error: any) {
     logger.error('Error getting overview stats:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
