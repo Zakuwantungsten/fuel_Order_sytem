@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   Shield, Network, Key, KeyRound, Loader2,
   ShieldBan, Ban,
@@ -35,6 +35,8 @@ const SECTIONS: { id: Section; label: string; shortLabel: string; icon: React.Re
 
 /* ───────── Component ───────── */
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function SecurityAccessControlSubTab({ onMessage }: Props) {
   const [section, setSection] = useState<Section>('ip');
   const [stats, setStats] = useState<OverviewStats | null>(null);
@@ -50,10 +52,10 @@ export default function SecurityAccessControlSubTab({ onMessage }: Props) {
     setLoadingStats(true);
     try {
       const [blocklistRes, tokensRes, breakGlassRes, ipRulesRes] = await Promise.all([
-        fetch('/api/v1/system-admin/security-blocklist/stats', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/api-tokens', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/break-glass', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/ip-rules', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/security-blocklist/stats`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/api-tokens`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/break-glass`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/ip-rules`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
       ]);
 
       setStats({

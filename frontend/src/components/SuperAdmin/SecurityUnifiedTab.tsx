@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { Shield, Settings, ShieldCheck, Lock, Radar, Bell, Keyboard } from 'lucide-react';
 import SecurityPoliciesSubTab from './SecurityPoliciesSubTab';
 import SecurityAccessControlSubTab from './SecurityAccessControlSubTab';
@@ -20,6 +20,8 @@ type SubTab = typeof SUB_TABS[number]['id'];
 interface SecurityUnifiedTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
 }
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProps) {
   const [subTab, setSubTab] = useState<SubTab>('policies');
@@ -47,7 +49,7 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
 
   useEffect(() => {
     const token = sessionStorage.getItem('fuel_order_token');
-    fetch('/api/v1/system-admin/security-alerts/count', {
+    fetch(`${API_BASE}/system-admin/security-alerts/count`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())

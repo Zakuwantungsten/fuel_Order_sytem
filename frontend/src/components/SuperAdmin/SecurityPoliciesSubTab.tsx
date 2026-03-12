@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   Lock, Key, Fingerprint, ShieldBan, Mail, Save,
   Loader2, AlertTriangle, Send, CheckCircle, XCircle,
@@ -65,6 +65,8 @@ const RULE_TYPES: Record<string, string> = {
 const DATA_TYPES = ['fuel_records', 'delivery_orders', 'lpo_entries', 'users', 'audit_logs', 'yard_fuel'];
 
 /* ───────── Component ───────── */
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export default function SecurityPoliciesSubTab({ onMessage }: Props) {
   /* Security settings */
@@ -140,8 +142,8 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
     setLoadingDLP(true);
     try {
       const [rulesRes, statsRes] = await Promise.all([
-        fetch('/api/v1/system-admin/dlp', { headers: authHeaders() }),
-        fetch('/api/v1/system-admin/dlp/stats', { headers: authHeaders() }),
+        fetch(`${API_BASE}/system-admin/dlp`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/system-admin/dlp/stats`, { headers: authHeaders() }),
       ]);
       const rulesJson = await rulesRes.json();
       const statsJson = await statsRes.json();
@@ -257,7 +259,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
   /* ── DLP actions ── */
   const createDLPRule = async () => {
     try {
-      const res = await fetch('/api/v1/system-admin/dlp', { method: 'POST', headers: authHeaders(), body: JSON.stringify(dlpForm) });
+      const res = await fetch(`${API_BASE}/system-admin/dlp`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(dlpForm) });
       const json = await res.json();
       if (json.success) {
         setSuccess('DLP rule created');
@@ -270,7 +272,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
 
   const toggleDLPRule = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/system-admin/dlp/${id}/toggle`, { method: 'PATCH', headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/system-admin/dlp/${id}/toggle`, { method: 'PATCH', headers: authHeaders() });
       const json = await res.json();
       if (json.success) loadDLP(); else setError(json.message);
     } catch (err: any) { setError(err.message); }
@@ -279,7 +281,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
   const deleteDLPRule = async (id: string) => {
     if (!confirm('Delete this DLP rule?')) return;
     try {
-      const res = await fetch(`/api/v1/system-admin/dlp/${id}`, { method: 'DELETE', headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/system-admin/dlp/${id}`, { method: 'DELETE', headers: authHeaders() });
       const json = await res.json();
       if (json.success) { setSuccess('Rule deleted'); loadDLP(); } else setError(json.message);
     } catch (err: any) { setError(err.message); }

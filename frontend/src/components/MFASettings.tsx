@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { MFASetup } from './MFASetup';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 interface MFAStatus {
   isEnabled: boolean;
   isRequired: boolean;
@@ -39,7 +41,7 @@ export const MFASettings: React.FC = () => {
 
   const fetchMFAStatus = async () => {
     try {
-      const response = await fetch('/api/mfa/status', {
+      const response = await fetch(`${API_BASE}/mfa/status`, {
         headers: {
           'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
         },
@@ -59,7 +61,7 @@ export const MFASettings: React.FC = () => {
 
   const fetchTrustedDevices = async () => {
     try {
-      const response = await fetch('/api/mfa/trusted-devices', {
+      const response = await fetch(`${API_BASE}/mfa/trusted-devices`, {
         headers: {
           'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
         },
@@ -85,7 +87,7 @@ export const MFASettings: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/mfa/disable', {
+      const response = await fetch(`${API_BASE}/mfa/disable`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +122,7 @@ export const MFASettings: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/mfa/backup-codes/regenerate', {
+      const response = await fetch(`${API_BASE}/mfa/backup-codes/regenerate`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
@@ -160,7 +162,7 @@ export const MFASettings: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`/api/mfa/trusted-devices/${deviceId}`, {
+      const response = await fetch(`${API_BASE}/mfa/trusted-devices/${deviceId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
@@ -198,11 +200,7 @@ export const MFASettings: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-        Two-Factor Authentication
-      </h1>
-
+    <div className="p-6 space-y-6">
       {error && (
         <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
           {error}

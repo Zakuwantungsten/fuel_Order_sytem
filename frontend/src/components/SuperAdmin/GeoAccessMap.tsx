@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   Globe, MapPin, Loader2, RefreshCw, AlertTriangle,
   Users, Activity, Clock,
@@ -29,6 +29,8 @@ interface GeoData {
 
 /* ───────── Component ───────── */
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function GeoAccessMap() {
   const [data, setData] = useState<GeoData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export default function GeoAccessMap() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/system-admin/geo-access?days=${days}`, { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/system-admin/geo-access?days=${days}`, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) setData(json.data);
     } catch {

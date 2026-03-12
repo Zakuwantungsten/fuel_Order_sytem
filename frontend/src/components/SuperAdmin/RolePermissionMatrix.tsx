@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Loader2, RefreshCw, Search, Shield, Eye, Pencil, Trash2, Plus } from 'lucide-react';
 
 /* ───────── Types ───────── */
@@ -46,6 +46,8 @@ const PERM_STYLES: Record<string, { bg: string; text: string; label: string; ico
 
 /* ───────── Component ───────── */
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function RolePermissionMatrix() {
   const [data, setData] = useState<PermissionMatrix | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,7 +61,7 @@ export default function RolePermissionMatrix() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/system-admin/role-permissions', { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/system-admin/role-permissions`, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) setData(json.data);
     } catch {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Server, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw, Zap, CheckCircle, XCircle } from 'lucide-react';
 
 interface SIEMConfig {
@@ -37,6 +37,8 @@ const DEST_TYPES: Record<string, string> = {
 
 const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'];
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function SIEMExportTab() {
   const [configs, setConfigs] = useState<SIEMConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +66,7 @@ const headers = () => {
   const fetchConfigs = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/system-admin/siem', { headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/siem`, { headers: headers() });
       const json = await res.json();
       if (json.success) setConfigs(json.data);
     } catch (err: any) { setError(err.message); }
@@ -86,7 +88,7 @@ const headers = () => {
     if (form.destinationType === 'elastic') body.elasticUrl = form.elasticUrl;
 
     try {
-      const res = await fetch('/api/v1/system-admin/siem', {
+      const res = await fetch(`${API_BASE}/system-admin/siem`, {
         method: 'POST', headers: headers(), body: JSON.stringify(body),
       });
       const json = await res.json();
@@ -101,7 +103,7 @@ const headers = () => {
 
   const toggleConfig = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/system-admin/siem/${id}/toggle`, { method: 'PATCH', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/siem/${id}/toggle`, { method: 'PATCH', headers: headers() });
       const json = await res.json();
       if (json.success) fetchConfigs();
       else setError(json.message);
@@ -111,7 +113,7 @@ const headers = () => {
   const testConnection = async (id: string) => {
     setTestResults(prev => ({ ...prev, [id]: { success: false, message: 'Testing...' } }));
     try {
-      const res = await fetch(`/api/v1/system-admin/siem/${id}/test`, { method: 'POST', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/siem/${id}/test`, { method: 'POST', headers: headers() });
       const json = await res.json();
       setTestResults(prev => ({ ...prev, [id]: { success: json.success, message: json.success ? 'Connection successful' : json.message } }));
     } catch (err: any) {
@@ -122,7 +124,7 @@ const headers = () => {
   const deleteConfig = async (id: string) => {
     if (!confirm('Delete this SIEM configuration?')) return;
     try {
-      const res = await fetch(`/api/v1/system-admin/siem/${id}`, { method: 'DELETE', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/siem/${id}`, { method: 'DELETE', headers: headers() });
       const json = await res.json();
       if (json.success) { setSuccess('Config deleted'); fetchConfigs(); setTimeout(() => setSuccess(null), 3000); }
       else setError(json.message);

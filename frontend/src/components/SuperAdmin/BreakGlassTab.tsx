@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { KeyRound, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw, Shield, Eye, EyeOff } from 'lucide-react';
 
 interface BreakGlassAccount {
@@ -15,6 +15,8 @@ interface BreakGlassAccount {
   usageCount: number;
   createdAt: string;
 }
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export default function BreakGlassTab() {
   const [accounts, setAccounts] = useState<BreakGlassAccount[]>([]);
@@ -40,7 +42,7 @@ const headers = () => {
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/system-admin/break-glass', { headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/break-glass`, { headers: headers() });
       const json = await res.json();
       if (json.success) setAccounts(json.data);
     } catch (err: any) {
@@ -56,7 +58,7 @@ const headers = () => {
     if (form.password !== form.confirmPassword) { setError('Passwords do not match'); return; }
     if (form.password.length < 20) { setError('Password must be at least 20 characters'); return; }
     try {
-      const res = await fetch('/api/v1/system-admin/break-glass', {
+      const res = await fetch(`${API_BASE}/system-admin/break-glass`, {
         method: 'POST', headers: headers(),
         body: JSON.stringify({ username: form.username, description: form.description, password: form.password }),
       });
@@ -73,7 +75,7 @@ const headers = () => {
 
   const toggleAccount = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/system-admin/break-glass/${id}/toggle`, { method: 'PATCH', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/break-glass/${id}/toggle`, { method: 'PATCH', headers: headers() });
       const json = await res.json();
       if (json.success) fetchAccounts();
       else setError(json.message);
@@ -84,7 +86,7 @@ const headers = () => {
     const newPass = prompt('Enter new password (min 20 characters):');
     if (!newPass || newPass.length < 20) { setError('Password must be at least 20 characters'); return; }
     try {
-      const res = await fetch(`/api/v1/system-admin/break-glass/${id}/rotate`, {
+      const res = await fetch(`${API_BASE}/system-admin/break-glass/${id}/rotate`, {
         method: 'PATCH', headers: headers(), body: JSON.stringify({ newPassword: newPass }),
       });
       const json = await res.json();
@@ -96,7 +98,7 @@ const headers = () => {
   const deleteAccount = async (id: string) => {
     if (!confirm('Permanently delete this break-glass account?')) return;
     try {
-      const res = await fetch(`/api/v1/system-admin/break-glass/${id}`, { method: 'DELETE', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/break-glass/${id}`, { method: 'DELETE', headers: headers() });
       const json = await res.json();
       if (json.success) { setSuccess('Account deleted'); fetchAccounts(); setTimeout(() => setSuccess(null), 3000); }
       else setError(json.message);

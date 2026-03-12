@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   AlertTriangle, ShieldAlert, Loader2, RefreshCw,
   Monitor, Clock, Globe, Activity,
@@ -23,6 +23,8 @@ interface SessionAnomaly {
 
 /* ───────── Component ───────── */
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function SessionAnomalyPanel() {
   const [sessions, setSessions] = useState<SessionAnomaly[]>([]);
   const [riskySessions, setRiskySessions] = useState(0);
@@ -36,7 +38,7 @@ export default function SessionAnomalyPanel() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/system-admin/session-anomalies', { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/system-admin/session-anomalies`, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) {
         setSessions(json.data.sessions);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Shield, CheckCircle, AlertTriangle, XCircle, RefreshCw, ChevronRight, Info, Download } from 'lucide-react';
 import { ScoreTrendChart } from './SecurityCharts';
 import { useSecurityExport } from '../../hooks/useSecurityExport';
@@ -39,6 +39,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   compliance: 'Compliance',
 };
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function SecurityScoreTab() {
   const { exporting, exportClientCSV } = useSecurityExport();
   const [data, setData] = useState<SecurityScoreData | null>(null);
@@ -53,7 +55,7 @@ export default function SecurityScoreTab() {
     setError(null);
     try {
       const token = sessionStorage.getItem('fuel_order_token');
-      const res = await fetch('/api/v1/system-admin/security-score', {
+      const res = await fetch(`${API_BASE}/system-admin/security-score`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -69,7 +71,7 @@ export default function SecurityScoreTab() {
   const fetchTrend = async () => {
     try {
       const token = sessionStorage.getItem('fuel_order_token');
-      const res = await fetch(`/api/v1/system-admin/security-score/history?days=${trendDays}`, {
+      const res = await fetch(`${API_BASE}/system-admin/security-score/history?days=${trendDays}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();

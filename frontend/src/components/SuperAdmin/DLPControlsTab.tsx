@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { ShieldBan, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw } from 'lucide-react';
 
 interface DLPRule {
@@ -36,6 +36,8 @@ const RULE_TYPES: Record<string, string> = {
 
 const DATA_TYPES = ['fuel_records', 'delivery_orders', 'lpo_entries', 'users', 'audit_logs', 'yard_fuel'];
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function DLPControlsTab() {
   const [rules, setRules] = useState<DLPRule[]>([]);
   const [stats, setStats] = useState<DLPStats | null>(null);
@@ -65,8 +67,8 @@ const headers = () => {
     setLoading(true);
     try {
       const [rulesRes, statsRes] = await Promise.all([
-        fetch('/api/v1/system-admin/dlp', { headers: headers() }),
-        fetch('/api/v1/system-admin/dlp/stats', { headers: headers() }),
+        fetch(`${API_BASE}/system-admin/dlp`, { headers: headers() }),
+        fetch(`${API_BASE}/system-admin/dlp/stats`, { headers: headers() }),
       ]);
       const rulesJson = await rulesRes.json();
       const statsJson = await statsRes.json();
@@ -83,7 +85,7 @@ const headers = () => {
 
   const createRule = async () => {
     try {
-      const res = await fetch('/api/v1/system-admin/dlp', {
+      const res = await fetch(`${API_BASE}/system-admin/dlp`, {
         method: 'POST', headers: headers(), body: JSON.stringify(form),
       });
       const json = await res.json();
@@ -99,7 +101,7 @@ const headers = () => {
 
   const toggleRule = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/system-admin/dlp/${id}/toggle`, { method: 'PATCH', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/dlp/${id}/toggle`, { method: 'PATCH', headers: headers() });
       const json = await res.json();
       if (json.success) fetchData();
       else setError(json.message);
@@ -109,7 +111,7 @@ const headers = () => {
   const deleteRule = async (id: string) => {
     if (!confirm('Delete this DLP rule?')) return;
     try {
-      const res = await fetch(`/api/v1/system-admin/dlp/${id}`, { method: 'DELETE', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/dlp/${id}`, { method: 'DELETE', headers: headers() });
       const json = await res.json();
       if (json.success) { setSuccess('Rule deleted'); fetchData(); setTimeout(() => setSuccess(null), 3000); }
       else setError(json.message);

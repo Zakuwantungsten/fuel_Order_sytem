@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   Shield, ShieldAlert, Radar, BarChart3, Activity,
   Loader2, RefreshCw, AlertTriangle, CheckCircle, Globe,
@@ -41,6 +41,8 @@ const THREAT_STYLES: Record<string, { bg: string; text: string; border: string }
 
 /* ───────── Component ───────── */
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function SecurityThreatMonitorSubTab() {
   const [section, setSection] = useState<Section>('overview');
   const [stats, setStats] = useState<QuickStats | null>(null);
@@ -54,10 +56,10 @@ export default function SecurityThreatMonitorSubTab() {
     setLoading(true);
     try {
       const [scoreRes, threatRes, eventsRes, historyRes] = await Promise.all([
-        fetch('/api/v1/system-admin/security-score', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/threat-detection/anomalies?days=7', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/security-events/stats?hours=24', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/security-score/history?days=14', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/security-score`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/threat-detection/anomalies?days=7`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/security-events/stats?hours=24`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/security-score/history?days=14`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
       ]);
 
       const sevData = eventsRes?.data?.bySeverity ?? {};

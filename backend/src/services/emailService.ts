@@ -45,6 +45,7 @@ class EmailService {
   private brevoApiKey: string | null = null;
   private mailjetApiKey: string | null = null;
   private mailjetApiSecret: string | null = null;
+  private sendgridApiKey: string | null = null;
 
   constructor() {
     this.initialize();
@@ -113,6 +114,37 @@ class EmailService {
   }): Promise<void> {
     const toArray = Array.isArray(options.to) ? options.to : [options.to];
 
+    if (this.sendgridApiKey) {
+      // SendGrid HTTP API — no custom domain required, just verify a single sender email
+      const fromMatch = options.from.match(/^"?([^"<]+)"?\s*<([^>]+)>$/);
+      const senderName = fromMatch ? fromMatch[1].trim() : 'Fuel Order System';
+      const senderEmail = fromMatch ? fromMatch[2].trim() : options.from;
+
+      const body = JSON.stringify({
+        personalizations: toArray.map(addr => ({ to: [{ email: addr }] })),
+        from: { email: senderEmail, name: senderName },
+        subject: options.subject,
+        content: [{ type: 'text/html', value: options.html }],
+      });
+
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.sendgridApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      // SendGrid returns 202 Accepted on success (no body)
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`SendGrid API error ${response.status}: ${errText}`);
+      }
+      return;
+    }
+
     if (this.mailjetApiKey && this.mailjetApiSecret) {
       // Use Mailjet HTTP API — no custom domain required, just a verified sender email
       const fromMatch = options.from.match(/^"?([^"<]+)"?\s*<([^>]+)>$/);
@@ -143,6 +175,18 @@ class EmailService {
         const errText = await response.text();
         throw new Error(`Mailjet API error ${response.status}: ${errText}`);
       }
+      // Log per-message delivery status — Mailjet returns 200 even for silent failures
+      try {
+        const result = await response.json() as any;
+        const messages: any[] = result?.Messages || [];
+        messages.forEach((msg: any) => {
+          if (msg.Status !== 'success') {
+            logger.error(`Mailjet delivery issue: status=${msg.Status} errors=${JSON.stringify(msg.Errors)}`);
+          } else {
+            logger.info(`Mailjet accepted: to=${msg.To?.[0]?.Email} msgId=${msg.To?.[0]?.MessageID}`);
+          }
+        });
+      } catch { /* non-critical — already sent */ }
       return;
     }
 
@@ -219,7 +263,22 @@ class EmailService {
   private async initialize() {
     const config = await this.getEmailConfig();
 
-    // Priority 1: Mailjet — no custom domain, just verify a sender email address (email link only)
+    // Priority 1: SendGrid — no custom domain, just verify a single sender email
+    // Free tier: 100 emails/day. Sign up at https://sendgrid.com (email only, no phone)
+    const sgKey = process.env.SENDGRID_API_KEY || '';
+    if (sgKey) {
+      this.sendgridApiKey = sgKey;
+      this.isConfigured = true;
+      if (!config.from) {
+        config.from = config.auth.user;
+        logger.warn(`EMAIL_FROM not set — using ${config.from} as SendGrid sender. Verify this address in SendGrid: Settings → Sender Authentication → Single Sender Verification.`);
+      }
+      this.currentConfig = config;
+      logger.info(`Email service initialized with SendGrid HTTP API (from: ${config.from})`);
+      return;
+    }
+
+    // Priority 2: Mailjet — no custom domain, just verify a sender email address (email link only)
     const mjKey = process.env.MAILJET_API_KEY || '';
     const mjSecret = process.env.MAILJET_API_SECRET || '';
     if (mjKey && mjSecret) {

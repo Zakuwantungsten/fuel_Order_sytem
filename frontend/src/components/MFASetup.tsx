@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import QRCode from 'react-qr-code';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 interface MFASetupProps {
   onComplete: () => void;
   onCancel: () => void;
@@ -47,7 +49,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/mfa/setup/totp/generate', { method: 'POST', headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/mfa/setup/totp/generate`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to generate TOTP secret');
       if (data.data.alreadyConfigured) {
@@ -75,7 +77,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
     setError('');
 
     try {
-      const response = await fetch('/api/mfa/setup/totp/verify', {
+      const response = await fetch(`${API_BASE}/mfa/setup/totp/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +129,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/mfa/setup/email/enable', { method: 'POST', headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/mfa/setup/email/enable`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to send email code');
       setStep('email-verify');
@@ -140,7 +142,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/mfa/setup/email/verify', {
+      const res = await fetch(`${API_BASE}/mfa/setup/email/verify`, {
         method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ code: verificationCode }),
       });
@@ -157,7 +159,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/mfa/setup/sms/send', {
+      const res = await fetch(`${API_BASE}/mfa/setup/sms/send`, {
         method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ phoneNumber }),
       });
@@ -173,7 +175,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/mfa/setup/sms/verify', {
+      const res = await fetch(`${API_BASE}/mfa/setup/sms/verify`, {
         method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ code: verificationCode, phoneNumber }),
       });

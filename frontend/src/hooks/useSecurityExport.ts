@@ -4,6 +4,8 @@
  */
 import { useCallback, useState } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 function getToken() {
   return sessionStorage.getItem('fuel_order_token') || '';
 }
@@ -32,7 +34,7 @@ export function useSecurityExport() {
   const exportSecurityEvents = useCallback(async (hours = 24) => {
     setExporting(true);
     try {
-      const res = await fetch(`/api/v1/system-admin/security-events/export?hours=${hours}`, {
+      const res = await fetch(`${API_BASE}/system-admin/security-events/export?hours=${hours}`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       if (!res.ok) throw new Error('Export failed');
@@ -49,7 +51,7 @@ export function useSecurityExport() {
   const exportAuditLog = useCallback(async (days = 30) => {
     setExporting(true);
     try {
-      const res = await fetch(`/api/v1/system-admin/security-audit-log/export?days=${days}`, {
+      const res = await fetch(`${API_BASE}/system-admin/security-audit-log/export?days=${days}`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       if (!res.ok) throw new Error('Export failed');

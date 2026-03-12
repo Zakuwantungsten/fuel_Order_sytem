@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Radar, Users, Clock, Download, MapPin, RefreshCw, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface ThreatOverview {
@@ -25,6 +25,8 @@ const THREAT_COLORS: Record<string, { bg: string; text: string; border: string }
   critical: { bg: 'bg-red-100 dark:bg-red-900/20', text: 'text-red-700 dark:text-red-400', border: 'border-red-300 dark:border-red-700' },
 };
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function ThreatDetectionTab() {
   const [overview, setOverview] = useState<ThreatOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +49,7 @@ const headers = () => {
   const fetchOverview = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/system-admin/threat-detection/anomalies?days=7', { headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/threat-detection/anomalies?days=7`, { headers: headers() });
       const json = await res.json();
       if (json.success) {
         const d = json.data || {};
@@ -99,7 +101,7 @@ const headers = () => {
     setBaselineLoading(true);
     setSelectedUser(userId);
     try {
-      const res = await fetch(`/api/v1/system-admin/threat-detection/baseline/${userId}`, { headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/threat-detection/baseline/${userId}`, { headers: headers() });
       const json = await res.json();
       if (json.success) setBaseline(json.data);
     } catch (err: any) { setError(err.message); }

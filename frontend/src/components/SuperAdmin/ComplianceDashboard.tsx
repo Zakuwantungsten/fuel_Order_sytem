@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ComplianceDashboard — Compliance & Regulatory overview.
  * Displays compliance status across four frameworks derived from security score checks.
  */
@@ -55,6 +55,8 @@ function barColor(pct: number): string {
 
 /* ───────── Component ───────── */
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function ComplianceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function ComplianceDashboard() {
     setError(null);
     try {
       const token = sessionStorage.getItem('fuel_order_token');
-      const res = await fetch('/api/v1/system-admin/compliance', {
+      const res = await fetch(`${API_BASE}/system-admin/compliance`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();

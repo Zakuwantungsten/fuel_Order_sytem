@@ -50,6 +50,7 @@ import OfficerPortal from './OfficerPortal';
 import PendingYardFuel from './PendingYardFuel';
 import NotificationsPage from './NotificationsPage';
 import ChangePasswordModal from './ChangePasswordModal';
+import { MFASettings } from './MFASettings';
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
 import DevicesSessionsPanel from './DevicesSessionsPanel';
@@ -145,6 +146,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showSecurityPanel, setShowSecurityPanel] = useState(false);
+  const [showMFASettings, setShowMFASettings] = useState(false);
   const [showPendingYardFuel, setShowPendingYardFuel] = useState(false);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [editDoId, setEditDoId] = useState<string | null>(null);
@@ -632,6 +634,16 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                       <Shield className="w-4 h-4 mr-3" />
                       Security & Devices
                     </button>
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        setShowMFASettings(true);
+                      }}
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      <ShieldCheck className="w-4 h-4 mr-3" />
+                      2FA / MFA Settings
+                    </button>
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                     <button
                       onClick={() => {
@@ -742,6 +754,16 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                         <Shield className="w-4 h-4 mr-3" />
                         Security & Devices
                       </button>
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          setShowMFASettings(true);
+                        }}
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        <ShieldCheck className="w-4 h-4 mr-3" />
+                        2FA / MFA Settings
+                      </button>
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                       <button
                         onClick={() => {
@@ -795,6 +817,25 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSecurityPanel(false)} />
           <div className="relative z-[210] w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
             <DevicesSessionsPanel onClose={() => setShowSecurityPanel(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* MFA Settings Modal */}
+      {showMFASettings && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMFASettings(false)} />
+          <div className="relative z-[210] w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl">
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-indigo-500" />
+                Two-Factor Authentication
+              </h2>
+              <button onClick={() => setShowMFASettings(false)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <MFASettings />
           </div>
         </div>
       )}

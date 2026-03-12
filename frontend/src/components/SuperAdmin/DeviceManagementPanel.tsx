@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   Monitor, Smartphone, Tablet, Loader2, RefreshCw, Search,
   ShieldCheck, ShieldBan, Trash2, CheckCircle, XCircle,
@@ -56,6 +56,8 @@ const DEVICE_ICONS: Record<string, React.ReactNode> = {
 
 /* ───────── Component ───────── */
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function DeviceManagementPanel({ onMessage }: Props) {
   const [devices, setDevices] = useState<KnownDevice[]>([]);
   const [stats, setStats] = useState<DeviceStats | null>(null);
@@ -82,7 +84,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
       if (filter === 'blocked') params.set('blocked', 'true');
       params.set('limit', '100');
 
-      const res = await fetch(`/api/v1/system-admin/known-devices?${params}`, { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/system-admin/known-devices?${params}`, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) setDevices(json.data.devices);
     } catch {
@@ -94,7 +96,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
 
   const loadStats = async () => {
     try {
-      const res = await fetch('/api/v1/system-admin/known-devices/stats', { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/system-admin/known-devices/stats`, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) setStats(json.data);
     } catch {
@@ -107,7 +109,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const res = await fetch('/api/v1/system-admin/known-devices/sync', {
+      const res = await fetch(`${API_BASE}/system-admin/known-devices/sync`, {
         method: 'POST',
         headers: authHeaders(),
       });
@@ -125,7 +127,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
   const handleTrust = async (id: string) => {
     setActionLoading(id + '_trust');
     try {
-      await fetch(`/api/v1/system-admin/known-devices/${id}/trust`, { method: 'PATCH', headers: authHeaders() });
+      await fetch(`${API_BASE}/system-admin/known-devices/${id}/trust`, { method: 'PATCH', headers: authHeaders() });
       onMessage('success', 'Device trusted');
       loadDevices();
       loadStats();
@@ -136,7 +138,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
   const handleBlock = async (id: string) => {
     setActionLoading(id + '_block');
     try {
-      await fetch(`/api/v1/system-admin/known-devices/${id}/block`, { method: 'PATCH', headers: authHeaders() });
+      await fetch(`${API_BASE}/system-admin/known-devices/${id}/block`, { method: 'PATCH', headers: authHeaders() });
       onMessage('success', 'Device blocked');
       loadDevices();
       loadStats();
@@ -147,7 +149,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
   const handleUntrust = async (id: string) => {
     setActionLoading(id + '_untrust');
     try {
-      await fetch(`/api/v1/system-admin/known-devices/${id}/untrust`, { method: 'PATCH', headers: authHeaders() });
+      await fetch(`${API_BASE}/system-admin/known-devices/${id}/untrust`, { method: 'PATCH', headers: authHeaders() });
       onMessage('success', 'Device untrusted');
       loadDevices();
       loadStats();
@@ -159,7 +161,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await fetch(`/api/v1/system-admin/known-devices/${deleteTarget._id}`, { method: 'DELETE', headers: authHeaders() });
+      await fetch(`${API_BASE}/system-admin/known-devices/${deleteTarget._id}`, { method: 'DELETE', headers: authHeaders() });
       onMessage('success', 'Device removed');
       setDeleteTarget(null);
       loadDevices();

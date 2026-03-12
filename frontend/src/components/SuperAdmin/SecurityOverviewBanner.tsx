@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SecurityOverviewBanner — Always-visible security posture summary
  * displayed at the top of the Security tab, above sub-tab navigation.
  */
@@ -45,6 +45,8 @@ interface Props {
   onNavigate?: (subTab: string) => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export default function SecurityOverviewBanner({ onNavigate }: Props) {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,11 +60,11 @@ export default function SecurityOverviewBanner({ onNavigate }: Props) {
     setLoading(true);
     try {
       const [scoreRes, threatRes, eventsRes, sessionsRes, historyRes] = await Promise.all([
-        fetch('/api/v1/system-admin/security-score', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/threat-detection/anomalies?days=7', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/security-events/stats?hours=24', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/admin/sessions/active', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch('/api/v1/system-admin/security-score/history?days=30', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/security-score`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/threat-detection/anomalies?days=7`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/security-events/stats?hours=24`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/admin/sessions/active`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/system-admin/security-score/history?days=30`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
       ]);
 
       const improvementItems = (scoreRes?.data?.improvementPriority || [])

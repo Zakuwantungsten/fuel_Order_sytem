@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   Bell, Mail, Server, RefreshCw, ArrowRight, CheckCircle, AlertTriangle,
 } from 'lucide-react';
@@ -8,6 +8,8 @@ import EmailLogViewerTab from './EmailLogViewerTab';
 import SIEMExportTab from './SIEMExportTab';
 
 type View = 'overview' | 'thresholds' | 'email_logs' | 'siem';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export default function MonitoringAlertsSubTab() {
   const [view, setView] = useState<View>('overview');
@@ -32,7 +34,7 @@ export default function MonitoringAlertsSubTab() {
       const [thresholdRes, emailRes, siemRes] = await Promise.allSettled([
         apiClient.get('/system-admin/config/settings/alert-thresholds'),
         apiClient.get('/system-admin/email-logs', { params: { limit: 1 } }),
-        fetch('/api/v1/system-admin/siem', { headers }),
+        fetch(`${API_BASE}/system-admin/siem`, { headers }),
       ]);
 
       const thresholds = thresholdRes.status === 'fulfilled' ? thresholdRes.value.data.data : null;
