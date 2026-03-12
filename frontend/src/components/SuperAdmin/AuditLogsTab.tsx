@@ -172,18 +172,18 @@ function LogDetailModal({ log, onClose }: { log: any; onClose: () => void }) {
             {[
               ['Timestamp',     new Date(log.timestamp).toLocaleString()],
               ['User',          log.username],
-              ['User ID',       log.userId || 'â€”'],
+              ['User ID',       log.userId || '—'],
               ['Action',        log.action],
               ['Resource Type', log.resourceType],
-              ['Resource ID',   log.resourceId || 'â€”'],
+              ['Resource ID',   log.resourceId || '—'],
               ['Outcome',       log.outcome || 'SUCCESS'],
               ['Severity',      log.severity],
-              ['Risk Score',    log.riskScore ?? 'â€”'],
-              ['IP Address',    log.ipAddress || 'â€”'],
+              ['Risk Score',    log.riskScore ?? '—'],
+              ['IP Address',    log.ipAddress || '—'],
               ['Read Only',     log.readOnly ? 'Yes' : 'No'],
-              ['Error Code',    log.errorCode || 'â€”'],
-              ['Correlation ID', log.correlationId || 'â€”'],
-              ['Session ID',    log.sessionId || 'â€”'],
+              ['Error Code',    log.errorCode || '—'],
+              ['Correlation ID', log.correlationId || '—'],
+              ['Session ID',    log.sessionId || '—'],
             ].map(([k, v]) => (
               <div key={k} className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
                 <p className="text-xs text-gray-500 dark:text-gray-400">{k}</p>
@@ -309,7 +309,7 @@ function IntegrityPanel({ onClose }: { onClose: () => void }) {
               </span>
             </div>
             <p className="text-xs mt-1 text-gray-600 dark:text-gray-300">
-              Checked {report.totalChecked} entries â€” {report.valid} valid,{' '}
+              Checked {report.totalChecked} entries — {report.valid} valid,{' '}
               {report.tampered.length} tampered, {report.chainBroken.length} chain breaks
             </p>
           </div>
@@ -321,7 +321,7 @@ function IntegrityPanel({ onClose }: { onClose: () => void }) {
               <div className="space-y-1 max-h-40 overflow-auto">
                 {report.tampered.map((e: any) => (
                   <div key={e.id} className="text-xs bg-red-50 dark:bg-red-900/20 p-2 rounded font-mono text-red-700 dark:text-red-300">
-                    {new Date(e.timestamp).toLocaleString()} â€” {e.action} â€” {e.id}
+                    {new Date(e.timestamp).toLocaleString()} — {e.action} — {e.id}
                   </div>
                 ))}
               </div>
@@ -335,7 +335,7 @@ function IntegrityPanel({ onClose }: { onClose: () => void }) {
               <div className="space-y-1 max-h-40 overflow-auto">
                 {report.chainBroken.map((e: any) => (
                   <div key={e.id} className="text-xs bg-orange-50 dark:bg-orange-900/20 p-2 rounded font-mono text-orange-700 dark:text-orange-300">
-                    {new Date(e.timestamp).toLocaleString()} â€” {e.action} â€” {e.id}
+                    {new Date(e.timestamp).toLocaleString()} — {e.action} — {e.id}
                   </div>
                 ))}
               </div>
@@ -586,7 +586,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
                     </span>
                   </td>
                   <td className="px-4 py-3 max-w-xs">
-                    <p className="text-gray-600 dark:text-gray-300 text-xs truncate">{log.details || 'â€”'}</p>
+                    <p className="text-gray-600 dark:text-gray-300 text-xs truncate">{log.details || '—'}</p>
                   </td>
                   <td className="px-4 py-3">
                     <ChevronRight className="w-4 h-4 text-gray-400" />

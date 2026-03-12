@@ -212,12 +212,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     checkExistingSession();
 
-    // Load system settings to apply timezone, date format, and system name (super_admin only)
+    // Load system settings to apply timezone, date format, and system name
     const loadSystemSettings = async () => {
       try {
         // Check if user is authenticated first
         const authData = sessionStorage.getItem('fuel_order_auth');
         if (!authData) return;
+
+        // Apply cached system name for all roles immediately
+        const cachedName = localStorage.getItem('fuel_order_system_name');
+        if (cachedName) setSystemName(cachedName);
 
         const parsed = JSON.parse(authData);
         if (parsed.role !== 'super_admin') return;
@@ -226,7 +230,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (settings?.general) {
           if (settings.general.timezone)   setSystemTimezone(settings.general.timezone);
           if (settings.general.dateFormat) setSystemDateFormat(settings.general.dateFormat);
-          if (settings.general.systemName) setSystemName(settings.general.systemName);
+          if (settings.general.systemName) {
+            localStorage.setItem('fuel_order_system_name', settings.general.systemName);
+            setSystemName(settings.general.systemName);
+          }
         }
       } catch (error) {
         // Silently fail - keep defaults
@@ -353,6 +360,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Apply the user's theme immediately after login
       dispatch({ type: 'SET_THEME', payload: userTheme });
 
+      // Apply cached system name for all roles
+      const cachedName = localStorage.getItem('fuel_order_system_name');
+      if (cachedName) setSystemName(cachedName);
+
       // Load system settings (super_admin only - endpoint is restricted)
       try {
         if (user.role !== 'super_admin') throw new Error('not super_admin');
@@ -360,7 +371,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (settings?.general) {
           if (settings.general.timezone)   setSystemTimezone(settings.general.timezone);
           if (settings.general.dateFormat) setSystemDateFormat(settings.general.dateFormat);
-          if (settings.general.systemName) setSystemName(settings.general.systemName);
+          if (settings.general.systemName) {
+            localStorage.setItem('fuel_order_system_name', settings.general.systemName);
+            setSystemName(settings.general.systemName);
+          }
         }
       } catch (error) {
         // Silently fail - timezone already set to default
