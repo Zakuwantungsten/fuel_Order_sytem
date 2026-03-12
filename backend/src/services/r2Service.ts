@@ -30,7 +30,7 @@ class R2Service {
         this.enabled = false;
       }
     } else {
-      logger.warn('R2 service is not configured. Backup functionality will be limited.');
+      logger.debug('R2 service is not configured. Backup functionality will be limited.');
     }
   }
 

@@ -15,7 +15,7 @@ export interface ISecurityScoreSnapshot extends Document {
 
 const SecurityScoreSnapshotSchema = new Schema<ISecurityScoreSnapshot>(
   {
-    date: { type: Date, required: true, unique: true },
+    date: { type: Date, required: true },
     overallScore: { type: Number, required: true, min: 0, max: 100 },
     categoryScores: { type: Schema.Types.Mixed, required: true },
     checksSummary: {
