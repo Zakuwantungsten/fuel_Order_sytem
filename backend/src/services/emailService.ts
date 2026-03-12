@@ -316,7 +316,7 @@ class EmailService {
    * Send critical alert email to super admins
    */
   async sendCriticalEmail(options: CriticalEmailOptions): Promise<void> {
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       logger.warn('Email service not configured - skipping email notification');
       return;
     }
@@ -422,10 +422,10 @@ class EmailService {
   async sendPasswordResetEmail(options: PasswordResetEmailOptions): Promise<void> {
     // Lazy reinit — covers the async startup race and the case where SMTP was
     // configured via the admin UI after the service first initialized.
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       await this.reinitialize();
     }
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       logger.warn('Email service not configured - cannot send password reset email');
       throw new Error('Email service is not configured');
     }
@@ -515,7 +515,7 @@ class EmailService {
    * Send password changed confirmation email
    */
   async sendPasswordChangedEmail(email: string, name: string): Promise<void> {
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       logger.warn('Email service not configured - cannot send password changed email');
       return; // Don't throw - this is just a confirmation
     }
@@ -592,7 +592,7 @@ class EmailService {
    * Send daily summary email
    */
   async sendDailySummary(): Promise<void> {
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       return;
     }
 
@@ -638,7 +638,7 @@ class EmailService {
    * Send weekly report email
    */
   async sendWeeklySummary(): Promise<void> {
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       return;
     }
 
@@ -662,11 +662,13 @@ class EmailService {
 
       const emailContent = this.generateWeeklySummaryEmail(stats);
 
-      await this.transporter.sendMail({
-        from: this.currentConfig?.from 
+      const fromAddr = this.currentConfig?.from
           ? `"${this.currentConfig.fromName}" <${this.currentConfig.from}>`
-          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`,
-        to: superAdmins.map((admin) => admin.email).join(', '),
+          : `"Fuel Order System" <${this.currentConfig?.auth.user}>`;
+
+      await this.dispatchMail({
+        from: fromAddr,
+        to: superAdmins.map((admin) => admin.email),
         subject: `📈 Weekly Report - Week of ${new Date().toLocaleDateString()}`,
         html: emailContent,
       });
@@ -686,10 +688,10 @@ class EmailService {
     message: string
   ): Promise<void> {
     // Lazy reinit — covers the async startup race and post-startup SMTP configuration
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       await this.reinitialize();
     }
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       logger.warn('Email service not configured - cannot send notification');
       throw new Error('Email service is not configured');
     }
@@ -719,8 +721,14 @@ class EmailService {
    */
 
   async testConnection(): Promise<boolean> {
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       return false;
+    }
+
+    // For HTTP API providers (Mailjet, Brevo, Resend) there is no persistent connection
+    // to verify — isConfigured being true is sufficient.
+    if (!this.transporter) {
+      return true;
     }
 
     try {
@@ -804,10 +812,10 @@ class EmailService {
    * Send password reset by admin email
    */
   async sendPasswordResetByAdminEmail(email: string, name: string, username: string, temporaryPassword: string): Promise<void> {
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       await this.reinitialize();
     }
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       logger.warn('Email service not configured - cannot send password reset email');
       throw new Error('Email service is not configured');
     }
@@ -898,10 +906,10 @@ class EmailService {
   async sendWelcomeEmail(email: string, name: string, username: string, temporaryPassword: string): Promise<void> {
     // Lazy reinit — covers the async startup race and the case where SMTP was
     // configured via the admin UI after the service first initialized.
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       await this.reinitialize();
     }
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       logger.warn('Email service not configured - cannot send welcome email');
       throw new Error('Email service is not configured');
     }
@@ -1016,7 +1024,7 @@ class EmailService {
       deviceType: string;
     }
   ): Promise<void> {
-    if (!this.isConfigured || !this.transporter) {
+    if (!this.isConfigured) {
       logger.warn('Email service not configured — skipping login notification');
       return;
     }
