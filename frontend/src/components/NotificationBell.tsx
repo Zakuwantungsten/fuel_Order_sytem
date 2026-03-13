@@ -275,8 +275,8 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       try {
         const n = new Notification(notification.title || 'New Notification', {
           body: (notification.message || '').split('\n')[0], // Show first line as body
-          icon: '/favicon.ico',
-          badge: '/favicon.ico',
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/favicon-48x48.png',
           tag: notification.id || notification._id,
           requireInteraction: false,
           silent: false,
