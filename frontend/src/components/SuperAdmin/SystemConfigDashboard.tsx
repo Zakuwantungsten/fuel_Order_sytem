@@ -64,6 +64,8 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
       weeklyReport: true,
       slowQueryThreshold: 500,
       storageWarningThreshold: 80,
+      sendCredentialsEmail: true,
+  bypassEmailVerification: false,
     },
     maintenance: {
       enabled: false,
