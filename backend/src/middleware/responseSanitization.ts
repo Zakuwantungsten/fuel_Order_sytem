@@ -41,11 +41,18 @@ export const responseSanitizationMiddleware = (
 
   const isTokenRoute = AUTH_TOKEN_ROUTES.some((route) => req.path.endsWith(route));
 
+  // Driver credential PIN provisioning/reset routes must return plaintext PIN once.
+  // If we sanitize these responses, `pin`/`newPIN` become [REDACTED] and the
+  // frontend cannot display/copy the actual value.
+  const isDriverPinRoute =
+    (req.method === 'POST' && /\/api(?:\/v1)?\/driver-credentials(?:\/scan)?$/.test(req.path)) ||
+    (req.method === 'PUT' && /\/api(?:\/v1)?\/driver-credentials\/[^/]+\/reset$/.test(req.path));
+
   // Override json method to sanitize response
   res.json = function (body: any): Response {
     try {
       // Skip sanitization for routes that intentionally return tokens to the client
-      if (isTokenRoute) {
+      if (isTokenRoute || isDriverPinRoute) {
         return originalJson.call(this, body);
       }
 

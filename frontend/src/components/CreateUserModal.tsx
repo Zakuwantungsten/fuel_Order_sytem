@@ -78,7 +78,6 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated, restri
     { value: 'manager' as UserRole, label: 'Station Manager (LPO View)', description: 'View LPOs for assigned station only' },
     { value: 'supervisor' as UserRole, label: 'Supervisor', description: 'Supervisory access' },
     { value: 'clerk' as UserRole, label: 'Clerk', description: 'Data entry' },
-    { value: 'driver' as UserRole, label: 'Driver', description: 'Driver portal' },
     { value: 'viewer' as UserRole, label: 'Viewer', description: 'Read-only access' },
     { value: 'fuel_order_maker' as UserRole, label: 'Fuel Order Maker', description: 'Create fuel orders' },
     { value: 'boss' as UserRole, label: 'Boss', description: 'Executive view' },

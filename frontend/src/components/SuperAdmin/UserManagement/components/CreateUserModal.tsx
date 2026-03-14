@@ -50,6 +50,7 @@ const INITIAL_FORM: FormData = {
 
 const STATION_ROLES: UserRole[] = ['fuel_attendant', 'station_manager'];
 const YARD_ROLES: UserRole[] = ['yard_personnel'];
+const USER_CREATE_ROLE_OPTIONS = USER_ROLES.filter(r => r.value !== 'driver');
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalProps) {
@@ -427,7 +428,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
               onChange={e => updateField('role', e.target.value as UserRole)}
               className={inputClasses('role')}
             >
-              {USER_ROLES.map(r => (
+              {USER_CREATE_ROLE_OPTIONS.map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>

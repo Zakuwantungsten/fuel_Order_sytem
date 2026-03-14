@@ -2,6 +2,7 @@ import express from 'express';
 import {
   getAllDriverCredentials,
   getDriverCredentialById,
+  createDriverCredential,
   scanAndGenerateCredentials,
   resetDriverPIN,
   deactivateDriverCredential,
@@ -11,6 +12,7 @@ import {
 } from '../controllers/driverCredentialController';
 import { authenticate, authorize } from '../middleware/auth';
 import { exportRateLimiter } from '../middleware/rateLimiters';
+import { asyncHandler } from '../middleware/errorHandler';
 
 const router = express.Router();
 
@@ -19,19 +21,20 @@ router.use(authenticate);
 router.use(authorize('super_admin', 'admin'));
 
 // Statistics
-router.get('/stats', getDriverCredentialsStats);
+router.get('/stats', asyncHandler(getDriverCredentialsStats));
 
 // Export
-router.get('/export', exportRateLimiter, exportDriverCredentials);
+router.get('/export', exportRateLimiter, asyncHandler(exportDriverCredentials));
 
 // Scan for new trucks
-router.post('/scan', scanAndGenerateCredentials);
+router.post('/scan', asyncHandler(scanAndGenerateCredentials));
 
 // CRUD operations
-router.get('/', getAllDriverCredentials);
-router.get('/:id', getDriverCredentialById);
-router.put('/:id/reset', resetDriverPIN);
-router.put('/:id/deactivate', deactivateDriverCredential);
-router.put('/:id/reactivate', reactivateDriverCredential);
+router.get('/', asyncHandler(getAllDriverCredentials));
+router.post('/', asyncHandler(createDriverCredential));
+router.get('/:id', asyncHandler(getDriverCredentialById));
+router.put('/:id/reset', asyncHandler(resetDriverPIN));
+router.put('/:id/deactivate', asyncHandler(deactivateDriverCredential));
+router.put('/:id/reactivate', asyncHandler(reactivateDriverCredential));
 
 export default router;

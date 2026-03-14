@@ -107,6 +107,38 @@ export function decryptData(encryptedPayload: string, encryptionKey: string): st
 }
 
 /**
+ * Best-effort decrypt for read paths where failures should not spam logs.
+ * Returns null when payload can't be decrypted with the provided key.
+ */
+export function tryDecryptData(encryptedPayload: string, encryptionKey: string): string | null {
+  try {
+    if (!encryptionKey || encryptionKey.length < 12) {
+      return null;
+    }
+
+    const payload = JSON.parse(encryptedPayload);
+    if (!payload.encrypted || !payload.iv || !payload.salt || !payload.authTag) {
+      return null;
+    }
+
+    const salt = Buffer.from(payload.salt, 'hex');
+    const iv = Buffer.from(payload.iv, 'hex');
+    const authTag = Buffer.from(payload.authTag, 'hex');
+    const encryptedData = payload.encrypted;
+
+    const key = deriveKey(encryptionKey, salt);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Encrypt a buffer (for file encryption like backups)
  */
 export function encryptBuffer(buffer: Buffer, encryptionKey: string): Buffer {

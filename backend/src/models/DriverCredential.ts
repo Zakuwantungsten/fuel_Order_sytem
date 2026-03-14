@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { encryptData, decryptData } from '../utils/cryptoUtils';
+import { encryptData, tryDecryptData } from '../utils/cryptoUtils';
 import logger from '../utils/logger';
 
 /**
@@ -144,28 +144,26 @@ function decryptSensitiveFields(doc: any) {
   const encryptionKey = process.env.FIELD_ENCRYPTION_KEY;
   if (!encryptionKey) return; // Encryption disabled
 
-  try {
-    // Decrypt driverName
-    if (doc.driverName && typeof doc.driverName === 'string' && doc.driverName.startsWith('encrypted:')) {
-      try {
-        const encryptedPayload = doc.driverName.substring(10);
-        doc.driverName = decryptData(encryptedPayload, encryptionKey);
-      } catch (error: any) {
-        logger.warn('[DriverCredential] Failed to decrypt driverName:', error.message);
-      }
+  // Decrypt driverName (silent fallback for legacy/bad payloads)
+  if (doc.driverName && typeof doc.driverName === 'string' && doc.driverName.startsWith('encrypted:')) {
+    const encryptedPayload = doc.driverName.substring(10);
+    const decrypted = tryDecryptData(encryptedPayload, encryptionKey);
+    if (decrypted !== null) {
+      doc.driverName = decrypted;
+    } else {
+      doc.driverName = undefined;
     }
+  }
 
-    // Decrypt phoneNumber
-    if (doc.phoneNumber && typeof doc.phoneNumber === 'string' && doc.phoneNumber.startsWith('encrypted:')) {
-      try {
-        const encryptedPayload = doc.phoneNumber.substring(10);
-        doc.phoneNumber = decryptData(encryptedPayload, encryptionKey);
-      } catch (error: any) {
-        logger.warn('[DriverCredential] Failed to decrypt phoneNumber:', error.message);
-      }
+  // Decrypt phoneNumber (silent fallback for legacy/bad payloads)
+  if (doc.phoneNumber && typeof doc.phoneNumber === 'string' && doc.phoneNumber.startsWith('encrypted:')) {
+    const encryptedPayload = doc.phoneNumber.substring(10);
+    const decrypted = tryDecryptData(encryptedPayload, encryptionKey);
+    if (decrypted !== null) {
+      doc.phoneNumber = decrypted;
+    } else {
+      doc.phoneNumber = undefined;
     }
-  } catch (error: any) {
-    logger.error('[DriverCredential] Decryption error:', error.message);
   }
 }
 

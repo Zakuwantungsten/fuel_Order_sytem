@@ -4,18 +4,20 @@ import { formatDate as formatSystemDate, formatDateOnly } from '../../utils/time
 import {
   RefreshCw,
   Download,
+  Plus,
   Lock,
   Unlock,
   RotateCcw,
   Search as ScanIcon,
   Search,
   Copy,
-  X,
+  Check,
   AlertTriangle,
   CheckCircle,
   Key,
   Loader
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Pagination from '../../components/Pagination';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
@@ -37,6 +39,15 @@ interface NewCredential {
   createdAt: string;
 }
 
+interface CreatedCredentialResult {
+  id: string;
+  truckNo: string;
+  pin: string;
+  createdAt: string;
+  driverName?: string;
+  phoneNumber?: string;
+}
+
 interface Stats {
   totalDrivers: number;
   activeDrivers: number;
@@ -50,8 +61,6 @@ const DriverCredentialsManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   // Pagination and search state
   const [currentPage, setCurrentPage] = useState(1);
@@ -64,11 +73,15 @@ const DriverCredentialsManager: React.FC = () => {
   // Dialog states
   const [showNewCredentials, setShowNewCredentials] = useState(false);
   const [newCredentials, setNewCredentials] = useState<NewCredential[]>([]);
+  const [showCreateCredentialModal, setShowCreateCredentialModal] = useState(false);
+  const [creatingCredential, setCreatingCredential] = useState(false);
+  const [createForm, setCreateForm] = useState({ truckNo: '', driverName: '', phoneNumber: '' });
+  const [createdCredentialResult, setCreatedCredentialResult] = useState<CreatedCredentialResult | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [resetDialog, setResetDialog] = useState<{ open: boolean; credential: DriverCredential | null }>({
     open: false,
     credential: null,
   });
-  const [resetReason, setResetReason] = useState('');
   const [newPIN, setNewPIN] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,9 +122,8 @@ const DriverCredentialsManager: React.FC = () => {
       setItemsPerPage(apiData.pagination?.limit || 10);
       setTotalPages(apiData.pagination?.totalPages || 1);
       setTotalItems(apiData.pagination?.total || 0);
-      setError(null);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to fetch driver credentials');
+      toast.error(err.response?.data?.message || 'Failed to fetch driver credentials');
     } finally {
       setLoading(false);
     }
@@ -129,7 +141,6 @@ const DriverCredentialsManager: React.FC = () => {
   const handleScanTrucks = async () => {
     try {
       setScanning(true);
-      setError(null);
       const response = await api.post('/driver-credentials/scan');
       
       const { newCredentials: newCreds, newCount } = response.data.data;
@@ -137,15 +148,15 @@ const DriverCredentialsManager: React.FC = () => {
       if (newCount > 0) {
         setNewCredentials(newCreds);
         setShowNewCredentials(true);
-        setSuccess(`Successfully created ${newCount} new driver credential(s)!`);
+        toast.success(`Successfully created ${newCount} new driver credential(s)!`);
       } else {
-        setSuccess('No new trucks found. All existing trucks already have credentials.');
+        toast.info('No new trucks found. All existing trucks already have credentials.');
       }
       
       fetchCredentials();
       fetchStats();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to scan for new trucks');
+      toast.error(err.response?.data?.message || 'Failed to scan for new trucks');
     } finally {
       setScanning(false);
     }
@@ -156,16 +167,14 @@ const DriverCredentialsManager: React.FC = () => {
 
     try {
       setLoading(true);
-      const response = await api.put(`/driver-credentials/${resetDialog.credential._id}/reset`, {
-        reason: resetReason,
-      });
+      const response = await api.put(`/driver-credentials/${resetDialog.credential._id}/reset`);
       
       const { newPIN: pin } = response.data.data;
       setNewPIN(pin);
-      setSuccess(`PIN reset successfully for truck ${resetDialog.credential.truckNo}`);
+      toast.success(`PIN reset successfully for truck ${resetDialog.credential.truckNo}`);
       fetchCredentials();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to reset PIN');
+      toast.error(err.response?.data?.message || 'Failed to reset PIN');
     } finally {
       setLoading(false);
     }
@@ -177,11 +186,11 @@ const DriverCredentialsManager: React.FC = () => {
       const action = credential.isActive ? 'deactivate' : 'reactivate';
       await api.put(`/driver-credentials/${credential._id}/${action}`);
       
-      setSuccess(`Driver credential ${action}d successfully`);
+      toast.success(`Driver credential ${action}d successfully`);
       fetchCredentials();
       fetchStats();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to update credential status');
+      toast.error(err.response?.data?.message || 'Failed to update credential status');
     } finally {
       setLoading(false);
     }
@@ -215,21 +224,72 @@ const DriverCredentialsManager: React.FC = () => {
         document.body.removeChild(a);
       }
 
-      setSuccess(`Credentials exported successfully as ${format.toUpperCase()}`);
+      toast.success(`Credentials exported successfully as ${format.toUpperCase()}`);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to export credentials');
+      toast.error(err.response?.data?.message || 'Failed to export credentials');
+    }
+  };
+
+  const isEncryptedPayload = (value?: string) => {
+    if (!value) return false;
+    return value.startsWith('encrypted:') || value.startsWith('encrypted:{');
+  };
+
+  const getDisplayDriverName = (credential: DriverCredential) => {
+    if (!credential.driverName || isEncryptedPayload(credential.driverName)) {
+      return credential.truckNo;
+    }
+    const trimmed = credential.driverName.trim();
+    return trimmed || credential.truckNo;
+  };
+
+  const closeCreateCredentialModal = () => {
+    setShowCreateCredentialModal(false);
+    setCreateForm({ truckNo: '', driverName: '', phoneNumber: '' });
+    setCreatedCredentialResult(null);
+  };
+
+  const handleCreateCredential = async () => {
+    const truckNo = createForm.truckNo.trim().toUpperCase();
+    if (!truckNo) {
+      toast.error('Truck number is required');
+      return;
+    }
+
+    try {
+      setCreatingCredential(true);
+      const response = await api.post('/driver-credentials', {
+        truckNo,
+        driverName: createForm.driverName.trim() || undefined,
+        phoneNumber: createForm.phoneNumber.trim() || undefined,
+      });
+
+      const created = response.data?.data;
+      setCreatedCredentialResult(created);
+      toast.success(`Driver credential created for truck ${created?.truckNo || truckNo}`);
+      fetchCredentials();
+      fetchStats();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to create driver credential');
+    } finally {
+      setCreatingCredential(false);
     }
   };
 
   const closeResetDialog = () => {
     setResetDialog({ open: false, credential: null });
-    setResetReason('');
     setNewPIN(null);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setSuccess('Copied to clipboard!');
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopiedKey(key);
+        window.setTimeout(() => {
+          setCopiedKey((current) => (current === key ? null : current));
+        }, 1500);
+      })
+      .catch(() => toast.error('Failed to copy to clipboard'));
   };
 
   return (
@@ -241,6 +301,13 @@ const DriverCredentialsManager: React.FC = () => {
           <h1 className="text-xl md:text-xl font-bold text-gray-800 dark:text-gray-100">Driver Credentials Manager</h1>
         </div>
         <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setShowCreateCredentialModal(true)}
+            className="px-3 py-1.5 text-xs md:text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors flex items-center space-x-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Driver Credential</span>
+          </button>
           <button
             onClick={() => handleExport('csv')}
             className="px-3 py-1.5 text-xs md:text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-1.5"
@@ -327,30 +394,6 @@ const DriverCredentialsManager: React.FC = () => {
         </div>
       )}
 
-      {/* Alerts */}
-      {error && (
-        <div className="mb-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 text-sm rounded-md flex items-start justify-between">
-          <div className="flex items-start space-x-2">
-            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-          <button onClick={() => setError(null)} className="text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-      {success && (
-        <div className="mb-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-3 py-2 text-sm rounded-md flex items-start justify-between">
-          <div className="flex items-start space-x-2">
-            <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <span>{success}</span>
-          </div>
-          <button onClick={() => setSuccess(null)} className="text-green-700 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* Credentials - Mobile Cards */}
       <div className="md:hidden space-y-3">
         {loading && credentials.length === 0 ? (
@@ -379,7 +422,7 @@ const DriverCredentialsManager: React.FC = () => {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="text-gray-500 dark:text-gray-400 text-xs">Driver</span>
-                  <div className="text-gray-900 dark:text-gray-100 mt-0.5">{credential.driverName || 'Not set'}</div>
+                  <div className="text-gray-900 dark:text-gray-100 mt-0.5">{getDisplayDriverName(credential)}</div>
                 </div>
                 <div>
                   <span className="text-gray-500 dark:text-gray-400 text-xs">Created By</span>
@@ -454,7 +497,7 @@ const DriverCredentialsManager: React.FC = () => {
                       <span className="font-semibold text-gray-900 dark:text-gray-100">{credential.truckNo}</span>
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap text-gray-700 dark:text-gray-300">
-                      {credential.driverName || 'Not set'}
+                      {getDisplayDriverName(credential)}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <span className={`px-1.5 py-0.5 text-[11px] font-semibold rounded-full ${
@@ -555,11 +598,11 @@ const DriverCredentialsManager: React.FC = () => {
                         </td>
                         <td className="px-4 py-3">
                           <button
-                            onClick={() => copyToClipboard(`${cred.truckNo}: ${cred.pin}`)}
+                            onClick={() => copyToClipboard(cred.pin, `scan-${cred.id}`)}
                             className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors flex items-center space-x-1"
                           >
-                            <Copy className="w-4 h-4" />
-                            <span>Copy</span>
+                            {copiedKey === `scan-${cred.id}` ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                            <span>{copiedKey === `scan-${cred.id}` ? 'Copied' : 'Copy PIN'}</span>
                           </button>
                         </td>
                       </tr>
@@ -575,6 +618,95 @@ const DriverCredentialsManager: React.FC = () => {
               >
                 I have saved the PINs
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Credential Dialog */}
+      {showCreateCredentialModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-lg w-full">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Create Driver Credential</h2>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {!createdCredentialResult ? (
+                <>
+                  <div>
+                    <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Truck Number</label>
+                    <input
+                      type="text"
+                      value={createForm.truckNo}
+                      onChange={(e) => setCreateForm(prev => ({ ...prev, truckNo: e.target.value }))}
+                      placeholder="e.g. T123ABC"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Driver Name (optional)</label>
+                    <input
+                      type="text"
+                      value={createForm.driverName}
+                      onChange={(e) => setCreateForm(prev => ({ ...prev, driverName: e.target.value }))}
+                      placeholder="Leave empty to use truck number display"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Phone Number (optional)</label>
+                    <input
+                      type="text"
+                      value={createForm.phoneNumber}
+                      onChange={(e) => setCreateForm(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                      placeholder="e.g. +255..."
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-400 px-4 py-3 rounded-lg">
+                    This PIN is shown once. Save it securely before closing.
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div><span className="text-gray-500 dark:text-gray-400">Truck:</span> <strong className="text-gray-900 dark:text-gray-100">{createdCredentialResult.truckNo}</strong></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Driver:</span> <strong className="text-gray-900 dark:text-gray-100">{createdCredentialResult.driverName || createdCredentialResult.truckNo}</strong></div>
+                    <div className="pt-2">
+                      <p className="text-gray-500 dark:text-gray-400">PIN</p>
+                      <p className="text-4xl font-mono font-bold text-indigo-600 dark:text-indigo-400">{createdCredentialResult.pin}</p>
+                      <button
+                        onClick={() => copyToClipboard(createdCredentialResult.pin, 'create-modal-pin')}
+                        className="mt-3 px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors flex items-center space-x-1"
+                      >
+                        {copiedKey === 'create-modal-pin' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        <span>{copiedKey === 'create-modal-pin' ? 'Copied' : 'Copy PIN'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button
+                onClick={closeCreateCredentialModal}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                {createdCredentialResult ? 'Close' : 'Cancel'}
+              </button>
+              {!createdCredentialResult && (
+                <button
+                  onClick={handleCreateCredential}
+                  disabled={creatingCredential}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                  {creatingCredential ? 'Creating...' : 'Create Credential'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -602,11 +734,11 @@ const DriverCredentialsManager: React.FC = () => {
                       {newPIN}
                     </p>
                     <button
-                      onClick={() => copyToClipboard(newPIN)}
+                      onClick={() => copyToClipboard(newPIN, 'reset-modal-pin')}
                       className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-2 mx-auto"
                     >
-                      <Copy className="w-4 h-4" />
-                      <span>Copy PIN</span>
+                      {copiedKey === 'reset-modal-pin' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedKey === 'reset-modal-pin' ? 'Copied' : 'Copy PIN'}</span>
                     </button>
                   </div>
                 </>
@@ -619,13 +751,6 @@ const DriverCredentialsManager: React.FC = () => {
                       The old PIN will no longer work.
                     </div>
                   </div>
-                  <textarea
-                    placeholder="Reason for reset (optional) - e.g., Driver change, lost PIN, security concern"
-                    value={resetReason}
-                    onChange={(e) => setResetReason(e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
-                  />
                 </>
               )}
             </div>

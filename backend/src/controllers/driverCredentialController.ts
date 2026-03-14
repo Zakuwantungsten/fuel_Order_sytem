@@ -5,6 +5,39 @@ import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
+import { tryDecryptData } from '../utils/cryptoUtils';
+
+const generatePin = (): string => Math.floor(1000 + Math.random() * 9000).toString();
+
+const decryptIfNeeded = (value?: string): string | undefined => {
+  if (!value || typeof value !== 'string') return value;
+  if (!value.startsWith('encrypted:')) return value;
+
+  const encryptionKey = process.env.FIELD_ENCRYPTION_KEY;
+  if (!encryptionKey) return undefined;
+
+  const decrypted = tryDecryptData(value.substring(10), encryptionKey);
+  return decrypted ?? undefined;
+};
+
+const normalizeCredentialForList = (credential: any) => {
+  const decryptedDriverName = decryptIfNeeded(credential.driverName);
+  const driverName = (decryptedDriverName ?? credential.driverName ?? '').toString().trim();
+  const phoneNumber = decryptIfNeeded(credential.phoneNumber) ?? credential.phoneNumber;
+
+  const normalized = {
+    ...credential,
+    driverName,
+    phoneNumber,
+  };
+
+  // UI rule: if no real name is set, table should show truck number
+  if (!normalized.driverName || normalized.driverName.startsWith('encrypted:{')) {
+    normalized.driverName = normalized.truckNo;
+  }
+
+  return normalized;
+};
 
 /**
  * Get all driver credentials
@@ -39,13 +72,73 @@ export const getAllDriverCredentials = async (req: AuthRequest, res: Response): 
       DriverCredential.countDocuments(filter),
     ]);
 
-    const response = createPaginatedResponse(credentials, page, limit, total);
+    const normalizedCredentials = credentials.map(normalizeCredentialForList);
+
+    const response = createPaginatedResponse(normalizedCredentials, page, limit, total);
 
     res.status(200).json({
       success: true,
       message: 'Driver credentials retrieved successfully',
       data: response,
     });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Create a single driver credential manually
+ */
+export const createDriverCredential = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo, driverName, phoneNumber } = req.body;
+
+    if (!truckNo || typeof truckNo !== 'string' || !truckNo.trim()) {
+      throw new ApiError(400, 'Truck number is required');
+    }
+
+    const normalizedTruckNo = truckNo.trim().toUpperCase();
+    const normalizedDriverName = typeof driverName === 'string' ? driverName.trim() : '';
+    const normalizedPhoneNumber = typeof phoneNumber === 'string' ? phoneNumber.trim() : '';
+
+    const existing = await DriverCredential.findOne({ truckNo: normalizedTruckNo });
+    if (existing) {
+      throw new ApiError(409, `Driver credential already exists for truck ${normalizedTruckNo}`);
+    }
+
+    const pin = generatePin();
+    const credential = await DriverCredential.create({
+      truckNo: normalizedTruckNo,
+      pin,
+      driverName: normalizedDriverName || undefined,
+      phoneNumber: normalizedPhoneNumber || undefined,
+      isActive: true,
+      createdBy: req.user?.username || 'system',
+    });
+
+    await AuditService.logCreate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'DriverCredential',
+      credential._id.toString(),
+      { truckNo: normalizedTruckNo },
+      req.ip
+    );
+
+    res.status(201).json({
+      success: true,
+      message: `Driver credential created for truck ${normalizedTruckNo}`,
+      data: {
+        id: credential._id,
+        truckNo: normalizedTruckNo,
+        driverName: normalizedDriverName || normalizedTruckNo,
+        phoneNumber: normalizedPhoneNumber || undefined,
+        pin,
+        createdAt: credential.createdAt,
+      },
+    });
+
+    emitDataChange('driver_credentials', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -127,13 +220,13 @@ export const scanAndGenerateCredentials = async (req: AuthRequest, res: Response
       }
 
       // Generate a random 4-digit PIN
-      const pin = Math.floor(1000 + Math.random() * 9000).toString();
+      const pin = generatePin();
 
       // Create driver credential
       const credential = await DriverCredential.create({
         truckNo: truckNo,
         pin: pin,
-        driverName: `Driver ${truckNo}`,
+        driverName: undefined,
         isActive: true,
         createdBy: req.user?.username || 'system',
       });
@@ -180,7 +273,6 @@ export const scanAndGenerateCredentials = async (req: AuthRequest, res: Response
 export const resetDriverPIN = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { reason } = req.body;
 
     const credential = await DriverCredential.findById(id);
 
@@ -203,12 +295,12 @@ export const resetDriverPIN = async (req: AuthRequest, res: Response): Promise<v
       action: 'UPDATE',
       resourceType: 'DriverCredential',
       resourceId: credential._id.toString(),
-      details: `PIN reset for truck ${credential.truckNo}. Reason: ${reason || 'Driver change'}`,
+      details: `PIN reset for truck ${credential.truckNo}`,
       ipAddress: req.ip,
       severity: 'high',
     });
 
-    logger.warn(`PIN reset for truck ${credential.truckNo} by ${req.user?.username}. Reason: ${reason || 'Not specified'}`);
+    logger.warn(`PIN reset for truck ${credential.truckNo} by ${req.user?.username}`);
 
     res.status(200).json({
       success: true,
@@ -316,23 +408,25 @@ export const exportDriverCredentials = async (req: AuthRequest, res: Response): 
       .sort({ truckNo: 1 })
       .lean();
 
+    const normalizedCredentials = credentials.map(normalizeCredentialForList);
+
     // Log export action
     await AuditService.logExport(
       req.user?.userId || 'system',
       req.user?.username || 'system',
       'DriverCredential',
       format as string,
-      credentials.length,
+      normalizedCredentials.length,
       req.ip
     );
 
-    logger.warn(`Driver credentials exported (${credentials.length} records) by ${req.user?.username}`);
+    logger.warn(`Driver credentials exported (${normalizedCredentials.length} records) by ${req.user?.username}`);
 
     if (format === 'csv') {
       // CSV format
       const csv = [
         'Truck Number,Driver Name,Created Date,Last Login,Status',
-        ...credentials.map(c => 
+        ...normalizedCredentials.map(c => 
           `${c.truckNo},"${c.driverName || 'Not set'}",${c.createdAt},${c.lastLogin || 'Never'},${c.isActive ? 'Active' : 'Inactive'}`
         )
       ].join('\n');
@@ -346,10 +440,10 @@ export const exportDriverCredentials = async (req: AuthRequest, res: Response): 
         success: true,
         message: 'Driver credentials exported successfully',
         data: {
-          credentials: credentials,
+          credentials: normalizedCredentials,
           exportedAt: new Date(),
           exportedBy: req.user?.username,
-          totalCount: credentials.length,
+          totalCount: normalizedCredentials.length,
         },
       });
     }
