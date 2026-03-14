@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Users, ShieldCheck } from 'lucide-react';
 import UsersView from './UsersView';
-import DriverCredentialsView from './DriverCredentialsView';
 import PrivilegeElevationView from './PrivilegeElevationView';
 import SectionErrorBoundary from './ErrorBoundary';
 
@@ -9,7 +8,7 @@ type SubTab = 'users' | 'credentials';
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'users',       label: 'Users',                icon: Users },
-  { id: 'credentials', label: 'Credentials & Access',  icon: ShieldCheck },
+  { id: 'credentials', label: 'Access Control',       icon: ShieldCheck },
 ];
 
 interface UserManagementPageProps {
@@ -49,7 +48,7 @@ export default function UserManagementPage({ onMessage: _onMessage }: UserManage
             User Management
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 ml-[46px]">
-            Manage users, credentials, and access controls
+            Manage users and access controls
           </p>
         </div>
       </div>
@@ -95,12 +94,8 @@ export default function UserManagementPage({ onMessage: _onMessage }: UserManage
           </SectionErrorBoundary>
         )}
         {activeTab === 'credentials' && (
-          <SectionErrorBoundary fallbackTitle="Credentials & Access section encountered an error">
-            <div className="space-y-8">
-              <DriverCredentialsView />
-              <div className="border-t border-gray-200 dark:border-gray-700" />
-              <PrivilegeElevationView />
-            </div>
+          <SectionErrorBoundary fallbackTitle="Access Control section encountered an error">
+            <PrivilegeElevationView />
           </SectionErrorBoundary>
         )}
       </div>
