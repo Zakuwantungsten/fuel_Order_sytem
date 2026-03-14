@@ -28,6 +28,12 @@ import type { UserAction } from './UserActionsMenu';
 // ── Confirmation modal state (simple confirm-only modals) ────────────────────
 type SimpleModalType = 'delete' | 'unban' | 'forceLogout' | null;
 
+type PendingBulkAction = {
+  action: BulkActionType;
+  targetRole?: string;
+  ids: string[];
+} | null;
+
 const SIMPLE_MODAL_CONFIG: Record<Exclude<SimpleModalType, null>, { title: string; description: string; confirmLabel: string; variant: string; icon: React.ComponentType<{ className?: string }> }> = {
   delete: { title: 'Delete User', description: 'This action cannot be undone. The user account and all associated data will be permanently removed.', confirmLabel: 'Delete', variant: 'red', icon: AlertTriangle },
   unban: { title: 'Unban User', description: 'This will restore the user\'s access and allow them to log in again.', confirmLabel: 'Unban', variant: 'green', icon: UserCheck },
@@ -101,6 +107,8 @@ export default function UsersView() {
   const [editModalUser, setEditModalUser] = useState<User | null>(null);
   const [banModalUser, setBanModalUser] = useState<User | null>(null);
   const [resetPwModalUser, setResetPwModalUser] = useState<User | null>(null);
+  const [pendingBulkAction, setPendingBulkAction] = useState<PendingBulkAction>(null);
+  const [bulkConfirmLoading, setBulkConfirmLoading] = useState(false);
 
   const openSimpleModal = useCallback((type: SimpleModalType, user: User) => {
     setSimpleModalUser(user);
@@ -220,44 +228,132 @@ export default function UsersView() {
   }, [invalidate]);
 
   // ── Bulk Actions ─────────────────────────────────────────────────────────
-  const handleBulkAction = useCallback(async (action: BulkActionType, targetRole?: string) => {
+  const executeBulkAction = useCallback(async (action: BulkActionType, ids: string[], targetRole?: string) => {
+    if (ids.length === 0) return;
+
+    switch (action) {
+      case 'activate':
+        await bulkUserService.bulkAction({ action: 'activate', userIds: ids });
+        toast.success(`${ids.length} user(s) activated`);
+        break;
+      case 'deactivate':
+        await bulkUserService.bulkAction({ action: 'deactivate', userIds: ids });
+        toast.success(`${ids.length} user(s) deactivated`);
+        break;
+      case 'change_role':
+        if (!targetRole) return;
+        await bulkUserService.bulkAction({ action: 'change_role', userIds: ids, role: targetRole });
+        toast.success(`${ids.length} user(s) role changed`);
+        break;
+      case 'delete':
+        await usersAPI.bulkDelete(ids);
+        toast.success(`${ids.length} user(s) deleted`);
+        break;
+      case 'reset_password':
+        await usersAPI.bulkResetPasswords(ids);
+        toast.success(`${ids.length} password(s) reset`);
+        break;
+      case 'export':
+        {
+          const blob = await usersAPI.exportCSV({
+            ...(filters.role && { role: filters.role }),
+            ...(filters.status && { isActive: filters.status }),
+            ...(filters.q && { q: filters.q }),
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `users-export-${new Date().toISOString().slice(0, 10)}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success('Users exported successfully');
+        }
+        break;
+    }
+  }, [filters.q, filters.role, filters.status]);
+
+  const handleBulkAction = useCallback((action: BulkActionType, targetRole?: string) => {
     const ids = Array.from(bulk.selectedIds);
     if (ids.length === 0) return;
 
+    setPendingBulkAction({ action, targetRole, ids });
+  }, [bulk.selectedIds]);
+
+  const closeBulkConfirm = useCallback(() => {
+    setPendingBulkAction(null);
+    setBulkConfirmLoading(false);
+  }, []);
+
+  const confirmBulkAction = useCallback(async () => {
+    if (!pendingBulkAction) return;
+
     try {
-      switch (action) {
-        case 'activate':
-          await bulkUserService.bulkAction({ action: 'activate', userIds: ids });
-          toast.success(`${ids.length} user(s) activated`);
-          break;
-        case 'deactivate':
-          await bulkUserService.bulkAction({ action: 'deactivate', userIds: ids });
-          toast.success(`${ids.length} user(s) deactivated`);
-          break;
-        case 'change_role':
-          if (!targetRole) return;
-          await bulkUserService.bulkAction({ action: 'change_role', userIds: ids, role: targetRole });
-          toast.success(`${ids.length} user(s) role changed`);
-          break;
-        case 'delete':
-          await usersAPI.bulkDelete(ids);
-          toast.success(`${ids.length} user(s) deleted`);
-          break;
-        case 'reset_password':
-          await usersAPI.bulkResetPasswords(ids);
-          toast.success(`${ids.length} password(s) reset`);
-          break;
-        case 'export':
-          handleExportCSV();
-          return;
-      }
+      setBulkConfirmLoading(true);
+      await executeBulkAction(pendingBulkAction.action, pendingBulkAction.ids, pendingBulkAction.targetRole);
       bulk.clearSelection();
       invalidate();
+      closeBulkConfirm();
     } catch (err: any) {
       const msg = err?.response?.data?.message || err.message || 'Bulk operation failed';
       toast.error(msg);
+      setBulkConfirmLoading(false);
     }
-  }, [bulk, invalidate]);
+  }, [pendingBulkAction, executeBulkAction, bulk, invalidate, closeBulkConfirm]);
+
+  const bulkActionMeta = useMemo(() => {
+    if (!pendingBulkAction) return null;
+    const count = pendingBulkAction.ids.length;
+    switch (pendingBulkAction.action) {
+      case 'activate':
+        return {
+          title: 'Confirm Bulk Activate',
+          description: `Activate ${count} selected user(s)?`,
+          confirmLabel: `Activate ${count}`,
+          variant: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500',
+        };
+      case 'deactivate':
+        return {
+          title: 'Confirm Bulk Deactivate',
+          description: `Deactivate ${count} selected user(s)?`,
+          confirmLabel: `Deactivate ${count}`,
+          variant: 'bg-orange-600 hover:bg-orange-700 focus:ring-orange-500',
+        };
+      case 'change_role': {
+        const roleLabel = pendingBulkAction.targetRole
+          ? pendingBulkAction.targetRole.replace(/_/g, ' ')
+          : 'selected role';
+        return {
+          title: 'Confirm Bulk Role Change',
+          description: `Change role for ${count} selected user(s) to ${roleLabel}?`,
+          confirmLabel: `Change ${count}`,
+          variant: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+        };
+      }
+      case 'delete':
+        return {
+          title: 'Confirm Bulk Delete',
+          description: `Delete ${count} selected user(s)? This action cannot be undone.`,
+          confirmLabel: `Delete ${count}`,
+          variant: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+        };
+      case 'reset_password':
+        return {
+          title: 'Confirm Bulk Password Reset',
+          description: `Reset passwords for ${count} selected user(s)?`,
+          confirmLabel: `Reset ${count}`,
+          variant: 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500',
+        };
+      case 'export':
+        return {
+          title: 'Confirm Bulk Export',
+          description: `Export data for ${count} selected user(s)?`,
+          confirmLabel: `Export ${count}`,
+          variant: 'bg-gray-700 hover:bg-gray-800 focus:ring-gray-500',
+        };
+      default:
+        return null;
+    }
+  }, [pendingBulkAction]);
 
   // ── CSV Export/Import ────────────────────────────────────────────────────
   const handleExportCSV = useCallback(async () => {
@@ -523,6 +619,54 @@ export default function UsersView() {
           </AccessibleModal>
         );
       })()}
+
+      {/* ── Bulk Confirmation Modal (all bulk actions) ───────────────── */}
+      {pendingBulkAction && bulkActionMeta && (
+        <AccessibleModal
+          isOpen={true}
+          title={bulkActionMeta.title}
+          onClose={closeBulkConfirm}
+          size="md"
+        >
+          <div className="p-6">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{bulkActionMeta.description}</p>
+
+            <div className="bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3 text-sm mb-5">
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Selected Users</span>
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{pendingBulkAction.ids.length}</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-gray-500 dark:text-gray-400">Action</span>
+                <span className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{pendingBulkAction.action.replace('_', ' ')}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={closeBulkConfirm}
+                disabled={bulkConfirmLoading}
+                className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkAction}
+                disabled={bulkConfirmLoading}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors focus:ring-2 focus:ring-offset-2 disabled:opacity-50 flex items-center gap-2 ${bulkActionMeta.variant}`}
+              >
+                {bulkConfirmLoading && (
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                )}
+                {bulkActionMeta.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </AccessibleModal>
+      )}
     </div>
   );
 }
