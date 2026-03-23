@@ -4,6 +4,8 @@ import {
   RefreshCw, CheckCircle, XCircle, HardDrive, ArrowRight,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
+import AsyncErrorPanel from './common/AsyncErrorPanel';
+import { useAsyncState } from '../../hooks/useAsyncState';
 import systemHealthService, { SystemHealth } from '../../services/systemHealthService';
 import { systemAdminAPI } from '../../services/api';
 import DatabaseMonitorTab from './DatabaseMonitorTab';
@@ -36,7 +38,7 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
   const [view, setView] = useState<View>('overview');
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [dbMetrics, setDbMetrics] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const overviewState = useAsyncState('loading');
 
   // SystemHealthTab uses reversed onMessage order
   const reversedOnMessage = (msg: string, type?: 'success' | 'error' | 'info') => {
@@ -48,18 +50,24 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
   }, []);
 
   const loadOverview = async () => {
-    setLoading(true);
-    try {
+    const result = await overviewState.run(async () => {
       const [h, db] = await Promise.all([
         systemHealthService.get(),
         systemAdminAPI.getDatabaseMetrics(),
       ]);
-      setHealth(h);
-      setDbMetrics(db);
-    } catch {
-      // Silent — individual tabs handle their own errors
-    } finally {
-      setLoading(false);
+      return { health: h, dbMetrics: db };
+    }, {
+      errorMessage: 'Failed to load monitoring overview',
+    });
+
+    if (result.ok) {
+      setHealth(result.data.health);
+      setDbMetrics(result.data.dbMetrics);
+      return;
+    }
+
+    if (!health) {
+      onMessage('error', result.error);
     }
   };
 
@@ -96,10 +104,10 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
         {view === 'overview' && (
           <button
             onClick={loadOverview}
-            disabled={loading}
+            disabled={overviewState.isLoading}
             className="ml-auto p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${overviewState.isLoading ? 'animate-spin' : ''}`} />
           </button>
         )}
       </div>
@@ -107,8 +115,16 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
       {/* Overview */}
       {view === 'overview' && (
         <div className="space-y-5">
+          {overviewState.isError && !health && (
+            <AsyncErrorPanel
+              title="Monitoring Overview Unavailable"
+              message={overviewState.error || 'Failed to load monitoring overview'}
+              onRetry={loadOverview}
+            />
+          )}
+
           {/* Status Banner */}
-          {!loading && health && (
+          {!overviewState.isLoading && health && (
             <div
               className={`flex items-center gap-3 p-4 rounded-xl border ${
                 dbOk
@@ -136,7 +152,7 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
           )}
 
           {/* Key Metrics Grid */}
-          {loading ? (
+          {overviewState.isLoading && !health ? (
             <UnifiedTabLoader label="Loading monitoring overview..." heightClassName="h-40" />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">

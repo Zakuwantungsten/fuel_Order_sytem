@@ -6,6 +6,9 @@ import {
   ChevronDown, ChevronRight, X, Shield, Bell,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
+import AsyncErrorPanel from './common/AsyncErrorPanel';
+import { useAsyncState } from '../../hooks/useAsyncState';
+import { useActionState } from '../../hooks/useActionState';
 import { systemAdminAPI } from '../../services/api';
 import { subscribeToSecurityEvents, unsubscribeFromSecurityEvents } from '../../services/websocket';
 import SecurityChangeLog from './SecurityChangeLog';
@@ -71,11 +74,12 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export default function SecurityPoliciesSubTab({ onMessage }: Props) {
   /* Security settings */
-  const [loading, setLoading] = useState(true);
-  const [savingSession, setSavingSession] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [savingMFA, setSavingMFA] = useState(false);
-  const [savingNotifications, setSavingNotifications] = useState(false);
+  const securityLoadState = useAsyncState('loading');
+  const sessionSaveAction = useActionState();
+  const passwordSaveAction = useActionState();
+  const mfaSaveAction = useActionState();
+  const notificationsSaveAction = useActionState();
+  const runSecurityLoad = securityLoadState.run;
   const [sessionSettings, setSessionSettings] = useState(DEFAULT_SESSION);
   const [passwordPolicy, setPasswordPolicy] = useState(DEFAULT_PASSWORD);
   const [mfaSettings, setMfaSettings] = useState(DEFAULT_MFA);
@@ -89,7 +93,8 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
   /* DLP */
   const [dlpRules, setDlpRules] = useState<DLPRule[]>([]);
   const [dlpStats, setDlpStats] = useState<DLPStats | null>(null);
-  const [loadingDLP, setLoadingDLP] = useState(true);
+  const dlpLoadState = useAsyncState('loading');
+  const runDlpLoad = dlpLoadState.run;
   const [showDLPCreate, setShowDLPCreate] = useState(false);
   const [dlpForm, setDlpForm] = useState({
     name: '', description: '', ruleType: 'export_limit', maxRecords: 500,
@@ -125,33 +130,47 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
     if (data.notifications) setNotifSettings(prev => ({ ...prev, ...data.notifications }));
   }, []);
 
+  const loadSecuritySettings = useCallback(async () => {
+    const result = await runSecurityLoad(
+      () => systemAdminAPI.getSecuritySettings(),
+      { errorMessage: 'Failed to load security settings' }
+    );
+
+    if (result.ok) {
+      applySettings(result.data);
+      return;
+    }
+
+    onMessage('error', result.error);
+  }, [applySettings, onMessage, runSecurityLoad]);
+
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        applySettings(await systemAdminAPI.getSecuritySettings());
-      } catch (err: any) {
-        onMessage('error', err.response?.data?.message || 'Failed to load security settings');
-      } finally { setLoading(false); }
-    })();
+    loadSecuritySettings();
     subscribeToSecurityEvents(event => applySettings(event));
     return () => unsubscribeFromSecurityEvents();
-  }, []);
+  }, [applySettings, loadSecuritySettings]);
 
   /* ── Load DLP ── */
   const loadDLP = async () => {
-    setLoadingDLP(true);
-    try {
+    const result = await runDlpLoad(async () => {
       const [rulesRes, statsRes] = await Promise.all([
         fetch(`${API_BASE}/system-admin/dlp`, { headers: authHeaders() }),
         fetch(`${API_BASE}/system-admin/dlp/stats`, { headers: authHeaders() }),
       ]);
       const rulesJson = await rulesRes.json();
       const statsJson = await statsRes.json();
-      if (rulesJson.success) setDlpRules(rulesJson.data);
-      if (statsJson.success) setDlpStats(statsJson.data);
-    } catch (err: any) { setError(err.message); }
-    finally { setLoadingDLP(false); }
+      return { rulesJson, statsJson };
+    }, {
+      errorMessage: 'Failed to load DLP settings',
+    });
+
+    if (result.ok) {
+      if (result.data.rulesJson.success) setDlpRules(result.data.rulesJson.data);
+      if (result.data.statsJson.success) setDlpStats(result.data.statsJson.data);
+      return;
+    }
+
+    setError(result.error);
   };
 
   useEffect(() => { loadDLP(); }, []);
@@ -159,39 +178,51 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
 
   /* ── Save functions ── */
   const saveSession = async () => {
-    setSavingSession(true);
-    try {
+    const result = await sessionSaveAction.run(async () => {
       await systemAdminAPI.updateSecuritySettings('session', sessionSettings);
+    }, { errorMessage: 'Failed to save session settings' });
+
+    if (result.ok) {
       onMessage('success', 'Session settings saved. Changes apply to new sessions.');
-    } catch (err: any) { onMessage('error', err.response?.data?.message || 'Failed'); }
-    finally { setSavingSession(false); }
+    } else {
+      onMessage('error', result.error);
+    }
   };
 
   const savePassword = async () => {
-    setSavingPassword(true);
-    try {
+    const result = await passwordSaveAction.run(async () => {
       await systemAdminAPI.updateSecuritySettings('password', passwordPolicy);
+    }, { errorMessage: 'Failed to save password policy' });
+
+    if (result.ok) {
       onMessage('success', 'Password policy saved');
-    } catch (err: any) { onMessage('error', err.response?.data?.message || 'Failed'); }
-    finally { setSavingPassword(false); }
+    } else {
+      onMessage('error', result.error);
+    }
   };
 
   const saveMFA = async () => {
-    setSavingMFA(true);
-    try {
+    const result = await mfaSaveAction.run(async () => {
       await systemAdminAPI.updateSecuritySettings('mfa', mfaSettings);
+    }, { errorMessage: 'Failed to save MFA settings' });
+
+    if (result.ok) {
       onMessage('success', 'MFA settings saved');
-    } catch (err: any) { onMessage('error', err.response?.data?.message || 'Failed'); }
-    finally { setSavingMFA(false); }
+    } else {
+      onMessage('error', result.error);
+    }
   };
 
   const saveNotifications = async () => {
-    setSavingNotifications(true);
-    try {
+    const result = await notificationsSaveAction.run(async () => {
       await systemAdminAPI.updateSecuritySettings('notifications', notifSettings);
+    }, { errorMessage: 'Failed to save login security settings' });
+
+    if (result.ok) {
       onMessage('success', 'Login security settings saved');
-    } catch (err: any) { onMessage('error', err.response?.data?.message || 'Failed'); }
-    finally { setSavingNotifications(false); }
+    } else {
+      onMessage('error', result.error);
+    }
   };
 
   const toggleMFARole = (role: string) => {
@@ -290,7 +321,16 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
 
   const inputCls = 'w-full max-w-xs px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-indigo-500';
 
-  if (loading) return <UnifiedTabLoader label="Loading security policies..." heightClassName="py-16" />;
+  if (securityLoadState.isLoading) return <UnifiedTabLoader label="Loading security policies..." heightClassName="py-16" />;
+  if (securityLoadState.isError) {
+    return (
+      <AsyncErrorPanel
+        title="Security Policies Unavailable"
+        message={securityLoadState.error || 'Failed to load security settings'}
+        onRetry={loadSecuritySettings}
+      />
+    );
+  }
 
   /* ── Render ── */
   return (
@@ -385,7 +425,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
           </div>
         </div>
         <div className="flex justify-end">
-          <SaveBtn label="Save Session Settings" saving={savingSession} onClick={saveSession} />
+          <SaveBtn label="Save Session Settings" saving={sessionSaveAction.isPending} onClick={saveSession} />
         </div>
       </SectionCard>
 
@@ -470,7 +510,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
           </div>
         </div>
         <div className="flex justify-end">
-          <SaveBtn label="Save Password Policy" saving={savingPassword} onClick={savePassword} />
+          <SaveBtn label="Save Password Policy" saving={passwordSaveAction.isPending} onClick={savePassword} />
         </div>
       </SectionCard>
 
@@ -595,7 +635,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
           )}
         </div>
         <div className="flex justify-end">
-          <SaveBtn label="Save MFA Settings" saving={savingMFA} onClick={saveMFA} />
+          <SaveBtn label="Save MFA Settings" saving={mfaSaveAction.isPending} onClick={saveMFA} />
         </div>
       </SectionCard>
 
@@ -631,7 +671,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
           ))}
         </div>
         <div className="flex justify-end">
-          <SaveBtn label="Save Login Security" saving={savingNotifications} onClick={saveNotifications} />
+          <SaveBtn label="Save Login Security" saving={notificationsSaveAction.isPending} onClick={saveNotifications} />
         </div>
       </SectionCard>
 
@@ -720,7 +760,7 @@ export default function SecurityPoliciesSubTab({ onMessage }: Props) {
         )}
 
         {/* Rules list */}
-        {loadingDLP ? (
+        {dlpLoadState.isLoading ? (
           <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 text-indigo-500 animate-spin" /></div>
         ) : dlpRules.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
@@ -854,7 +894,7 @@ function SaveBtn({ label, saving, onClick }: { label: string; saving: boolean; o
     <button onClick={onClick} disabled={saving}
       className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm disabled:opacity-50 transition-colors">
       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-      {label}
+      {saving ? 'Saving...' : label}
     </button>
   );
 }

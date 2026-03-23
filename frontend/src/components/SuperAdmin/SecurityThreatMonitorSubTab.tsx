@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import {
   Shield, ShieldAlert, Radar, BarChart3, Activity,
-  Loader2, RefreshCw, AlertTriangle, CheckCircle, Globe,
+  RefreshCw, AlertTriangle, CheckCircle, Globe,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import SecurityEventsTab from './SecurityEventsTab';

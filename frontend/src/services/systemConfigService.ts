@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { measureSettingsAction } from './settingsTelemetry';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
@@ -136,6 +137,14 @@ export interface PasswordPolicySettings {
   expirationDays: number;
 }
 
+export interface SettingsDomainMetadata {
+  strictMode: boolean;
+  ownership: {
+    sections: Record<string, string>;
+    keys: Record<string, string>;
+  };
+}
+
 export const systemConfigAPI = {
   // ===== System Settings Management =====
 
@@ -144,7 +153,20 @@ export const systemConfigAPI = {
    * GET /api/system-admin/config/settings
    */
   getSystemSettings: async (): Promise<SystemSettings> => {
-    const response = await apiClient.get('/system-admin/config/settings');
+    const response = await measureSettingsAction('platform', 'system_settings', 'load', () =>
+      apiClient.get('/system-admin/config/settings')
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Get settings key/domain ownership metadata
+   * GET /api/system-admin/config/settings/domain-metadata
+   */
+  getSettingsDomainMetadata: async (): Promise<SettingsDomainMetadata> => {
+    const response = await measureSettingsAction('platform', 'domain_metadata', 'load', () =>
+      apiClient.get('/system-admin/config/settings/domain-metadata')
+    );
     return response.data.data;
   },
 
@@ -153,7 +175,9 @@ export const systemConfigAPI = {
    * PUT /api/system-admin/config/settings/general
    */
   updateGeneralSettings: async (settings: SystemSettings['general']) => {
-    const response = await apiClient.put('/system-admin/config/settings/general', settings);
+    const response = await measureSettingsAction('platform', 'general', 'save', () =>
+      apiClient.put('/system-admin/config/settings/general', settings)
+    );
     return response.data;
   },
 
@@ -162,7 +186,9 @@ export const systemConfigAPI = {
    * PUT /api/system-admin/config/settings/security
    */
   updateSecuritySettings: async (settings: SystemSettings['session']) => {
-    const response = await apiClient.put('/system-admin/config/settings/security', settings);
+    const response = await measureSettingsAction('security', 'session', 'save', () =>
+      apiClient.put('/system-admin/config/settings/security', settings)
+    );
     return response.data;
   },
 
@@ -171,7 +197,9 @@ export const systemConfigAPI = {
    * GET /api/system-admin/config/settings/security/password-policy
    */
   getPasswordPolicy: async (): Promise<PasswordPolicySettings> => {
-    const response = await apiClient.get('/system-admin/config/settings/security/password-policy');
+    const response = await measureSettingsAction('security', 'password_policy', 'load', () =>
+      apiClient.get('/system-admin/config/settings/security/password-policy')
+    );
     return response.data.data;
   },
 
@@ -180,7 +208,9 @@ export const systemConfigAPI = {
    * PUT /api/system-admin/config/settings/security/password-policy
    */
   updatePasswordPolicy: async (policy: PasswordPolicySettings): Promise<void> => {
-    await apiClient.put('/system-admin/config/settings/security/password-policy', policy);
+    await measureSettingsAction('security', 'password_policy', 'save', () =>
+      apiClient.put('/system-admin/config/settings/security/password-policy', policy)
+    );
   },
 
   /**
@@ -188,7 +218,9 @@ export const systemConfigAPI = {
    * PUT /api/system-admin/config/settings/data-retention
    */
   updateDataRetentionSettings: async (settings: Partial<SystemSettings['data']>) => {
-    const response = await apiClient.put('/system-admin/config/settings/data-retention', settings);
+    const response = await measureSettingsAction('data_lifecycle', 'data_retention', 'save', () =>
+      apiClient.put('/system-admin/config/settings/data-retention', settings)
+    );
     return response.data;
   },
 
@@ -197,7 +229,9 @@ export const systemConfigAPI = {
    * PUT /api/system-admin/config/settings/notifications
    */
   updateNotificationSettings: async (settings: SystemSettings['notifications']) => {
-    const response = await apiClient.put('/system-admin/config/settings/notifications', settings);
+    const response = await measureSettingsAction('monitoring_alerts', 'notifications', 'save', () =>
+      apiClient.put('/system-admin/config/settings/notifications', settings)
+    );
     return response.data;
   },
 
@@ -206,7 +240,9 @@ export const systemConfigAPI = {
    * PUT /api/system-admin/config/settings/maintenance
    */
   updateMaintenanceMode: async (settings: SystemSettings['maintenance']) => {
-    const response = await apiClient.put('/system-admin/config/settings/maintenance', settings);
+    const response = await measureSettingsAction('operations', 'maintenance', 'save', () =>
+      apiClient.put('/system-admin/config/settings/maintenance', settings)
+    );
     return response.data;
   },
 

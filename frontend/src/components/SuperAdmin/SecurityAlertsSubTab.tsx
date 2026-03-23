@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Bell, RefreshCw, AlertTriangle, CheckCircle, Eye, Search as SearchIcon,
   ShieldAlert, XCircle, ChevronDown, ChevronRight, MessageSquare,
-  Filter, Loader2, Send, Clock,
+  Filter, Send, Clock,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import SecurityIncidentPanel from './SecurityIncidentPanel';

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Megaphone, FileUp, RefreshCw } from 'lucide-react';
+import { Megaphone, FileUp } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import announcementService from '../../services/announcementService';
 import AnnouncementsTab from './AnnouncementsTab';

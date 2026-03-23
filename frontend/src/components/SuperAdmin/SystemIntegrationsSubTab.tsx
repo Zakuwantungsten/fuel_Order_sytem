@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Webhook, Flag, Bell, RefreshCw } from 'lucide-react';
+import { Webhook, Flag, Bell } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import webhookService from '../../services/webhookService';
 import featureFlagService from '../../services/featureFlagService';

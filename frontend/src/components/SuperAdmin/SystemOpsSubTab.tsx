@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Cpu, Wrench, Gauge, Database, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Cpu, Wrench, Gauge, Database, AlertTriangle, CheckCircle } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import cronJobService from '../../services/cronJobService';
 import maintenanceModeService from '../../services/maintenanceModeService';

@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { Loader2, RefreshCw, Search, Shield, Eye, Pencil, Trash2, Plus } from 'lucide-react';
+import { RefreshCw, Search, Shield, Eye, Pencil, Trash2, Plus } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */

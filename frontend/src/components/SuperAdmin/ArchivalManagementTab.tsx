@@ -14,7 +14,6 @@ import {
   CheckCircle,
   BarChart3,
   Loader,
-  Save,
   History
 } from 'lucide-react';
 import { archivalAPI } from '../../services/api';
@@ -22,6 +21,7 @@ import { systemConfigAPI } from '../../services/systemConfigService';
 
 interface ArchivalManagementTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
+  onNavigate?: (section: string) => void;
 }
 
 interface CollectionConfig {
@@ -40,7 +40,7 @@ const COLLECTION_OPTIONS = [
   { name: 'AuditLog', label: 'Audit Logs', defaultMonths: 12 },
 ];
 
-export default function ArchivalManagementTab({ onMessage }: ArchivalManagementTabProps) {
+export default function ArchivalManagementTab({ onMessage, onNavigate }: ArchivalManagementTabProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'config' | 'browser' | 'history'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
@@ -66,7 +66,6 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
   const [globalRetentionMonths, setGlobalRetentionMonths] = useState(6);
   const [auditLogRetentionMonths, setAuditLogRetentionMonths] = useState(12);
   const [archivalEnabled, setArchivalEnabled] = useState(true);
-  const [saving, setSaving] = useState(false);
 
   // Manual archival options
   const [manualOptions, setManualOptions] = useState({
@@ -211,52 +210,10 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
     }
   };
 
-  const handleSaveConfiguration = async () => {
-    setSaving(true);
-    try {
-      // Build collection archival settings
-      const collectionArchivalSettings: any = {};
-      collectionConfigs.forEach(config => {
-        collectionArchivalSettings[config.name] = {
-          enabled: config.enabled,
-          retentionMonths: config.retentionMonths,
-        };
-      });
-
-      await systemConfigAPI.updateDataRetentionSettings({
-        archivalEnabled,
-        archivalMonths: globalRetentionMonths,
-        auditLogRetention: auditLogRetentionMonths,
-        collectionArchivalSettings,
-      });
-
-      onMessage('success', 'Archival configuration saved successfully');
-      loadConfiguration();
-    } catch (error: any) {
-      onMessage('error', error.response?.data?.message || 'Failed to save configuration');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const toggleCollectionEnabled = (collectionName: string) => {
-    setCollectionConfigs(prevConfigs =>
-      prevConfigs.map(config =>
-        config.name === collectionName
-          ? { ...config, enabled: !config.enabled }
-          : config
-      )
-    );
-  };
-
-  const updateCollectionRetention = (collectionName: string, months: number) => {
-    setCollectionConfigs(prevConfigs =>
-      prevConfigs.map(config =>
-        config.name === collectionName
-          ? { ...config, retentionMonths: Math.max(1, months) }
-          : config
-      )
-    );
+  const openDataLifecyclePolicyEditor = () => {
+    sessionStorage.setItem('sa_system_preferred_tab', 'config');
+    sessionStorage.setItem('sa_system_config_focus_section', 'data');
+    onNavigate?.('sa_system');
   };
 
   const formatDate = (dateString: string) => formatSystemDate(dateString);
@@ -502,21 +459,30 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
           <div className="space-y-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Archival Configuration
+                Archival Policy Summary
               </h3>
               <button
-                onClick={handleSaveConfiguration}
-                disabled={saving}
+                onClick={openDataLifecyclePolicyEditor}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
               >
-                {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Configuration
+                <Settings className="w-4 h-4" />
+                Manage in Data Lifecycle Policy
               </button>
+            </div>
+
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start gap-2">
+                <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div className="text-sm text-blue-900 dark:text-blue-200">
+                  <strong>Policy ownership:</strong> retention policy edits are centralized in System → Data Lifecycle Policy.
+                  This tab remains focused on archival operations, browsing, and execution history.
+                </div>
+              </div>
             </div>
 
             {/* Global Settings */}
             <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">Global Settings</h4>
+              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">Global Settings (Read-only)</h4>
               
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -529,10 +495,10 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
                     </p>
                   </div>
                   <button
-                    onClick={() => setArchivalEnabled(!archivalEnabled)}
+                    disabled
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                       archivalEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-                    }`}
+                    } opacity-70 cursor-not-allowed`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -552,7 +518,7 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
                       min="1"
                       max="60"
                       value={globalRetentionMonths}
-                      onChange={(e) => setGlobalRetentionMonths(parseInt(e.target.value) || 6)}
+                      readOnly
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     />
                   </div>
@@ -566,7 +532,7 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
                       min="1"
                       max="60"
                       value={auditLogRetentionMonths}
-                      onChange={(e) => setAuditLogRetentionMonths(parseInt(e.target.value) || 12)}
+                      readOnly
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     />
                   </div>
@@ -576,7 +542,7 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
 
             {/* Per-Collection Configuration */}
             <div>
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">Per-Collection Settings</h4>
+              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">Per-Collection Settings (Read-only)</h4>
               <div className="space-y-3">
                 {collectionConfigs.map(config => (
                   <div
@@ -585,10 +551,10 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
                   >
                     <div className="flex items-center gap-4 flex-1">
                       <button
-                        onClick={() => toggleCollectionEnabled(config.name)}
+                        disabled
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                           config.enabled ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
+                        } opacity-70 cursor-not-allowed`}
                       >
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -612,8 +578,8 @@ export default function ArchivalManagementTab({ onMessage }: ArchivalManagementT
                         min="1"
                         max="60"
                         value={config.retentionMonths}
-                        onChange={(e) => updateCollectionRetention(config.name, parseInt(e.target.value) || 1)}
-                        disabled={!config.enabled}
+                        readOnly
+                        disabled
                         className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm disabled:opacity-50"
                       />
                       <span className="text-sm text-gray-500 dark:text-gray-400">months</span>

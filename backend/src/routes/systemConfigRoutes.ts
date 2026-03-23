@@ -13,6 +13,7 @@ router.use(authenticate, authorize('super_admin'));
 
 // Get all system settings
 router.get('/settings', systemConfigController.getSystemSettings);
+router.get('/settings/domain-metadata', systemConfigController.getSettingsDomainMetadata);
 
 // Update specific setting categories
 router.put('/settings/general', systemConfigController.updateGeneralSettings);

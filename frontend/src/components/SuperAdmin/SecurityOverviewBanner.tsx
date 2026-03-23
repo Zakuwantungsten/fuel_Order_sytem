@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react';
 import {
   Shield, ShieldAlert, Radar, Users, AlertTriangle,
   RefreshCw, ChevronRight, TrendingUp, TrendingDown, Minus,
-  Loader2,
 } from 'lucide-react';
 import { ScoreTrendChart, Sparkline } from './SecurityCharts';
 import UnifiedTabLoader from './common/UnifiedTabLoader';

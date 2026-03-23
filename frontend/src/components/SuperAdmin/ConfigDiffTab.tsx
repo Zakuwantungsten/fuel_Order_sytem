@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   GitCompare,
   History,
-  Loader2,
   Search,
   ChevronLeft,
   ChevronRight,

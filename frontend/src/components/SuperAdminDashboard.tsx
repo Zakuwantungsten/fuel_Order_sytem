@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Database,
   Activity,
-  RefreshCw,
   AlertTriangle,
   CheckCircle,
   X,
@@ -203,7 +202,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
               <RoutesTab onMessage={showMessage} />
             )}
             {section === 'system' && (
-              <SystemUnifiedTab onMessage={showMessage} />
+              <SystemUnifiedTab onMessage={showMessage} onNavigate={onNavigate} />
             )}
             {/* config, config_diff, config_history, cron_jobs, maintenance, webhooks, rate_limits,
                 db_indexes, feature_flags, notification_config, announcements merged into 'system' tab */}
@@ -214,13 +213,13 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
               <SecurityUnifiedTab onMessage={showMessage} />
             )}
             {section === 'trash' && (
-              <TrashManagementTab onMessage={showMessage} />
+              <TrashManagementTab onMessage={showMessage} onNavigate={onNavigate} />
             )}
             {section === 'archival' && (
-              <ArchivalManagementTab onMessage={showMessage} />
+              <ArchivalManagementTab onMessage={showMessage} onNavigate={onNavigate} />
             )}
             {section === 'backup' && (
-              <BackupRecoveryTab onMessage={showMessage} />
+              <BackupRecoveryTab onMessage={showMessage} onNavigate={onNavigate} />
             )}
             {section === 'analytics' && (
               <AnalyticsTab onMessage={showMessage} />

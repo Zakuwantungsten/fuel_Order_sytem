@@ -5,7 +5,6 @@
 import { useState, useEffect } from 'react';
 import {
   History, ChevronDown, ChevronRight, RefreshCw, User, Clock,
-  Loader2,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 

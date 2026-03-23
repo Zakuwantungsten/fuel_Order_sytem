@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { measureSettingsAction } from './settingsTelemetry';
 import { 
   DeliveryOrder, 
   LPOEntry, 
@@ -1615,12 +1616,16 @@ export const systemAdminAPI = {
 
   // System Settings
   getSystemSettings: async () => {
-    const response = await apiClient.get('/admin/system-settings');
+    const response = await measureSettingsAction('platform', 'admin.system_settings', 'load', () =>
+      apiClient.get('/admin/system-settings')
+    );
     return response.data.data;
   },
 
   updateSystemSettings: async (section: string, settings: any) => {
-    const response = await apiClient.put('/admin/system-settings', { section, settings });
+    const response = await measureSettingsAction('platform', `admin.${section}`, 'save', () =>
+      apiClient.put('/admin/system-settings', { section, settings })
+    );
     return response.data;
   },
 
@@ -1636,12 +1641,16 @@ export const systemAdminAPI = {
 
   // Security Settings
   getSecuritySettings: async () => {
-    const response = await apiClient.get('/admin/security-settings');
+    const response = await measureSettingsAction('security', 'admin.security_settings', 'load', () =>
+      apiClient.get('/admin/security-settings')
+    );
     return response.data.data;
   },
 
   updateSecuritySettings: async (type: 'password' | 'session' | 'mfa' | 'notifications', settings: any) => {
-    const response = await apiClient.put('/admin/security-settings', { type, settings });
+    const response = await measureSettingsAction('security', `admin.${type}`, 'save', () =>
+      apiClient.put('/admin/security-settings', { type, settings })
+    );
     return response.data;
   },
 };

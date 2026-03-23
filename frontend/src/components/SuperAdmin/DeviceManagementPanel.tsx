@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
 import {
-  Monitor, Smartphone, Tablet, Loader2, RefreshCw, Search,
+  Monitor, Smartphone, Tablet, RefreshCw, Search,
   ShieldCheck, ShieldBan, Trash2, CheckCircle, XCircle,
   AlertTriangle, X, Laptop, HardDrive,
 } from 'lucide-react';

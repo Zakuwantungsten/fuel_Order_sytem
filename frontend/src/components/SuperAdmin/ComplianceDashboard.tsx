@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Shield, RefreshCw, CheckCircle, AlertTriangle, XCircle,
-  Loader2, ChevronDown, ChevronRight, ClipboardCheck,
+  ChevronDown, ChevronRight, ClipboardCheck,
   AlertOctagon,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';

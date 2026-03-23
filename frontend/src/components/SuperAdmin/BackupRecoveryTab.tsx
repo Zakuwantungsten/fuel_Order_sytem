@@ -8,17 +8,15 @@ import { Backup, BackupSchedule, BackupStats } from '../../types';
 
 interface BackupRecoveryTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
+  onNavigate?: (section: string) => void;
 }
 
-export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps) {
+export default function BackupRecoveryTab({ onMessage, onNavigate }: BackupRecoveryTabProps) {
   const [backups, setBackups] = useState<Backup[]>([]);
   const [schedules, setSchedules] = useState<BackupSchedule[]>([]);
   const [stats, setStats] = useState<BackupStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [_showScheduleModal, setShowScheduleModal] = useState(false);
-  // Using underscore prefix to suppress unused variable warning
-  void _showScheduleModal;
   const [confirmState, setConfirmState] = useState<{
     title: string;
     message: string;
@@ -114,14 +112,10 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     });
   };
 
-  const handleToggleSchedule = async (schedule: BackupSchedule) => {
-    try {
-      await backupAPI.updateSchedule(schedule.id, { enabled: !schedule.enabled });
-      onMessage('success', `Schedule ${schedule.enabled ? 'disabled' : 'enabled'}`);
-      loadData();
-    } catch (error: any) {
-      onMessage('error', error.response?.data?.message || 'Failed to update schedule');
-    }
+  const openDataLifecyclePolicyEditor = () => {
+    sessionStorage.setItem('sa_system_preferred_tab', 'config');
+    sessionStorage.setItem('sa_system_config_focus_section', 'data');
+    onNavigate?.('sa_system');
   };
 
   const formatBytes = (bytes: number): string => {
@@ -347,14 +341,21 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <Calendar className="w-5 h-5" />
-            Backup Schedules
+            Backup Schedules (Read-only)
           </h3>
           <button
-            onClick={() => setShowScheduleModal(true)}
+            onClick={openDataLifecyclePolicyEditor}
             className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            Add Schedule
+            Manage in Data Lifecycle Policy
           </button>
+        </div>
+
+        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <p className="text-sm text-blue-900 dark:text-blue-300">
+            Retention and backup policy ownership is centralized in System → Data Lifecycle Policy.
+            This section provides operational visibility only.
+          </p>
         </div>
 
         {schedules.length === 0 ? (
@@ -372,7 +373,8 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                   <input
                     type="checkbox"
                     checked={schedule.enabled}
-                    onChange={() => handleToggleSchedule(schedule)}
+                    readOnly
+                    disabled
                     className="rounded text-indigo-600"
                   />
                   <div>

@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import {
-  Globe, MapPin, Loader2, RefreshCw, AlertTriangle,
+  Globe, MapPin, RefreshCw, AlertTriangle,
   Users, Activity, Clock,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';

@@ -27,6 +27,16 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
   const [subTab, setSubTab] = useState<SubTab>('policies');
   const [alertBadge, setAlertBadge] = useState(0);
 
+  useEffect(() => {
+    const preferred = sessionStorage.getItem('sa_security_preferred_subtab') as SubTab | null;
+    if (preferred && SUB_TABS.some((t) => t.id === preferred)) {
+      setSubTab(preferred);
+    }
+    if (preferred) {
+      sessionStorage.removeItem('sa_security_preferred_subtab');
+    }
+  }, []);
+
   // Keyboard shortcuts: 1-5 switch tabs, R refreshes (triggers re-mount)
   const handleKeyboard = useCallback((e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement)?.tagName;
@@ -70,6 +80,9 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 ml-[52px]">
             Manage policies, access control, sessions, threats, and incidents
+          </p>
+          <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1 ml-[52px] font-medium">
+            Canonical owner for security policy and session configuration
           </p>
         </div>
         <div className="hidden lg:flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">

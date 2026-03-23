@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { Server, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw, Zap, CheckCircle, XCircle } from 'lucide-react';
+import { Server, Plus, Trash2, ToggleLeft, ToggleRight, Zap, CheckCircle, XCircle } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface SIEMConfig {

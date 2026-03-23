@@ -18,6 +18,7 @@ type TabId = typeof TABS[number]['id'];
 
 interface Props {
   onMessage: (type: 'success' | 'error', message: string) => void;
+  onNavigate?: (section: string) => void;
 }
 
 function fmtUptime(s: number): string {
@@ -28,7 +29,7 @@ function fmtUptime(s: number): string {
   return `${h}h ${m}m`;
 }
 
-export default function SystemUnifiedTab({ onMessage }: Props) {
+export default function SystemUnifiedTab({ onMessage, onNavigate }: Props) {
   const [tab, setTab] = useState<TabId>('config');
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
@@ -46,6 +47,16 @@ export default function SystemUnifiedTab({ onMessage }: Props) {
   }, []);
 
   useEffect(() => { loadHealth(); }, [loadHealth]);
+
+  useEffect(() => {
+    const preferredTab = sessionStorage.getItem('sa_system_preferred_tab') as TabId | null;
+    if (preferredTab && ['config', 'operations', 'integrations', 'content'].includes(preferredTab)) {
+      setTab(preferredTab);
+    }
+    if (preferredTab) {
+      sessionStorage.removeItem('sa_system_preferred_tab');
+    }
+  }, []);
 
   const isOk = health?.database?.status === 'connected';
   const heapPct = health
@@ -147,7 +158,7 @@ export default function SystemUnifiedTab({ onMessage }: Props) {
 
       {/* ── Tab content ─────────────────────────────────────────── */}
       <div className="bg-[#F8F9FB] dark:bg-gray-900 min-h-[calc(100vh-220px)]">
-        {tab === 'config'       && <SystemConfigSubTab       onMessage={onMessage} />}
+        {tab === 'config'       && <SystemConfigSubTab       onMessage={onMessage} onNavigate={onNavigate} />}
         {tab === 'operations'   && <SystemOpsSubTab          onMessage={onMessage} />}
         {tab === 'integrations' && <SystemIntegrationsSubTab onMessage={onMessage} />}
         {tab === 'content'      && <SystemContentSubTab      onMessage={onMessage} />}

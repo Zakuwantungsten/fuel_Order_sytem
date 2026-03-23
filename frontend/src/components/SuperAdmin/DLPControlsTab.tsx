@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { ShieldBan, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw } from 'lucide-react';
+import { ShieldBan, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface DLPRule {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Database, RefreshCw, AlertTriangle, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Database, RefreshCw, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import apiClient from '../../services/api';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 

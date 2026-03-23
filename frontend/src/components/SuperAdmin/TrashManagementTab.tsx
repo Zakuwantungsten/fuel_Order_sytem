@@ -18,6 +18,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface TrashManagementTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
+  onNavigate?: (section: string) => void;
 }
 
 const RESOURCE_TYPES = [
@@ -30,7 +31,7 @@ const RESOURCE_TYPES = [
   { value: 'driver_accounts', label: 'Driver Accounts' },
 ];
 
-export default function TrashManagementTab({ onMessage }: TrashManagementTabProps) {
+export default function TrashManagementTab({ onMessage, onNavigate }: TrashManagementTabProps) {
   const [selectedType, setSelectedType] = useState('delivery_orders');
   const [items, setItems] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -81,6 +82,10 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('scroll', handleScroll, true);
     };
+  }, []);
+
+  useEffect(() => {
+    loadTrashStats();
     loadRetentionSettings();
   }, []);
 
@@ -241,15 +246,10 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
     });
   };
 
-  const handleUpdateRetention = async () => {
-    if (!retentionSettings) return;
-
-    try {
-      await trashAPI.updateRetentionSettings(retentionSettings);
-      onMessage('success', 'Retention policy updated');
-    } catch (error: any) {
-      onMessage('error', 'Failed to update retention policy');
-    }
+  const openDataLifecyclePolicyEditor = () => {
+    sessionStorage.setItem('sa_system_preferred_tab', 'config');
+    sessionStorage.setItem('sa_system_config_focus_section', 'data');
+    onNavigate?.('sa_system');
   };
 
   const toggleSelectAll = () => {
@@ -540,42 +540,35 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
       <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
           <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-          Retention Policy
+          Retention Policy (Read-only)
         </h3>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Auto-delete items older than (days)
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                value={retentionSettings?.retentionDays || 90}
-                onChange={(e) => setRetentionSettings({ ...retentionSettings, retentionDays: parseInt(e.target.value) })}
-                className="w-32 px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-              <span className="text-sm text-gray-600 dark:text-gray-300">days</span>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+            <p className="text-sm text-amber-900 dark:text-amber-200">
+              Retention policy changes are managed in System → Data Lifecycle Policy.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Auto-delete threshold</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">{retentionSettings?.retentionDays || 90} days</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Automatic cleanup</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">{retentionSettings?.autoCleanupEnabled ? 'Enabled' : 'Disabled'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={retentionSettings?.autoCleanupEnabled || false}
-              onChange={(e) => setRetentionSettings({ ...retentionSettings, autoCleanupEnabled: e.target.checked })}
-              className="rounded text-indigo-600 focus:ring-indigo-500"
-            />
-            <label className="text-sm text-gray-700 dark:text-gray-300">
-              Enable automatic cleanup
-            </label>
-          </div>
+
           <button
-            onClick={handleUpdateRetention}
+            onClick={openDataLifecyclePolicyEditor}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            Save Settings
+            Manage in Data Lifecycle Policy
           </button>
+
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            ⚠️ Items older than {retentionSettings?.retentionDays || 90} days will be permanently deleted automatically.
+            Items older than {retentionSettings?.retentionDays || 90} days are automatically deleted when cleanup is enabled.
           </p>
         </div>
       </div>

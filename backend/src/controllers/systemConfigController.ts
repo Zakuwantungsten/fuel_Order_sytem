@@ -10,6 +10,76 @@ import { invalidateMaintenanceCache } from '../middleware/maintenance';
 import { isSafeUrl } from '../utils/ssrfGuard';
 import { encryptData, decryptData } from '../utils/cryptoUtils';
 import { isEncrypted, getFieldEncryptionKey } from '../utils/fieldEncryption';
+import { sendSuccess } from '../utils/apiResponse';
+import {
+  SETTINGS_DOMAIN_OWNERSHIP,
+  getDomainBySection,
+  getUnknownSectionKeys,
+} from '../config/settingsDomainOwnership';
+
+const STRICT_SETTINGS_OWNERSHIP = process.env.SETTINGS_OWNER_GUARDRAILS_STRICT === 'true';
+
+const enforceSettingsOwnership = (
+  section: string,
+  patch: Record<string, unknown>,
+  req: AuthRequest
+): void => {
+  const domain = getDomainBySection(section);
+  if (!domain) {
+    throw new ApiError(400, `Unknown settings section: ${section}`);
+  }
+
+  const unknownKeys = getUnknownSectionKeys(section, patch);
+  if (unknownKeys.length > 0) {
+    const msg = `Unknown settings keys submitted: ${unknownKeys.join(', ')}`;
+    if (STRICT_SETTINGS_OWNERSHIP) {
+      throw new ApiError(400, msg);
+    }
+    logger.warn(msg, {
+      requestId: (req as any).requestId,
+      username: req.user?.username,
+      section,
+      domain,
+    });
+  }
+};
+
+const enforcePasswordPolicyOwnership = (patch: Record<string, unknown>, req: AuthRequest): void => {
+  const unknownKeys = Object.keys(patch || {}).filter(
+    (key) => !SETTINGS_DOMAIN_OWNERSHIP.keys[`security.password.${key}`]
+  );
+
+  if (unknownKeys.length > 0) {
+    const qualified = unknownKeys.map((key) => `security.password.${key}`);
+    const msg = `Unknown settings keys submitted: ${qualified.join(', ')}`;
+    if (STRICT_SETTINGS_OWNERSHIP) {
+      throw new ApiError(400, msg);
+    }
+    logger.warn(msg, {
+      requestId: (req as any).requestId,
+      username: req.user?.username,
+      section: 'security.password',
+      domain: 'security',
+    });
+  }
+};
+
+/**
+ * Get settings ownership metadata
+ * GET /api/system-admin/config/settings/domain-metadata
+ * Super Admin Only
+ */
+export const getSettingsDomainMetadata = async (req: AuthRequest, res: Response): Promise<void> => {
+  sendSuccess(
+    res,
+    200,
+    'Settings domain metadata retrieved successfully',
+    {
+      strictMode: STRICT_SETTINGS_OWNERSHIP,
+      ownership: SETTINGS_DOMAIN_OWNERSHIP,
+    }
+  );
+};
 
 /**
  * Get all system settings
@@ -71,11 +141,7 @@ export const getSystemSettings = async (req: AuthRequest, res: Response): Promis
       });
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'System settings retrieved successfully',
-      data: systemConfig.systemSettings,
-    });
+    sendSuccess(res, 200, 'System settings retrieved successfully', systemConfig.systemSettings);
   } catch (error: any) {
     logger.error('Error getting system settings:', error);
     throw error;
@@ -90,6 +156,8 @@ export const getSystemSettings = async (req: AuthRequest, res: Response): Promis
 export const updateGeneralSettings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { systemName, timezone, dateFormat, language } = req.body;
+
+    enforceSettingsOwnership('general', req.body || {}, req);
 
     let systemConfig = await SystemConfig.findOne({
       configType: 'system_settings',
@@ -138,11 +206,7 @@ export const updateGeneralSettings = async (req: AuthRequest, res: Response): Pr
 
     logger.info(`General settings updated by ${req.user?.username}`);
 
-    res.status(200).json({
-      success: true,
-      message: 'General settings updated successfully',
-      data: systemConfig.systemSettings?.general,
-    });
+    sendSuccess(res, 200, 'General settings updated successfully', systemConfig.systemSettings?.general);
   } catch (error: any) {
     logger.error('Error updating general settings:', error);
     throw error;
@@ -164,6 +228,8 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       lockoutDuration,
       allowMultipleSessions,
     } = req.body;
+
+    enforceSettingsOwnership('session', req.body || {}, req);
 
     let systemConfig = await SystemConfig.findOne({
       configType: 'system_settings',
@@ -215,11 +281,12 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
 
     logger.warn(`Security settings updated by ${req.user?.username} - requires attention`);
 
-    res.status(200).json({
-      success: true,
-      message: 'Security settings updated successfully. Changes will take effect for new sessions.',
-      data: systemConfig.systemSettings?.session,
-    });
+    sendSuccess(
+      res,
+      200,
+      'Security settings updated successfully. Changes will take effect for new sessions.',
+      systemConfig.systemSettings?.session
+    );
   } catch (error: any) {
     logger.error('Error updating security settings:', error);
     throw error;
@@ -249,18 +316,14 @@ export const getPasswordPolicy = async (req: AuthRequest, res: Response): Promis
     };
 
     const p = systemConfig?.securitySettings?.password;
-    res.status(200).json({
-      success: true,
-      message: 'Password policy retrieved successfully',
-      data: {
-        minLength:          p?.minLength          ?? defaults.minLength,
-        requireUppercase:   p?.requireUppercase   ?? defaults.requireUppercase,
-        requireLowercase:   p?.requireLowercase   ?? defaults.requireLowercase,
-        requireNumbers:     p?.requireNumbers     ?? defaults.requireNumbers,
-        requireSpecialChars: p?.requireSpecialChars ?? defaults.requireSpecialChars,
-        historyCount:       p?.historyCount       ?? defaults.historyCount,
-        expirationDays:     p?.expirationDays     ?? defaults.expirationDays,
-      },
+    sendSuccess(res, 200, 'Password policy retrieved successfully', {
+      minLength: p?.minLength ?? defaults.minLength,
+      requireUppercase: p?.requireUppercase ?? defaults.requireUppercase,
+      requireLowercase: p?.requireLowercase ?? defaults.requireLowercase,
+      requireNumbers: p?.requireNumbers ?? defaults.requireNumbers,
+      requireSpecialChars: p?.requireSpecialChars ?? defaults.requireSpecialChars,
+      historyCount: p?.historyCount ?? defaults.historyCount,
+      expirationDays: p?.expirationDays ?? defaults.expirationDays,
     });
   } catch (error: any) {
     logger.error('Error getting password policy:', error);
@@ -284,6 +347,8 @@ export const updatePasswordPolicy = async (req: AuthRequest, res: Response): Pro
       historyCount,
       expirationDays,
     } = req.body;
+
+    enforcePasswordPolicyOwnership(req.body || {}, req);
 
     const systemConfig = await SystemConfig.findOne({
       configType: 'system_settings',
@@ -331,11 +396,7 @@ export const updatePasswordPolicy = async (req: AuthRequest, res: Response): Pro
 
     logger.warn(`Password policy updated by ${req.user?.username}`);
 
-    res.status(200).json({
-      success: true,
-      message: 'Password policy updated successfully',
-      data: systemConfig.securitySettings?.password,
-    });
+    sendSuccess(res, 200, 'Password policy updated successfully', systemConfig.securitySettings?.password);
   } catch (error: any) {
     logger.error('Error updating password policy:', error);
     throw error;
@@ -359,6 +420,8 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
       backupRetention,
       collectionArchivalSettings,
     } = req.body;
+
+    enforceSettingsOwnership('data', req.body || {}, req);
 
     let systemConfig = await SystemConfig.findOne({
       configType: 'system_settings',
@@ -401,11 +464,7 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
 
     logger.info(`Data retention settings updated by ${req.user?.username}`);
 
-    res.status(200).json({
-      success: true,
-      message: 'Data retention settings updated successfully',
-      data: systemConfig.systemSettings?.data,
-    });
+    sendSuccess(res, 200, 'Data retention settings updated successfully', systemConfig.systemSettings?.data);
   } catch (error: any) {
     logger.error('Error updating data retention settings:', error);
     throw error;
@@ -429,6 +488,8 @@ export const updateNotificationSettings = async (req: AuthRequest, res: Response
       sendCredentialsEmail,
       bypassEmailVerification,
     } = req.body;
+
+    enforceSettingsOwnership('notifications', req.body || {}, req);
 
     let systemConfig = await SystemConfig.findOne({
       configType: 'system_settings',
@@ -469,11 +530,7 @@ export const updateNotificationSettings = async (req: AuthRequest, res: Response
 
     logger.info(`Notification settings updated by ${req.user?.username}`);
 
-    res.status(200).json({
-      success: true,
-      message: 'Notification settings updated successfully',
-      data: systemConfig.systemSettings?.notifications,
-    });
+    sendSuccess(res, 200, 'Notification settings updated successfully', systemConfig.systemSettings?.notifications);
   } catch (error: any) {
     logger.error('Error updating notification settings:', error);
     throw error;
@@ -488,6 +545,8 @@ export const updateNotificationSettings = async (req: AuthRequest, res: Response
 export const updateMaintenanceMode = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { enabled, message, allowedRoles } = req.body;
+
+    enforceSettingsOwnership('maintenance', req.body || {}, req);
 
     let systemConfig = await SystemConfig.findOne({
       configType: 'system_settings',
@@ -540,11 +599,12 @@ export const updateMaintenanceMode = async (req: AuthRequest, res: Response): Pr
 
     logger.warn(`Maintenance mode ${enabled ? 'ENABLED' : 'DISABLED'} by ${req.user?.username}`);
 
-    res.status(200).json({
-      success: true,
-      message: `Maintenance mode ${enabled ? 'enabled' : 'disabled'} successfully`,
-      data: systemConfig.systemSettings?.maintenance,
-    });
+    sendSuccess(
+      res,
+      200,
+      `Maintenance mode ${enabled ? 'enabled' : 'disabled'} successfully`,
+      systemConfig.systemSettings?.maintenance
+    );
   } catch (error: any) {
     logger.error('Error updating maintenance mode:', error);
     throw error;

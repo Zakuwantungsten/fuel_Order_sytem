@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
+import { TrendingUp, RefreshCw, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import apiClient from '../../services/api';
 import UnifiedTabLoader from './common/UnifiedTabLoader';

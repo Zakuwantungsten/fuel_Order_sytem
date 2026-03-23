@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Settings, Lock, Database, Bell, Clock, GitCompare,
-  ChevronDown, RefreshCw, Save, CheckCircle, AlertCircle,
+  ChevronDown, RefreshCw, Save, CheckCircle, AlertCircle, ShieldCheck,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
+import AsyncErrorPanel from './common/AsyncErrorPanel';
+import { useAsyncState } from '../../hooks/useAsyncState';
+import { useActionState } from '../../hooks/useActionState';
 import apiClient from '../../services/api';
 import { systemConfigAPI } from '../../services/systemConfigService';
 import type { SystemSettings, PasswordPolicySettings } from '../../services/systemConfigService';
@@ -12,6 +15,7 @@ import ConfigDiffTab from './ConfigDiffTab';
 
 interface Props {
   onMessage: (type: 'success' | 'error', message: string) => void;
+  onNavigate?: (section: string) => void;
 }
 
 type AccSection = 'general' | 'security' | 'data' | 'notifications';
@@ -67,10 +71,13 @@ const labelCls = 'text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export default function SystemConfigSubTab({ onMessage }: Props) {
+export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
   const [openSection, setOpenSection] = useState<AccSection | null>('general');
   const [settings, setSettings] = useState<SystemSettings | null>(null);
-  const [loadingSettings, setLoadingSettings] = useState(true);
+  const settingsLoadState = useAsyncState('loading');
+  const sectionSaveState = useActionState();
+  const runSettingsLoad = settingsLoadState.run;
+  const runSectionSave = sectionSaveState.run;
   const [passwordPolicy, setPasswordPolicy] = useState<PasswordPolicySettings>({
     minLength: 12,
     requireUppercase: true,
@@ -84,6 +91,7 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
   const [sectionFeedback, setSectionFeedback] = useState<{ section: AccSection; type: 'success' | 'error'; message: string } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState<{ snapshots: number; changes: number } | null>(null);
+  const [securityLastChanged, setSecurityLastChanged] = useState<{ by: string; at: string } | null>(null);
 
   const fwd = useCallback((msg: string, type?: 'success' | 'error' | 'info') => {
     onMessage((type || 'error') as 'success' | 'error', msg);
@@ -92,35 +100,66 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
     try {
-      const [hRes, dRes] = await Promise.allSettled([
+      const [hRes, dRes, secRes] = await Promise.allSettled([
         apiClient.get('/system-admin/config-history', { params: { page: 1, limit: 1 } }),
         apiClient.get('/system-admin/config-diff',    { params: { page: 1, limit: 1 } }),
+        apiClient.get('/system-admin/security-audit-log', { params: { page: 1, limit: 1 } }),
       ]);
       setStats({
         snapshots: hRes.status === 'fulfilled' ? (hRes.value.data.pagination?.total ?? 0) : 0,
         changes:   dRes.status === 'fulfilled' ? (dRes.value.data.pagination?.total ?? 0) : 0,
       });
+
+      if (secRes.status === 'fulfilled') {
+        const rows = secRes.value.data?.data?.data || secRes.value.data?.data || [];
+        const latest = Array.isArray(rows) ? rows[0] : null;
+        if (latest) {
+          const name = latest.userId
+            ? `${latest.userId.firstName || ''} ${latest.userId.lastName || ''}`.trim() || latest.userId.email || 'System'
+            : latest.username || 'System';
+          setSecurityLastChanged({
+            by: name,
+            at: latest.createdAt || '',
+          });
+        }
+      }
     } catch { /* silent */ } finally { setStatsLoading(false); }
   }, []);
 
   const loadSettings = useCallback(async () => {
-    setLoadingSettings(true);
-    try {
+    const result = await runSettingsLoad(async () => {
       const [data, policy] = await Promise.all([
         systemConfigAPI.getSystemSettings(),
         systemConfigAPI.getPasswordPolicy(),
       ]);
-      setSettings(data);
-      setPasswordPolicy(policy);
-    } catch (e: any) {
-      onMessage('error', e.response?.data?.message || 'Failed to load settings');
-    } finally { setLoadingSettings(false); }
-  }, [onMessage]);
+      return { data, policy };
+    }, {
+      errorMessage: 'Failed to load settings',
+    });
+
+    if (result.ok) {
+      setSettings(result.data.data);
+      setPasswordPolicy(result.data.policy);
+      return;
+    }
+
+    onMessage('error', result.error);
+  }, [onMessage, runSettingsLoad]);
 
   useEffect(() => {
     loadStats();
     loadSettings();
   }, [loadStats, loadSettings]);
+
+  useEffect(() => {
+    const preferredSection = sessionStorage.getItem('sa_system_config_focus_section') as AccSection | null;
+    if (preferredSection && ['general', 'security', 'data', 'notifications'].includes(preferredSection)) {
+      setOpenSection(preferredSection);
+    }
+    if (preferredSection) {
+      sessionStorage.removeItem('sa_system_config_focus_section');
+    }
+  }, []);
 
   const toggleSection = (id: AccSection) => {
     setOpenSection(prev => prev === id ? null : id);
@@ -133,34 +172,48 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
 
   const saveSection = async (id: AccSection) => {
     if (!settings) return;
+
+    if (id === 'security') {
+      onMessage('error', 'Security settings are managed in Security Center');
+      return;
+    }
+
     setSavingSection(id);
     setSectionFeedback(null);
-    try {
+    const result = await runSectionSave(async () => {
       switch (id) {
-        case 'general':       await systemConfigAPI.updateGeneralSettings(settings.general);       break;
-        case 'security':
-          await systemConfigAPI.updateSecuritySettings(settings.session);
-          await systemConfigAPI.updatePasswordPolicy(passwordPolicy);
+        case 'general':
+          await systemConfigAPI.updateGeneralSettings(settings.general);
           break;
-        case 'data':          await systemConfigAPI.updateDataRetentionSettings(settings.data);    break;
-        case 'notifications': await systemConfigAPI.updateNotificationSettings(settings.notifications); break;
+        case 'data':
+          await systemConfigAPI.updateDataRetentionSettings(settings.data);
+          break;
+        case 'notifications':
+          await systemConfigAPI.updateNotificationSettings(settings.notifications);
+          break;
       }
+    }, {
+      errorMessage: 'Save failed',
+    });
+
+    if (result.ok) {
       setSectionFeedback({ section: id, type: 'success', message: 'Settings saved successfully' });
       onMessage('success', 'Settings saved');
       setTimeout(() => setSectionFeedback(s => s?.section === id ? null : s), 4000);
-    } catch (e: any) {
-      const msg = e.response?.data?.message || 'Save failed';
-      setSectionFeedback({ section: id, type: 'error', message: msg });
-      onMessage('error', msg);
-    } finally { setSavingSection(null); }
+    } else {
+      setSectionFeedback({ section: id, type: 'error', message: result.error });
+      onMessage('error', result.error);
+    }
+
+    setSavingSection(null);
   };
 
   // ── Section definitions ────────────────────────────────────────────────────
 
   const SECTIONS: { id: AccSection; label: string; sub: string; icon: React.ElementType; accent: string; accentBg: string }[] = [
     { id: 'general',       label: 'General',              sub: 'System name, timezone, date format, language',                     icon: Settings, accent: '#4F46E5', accentBg: '#EEF2FF' },
-    { id: 'security',      label: 'Security & Sessions',  sub: 'Timeouts, password policy, login attempts, multi-session',         icon: Lock,     accent: '#2563EB', accentBg: '#EFF6FF' },
-    { id: 'data',          label: 'Data Retention',       sub: 'Archival policy, audit logs, trash, backup schedule',              icon: Database, accent: '#0D9488', accentBg: '#F0FDFA' },
+    { id: 'security',      label: 'Security & Sessions',  sub: 'Read-only summary. Managed in Security Center.',                   icon: Lock,     accent: '#2563EB', accentBg: '#EFF6FF' },
+    { id: 'data',          label: 'Data Lifecycle Policy', sub: 'Canonical policy editor for archival, trash, and backup retention', icon: Database, accent: '#0D9488', accentBg: '#F0FDFA' },
     { id: 'notifications', label: 'Notifications',        sub: 'Email toggles, alert recipients, digests, warning thresholds',     icon: Bell,     accent: '#D97706', accentBg: '#FFFBEB' },
   ];
 
@@ -170,12 +223,18 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatTile label="Config Snapshots"   value={statsLoading ? '…' : (stats?.snapshots ?? 0)} icon={Clock}      iconBg="#EEF2FF" iconColor="#4F46E5" />
         <StatTile label="Config Changes"     value={statsLoading ? '…' : (stats?.changes   ?? 0)} icon={GitCompare}  iconBg="#F5F3FF" iconColor="#7C3AED" />
-        <StatTile label="Settings Sections"  value={4}                                             icon={Settings}   iconBg="#F0FDF4" iconColor="#16A34A" sub="General · Security · Data · Notifications" />
+        <StatTile label="Settings Sections"  value={4}                                             icon={Settings}   iconBg="#F0FDF4" iconColor="#16A34A" sub="General · Security · Data Lifecycle · Notifications" />
       </div>
 
       {/* ── Settings accordion ─────────────────────────────────────────────── */}
-      {loadingSettings ? (
+      {settingsLoadState.isLoading && !settings ? (
         <UnifiedTabLoader label="Loading settings..." heightClassName="h-40" />
+      ) : settingsLoadState.isError && !settings ? (
+        <AsyncErrorPanel
+          title="System Settings Unavailable"
+          message={settingsLoadState.error || 'Failed to load settings'}
+          onRetry={loadSettings}
+        />
       ) : settings && (
         <div className="space-y-2">
           {SECTIONS.map(sec => {
@@ -295,73 +354,67 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
 
                     {/* ── SECURITY ── */}
                     {sec.id === 'security' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {[
-                          { key: 'sessionTimeout',      label: 'Session Timeout (min)',           min: 5 },
-                          { key: 'jwtExpiry',           label: 'JWT Expiry (min)',                min: 5 },
-                          { key: 'refreshTokenExpiry',  label: 'Refresh Token Expiry (days)',     min: 1 },
-                          { key: 'maxLoginAttempts',    label: 'Max Login Attempts',             min: 1 },
-                          { key: 'lockoutDuration',     label: 'Lockout Duration (min)',         min: 1 },
-                        ].map(f => (
-                          <div key={f.key} className="flex flex-col gap-1.5">
-                            <label className={labelCls}>{f.label}</label>
-                            <input type="number" min={f.min} className={inputCls}
-                              value={(settings.session as any)[f.key]}
-                              onChange={e => upd('session', { [f.key]: Number(e.target.value) } as any)} />
+                      <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              <span className="text-[12px] font-semibold text-blue-800 dark:text-blue-300">Managed in Security Center</span>
+                            </div>
+                            <p className="mt-1 text-[12px] text-blue-700 dark:text-blue-300/90">
+                              Security policy editing is locked in System Configuration. Use Security Center for all policy changes.
+                            </p>
+                            <p className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
+                              Last changed by: <span className="font-semibold">{securityLastChanged?.by || 'Unknown'}</span>
+                              {' '}
+                              {securityLastChanged?.at ? `on ${new Date(securityLastChanged.at).toLocaleString()}` : ''}
+                            </p>
                           </div>
-                        ))}
-                        <div className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
-                          <div>
-                            <div className="text-[13px] font-medium text-[#111827] dark:text-gray-100">Allow Multiple Sessions</div>
-                            <div className="text-[11px] text-[#9CA3AF] dark:text-gray-400 mt-0.5">Users can be logged in on multiple devices simultaneously</div>
-                          </div>
-                          <Toggle checked={settings.session.allowMultipleSessions}
-                            onChange={v => upd('session', { allowMultipleSessions: v })} />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              sessionStorage.setItem('sa_security_preferred_subtab', 'policies');
+                              onNavigate?.('sa_security');
+                            }}
+                            className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-blue-700"
+                          >
+                            Manage in Security Center
+                          </button>
                         </div>
 
-                        {/* ── Password Policy ── */}
-                        <div className="sm:col-span-2">
-                          <SectionDivider label="Password Policy" icon={Lock} />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <ReadOnlyRow label="Session Timeout" value={`${settings.session.sessionTimeout} min`} />
+                          <ReadOnlyRow label="JWT Expiry" value={`${settings.session.jwtExpiry} min`} />
+                          <ReadOnlyRow label="Refresh Token Expiry" value={`${settings.session.refreshTokenExpiry} days`} />
+                          <ReadOnlyRow label="Max Login Attempts" value={String(settings.session.maxLoginAttempts)} />
+                          <ReadOnlyRow label="Lockout Duration" value={`${settings.session.lockoutDuration} min`} />
+                          <ReadOnlyRow label="Allow Multiple Sessions" value={settings.session.allowMultipleSessions ? 'Enabled' : 'Disabled'} />
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className={labelCls}>Minimum Length</label>
-                          <input type="number" min={6} max={128} className={inputCls}
-                            value={passwordPolicy.minLength}
-                            onChange={e => setPasswordPolicy(p => ({ ...p, minLength: Number(e.target.value) }))} />
+
+                        <SectionDivider label="Password Policy (Read-only)" icon={Lock} />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <ReadOnlyRow label="Minimum Length" value={String(passwordPolicy.minLength)} />
+                          <ReadOnlyRow label="Password History" value={`${passwordPolicy.historyCount} previous passwords`} />
+                          <ReadOnlyRow label="Expiration" value={passwordPolicy.expirationDays > 0 ? `${passwordPolicy.expirationDays} days` : 'Never'} />
+                          <ReadOnlyRow label="Uppercase Required" value={passwordPolicy.requireUppercase ? 'Yes' : 'No'} />
+                          <ReadOnlyRow label="Lowercase Required" value={passwordPolicy.requireLowercase ? 'Yes' : 'No'} />
+                          <ReadOnlyRow label="Numbers Required" value={passwordPolicy.requireNumbers ? 'Yes' : 'No'} />
+                          <ReadOnlyRow label="Special Characters Required" value={passwordPolicy.requireSpecialChars ? 'Yes' : 'No'} />
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className={labelCls}>Password History (last N)</label>
-                          <input type="number" min={0} max={24} className={inputCls}
-                            value={passwordPolicy.historyCount}
-                            onChange={e => setPasswordPolicy(p => ({ ...p, historyCount: Number(e.target.value) }))} />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className={labelCls}>Expiration (days, 0 = never)</label>
-                          <input type="number" min={0} className={inputCls}
-                            value={passwordPolicy.expirationDays}
-                            onChange={e => setPasswordPolicy(p => ({ ...p, expirationDays: Number(e.target.value) }))} />
-                        </div>
-                        {[
-                          { key: 'requireUppercase',    label: 'Require Uppercase',    sub: 'At least one A–Z character' },
-                          { key: 'requireLowercase',    label: 'Require Lowercase',    sub: 'At least one a–z character' },
-                          { key: 'requireNumbers',      label: 'Require Numbers',      sub: 'At least one 0–9 digit' },
-                          { key: 'requireSpecialChars', label: 'Require Special Chars', sub: 'At least one !@#$… symbol' },
-                        ].map(f => (
-                          <div key={f.key} className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
-                            <div>
-                              <div className="text-[13px] font-medium text-[#111827] dark:text-gray-100">{f.label}</div>
-                              <div className="text-[11px] text-[#9CA3AF] dark:text-gray-400 mt-0.5">{f.sub}</div>
-                            </div>
-                            <Toggle checked={(passwordPolicy as any)[f.key]}
-                              onChange={v => setPasswordPolicy(p => ({ ...p, [f.key]: v }))} />
-                          </div>
-                        ))}
                       </div>
                     )}
 
                     {/* ── DATA RETENTION ── */}
                     {sec.id === 'data' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-4">
+                        <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 dark:border-teal-800 dark:bg-teal-900/20">
+                          <div className="text-[12px] font-semibold text-teal-800 dark:text-teal-300">Canonical Data Lifecycle Editor</div>
+                          <p className="mt-1 text-[12px] text-teal-700 dark:text-teal-300/90">
+                            Archival, trash retention, and backup retention policy are managed here. Operational tabs are read-only for policy values.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="sm:col-span-2 flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
                           <div>
                             <div className="text-[13px] font-medium text-[#111827] dark:text-gray-100">Enable Archival</div>
@@ -399,6 +452,7 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
                           </div>
                           <Toggle checked={settings.data.autoCleanupEnabled}
                             onChange={v => upd('data', { autoCleanupEnabled: v })} />
+                        </div>
                         </div>
                       </div>
                     )}
@@ -447,18 +501,20 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
                     )}
 
                     {/* Save button */}
-                    <div className="flex justify-end mt-5 pt-4 border-t border-[#E4E7EC] dark:border-gray-700">
-                      <button
-                        onClick={() => saveSection(sec.id)}
-                        disabled={isSaving}
-                        className="flex items-center gap-2 px-5 py-2 text-[13px] font-semibold text-white rounded-lg transition-colors disabled:opacity-60"
-                        style={{ background: sec.accent }}
-                      >
-                        {isSaving
-                          ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving…</>
-                          : <><Save className="w-3.5 h-3.5" /> Save {sec.label}</>}
-                      </button>
-                    </div>
+                    {sec.id !== 'security' && (
+                      <div className="flex justify-end mt-5 pt-4 border-t border-[#E4E7EC] dark:border-gray-700">
+                        <button
+                          onClick={() => saveSection(sec.id)}
+                          disabled={isSaving}
+                          className="flex items-center gap-2 px-5 py-2 text-[13px] font-semibold text-white rounded-lg transition-colors disabled:opacity-60"
+                          style={{ background: sec.accent }}
+                        >
+                          {isSaving
+                            ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+                            : <><Save className="w-3.5 h-3.5" /> Save {sec.label}</>}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -478,6 +534,15 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
       <div className="bg-white dark:bg-gray-800 border border-[#E4E7EC] dark:border-gray-700 rounded-xl overflow-hidden">
         <ConfigDiffTab onMessage={fwd} />
       </div>
+    </div>
+  );
+}
+
+function ReadOnlyRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[#E4E7EC] bg-[#F8F9FB] px-3 py-2 dark:border-gray-600 dark:bg-gray-700/50">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6B7280] dark:text-gray-400">{label}</div>
+      <div className="mt-1 text-[13px] font-medium text-[#111827] dark:text-gray-100">{value}</div>
     </div>
   );
 }

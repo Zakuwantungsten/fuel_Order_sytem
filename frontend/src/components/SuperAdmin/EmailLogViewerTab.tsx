@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, RefreshCw, Search, AlertTriangle, Loader2, X, Info } from 'lucide-react';
+import { Mail, RefreshCw, Search, AlertTriangle, X, Info } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 
