@@ -37,6 +37,7 @@ import DataExportTab from './SuperAdmin/DataExportTab';
 import StorageManagerTab from './SuperAdmin/StorageManagerTab';
 import MonitoringUnifiedTab from './SuperAdmin/MonitoringUnifiedTab';
 import CustomReportBuilderTab from './SuperAdmin/CustomReportBuilderTab';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 // SecurityScoreTab merged into SecurityUnifiedTab
 // PrivilegeElevationTab merged into UserManagement module
 // DLPControlsTab merged into SecurityUnifiedTab
@@ -179,9 +180,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
           </div>
         )}
         {loading && section === 'overview' ? (
-          <div className="flex items-center justify-center h-64">
-            <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-          </div>
+          <UnifiedTabLoader label="Loading overview..." />
         ) : (
           <>
             {section === 'overview' && (
@@ -269,11 +268,7 @@ function OverviewTab({
   onNavigate?: (section: string) => void;
 }) {
   if (!data) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 text-slate-400 animate-spin" />
-      </div>
-    );
+    return <UnifiedTabLoader label="Loading overview data..." />;
   }
 
   return (

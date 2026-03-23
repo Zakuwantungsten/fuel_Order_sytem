@@ -8,6 +8,7 @@ import {
   ShieldAlert, XCircle, ChevronDown, ChevronRight, MessageSquare,
   Filter, Loader2, Send, Clock,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import SecurityIncidentPanel from './SecurityIncidentPanel';
 
 /* ───────── Types ───────── */
@@ -288,9 +289,7 @@ export default function SecurityAlertsSubTab() {
 
       {/* Alert List */}
       {loading && !alertsPage ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-        </div>
+        <UnifiedTabLoader label="Loading security alerts..." heightClassName="py-16" />
       ) : !alertsPage || alertsPage.alerts.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-12 text-center">
           <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-3" />

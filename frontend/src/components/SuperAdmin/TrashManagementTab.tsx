@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Check
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import { trashAPI } from '../../services/api';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
@@ -450,7 +451,7 @@ export default function TrashManagementTab({ onMessage }: TrashManagementTabProp
               {loading ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center">
-                    <RefreshCw className="w-6 h-6 mx-auto text-gray-400 animate-spin" />
+                    <UnifiedTabLoader label="Loading trash items..." heightClassName="py-4" />
                   </td>
                 </tr>
               ) : items.length === 0 ? (

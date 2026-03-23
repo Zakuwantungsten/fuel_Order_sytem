@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Database, RefreshCw, AlertTriangle, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import apiClient from '../../services/api';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface IndexDef {
   name: string;
@@ -92,7 +93,7 @@ export const DbIndexExplorerTab: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
+        <UnifiedTabLoader label="Loading database indexes..." heightClassName="py-16" />
       ) : (
         <div className="space-y-2">
           {filtered.map((coll) => {

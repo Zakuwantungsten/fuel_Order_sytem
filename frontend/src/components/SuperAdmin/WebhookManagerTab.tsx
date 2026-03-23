@@ -3,6 +3,7 @@ import {
   Webhook as WebhookIcon, Plus, Trash2, RefreshCw, Play, Eye,
   CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp, RotateCcw, X,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import webhookService, { Webhook } from '../../services/webhookService';
 
 interface Props {
@@ -155,9 +156,7 @@ export default function WebhookManagerTab({ onMessage }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-      </div>
+      <UnifiedTabLoader label="Loading webhooks..." />
     );
   }
 

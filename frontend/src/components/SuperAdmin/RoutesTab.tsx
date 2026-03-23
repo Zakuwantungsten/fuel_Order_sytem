@@ -4,6 +4,7 @@ import { Route, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-
 import { configAPI } from '../../services/api';
 import { RouteConfig } from '../../types';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface RoutesTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -11,6 +12,7 @@ interface RoutesTabProps {
 
 export default function RoutesTab({ onMessage }: RoutesTabProps) {
   const [routes, setRoutes] = useState<RouteConfig[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showRouteModal, setShowRouteModal] = useState(false);
   const [editingRoute, setEditingRoute] = useState<RouteConfig | null>(null);
   const [deleteRouteTarget, setDeleteRouteTarget] = useState<string | null>(null);
@@ -59,11 +61,14 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
   }, []);
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const routesData = await configAPI.getRoutes();
       setRoutes(routesData);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to load routes');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -237,6 +242,11 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
           <Plus className="w-3.5 h-3.5" />Add Route
         </button>
       </div>
+
+      {loading && routes.length === 0 ? (
+        <UnifiedTabLoader label="Loading routes..." />
+      ) : (
+        <>
 
       {/* Mobile Cards */}
       <div className="md:hidden space-y-3">
@@ -478,6 +488,8 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
         onConfirm={confirmDeleteRoute}
         onCancel={() => !deletingRoute && setDeleteRouteTarget(null)}
       />
+        </>
+      )}
     </div>
   );
 }

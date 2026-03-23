@@ -6,6 +6,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Clock, Plus, RefreshCw,
   X, CheckCircle, Edit3, ChevronDown, ChevronUp, Zap,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
@@ -404,9 +405,7 @@ export default function FuelPriceTab({ onMessage }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-      </div>
+      <UnifiedTabLoader label="Loading fuel prices..." />
     );
   }
 

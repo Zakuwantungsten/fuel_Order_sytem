@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GitCompare, RefreshCw, AlertTriangle, Loader2, ChevronDown, ChevronRight, Camera } from 'lucide-react';
 import Pagination from '../Pagination';
 import apiClient from '../../services/api';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface Snapshot {
   _id: string;
@@ -96,7 +97,7 @@ export const ConfigVersionHistoryTab: React.FC = () => {
       {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
 
       {loading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-violet-500" /></div>
+        <UnifiedTabLoader label="Loading config history..." heightClassName="py-16" />
       ) : (
         <>
           <div className="space-y-2">

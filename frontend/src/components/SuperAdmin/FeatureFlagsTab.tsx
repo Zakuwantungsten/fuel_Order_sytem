@@ -3,6 +3,7 @@ import ConfirmModal from './ConfirmModal';
 import {
   Flag, Plus, RefreshCw, Trash2, Edit3, X, Check, Users,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import featureFlagService, { FeatureFlag } from '../../services/featureFlagService';
 
 interface Props {
@@ -285,9 +286,7 @@ export default function FeatureFlagsTab({ onMessage }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-      </div>
+      <UnifiedTabLoader label="Loading feature flags..." />
     );
   }
 

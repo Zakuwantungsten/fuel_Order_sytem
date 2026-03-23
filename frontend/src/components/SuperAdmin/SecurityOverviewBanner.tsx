@@ -9,6 +9,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { ScoreTrendChart, Sparkline } from './SecurityCharts';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
 
@@ -97,10 +98,7 @@ export default function SecurityOverviewBanner({ onNavigate }: Props) {
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex items-center justify-center gap-2 py-4">
-          <Loader2 className="w-5 h-5 text-indigo-500 animate-spin" />
-          <span className="text-sm text-gray-500 dark:text-gray-400">Loading security overview...</span>
-        </div>
+        <UnifiedTabLoader label="Loading security overview..." heightClassName="py-4" />
       </div>
     );
   }

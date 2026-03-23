@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Megaphone, FileUp, RefreshCw } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import announcementService from '../../services/announcementService';
 import AnnouncementsTab from './AnnouncementsTab';
 import ExcelImport from '../../pages/ExcelImport';
@@ -62,10 +63,7 @@ export default function SystemContentSubTab({ onMessage }: Props) {
     <div className="p-6 space-y-6">
       {/* ── Stat tiles ─────────────────────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex items-center gap-2 py-6">
-          <RefreshCw className="w-4 h-4 text-[#4F46E5] animate-spin" />
-          <span className="text-[13px] text-[#6B7280] dark:text-gray-400">Loading…</span>
-        </div>
+        <UnifiedTabLoader label="Loading content..." heightClassName="h-28" />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <StatTile label="Live Announcements"     value={stats?.live ?? 0}

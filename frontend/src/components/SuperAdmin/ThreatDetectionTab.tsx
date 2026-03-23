@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { Radar, Users, Clock, Download, MapPin, RefreshCw, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface ThreatOverview {
   threatLevel: string;
@@ -118,7 +119,7 @@ const headers = () => {
     });
   };
 
-  if (loading) return <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 text-red-600 animate-spin" /></div>;
+  if (loading) return <UnifiedTabLoader label="Loading threat analytics..." heightClassName="py-12" />;
 
   const tc = THREAT_COLORS[overview?.threatLevel || 'low'];
 

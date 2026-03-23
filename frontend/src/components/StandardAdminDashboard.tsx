@@ -15,6 +15,7 @@ import FuelStationsTab from './SuperAdmin/FuelStationsTab';
 import RoutesTab from './SuperAdmin/RoutesTab';
 import FuelPriceTab from './SuperAdmin/FuelPriceTab';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 interface StandardAdminDashboardProps {
   user: any;
@@ -131,12 +132,7 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
       {/* Content */}
       <div className="p-6">
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="flex flex-col items-center gap-3">
-              <RefreshCw className="w-8 h-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
-              <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-            </div>
-          </div>
+          <UnifiedTabLoader label="Loading admin section..." />
         ) : (
           <>
             {section === 'overview' && <OperationalOverviewTab stats={stats} onRefresh={loadData} />}

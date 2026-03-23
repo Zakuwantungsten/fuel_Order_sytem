@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Key, RefreshCw, AlertTriangle, Loader2, Shield, Clock, Activity, Truck } from 'lucide-react';
 import apiClient from '../../services/api';
 import Pagination from '../Pagination';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface DriverCredentialStats {
   totalDrivers: number;
@@ -151,7 +152,7 @@ export const DriverCredentialManagerEnhancedTab: React.FC = () => {
       </form>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-sky-500" /></div>
+        <UnifiedTabLoader label="Loading driver credentials..." heightClassName="py-16" />
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="overflow-x-auto">

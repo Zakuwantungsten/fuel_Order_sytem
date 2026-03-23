@@ -3,6 +3,7 @@ import { TrendingUp, Download, Fuel, DollarSign, Truck, FileText, BarChart3 } fr
 import { dashboardAPI } from '../services/api';
 import { ReportStats } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 interface ReportsProps {
   user: any;
@@ -70,14 +71,7 @@ export function Reports({}: ReportsProps) {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading reports...</p>
-        </div>
-      </div>
-    );
+    return <UnifiedTabLoader label="Loading reports..." />;
   }
 
   if (error || !reportData) {

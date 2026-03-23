@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, XCircle, CheckCircle, AlertTriangle, DollarSign } from 'lucide-react';
 import Pagination from './Pagination';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 interface PaymentOrder {
   id: string;
@@ -16,6 +17,7 @@ interface PaymentOrder {
 }
 
 export function PaymentManager({ user: _user }: { user: any }) {
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<PaymentOrder | null>(null);
@@ -110,6 +112,15 @@ export function PaymentManager({ user: _user }: { user: any }) {
     cancelled: orders.filter((o) => o.status === 'cancelled').length,
     totalAmount: orders.filter((o) => o.status === 'active').reduce((sum, o) => sum + o.amount, 0),
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return <UnifiedTabLoader label="Loading payment manager..." />;
+  }
 
   return (
     <div>

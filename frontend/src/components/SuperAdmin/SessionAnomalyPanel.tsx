@@ -3,6 +3,7 @@ import {
   AlertTriangle, ShieldAlert, Loader2, RefreshCw,
   Monitor, Clock, Globe, Activity,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
 
@@ -72,9 +73,7 @@ export default function SessionAnomalyPanel() {
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="flex justify-center py-8">
-          <Loader2 className="w-5 h-5 text-indigo-500 animate-spin" />
-        </div>
+        <UnifiedTabLoader label="Loading session anomalies..." heightClassName="py-8" />
       </div>
     );
   }

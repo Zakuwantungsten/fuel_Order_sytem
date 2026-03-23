@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, RefreshCw, AlertTriangle, Loader2, Save, Info } from 'lucide-react';
 import apiClient from '../../services/api';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 const ALL_EVENT_TYPES = [
   { id: 'truck_entry_rejected', label: 'Truck Entry Rejected' },
@@ -110,7 +111,7 @@ export const NotificationCenterConfigTab: React.FC = () => {
       {success && <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm"><Info className="h-4 w-4 shrink-0" />Configuration saved successfully.</div>}
 
       {loading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-amber-500" /></div>
+        <UnifiedTabLoader label="Loading notification settings..." heightClassName="py-16" />
       ) : (
         <div className="space-y-5">
           {/* Master email toggle */}

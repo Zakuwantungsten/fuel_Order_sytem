@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import usePersistedState from '../hooks/usePersistedState';
 import { Search, CheckCircle, XCircle, Fuel, Truck, MapPin } from 'lucide-react';
 import Pagination from './Pagination';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 interface StationOrder {
   id: string;
@@ -21,6 +22,7 @@ interface StationViewProps {
 }
 
 export function StationView({ user }: StationViewProps) {
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = usePersistedState<'all' | 'pending' | 'fulfilled'>('sv:filterStatus', 'all');
   
@@ -140,6 +142,15 @@ export function StationView({ user }: StationViewProps) {
       .filter((o) => o.status === 'pending')
       .reduce((sum, o) => sum + o.liters, 0),
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return <UnifiedTabLoader label="Loading station view..." />;
+  }
 
   return (
     <div>

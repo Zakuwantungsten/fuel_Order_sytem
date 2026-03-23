@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User } from '../types';
 import DOManagement from './DOManagement';
 import NotificationBell from './NotificationBell';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useAuth } from '../contexts/AuthContext';
 import { LogOut, User as UserIcon, Sun, Moon, Key, X } from 'lucide-react';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 interface OfficerPortalProps {
   user: User;
@@ -16,9 +17,19 @@ interface OfficerPortalProps {
  */
 export function OfficerPortal({ user }: OfficerPortalProps) {
   const { logout, toggleTheme, isDark } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return <UnifiedTabLoader label="Loading officer portal..." />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

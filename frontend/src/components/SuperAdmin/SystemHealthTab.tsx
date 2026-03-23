@@ -3,6 +3,7 @@ import {
   Activity, Server, Database, Users, Clock, RefreshCw,
   CheckCircle, XCircle, AlertTriangle, Cpu,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import systemHealthService, { SystemHealth } from '../../services/systemHealthService';
 
 interface SystemHealthTabProps {
@@ -100,9 +101,7 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-      </div>
+      <UnifiedTabLoader label="Loading system health..." />
     );
   }
 

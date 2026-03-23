@@ -4,6 +4,7 @@ import { formatTruckNumber } from '../utils/dataCleanup';
 import { useAuth } from '../contexts/AuthContext';
 import { Fuel, Truck, Calendar, LogOut, RefreshCw, Sun, Moon, Wifi, WifiOff, CheckCircle, Clock, Link2 } from 'lucide-react';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 // Real-time update interval (30 seconds)
 const REALTIME_UPDATE_INTERVAL = 30000;
@@ -446,10 +447,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
                 <div>
             
             {loading ? (
-              <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
-                <RefreshCw className="w-8 h-8 sm:w-10 sm:h-10 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-3" />
-                <p className="text-sm sm:text-base">Loading...</p>
-              </div>
+              <UnifiedTabLoader label="Loading yard entries..." heightClassName="h-48" />
             ) : recentEntries.length === 0 ? (
               <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
                 <Fuel className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-gray-300 dark:text-gray-600 mb-2" />

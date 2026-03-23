@@ -2,6 +2,7 @@
 import { Shield, CheckCircle, AlertTriangle, XCircle, RefreshCw, ChevronRight, Info, Download } from 'lucide-react';
 import { ScoreTrendChart } from './SecurityCharts';
 import { useSecurityExport } from '../../hooks/useSecurityExport';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface SecurityCheck {
   id: string;
@@ -118,11 +119,7 @@ export default function SecurityScoreTab() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-      </div>
-    );
+    return <UnifiedTabLoader label="Loading security posture..." heightClassName="py-20" />;
   }
 
   if (error || !data) {

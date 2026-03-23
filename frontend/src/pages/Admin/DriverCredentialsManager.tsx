@@ -20,6 +20,7 @@ import {
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Pagination from '../../components/Pagination';
+import UnifiedTabLoader from '../../components/SuperAdmin/common/UnifiedTabLoader';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 interface DriverCredential {
@@ -58,7 +59,7 @@ interface Stats {
 
 const DriverCredentialsManager: React.FC = () => {
   const [credentials, setCredentials] = useState<DriverCredential[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
 
@@ -292,6 +293,14 @@ const DriverCredentialsManager: React.FC = () => {
       .catch(() => toast.error('Failed to copy to clipboard'));
   };
 
+  if (loading && credentials.length === 0) {
+    return (
+      <UnifiedTabLoader
+        label="Loading driver access..."
+      />
+    );
+  }
+
   return (
     <div className="p-4 md:p-5 bg-gray-50 dark:bg-gray-900 min-h-screen">
       {/* Header */}
@@ -396,11 +405,7 @@ const DriverCredentialsManager: React.FC = () => {
 
       {/* Credentials - Mobile Cards */}
       <div className="md:hidden space-y-3">
-        {loading && credentials.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow px-6 py-12 text-center">
-            <Loader className="w-8 h-8 animate-spin mx-auto text-indigo-600" />
-          </div>
-        ) : credentials.length === 0 ? (
+        {credentials.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow px-6 py-12 text-center text-gray-500 dark:text-gray-400">
             No driver credentials found. Click "Scan for New Trucks" to get started.
           </div>
@@ -478,13 +483,7 @@ const DriverCredentialsManager: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {loading && credentials.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center">
-                    <Loader className="w-6 h-6 animate-spin mx-auto text-indigo-600" />
-                  </td>
-                </tr>
-              ) : credentials.length === 0 ? (
+              {credentials.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                     No driver credentials found. Click "Scan for New Trucks" to get started.

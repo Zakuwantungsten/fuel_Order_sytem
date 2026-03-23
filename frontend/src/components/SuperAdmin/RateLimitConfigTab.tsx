@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Gauge, RefreshCw, Save, AlertTriangle, Info } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import api from '../../services/api';
 
 interface Props {
@@ -74,9 +75,7 @@ export default function RateLimitConfigTab({ onMessage }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-      </div>
+      <UnifiedTabLoader label="Loading rate limits..." />
     );
   }
 

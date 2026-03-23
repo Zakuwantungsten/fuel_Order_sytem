@@ -3,6 +3,7 @@ import {
   Shield, ShieldAlert, Radar, BarChart3, Activity,
   Loader2, RefreshCw, AlertTriangle, CheckCircle, Globe,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import SecurityEventsTab from './SecurityEventsTab';
 import ThreatDetectionTab from './ThreatDetectionTab';
 import SecurityScoreTab from './SecurityScoreTab';
@@ -122,9 +123,7 @@ export default function SecurityThreatMonitorSubTab() {
       {section === 'overview' && (
         <div className="space-y-6">
           {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-            </div>
+            <UnifiedTabLoader label="Loading threat monitor..." heightClassName="py-16" />
           ) : stats ? (
             <>
               {/* Score + Threat level banner */}

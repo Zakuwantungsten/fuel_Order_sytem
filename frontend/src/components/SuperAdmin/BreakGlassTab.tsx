@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { KeyRound, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw, Shield, Eye, EyeOff } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface BreakGlassAccount {
   _id: string;
@@ -114,7 +115,7 @@ const headers = () => {
     setGeneratedPassword(pw);
   };
 
-  if (loading) return <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 text-amber-600 animate-spin" /></div>;
+  if (loading) return <UnifiedTabLoader label="Loading break-glass accounts..." heightClassName="py-12" />;
 
   return (
     <div className="space-y-6">

@@ -8,6 +8,7 @@ import {
   Loader2, ChevronDown, ChevronRight, ClipboardCheck,
   AlertOctagon,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
 
@@ -84,11 +85,7 @@ export default function ComplianceDashboard() {
   useEffect(() => { fetchCompliance(); }, [fetchCompliance]);
 
   if (loading && !data) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-      </div>
-    );
+    return <UnifiedTabLoader label="Loading compliance dashboard..." heightClassName="py-16" />;
   }
 
   if (error && !data) {

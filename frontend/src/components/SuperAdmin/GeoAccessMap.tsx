@@ -3,6 +3,7 @@ import {
   Globe, MapPin, Loader2, RefreshCw, AlertTriangle,
   Users, Activity, Clock,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
 
@@ -56,11 +57,7 @@ export default function GeoAccessMap() {
   useEffect(() => { load(); }, [days]);
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-      </div>
-    );
+    return <UnifiedTabLoader label="Loading geo access..." heightClassName="py-16" />;
   }
 
   if (!data) {

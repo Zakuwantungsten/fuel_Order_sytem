@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
 import { ShieldCheck, RefreshCw, AlertTriangle, Loader2, X, CheckCircle, Lock, Unlock, ShieldOff } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 
 interface UserMFAStatus {
@@ -183,7 +184,7 @@ export const MFAManagementTab: React.FC = () => {
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-teal-500" /></div>
+          <UnifiedTabLoader label="Loading MFA status..." heightClassName="py-16" />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

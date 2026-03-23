@@ -12,6 +12,7 @@ import { User } from '../../types';
 import Pagination from '../Pagination';
 import { SuperAdminCreateUserModal } from '../SuperAdmin/UserManagementTab';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import UnifiedTabLoader from '../SuperAdmin/common/UnifiedTabLoader';
 
 interface UserSupportTabProps {
   user: any;
@@ -143,9 +144,7 @@ export default function UserSupportTab({ showMessage }: UserSupportTabProps) {
       {/* Users Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center">
-            <p className="text-gray-500 dark:text-gray-400">Loading users...</p>
-          </div>
+          <UnifiedTabLoader label="Loading users..." heightClassName="h-48" />
         ) : paginatedUsers.length === 0 ? (
           <div className="p-8 text-center">
             <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />

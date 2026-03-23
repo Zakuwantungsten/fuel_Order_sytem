@@ -30,6 +30,7 @@ import ChangePasswordModal from './ChangePasswordModal';
 import NotificationBell from './NotificationBell';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 // All valid fuel stations (excluding CASH)
 const ALL_STATIONS = [
@@ -385,10 +386,7 @@ export function ManagerView({ user }: ManagerViewProps) {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 transition-colors">
-        <div className="flex flex-col items-center space-y-4">
-          <RefreshCw className="w-10 h-10 animate-spin text-indigo-600 dark:text-indigo-400" />
-          <p className="text-gray-600 dark:text-gray-400 text-lg">Loading LPO data...</p>
-        </div>
+        <UnifiedTabLoader label="Loading LPO data..." heightClassName="h-64" />
       </div>
     );
   }

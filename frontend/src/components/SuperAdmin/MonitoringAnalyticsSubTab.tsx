@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   TrendingUp, Activity, Users, Zap, RefreshCw, BarChart3, ArrowRight,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 import activityHeatmapService from '../../services/activityHeatmapService';
 import PerformanceMetricsTab from './PerformanceMetricsTab';
@@ -91,9 +92,7 @@ export default function MonitoringAnalyticsSubTab({ onMessage }: Props) {
         <div className="space-y-5">
           {/* Stats Cards */}
           {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <RefreshCw className="w-6 h-6 text-emerald-500 animate-spin" />
-            </div>
+            <UnifiedTabLoader label="Loading analytics overview..." heightClassName="h-40" />
           ) : stats && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">

@@ -18,6 +18,7 @@ import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGene
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
+import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import {
   lpoKeys,
   periodsToDateRange,
@@ -1474,10 +1475,7 @@ const LPOs = () => {
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg transition-colors">
         {loading ? (
-          <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm sm:text-base">Loading LPO entries...</p>
-          </div>
+          <UnifiedTabLoader label="Loading LPO entries..." />
         ) : orders.length === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
             <p className="text-sm sm:text-base">No LPO entries found</p>

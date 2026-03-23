@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HardDrive, RefreshCw, Trash2, AlertTriangle, Loader2, X, CheckCircle, FolderOpen } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import * as storageService from '../../services/storageService';
 import type { StorageInfo } from '../../services/storageService';
 
@@ -102,9 +103,7 @@ export const StorageManagerTab: React.FC = () => {
       )}
 
       {loading && !info ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
-        </div>
+        <UnifiedTabLoader label="Loading storage overview..." heightClassName="py-20" />
       ) : !info?.enabled ? (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-xl p-8 text-center">
           <HardDrive className="h-12 w-12 mx-auto mb-3 text-yellow-500 opacity-60" />

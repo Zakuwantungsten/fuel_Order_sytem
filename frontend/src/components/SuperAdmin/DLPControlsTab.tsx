@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { ShieldBan, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface DLPRule {
   _id: string;
@@ -118,7 +119,7 @@ const headers = () => {
     } catch (err: any) { setError(err.message); }
   };
 
-  if (loading) return <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 text-indigo-600 animate-spin" /></div>;
+  if (loading) return <UnifiedTabLoader label="Loading DLP controls..." heightClassName="py-12" />;
 
   return (
     <div className="space-y-6">

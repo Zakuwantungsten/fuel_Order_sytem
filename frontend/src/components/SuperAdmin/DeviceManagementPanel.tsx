@@ -5,6 +5,7 @@ import {
   AlertTriangle, X, Laptop, HardDrive,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
 
@@ -254,7 +255,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
 
       {/* Device list */}
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 text-indigo-500 animate-spin" /></div>
+        <UnifiedTabLoader label="Loading devices..." heightClassName="py-12" />
       ) : devices.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <Monitor className="w-8 h-8 mx-auto mb-2 opacity-30" />

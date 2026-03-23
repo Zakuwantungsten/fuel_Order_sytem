@@ -4,6 +4,7 @@ import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check, AlertTriangle, 
 import { configAPI, StandardAllocations, YardFuelTimeLimitConfig } from '../../services/api';
 import { FuelStationConfig, FuelRecordFieldOption } from '../../types';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface FuelStationsTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -11,6 +12,7 @@ interface FuelStationsTabProps {
 
 export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   const [stations, setStations] = useState<FuelStationConfig[]>([]);
+  const [loading, setLoading] = useState(true);
   const [fuelRecordFieldsGoing, setFuelRecordFieldsGoing] = useState<FuelRecordFieldOption[]>([]);
   const [fuelRecordFieldsReturning, setFuelRecordFieldsReturning] = useState<FuelRecordFieldOption[]>([]);
   const [showStationModal, setShowStationModal] = useState(false);
@@ -89,6 +91,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   }, []);
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const [stationsData, formulaData, allocData, timeLimitData] = await Promise.all([
         configAPI.getStations(),
@@ -107,6 +110,8 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
       }
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to load fuel stations');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -283,6 +288,11 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
           <Plus className="w-3.5 h-3.5" />Add Station
         </button>
       </div>
+
+      {loading && stations.length === 0 && !allocations ? (
+        <UnifiedTabLoader label="Loading fuel stations..." />
+      ) : (
+        <>
 
       {/* Mobile Cards */}
       <div className="md:hidden space-y-3">
@@ -750,6 +760,9 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
           setEditingAllocations(allocations ? { ...allocations } : null);
         }}
       />
+
+        </>
+      )}
 
       <ConfirmModal
         open={deleteStationTarget !== null}

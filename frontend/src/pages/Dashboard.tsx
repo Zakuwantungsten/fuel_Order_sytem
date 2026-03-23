@@ -21,6 +21,7 @@ import { BarChart, Bar, PieChart as RePieChart, Pie, Cell, LineChart, Line, XAxi
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
 import { DashboardStats, FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
 // Colors for charts
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -453,14 +454,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading dashboard...</p>
-        </div>
-      </div>
-    );
+    return <UnifiedTabLoader label="Loading dashboard..." />;
   }
 
   if (error || !stats) {

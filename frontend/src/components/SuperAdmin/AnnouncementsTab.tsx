@@ -19,6 +19,7 @@ import {
   Filter,
 } from 'lucide-react';
 import announcementService, { SystemAnnouncement, CreateAnnouncementPayload } from '../../services/announcementService';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 const ALL_ROLES = [
   'super_admin', 'admin', 'manager', 'super_manager', 'supervisor',
@@ -297,9 +298,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
 
       {/* Announcements list */}
       {loading ? (
-        <div className="flex items-center justify-center h-40">
-          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-        </div>
+        <UnifiedTabLoader label="Loading announcements..." heightClassName="py-20" />
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-400 dark:text-gray-500">
           <Megaphone className="w-10 h-10 mx-auto mb-3 opacity-30" />

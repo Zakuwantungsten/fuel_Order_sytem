@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Cpu, Wrench, Gauge, Database, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import cronJobService from '../../services/cronJobService';
 import maintenanceModeService from '../../services/maintenanceModeService';
 import apiClient from '../../services/api';
@@ -88,10 +89,7 @@ export default function SystemOpsSubTab({ onMessage }: Props) {
     <div className="p-6 space-y-6">
       {/* ── Stat tiles ──────────────────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex items-center gap-2 py-6">
-          <RefreshCw className="w-4 h-4 text-[#4F46E5] animate-spin" />
-          <span className="text-[13px] text-[#6B7280] dark:text-gray-400">Loading…</span>
-        </div>
+        <UnifiedTabLoader label="Loading operations..." heightClassName="h-28" />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatTile label="Cron Jobs Active"  value={`${stats?.jobsEnabled ?? 0}/${stats?.jobsTotal ?? 0}`}

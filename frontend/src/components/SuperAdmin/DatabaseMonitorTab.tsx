@@ -8,6 +8,7 @@ import {
   HardDrive,
   Zap
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import { systemAdminAPI } from '../../services/api';
 
 interface DatabaseMonitorTabProps {
@@ -41,9 +42,7 @@ export default function DatabaseMonitorTab({ onMessage }: DatabaseMonitorTabProp
 
   if (loading && !metrics) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-      </div>
+      <UnifiedTabLoader label="Loading database metrics..." />
     );
   }
 

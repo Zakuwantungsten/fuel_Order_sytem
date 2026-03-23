@@ -5,6 +5,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 // Real-time update interval (30 seconds)
 const REALTIME_UPDATE_INTERVAL = 30000;
@@ -430,10 +431,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
         </div>
         
         <div className="flex items-center justify-center p-4" style={{ minHeight: 'calc(100vh - 80px)' }}>
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Loading your information...</p>
-          </div>
+          <UnifiedTabLoader label="Loading your information..." heightClassName="h-[calc(100vh-80px)]" />
         </div>
       </div>
     );

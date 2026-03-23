@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { Loader2, RefreshCw, Search, Shield, Eye, Pencil, Trash2, Plus } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
 
@@ -74,11 +75,7 @@ export default function RolePermissionMatrix() {
   useEffect(() => { load(); }, []);
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-      </div>
-    );
+    return <UnifiedTabLoader label="Loading role permissions..." heightClassName="py-16" />;
   }
 
   if (!data) {

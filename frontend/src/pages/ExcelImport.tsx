@@ -16,13 +16,14 @@
  *   3. View per-sheet results
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Upload, FileSpreadsheet, Eye, Play, RotateCcw, CheckCircle2,
   AlertTriangle, XCircle, Info, ChevronDown, ChevronUp, Loader2,
   Fuel, PackageCheck, Receipt, HelpCircle, X
 } from 'lucide-react';
 import apiClient from '../services/api';
+import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ function StatPill({ label, value, color }: { label: string; value: number; color
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function ExcelImport() {
+  const [loading, setLoading] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [sheets, setSheets] = useState<SheetPreview[]>([]);
   const [selectedSheets, setSelectedSheets] = useState<Set<string>>(new Set());
@@ -107,6 +109,15 @@ export default function ExcelImport() {
   const [expandedSheets, setExpandedSheets] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return <UnifiedTabLoader label="Loading Excel import..." />;
+  }
 
   // ── File handling ──────────────────────────────────────────────────────────
 

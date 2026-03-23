@@ -4,6 +4,7 @@ import {
   Clock, Play, Power, RefreshCw, CheckCircle, XCircle,
   AlertCircle, ChevronDown, ChevronUp, Activity, Timer,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import cronJobService, { CronJob, JobRunRecord } from '../../services/cronJobService';
 
 interface Props {
@@ -205,9 +206,7 @@ export default function CronJobsTab({ onMessage }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-      </div>
+      <UnifiedTabLoader label="Loading cron jobs..." />
     );
   }
 

@@ -9,6 +9,7 @@ import {
   Loader2, Send, Clock, FileText, Link2, Plus, Users,
   ArrowUpRight, Target, BarChart3,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
 
@@ -426,9 +427,7 @@ export default function SecurityIncidentPanel() {
 
       {/* Incident List */}
       {loading && !incidentsPage ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-        </div>
+        <UnifiedTabLoader label="Loading security incidents..." heightClassName="py-16" />
       ) : !incidentsPage || incidentsPage.incidents.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-12 text-center">
           <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-3" />

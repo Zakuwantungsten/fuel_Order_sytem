@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { TrendingUp, BarChart, Download, TrendingDown, DollarSign, Fuel, Truck, Activity, RefreshCw, ChevronDown, Check } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import { analyticsAPI } from '../../services/api';
 import { DashboardAnalytics } from '../../types';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
@@ -163,10 +164,7 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
       </div>
 
       {loading && !analytics ? (
-        <div className="p-8 text-center">
-          <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" />
-          <p className="mt-2 text-sm text-gray-500">Loading analytics...</p>
-        </div>
+        <UnifiedTabLoader label="Loading analytics..." heightClassName="h-40" />
       ) : analytics ? (
         <>
           {/* Summary Cards */}

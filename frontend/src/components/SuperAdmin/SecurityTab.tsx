@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Shield, Key, Lock, AlertTriangle, Mail, Send, CheckCircle, XCircle, Loader, Save, Fingerprint } from 'lucide-react';
 import { systemAdminAPI } from '../../services/api';
 import { subscribeToSecurityEvents, unsubscribeFromSecurityEvents } from '../../services/websocket';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface SecurityTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -180,12 +181,7 @@ export default function SecurityTab({ onMessage }: SecurityTabProps) {
   const inputNum = 'w-full max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100';
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader className="w-7 h-7 animate-spin text-purple-600" />
-        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading security settings…</span>
-      </div>
-    );
+    return <UnifiedTabLoader label="Loading security settings..." heightClassName="py-16" />;
   }
 
   return (

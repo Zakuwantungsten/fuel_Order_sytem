@@ -19,6 +19,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { ipRuleService, IPRule, CreateIPRulePayload } from '../../services/ipRuleService';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface Props {
   onMessage: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -380,26 +381,7 @@ export default function IPRulesTab({ onMessage }: Props) {
 
       {/* Rules list */}
       {loading ? (
-        <div className="space-y-2 animate-pulse">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-                  <div className="space-y-1.5">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32" />
-                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-48" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-14 bg-gray-200 dark:bg-gray-700 rounded-full" />
-                  <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-                  <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <UnifiedTabLoader label="Loading IP rules..." heightClassName="py-20" />
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-400 dark:text-gray-500">
           <Network className="w-10 h-10 mx-auto mb-3 opacity-30" />

@@ -10,6 +10,7 @@ import {
   useUpdateBatch,
   useDeleteBatch,
 } from '../hooks/useTruckBatches';
+import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
 interface DestinationRule {
   destination: string;
@@ -380,12 +381,7 @@ export default function TruckBatches() {
 
   if (loading || !batches) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading truck batches...</p>
-        </div>
-      </div>
+      <UnifiedTabLoader label="Loading truck batches..." heightClassName="h-96" />
     );
   }
 

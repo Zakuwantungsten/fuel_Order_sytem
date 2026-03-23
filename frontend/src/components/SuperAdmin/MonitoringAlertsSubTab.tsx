@@ -2,6 +2,7 @@
 import {
   Bell, Mail, Server, RefreshCw, ArrowRight, CheckCircle, AlertTriangle,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 import AlertThresholdsTab from './AlertThresholdsTab';
 import EmailLogViewerTab from './EmailLogViewerTab';
@@ -103,9 +104,7 @@ export default function MonitoringAlertsSubTab() {
         <div className="space-y-5">
           {/* Stats */}
           {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <RefreshCw className="w-6 h-6 text-amber-500 animate-spin" />
-            </div>
+            <UnifiedTabLoader label="Loading alerts overview..." heightClassName="h-40" />
           ) : stats && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">

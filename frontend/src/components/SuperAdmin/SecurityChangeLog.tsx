@@ -7,6 +7,7 @@ import {
   History, ChevronDown, ChevronRight, RefreshCw, User, Clock,
   Loader2,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface AuditEntry {
   _id: string;
@@ -120,9 +121,7 @@ export default function SecurityChangeLog() {
       {open && (
         <div className="border-t border-gray-100 dark:border-gray-700">
           {loading && entries.length === 0 ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-5 h-5 text-indigo-500 animate-spin" />
-            </div>
+            <UnifiedTabLoader label="Loading security changes..." heightClassName="py-8" />
           ) : error ? (
             <p className="text-sm text-red-500 px-5 py-4">{error}</p>
           ) : entries.length === 0 ? (

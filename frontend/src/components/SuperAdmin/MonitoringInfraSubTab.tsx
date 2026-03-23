@@ -3,6 +3,7 @@ import {
   Activity, Database, Server, Cpu, Clock, Zap,
   RefreshCw, CheckCircle, XCircle, HardDrive, ArrowRight,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import systemHealthService, { SystemHealth } from '../../services/systemHealthService';
 import { systemAdminAPI } from '../../services/api';
 import DatabaseMonitorTab from './DatabaseMonitorTab';
@@ -136,9 +137,7 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
 
           {/* Key Metrics Grid */}
           {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
-            </div>
+            <UnifiedTabLoader label="Loading monitoring overview..." heightClassName="h-40" />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
               <MetricCard icon={Clock} label="Uptime" value={health ? formatUptime(health.process.uptimeSeconds) : '—'} color="text-indigo-500" />

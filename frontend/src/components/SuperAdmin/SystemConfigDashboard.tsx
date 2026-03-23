@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import systemConfigAPI, { SystemSettings } from '../../services/systemConfigService';
 import { subscribeToSecurityEvents, unsubscribeFromSecurityEvents } from '../../services/websocket';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface SystemConfigDashboardProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -343,9 +344,7 @@ export default function SystemConfigDashboard({ onMessage }: SystemConfigDashboa
           </div>
         )}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader className="w-8 h-8 animate-spin text-purple-600" />
-          </div>
+          <UnifiedTabLoader label="Loading system configuration..." heightClassName="py-12" />
         ) : (
           <>
             {activeTab === 'settings' && (

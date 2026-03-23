@@ -16,6 +16,7 @@ import CancelDOModal from '../components/CancelDOModal';
 import AmendedDOsModal from '../components/AmendedDOsModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import Pagination from '../components/Pagination';
+import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { useTruckBatches, getExtraFuelFromBatches } from '../hooks/useTruckBatches';
 import { useRoutes, getTotalLitersFromRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -1735,10 +1736,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           {/* Table */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg overflow-hidden transition-colors">
             {loading ? (
-              <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-sm sm:text-base">Loading delivery orders...</p>
-              </div>
+              <UnifiedTabLoader label="Loading delivery orders..." />
             ) : orders.length === 0 ? (
               <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
                 <p className="text-sm sm:text-base">No delivery orders found</p>

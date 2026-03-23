@@ -10,6 +10,7 @@ import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
 import JourneyStatusBadge from '../components/JourneyStatusBadge';
 import Pagination from '../components/Pagination';
+import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -1001,10 +1002,7 @@ const FuelRecords = () => {
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg transition-colors">
         {loading ? (
-          <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm sm:text-base">Loading fuel records...</p>
-          </div>
+          <UnifiedTabLoader label="Loading fuel records..." />
         ) : totalItems === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
             <p className="text-sm sm:text-base">

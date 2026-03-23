@@ -4,6 +4,7 @@ import {
   FileSearch, Download, ChevronDown, Check, Shield, ShieldAlert,
   ShieldCheck, RefreshCw, AlertTriangle, Eye, X, ChevronRight,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import { systemAdminAPI } from '../../services/api';
 import Pagination from '../Pagination';
 
@@ -543,7 +544,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">Loading...</td></tr>
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400"><UnifiedTabLoader label="Loading audit logs..." heightClassName="py-6" /></td></tr>
               ) : logs.length === 0 ? (
                 <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">No audit logs found</td></tr>
               ) : logs.map((log, i) => (

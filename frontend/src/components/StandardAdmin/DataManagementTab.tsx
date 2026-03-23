@@ -11,6 +11,7 @@ import {
 import { deliveryOrdersAPI, lposAPI, fuelRecordsAPI, doWorkbookAPI, lpoWorkbookAPI } from '../../services/api';
 import { DeliveryOrder, LPOEntry, FuelRecord } from '../../types';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import UnifiedTabLoader from '../SuperAdmin/common/UnifiedTabLoader';
 
 interface DataManagementTabProps {
   user: any;
@@ -224,9 +225,7 @@ export default function DataManagementTab({ showMessage }: DataManagementTabProp
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center p-8">
-            <RefreshCw className="w-8 h-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
-          </div>
+          <UnifiedTabLoader label="Loading data management records..." heightClassName="h-48" />
         ) : data.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

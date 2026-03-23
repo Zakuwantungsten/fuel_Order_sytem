@@ -3,6 +3,7 @@ import { Truck, AlertTriangle, X, CheckCircle } from 'lucide-react';
 import { yardFuelService } from '../services/yardFuelService';
 import { toast } from 'react-toastify';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 interface PendingYardFuelProps {
   onClose: () => void;
@@ -84,10 +85,7 @@ export default function PendingYardFuel({ onClose }: PendingYardFuelProps) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-            </div>
+            <UnifiedTabLoader label="Loading pending entries..." heightClassName="h-48" />
           ) : pendingEntries.length === 0 ? (
             <div className="text-center py-12">
               <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />

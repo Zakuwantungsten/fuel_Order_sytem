@@ -14,6 +14,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { configDiffService, ConfigChangeEntry } from '../../services/configDiffService';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface Props {
   onMessage: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -318,9 +319,7 @@ export default function ConfigDiffTab({ onMessage }: Props) {
 
       {/* List */}
       {loading ? (
-        <div className="flex items-center justify-center h-40">
-          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-        </div>
+        <UnifiedTabLoader label="Loading config changes..." heightClassName="py-20" />
       ) : entries.length === 0 ? (
         <div className="text-center py-16 text-gray-400 dark:text-gray-500">
           <History className="w-10 h-10 mx-auto mb-3 opacity-30" />

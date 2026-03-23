@@ -3,6 +3,7 @@ import {
   Settings, Lock, Database, Bell, Clock, GitCompare,
   ChevronDown, RefreshCw, Save, CheckCircle, AlertCircle,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 import { systemConfigAPI } from '../../services/systemConfigService';
 import type { SystemSettings, PasswordPolicySettings } from '../../services/systemConfigService';
@@ -174,10 +175,7 @@ export default function SystemConfigSubTab({ onMessage }: Props) {
 
       {/* ── Settings accordion ─────────────────────────────────────────────── */}
       {loadingSettings ? (
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-5 h-5 text-[#4F46E5] animate-spin" />
-          <span className="ml-2 text-[13px] text-[#6B7280] dark:text-gray-400">Loading settings…</span>
-        </div>
+        <UnifiedTabLoader label="Loading settings..." heightClassName="h-40" />
       ) : settings && (
         <div className="space-y-2">
           {SECTIONS.map(sec => {

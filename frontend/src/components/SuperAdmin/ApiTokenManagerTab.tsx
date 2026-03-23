@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
 import { Key, Plus, Trash2, RefreshCw, AlertTriangle, Loader2, X, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 
 interface ApiToken {
@@ -134,7 +135,7 @@ export const ApiTokenManagerTab: React.FC = () => {
 
       {/* Token list */}
       {loading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>
+        <UnifiedTabLoader label="Loading API tokens..." heightClassName="py-16" />
       ) : tokens.length === 0 ? (
         <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
           <Key className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>No API tokens yet</p>

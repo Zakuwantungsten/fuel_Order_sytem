@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, RefreshCw, Search, AlertTriangle, Loader2, X, Info } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 
 interface LogEntry {
@@ -90,9 +91,7 @@ export const EmailLogViewerTab: React.FC = () => {
       {/* Log list */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          </div>
+          <UnifiedTabLoader label="Loading email logs..." heightClassName="py-16" />
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-500 dark:text-gray-400">
             <Mail className="h-12 w-12 mx-auto mb-3 opacity-30" />

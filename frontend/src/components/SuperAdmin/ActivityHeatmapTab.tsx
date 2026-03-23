@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Activity, RefreshCw, Users, Zap } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import activityHeatmapService, { HeatmapData } from '../../services/activityHeatmapService';
 
 interface Props {
@@ -145,9 +146,7 @@ export default function ActivityHeatmapTab({ onMessage }: Props) {
       </div>
 
       {loading || !data ? (
-        <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-        </div>
+        <UnifiedTabLoader label="Loading activity heatmap..." />
       ) : (
         <>
           {/* Stats row */}

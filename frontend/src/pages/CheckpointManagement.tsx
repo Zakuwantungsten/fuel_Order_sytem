@@ -7,11 +7,11 @@ import {
   Save, 
   X,
   AlertCircle,
-  CheckCircle,
-  Loader2
+  CheckCircle
 } from 'lucide-react';
 import apiClient from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
 interface Checkpoint {
   _id: string;
@@ -179,9 +179,9 @@ const CheckpointManagement = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
+      <UnifiedTabLoader
+        label="Loading checkpoints..."
+      />
     );
   }
 

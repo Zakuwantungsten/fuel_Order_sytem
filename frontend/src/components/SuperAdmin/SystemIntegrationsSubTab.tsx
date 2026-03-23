@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Webhook, Flag, Bell, RefreshCw } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import webhookService from '../../services/webhookService';
 import featureFlagService from '../../services/featureFlagService';
 import apiClient from '../../services/api';
@@ -85,10 +86,7 @@ export default function SystemIntegrationsSubTab({ onMessage }: Props) {
     <div className="p-6 space-y-6">
       {/* ── Stat tiles ─────────────────────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex items-center gap-2 py-6">
-          <RefreshCw className="w-4 h-4 text-[#4F46E5] animate-spin" />
-          <span className="text-[13px] text-[#6B7280] dark:text-gray-400">Loading…</span>
-        </div>
+        <UnifiedTabLoader label="Loading integrations..." heightClassName="h-28" />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <StatTile label="Active Webhooks"    value={`${stats?.webhookActive ?? 0}/${stats?.webhookCount ?? 0}`}

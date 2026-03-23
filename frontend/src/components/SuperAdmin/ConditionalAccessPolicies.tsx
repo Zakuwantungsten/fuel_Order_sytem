@@ -22,6 +22,7 @@ import {
   UserCheck,
   Globe,
 } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
 
@@ -450,9 +451,7 @@ export default function ConditionalAccessPolicies() {
 
       {/* Policy List */}
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading policies...
-        </div>
+        <UnifiedTabLoader label="Loading access policies..." heightClassName="py-12" />
       ) : policies.length === 0 ? (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400">
           <Shield className="w-10 h-10 mx-auto mb-2 opacity-30" />

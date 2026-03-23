@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
 import { formatDate as formatSystemDate } from '../../utils/timezone';
 import { Database, Download, Upload, Calendar, RefreshCw, Trash2, AlertCircle, CheckCircle, Clock, HardDrive, Package } from 'lucide-react';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 import { backupAPI } from '../../services/api';
 import { Backup, BackupSchedule, BackupStats } from '../../types';
 
@@ -244,24 +245,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
         </div>
 
         {loading ? (
-          <div className="divide-y divide-gray-200 dark:divide-gray-700 animate-pulse">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-                  <div className="space-y-1.5 flex-1">
-                    <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-48" />
-                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-32" />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
-                  <div className="h-8 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
-                  <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
+          <UnifiedTabLoader label="Loading backups..." heightClassName="py-16" />
         ) : backups.length === 0 ? (
           <div className="p-8 text-center">
             <Database className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600" />

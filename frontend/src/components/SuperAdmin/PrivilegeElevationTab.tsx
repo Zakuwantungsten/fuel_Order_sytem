@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ShieldPlus, Clock, CheckCircle, XCircle, RefreshCw, UserCheck, Ban } from 'lucide-react';
 import apiClient from '../../services/api';
+import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface PrivilegeRequest {
   _id: string;
@@ -113,9 +114,7 @@ export default function PrivilegeElevationTab() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <RefreshCw className="w-6 h-6 text-indigo-600 animate-spin" />
-        </div>
+        <UnifiedTabLoader label="Loading privilege requests..." heightClassName="py-12" />
       ) : requests.length === 0 ? (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400">
           <ShieldPlus className="w-12 h-12 mx-auto mb-3 opacity-30" />

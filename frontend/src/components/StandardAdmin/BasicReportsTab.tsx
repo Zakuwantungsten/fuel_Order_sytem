@@ -16,6 +16,7 @@ import {
 import { dashboardAPI, doWorkbookAPI, lpoWorkbookAPI, fuelRecordsAPI } from '../../services/api';
 import XLSXStyle from 'xlsx-js-style';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import UnifiedTabLoader from '../SuperAdmin/common/UnifiedTabLoader';
 
 // ── Styling helpers ────────────────────────────────────────────────────────────
 
@@ -1009,14 +1010,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
 
   const renderContent = () => {
     if (loading) {
-      return (
-        <div className="flex items-center justify-center h-48">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto" />
-            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Loading report data...</p>
-          </div>
-        </div>
-      );
+      return <UnifiedTabLoader label="Loading report data..." heightClassName="h-48" />;
     }
     if (!reportData && activeReport !== 'export_hub') {
       return (
