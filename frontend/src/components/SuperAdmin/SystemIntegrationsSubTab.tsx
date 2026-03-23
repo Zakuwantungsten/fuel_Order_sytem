@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Webhook, Flag, Bell } from 'lucide-react';
+import { Webhook, Flag, Bell, ArrowUpRight } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import webhookService from '../../services/webhookService';
 import featureFlagService from '../../services/featureFlagService';
-import apiClient from '../../services/api';
 import WebhookManagerTab from './WebhookManagerTab';
 import FeatureFlagsTab from './FeatureFlagsTab';
-import NotificationCenterConfigTab from './NotificationCenterConfigTab';
 
 interface Props {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -51,7 +49,6 @@ export default function SystemIntegrationsSubTab({ onMessage }: Props) {
   const [stats, setStats] = useState<{
     webhookCount: number; webhookActive: number;
     flagCount: number; flagEnabled: number;
-    notifEnabled: boolean;
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -62,20 +59,17 @@ export default function SystemIntegrationsSubTab({ onMessage }: Props) {
   const loadStats = useCallback(async () => {
     setLoading(true);
     try {
-      const [whRes, ffRes, notifRes] = await Promise.allSettled([
+      const [whRes, ffRes] = await Promise.allSettled([
         webhookService.list(),
         featureFlagService.list(),
-        apiClient.get('/system-admin/notification-config'),
       ]);
-      const webhooks  = whRes.status    === 'fulfilled' ? whRes.value              : [];
-      const flags     = ffRes.status    === 'fulfilled' ? ffRes.value              : [];
-      const notifData = notifRes.status === 'fulfilled' ? notifRes.value.data?.data : null;
+      const webhooks  = whRes.status === 'fulfilled' ? whRes.value : [];
+      const flags     = ffRes.status === 'fulfilled' ? ffRes.value : [];
       setStats({
         webhookCount:  Array.isArray(webhooks) ? webhooks.length                                           : 0,
         webhookActive: Array.isArray(webhooks) ? webhooks.filter((w: any) => w.isEnabled).length           : 0,
         flagCount:     Array.isArray(flags)    ? flags.length                                               : 0,
         flagEnabled:   Array.isArray(flags)    ? flags.filter((f: any) => f.isEnabled).length              : 0,
-        notifEnabled:  notifData?.emailEnabled ?? false,
       });
     } catch { /* silent */ } finally { setLoading(false); }
   }, []);
@@ -88,16 +82,26 @@ export default function SystemIntegrationsSubTab({ onMessage }: Props) {
       {loading ? (
         <UnifiedTabLoader label="Loading integrations..." heightClassName="h-28" />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <StatTile label="Active Webhooks"    value={`${stats?.webhookActive ?? 0}/${stats?.webhookCount ?? 0}`}
             icon={Webhook} iconBg="#ECFEFF" iconColor="#0891B2" sub="Receiving events" />
           <StatTile label="Feature Flags On"   value={`${stats?.flagEnabled ?? 0}/${stats?.flagCount ?? 0}`}
             icon={Flag}    iconBg="#FFF7ED" iconColor="#EA580C" sub="Currently enabled" />
-          <StatTile label="Email Notifications" value={stats?.notifEnabled ? 'Enabled' : 'Disabled'}
-            icon={Bell}    iconBg={stats?.notifEnabled ? '#F0FDF4' : '#F9FAFB'}
-            iconColor={stats?.notifEnabled ? '#16A34A' : '#9CA3AF'} />
         </div>
       )}
+
+      {/* ── Notification Center reference ─────────────────────────────────────── */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+        <Bell className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-amber-800 dark:text-amber-300">Notification Center Config</p>
+          <p className="mt-1 text-[12px] text-amber-700 dark:text-amber-300/90">
+            Event trigger rules, alert recipient routing, and digest settings are now managed under
+            <strong> Monitoring &amp; Alerts &rarr; Notification Config</strong>.
+          </p>
+        </div>
+        <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+      </div>
 
       {/* ── Webhooks ────────────────────────────────────────────────────────────── */}
       <SectionDivider label="Webhooks" icon={Webhook} />
@@ -106,10 +110,6 @@ export default function SystemIntegrationsSubTab({ onMessage }: Props) {
       {/* ── Feature Flags ─────────────────────────────────────────────────────── */}
       <SectionDivider label="Feature Flags" icon={Flag} />
       <FeatureFlagsTab onMessage={fwd} />
-
-      {/* ── Notification Center ──────────────────────────────────────────────── */}
-      <SectionDivider label="Notification Center" icon={Bell} />
-      <NotificationCenterConfigTab />
     </div>
   );
 }

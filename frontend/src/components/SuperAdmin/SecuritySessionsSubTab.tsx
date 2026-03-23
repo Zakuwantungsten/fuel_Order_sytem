@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Users, LogOut, Loader2, RefreshCw, MapPin, Clock, Activity,
   ShieldAlert, AlertTriangle, Zap, ShieldCheck, Lock, Unlock,
-  X, CheckCircle, Search, Download,
+  X, CheckCircle, Search, Download, Info,
 } from 'lucide-react';
 import { sessionService, ActiveSession } from '../../services/sessionService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -32,6 +32,7 @@ interface UserMFAStatus {
 
 interface Props {
   onMessage: (type: 'success' | 'error', message: string) => void;
+  onNavigate?: (section: string) => void;
 }
 
 /* ───────── Helpers ───────── */
@@ -54,7 +55,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 /* ───────── Component ───────── */
 
-export default function SecuritySessionsSubTab({ onMessage }: Props) {
+export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props) {
   const { user: currentUser } = useAuth();
   const { exporting, exportClientCSV } = useSecurityExport();
 
@@ -317,6 +318,25 @@ export default function SecuritySessionsSubTab({ onMessage }: Props) {
       </div>
 
       {/* ═══════ User MFA Status ═══════ */}
+      {/* Global MFA policy banner */}
+      <div className="flex items-center gap-3 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20 px-4 py-3">
+        <Info className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+        <p className="flex-1 text-[12px] text-teal-800 dark:text-teal-300">
+          This section manages <strong>per-user</strong> MFA status and overrides.
+          Global MFA enforcement policy (which roles must use MFA, allowed methods) is configured in
+          {' '}<strong>Security &rarr; Policies</strong>.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            sessionStorage.setItem('sa_security_preferred_subtab', 'policies');
+            onNavigate?.('sa_security');
+          }}
+          className="shrink-0 rounded-lg bg-teal-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-teal-700"
+        >
+          Policies &uarr;
+        </button>
+      </div>
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
           <div className="flex items-center gap-3">

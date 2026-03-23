@@ -37,7 +37,6 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [retentionSettings, setRetentionSettings] = useState<any>(null);
   const [dateFilter, setDateFilter] = useState('30'); // Last 30 days
   const [confirmState, setConfirmState] = useState<{
     title: string;
@@ -86,7 +85,6 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
 
   useEffect(() => {
     loadTrashStats();
-    loadRetentionSettings();
   }, []);
 
   useEffect(() => {
@@ -127,15 +125,6 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
     ['fuel_records', 'delivery_orders', 'lpo_entries', 'lpo_summaries', 'users', 'yard_fuel'],
     () => { loadTrashStats(); loadDeletedItems(); }
   );
-
-  const loadRetentionSettings = async () => {
-    try {
-      const settings = await trashAPI.getRetentionSettings();
-      setRetentionSettings(settings);
-    } catch (error) {
-      // Settings might not exist yet
-    }
-  };
 
   const handleRestore = async (id: string) => {
     try {
@@ -536,40 +525,25 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
         )}
       </div>
 
-      {/* Retention Policy */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-          Retention Policy (Read-only)
-        </h3>
-        <div className="space-y-4">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
-            <p className="text-sm text-amber-900 dark:text-amber-200">
-              Retention policy changes are managed in System → Data Lifecycle Policy.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Auto-delete threshold</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">{retentionSettings?.retentionDays || 90} days</p>
-            </div>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Automatic cleanup</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">{retentionSettings?.autoCleanupEnabled ? 'Enabled' : 'Disabled'}</p>
+      {/* Retention Policy → nav card only */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Trash Retention Policy</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                Auto-delete threshold and automatic cleanup toggle — configured in <strong>System &rarr; Data Lifecycle Policy</strong>.
+              </p>
             </div>
           </div>
-
           <button
+            type="button"
             onClick={openDataLifecyclePolicyEditor}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-indigo-700"
           >
-            Manage in Data Lifecycle Policy
+            Configure Policy
           </button>
-
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Items older than {retentionSettings?.retentionDays || 90} days are automatically deleted when cleanup is enabled.
-          </p>
         </div>
       </div>
 

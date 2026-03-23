@@ -56,16 +56,8 @@ vi.mock('../../components/SuperAdmin/UserManagementTab', () => ({
   default: () => <div data-testid="user-management-tab">User Management</div>
 }));
 
-vi.mock('../../components/SuperAdmin/ConfigurationTab', () => ({
-  default: () => <div data-testid="configuration-tab">Configuration</div>
-}));
-
 vi.mock('../../components/SuperAdmin/AuditLogsTab', () => ({
   default: () => <div data-testid="audit-logs-tab">Audit Logs</div>
-}));
-
-vi.mock('../../components/SuperAdmin/SecurityTab', () => ({
-  default: () => <div data-testid="security-tab">Security</div>
 }));
 
 vi.mock('../../components/SuperAdmin/BackupRecoveryTab', () => ({
@@ -147,27 +139,11 @@ describe('SuperAdminDashboard', () => {
       });
     });
 
-    it('should render config section when specified', async () => {
-      renderSuperAdminDashboard('config');
-      
-      await waitFor(() => {
-        expect(screen.getByTestId('configuration-tab')).toBeInTheDocument();
-      });
-    });
-
     it('should render audit section when specified', async () => {
       renderSuperAdminDashboard('audit');
       
       await waitFor(() => {
         expect(screen.getByTestId('audit-logs-tab')).toBeInTheDocument();
-      });
-    });
-
-    it('should render security section when specified', async () => {
-      renderSuperAdminDashboard('security');
-      
-      await waitFor(() => {
-        expect(screen.getByTestId('security-tab')).toBeInTheDocument();
       });
     });
 

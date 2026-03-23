@@ -27,9 +27,9 @@ import BackupRecoveryTab from './SuperAdmin/BackupRecoveryTab';
 import AnalyticsTab from './SuperAdmin/AnalyticsTab';
 import TrashManagementTab from './SuperAdmin/TrashManagementTab';
 import ArchivalManagementTab from './SuperAdmin/ArchivalManagementTab';
-// SystemConfigDashboard, ConfigDiffTab, ConfigVersionHistoryTab, CronJobsTab, MaintenanceModeTab,
+// ConfigDiffTab, ConfigVersionHistoryTab, CronJobsTab, MaintenanceModeTab,
 // RateLimitConfigTab, DbIndexExplorerTab, WebhookManagerTab, FeatureFlagsTab, NotificationCenterConfigTab,
-// AnnouncementsTab, ExcelImport merged into SystemUnifiedTab
+// AnnouncementsTab, ExcelImport, SystemConfigDashboard, ConfigurationTab merged into SystemUnifiedTab
 import SystemUnifiedTab from './SuperAdmin/SystemUnifiedTab';
 import FuelPriceTab from './SuperAdmin/FuelPriceTab';
 import DataExportTab from './SuperAdmin/DataExportTab';
@@ -45,6 +45,7 @@ import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 // SIEMExportTab merged into MonitoringUnifiedTab
 // SecurityBlocklistTab merged into SecurityUnifiedTab
 // SecurityEventsTab merged into SecurityUnifiedTab
+// SecurityTab (legacy top-level) decommissioned — replaced by SecurityUnifiedTab
 
 interface SuperAdminDashboardProps {
   user: any;

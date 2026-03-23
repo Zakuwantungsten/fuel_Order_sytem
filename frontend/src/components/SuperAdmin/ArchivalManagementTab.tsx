@@ -54,19 +54,6 @@ export default function ArchivalManagementTab({ onMessage, onNavigate }: Archiva
   const [archiveResults, setArchiveResults] = useState<any[]>([]);
   const [archiveResultsLoading, setArchiveResultsLoading] = useState(false);
 
-  // Archival Configuration
-  const [collectionConfigs, setCollectionConfigs] = useState<CollectionConfig[]>(
-    COLLECTION_OPTIONS.map(opt => ({
-      name: opt.name,
-      label: opt.label,
-      enabled: true,
-      retentionMonths: opt.defaultMonths,
-    }))
-  );
-  const [globalRetentionMonths, setGlobalRetentionMonths] = useState(6);
-  const [auditLogRetentionMonths, setAuditLogRetentionMonths] = useState(12);
-  const [archivalEnabled, setArchivalEnabled] = useState(true);
-
   // Manual archival options
   const [manualOptions, setManualOptions] = useState({
     dryRun: true,
@@ -80,7 +67,6 @@ export default function ArchivalManagementTab({ onMessage, onNavigate }: Archiva
   useEffect(() => {
     loadStats();
     loadHistory();
-    loadConfiguration();
   }, []);
 
   const loadStats = async () => {
@@ -98,31 +84,6 @@ export default function ArchivalManagementTab({ onMessage, onNavigate }: Archiva
       setHistory(data || []);
     } catch (error: any) {
       console.error('Failed to load archival history:', error);
-    }
-  };
-
-  const loadConfiguration = async () => {
-    try {
-      const config = await systemConfigAPI.getSystemSettings();
-      if (config?.data) {
-        const dataSettings = config.data;
-        setArchivalEnabled(dataSettings.archivalEnabled ?? true);
-        setGlobalRetentionMonths(dataSettings.archivalMonths ?? 6);
-        setAuditLogRetentionMonths(dataSettings.auditLogRetention ?? 12);
-        
-        // Update collection configs if available
-        if (dataSettings.collectionArchivalSettings) {
-          setCollectionConfigs(prevConfigs => 
-            prevConfigs.map(config => ({
-              ...config,
-              enabled: dataSettings.collectionArchivalSettings?.[config.name]?.enabled ?? config.enabled,
-              retentionMonths: dataSettings.collectionArchivalSettings?.[config.name]?.retentionMonths ?? config.retentionMonths,
-            }))
-          );
-        }
-      }
-    } catch (error: any) {
-      console.error('Failed to load configuration:', error);
     }
   };
 
@@ -470,133 +431,26 @@ export default function ArchivalManagementTab({ onMessage, onNavigate }: Archiva
               </button>
             </div>
 
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div className="text-sm text-blue-900 dark:text-blue-200">
-                  <strong>Policy ownership:</strong> retention policy edits are centralized in System → Data Lifecycle Policy.
-                  This tab remains focused on archival operations, browsing, and execution history.
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Settings className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold text-blue-900 dark:text-blue-200">Archival &amp; Retention Policy</p>
+                  <p className="text-[11px] text-blue-700 dark:text-blue-400 mt-0.5">
+                    Enable archival, set global retention periods, and configure per-collection overrides in <strong>System &rarr; Configuration &rarr; Data Lifecycle Policy</strong>.
+                  </p>
                 </div>
               </div>
-            </div>
-
-            {/* Global Settings */}
-            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">Global Settings (Read-only)</h4>
-              
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Enable Automatic Archival
-                    </label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Runs monthly on the 1st at 2:00 AM
-                    </p>
-                  </div>
-                  <button
-                    disabled
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      archivalEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-                    } opacity-70 cursor-not-allowed`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        archivalEnabled ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Default Retention Period (months)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="60"
-                      value={globalRetentionMonths}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Audit Log Retention (months)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="60"
-                      value={auditLogRetentionMonths}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Per-Collection Configuration */}
-            <div>
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">Per-Collection Settings (Read-only)</h4>
-              <div className="space-y-3">
-                {collectionConfigs.map(config => (
-                  <div
-                    key={config.name}
-                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
-                  >
-                    <div className="flex items-center gap-4 flex-1">
-                      <button
-                        disabled
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          config.enabled ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
-                        } opacity-70 cursor-not-allowed`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            config.enabled ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                      
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{config.label}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {config.enabled ? 'Archival enabled' : 'Archival disabled'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <label className="text-sm text-gray-700 dark:text-gray-300">Retention:</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="60"
-                        value={config.retentionMonths}
-                        readOnly
-                        disabled
-                        className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm disabled:opacity-50"
-                      />
-                      <span className="text-sm text-gray-500 dark:text-gray-400">months</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Archival Recommendation */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div className="text-sm text-blue-900 dark:text-blue-200">
-                  <strong>Recommendation:</strong> Configure retention periods based on your data access patterns. Longer retention for frequently accessed data, shorter for historical records. All collections can be archived including Delivery Orders.
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem('sa_system_config_focus_section', 'data');
+                  onNavigate?.('sa_system');
+                }}
+                className="shrink-0 flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-blue-700"
+              >
+                Configure Policy
+              </button>
             </div>
           </div>
         )}

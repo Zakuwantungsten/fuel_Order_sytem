@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Settings, Lock, Database, Bell, Clock, GitCompare,
   ChevronDown, RefreshCw, Save, CheckCircle, AlertCircle, ShieldCheck,
+  ArrowRight, Monitor, Mail, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import AsyncErrorPanel from './common/AsyncErrorPanel';
 import { useAsyncState } from '../../hooks/useAsyncState';
 import { useActionState } from '../../hooks/useActionState';
 import apiClient from '../../services/api';
+import { systemAdminAPI } from '../../services/api';
 import { systemConfigAPI } from '../../services/systemConfigService';
 import type { SystemSettings, PasswordPolicySettings } from '../../services/systemConfigService';
 import ConfigVersionHistoryTab from './ConfigVersionHistoryTab';
@@ -18,7 +20,7 @@ interface Props {
   onNavigate?: (section: string) => void;
 }
 
-type AccSection = 'general' | 'security' | 'data' | 'notifications';
+type AccSection = 'general' | 'data' | 'notifications';
 
 // ── Tiny shared primitives ──────────────────────────────────────────────────
 
@@ -91,7 +93,27 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
   const [sectionFeedback, setSectionFeedback] = useState<{ section: AccSection; type: 'success' | 'error'; message: string } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState<{ snapshots: number; changes: number } | null>(null);
-  const [securityLastChanged, setSecurityLastChanged] = useState<{ by: string; at: string } | null>(null);
+  const [generalLastChanged, setGeneralLastChanged] = useState<{ by: string; at: string } | null>(null);
+  const [dataLastChanged, setDataLastChanged] = useState<{ by: string; at: string } | null>(null);
+
+  // ── Login-security notification state (owned here, moved from SecurityPoliciesSubTab) ──
+  const notifLoginSaveAction = useActionState();
+  const [notifLoginSettings, setNotifLoginSettings] = useState({
+    loginNotifications: true,
+    newDeviceAlerts: true,
+    deviceTracking: true,
+  });
+
+  // ── Alert-routing notification state (owned here, moved from MonitoringAlertsSubTab) ──
+  const notifRoutingSaveAction = useActionState();
+  const [notifRouting, setNotifRouting] = useState({
+    emailEnabled: true,
+    emailOnTypes: ['truck_entry_rejected', 'missing_total_liters', 'lpo_created'] as string[],
+    alertRecipients: ['super_admin', 'admin'] as string[],
+    digestEnabled: false,
+    digestSchedule: 'daily' as 'daily' | 'weekly',
+  });
+  const [notifRoutingLoaded, setNotifRoutingLoaded] = useState(false);
 
   const fwd = useCallback((msg: string, type?: 'success' | 'error' | 'info') => {
     onMessage((type || 'error') as 'success' | 'error', msg);
@@ -100,27 +122,25 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
     try {
-      const [hRes, dRes, secRes] = await Promise.allSettled([
+      const [hRes, dRes] = await Promise.allSettled([
         apiClient.get('/system-admin/config-history', { params: { page: 1, limit: 1 } }),
         apiClient.get('/system-admin/config-diff',    { params: { page: 1, limit: 1 } }),
-        apiClient.get('/system-admin/security-audit-log', { params: { page: 1, limit: 1 } }),
       ]);
       setStats({
         snapshots: hRes.status === 'fulfilled' ? (hRes.value.data.pagination?.total ?? 0) : 0,
         changes:   dRes.status === 'fulfilled' ? (dRes.value.data.pagination?.total ?? 0) : 0,
       });
 
-      if (secRes.status === 'fulfilled') {
-        const rows = secRes.value.data?.data?.data || secRes.value.data?.data || [];
-        const latest = Array.isArray(rows) ? rows[0] : null;
-        if (latest) {
-          const name = latest.userId
-            ? `${latest.userId.firstName || ''} ${latest.userId.lastName || ''}`.trim() || latest.userId.email || 'System'
-            : latest.username || 'System';
-          setSecurityLastChanged({
-            by: name,
-            at: latest.createdAt || '',
-          });
+      if (hRes.status === 'fulfilled') {
+        const cfgRows = hRes.value.data?.data?.data || hRes.value.data?.data || [];
+        const latestCfg = Array.isArray(cfgRows) ? cfgRows[0] : null;
+        if (latestCfg) {
+          const name = latestCfg.userId
+            ? `${latestCfg.userId.firstName || ''} ${latestCfg.userId.lastName || ''}`.trim() || latestCfg.userId.email || 'System'
+            : latestCfg.changedBy || latestCfg.username || 'System';
+          const meta = { by: name, at: latestCfg.createdAt || latestCfg.timestamp || '' };
+          setGeneralLastChanged(meta);
+          setDataLastChanged(meta);
         }
       }
     } catch { /* silent */ } finally { setStatsLoading(false); }
@@ -128,11 +148,13 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
 
   const loadSettings = useCallback(async () => {
     const result = await runSettingsLoad(async () => {
-      const [data, policy] = await Promise.all([
+      const [data, policy, secSettings, routingRes] = await Promise.all([
         systemConfigAPI.getSystemSettings(),
         systemConfigAPI.getPasswordPolicy(),
+        systemAdminAPI.getSecuritySettings().catch(() => null),
+        apiClient.get('/system-admin/notification-config').catch(() => null),
       ]);
-      return { data, policy };
+      return { data, policy, secSettings, routingRes };
     }, {
       errorMessage: 'Failed to load settings',
     });
@@ -140,6 +162,13 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
     if (result.ok) {
       setSettings(result.data.data);
       setPasswordPolicy(result.data.policy);
+      if (result.data.secSettings?.notifications) {
+        setNotifLoginSettings(prev => ({ ...prev, ...result.data.secSettings.notifications }));
+      }
+      if (result.data.routingRes?.data?.data) {
+        setNotifRouting(prev => ({ ...prev, ...result.data.routingRes.data.data }));
+      }
+      setNotifRoutingLoaded(true);
       return;
     }
 
@@ -153,7 +182,7 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
 
   useEffect(() => {
     const preferredSection = sessionStorage.getItem('sa_system_config_focus_section') as AccSection | null;
-    if (preferredSection && ['general', 'security', 'data', 'notifications'].includes(preferredSection)) {
+    if (preferredSection && ['general', 'data', 'notifications'].includes(preferredSection)) {
       setOpenSection(preferredSection);
     }
     if (preferredSection) {
@@ -170,13 +199,24 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
     setSettings(prev => prev ? { ...prev, [section]: { ...prev[section], ...patch } } : prev);
   };
 
+  const saveNotifLogin = async () => {
+    const result = await notifLoginSaveAction.run(async () => {
+      await systemAdminAPI.updateSecuritySettings('notifications', notifLoginSettings);
+    }, { errorMessage: 'Failed to save login security settings' });
+    if (result.ok) onMessage('success', 'Login security settings saved');
+    else onMessage('error', result.error);
+  };
+
+  const saveNotifRouting = async () => {
+    const result = await notifRoutingSaveAction.run(async () => {
+      await apiClient.put('/system-admin/notification-config', notifRouting);
+    }, { errorMessage: 'Failed to save notification routing' });
+    if (result.ok) onMessage('success', 'Notification routing saved');
+    else onMessage('error', result.error);
+  };
+
   const saveSection = async (id: AccSection) => {
     if (!settings) return;
-
-    if (id === 'security') {
-      onMessage('error', 'Security settings are managed in Security Center');
-      return;
-    }
 
     setSavingSection(id);
     setSectionFeedback(null);
@@ -210,11 +250,10 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
 
   // ── Section definitions ────────────────────────────────────────────────────
 
-  const SECTIONS: { id: AccSection; label: string; sub: string; icon: React.ElementType; accent: string; accentBg: string }[] = [
-    { id: 'general',       label: 'General',              sub: 'System name, timezone, date format, language',                     icon: Settings, accent: '#4F46E5', accentBg: '#EEF2FF' },
-    { id: 'security',      label: 'Security & Sessions',  sub: 'Read-only summary. Managed in Security Center.',                   icon: Lock,     accent: '#2563EB', accentBg: '#EFF6FF' },
-    { id: 'data',          label: 'Data Lifecycle Policy', sub: 'Canonical policy editor for archival, trash, and backup retention', icon: Database, accent: '#0D9488', accentBg: '#F0FDFA' },
-    { id: 'notifications', label: 'Notifications',        sub: 'Email toggles, alert recipients, digests, warning thresholds',     icon: Bell,     accent: '#D97706', accentBg: '#FFFBEB' },
+  const SECTIONS: { id: AccSection; label: string; sub: string; icon: React.ElementType; accent: string; accentBg: string; impact: 'high' | 'medium' | 'low' }[] = [
+    { id: 'general',       label: 'General',              sub: 'System name, timezone, date format, language',                      icon: Settings, accent: '#4F46E5', accentBg: '#EEF2FF', impact: 'low'  },
+    { id: 'data',          label: 'Data Lifecycle Policy', sub: 'Canonical editor for archival, trash, and backup retention',        icon: Database, accent: '#0D9488', accentBg: '#F0FDFA', impact: 'high' },
+    { id: 'notifications', label: 'Notifications',        sub: 'Login alerts, event routing, system-level email settings',          icon: Bell,     accent: '#D97706', accentBg: '#FFFBEB', impact: 'medium' },
   ];
 
   return (
@@ -223,7 +262,32 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatTile label="Config Snapshots"   value={statsLoading ? '…' : (stats?.snapshots ?? 0)} icon={Clock}      iconBg="#EEF2FF" iconColor="#4F46E5" />
         <StatTile label="Config Changes"     value={statsLoading ? '…' : (stats?.changes   ?? 0)} icon={GitCompare}  iconBg="#F5F3FF" iconColor="#7C3AED" />
-        <StatTile label="Settings Sections"  value={4}                                             icon={Settings}   iconBg="#F0FDF4" iconColor="#16A34A" sub="General · Security · Data Lifecycle · Notifications" />
+        <StatTile label="Settings Sections"  value={3}                                             icon={Settings}   iconBg="#F0FDF4" iconColor="#16A34A" sub="General · Data Lifecycle · Notifications" />
+      </div>
+
+      {/* ── Security quick-link card ─────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-5 py-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+            <Lock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] font-bold text-blue-900 dark:text-blue-200">Security &amp; Sessions Policy</div>
+            <div className="text-[11px] text-blue-700 dark:text-blue-400 mt-0.5">
+              Session timeout · Password rules · MFA enforcement · DLP rules — edit in Security Center
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            sessionStorage.setItem('sa_security_preferred_subtab', 'policies');
+            onNavigate?.('sa_security');
+          }}
+          className="shrink-0 flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-blue-700"
+        >
+          Security Center <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* ── Settings accordion ─────────────────────────────────────────────── */}
@@ -263,6 +327,15 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[14px] font-bold text-[#111827] dark:text-gray-100">{sec.label}</span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                        sec.impact === 'high'
+                          ? 'bg-red-50 border-red-200 text-red-600 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
+                          : sec.impact === 'medium'
+                          ? 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400'
+                          : 'bg-green-50 border-green-200 text-green-600 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400'
+                      }`}>
+                        {sec.impact === 'high' ? 'High Impact' : sec.impact === 'medium' ? 'Medium Impact' : 'Low Impact'}
+                      </span>
                     </div>
                     <div className="text-[12px] text-[#9CA3AF] dark:text-gray-400 mt-0.5 truncate">{sec.sub}</div>
                   </div>
@@ -289,6 +362,13 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                     {/* ── GENERAL ── */}
                     {sec.id === 'general' && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {generalLastChanged && (
+                          <div className="sm:col-span-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-500 dark:text-gray-400">
+                            <Clock className="w-3 h-3 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+                            Last changed by&nbsp;<span className="font-semibold text-gray-700 dark:text-gray-300">{generalLastChanged.by}</span>
+                            {generalLastChanged.at && <>&nbsp;·&nbsp;{new Date(generalLastChanged.at).toLocaleString()}</>}
+                          </div>
+                        )}
                         <div className="sm:col-span-2 flex flex-col gap-1.5">
                           <label className={labelCls}>System Name</label>
                           <input className={inputCls} value={settings.general.systemName}
@@ -352,58 +432,6 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                       </div>
                     )}
 
-                    {/* ── SECURITY ── */}
-                    {sec.id === 'security' && (
-                      <div className="space-y-4">
-                        <div className="flex items-start justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                              <span className="text-[12px] font-semibold text-blue-800 dark:text-blue-300">Managed in Security Center</span>
-                            </div>
-                            <p className="mt-1 text-[12px] text-blue-700 dark:text-blue-300/90">
-                              Security policy editing is locked in System Configuration. Use Security Center for all policy changes.
-                            </p>
-                            <p className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
-                              Last changed by: <span className="font-semibold">{securityLastChanged?.by || 'Unknown'}</span>
-                              {' '}
-                              {securityLastChanged?.at ? `on ${new Date(securityLastChanged.at).toLocaleString()}` : ''}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              sessionStorage.setItem('sa_security_preferred_subtab', 'policies');
-                              onNavigate?.('sa_security');
-                            }}
-                            className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-blue-700"
-                          >
-                            Manage in Security Center
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <ReadOnlyRow label="Session Timeout" value={`${settings.session.sessionTimeout} min`} />
-                          <ReadOnlyRow label="JWT Expiry" value={`${settings.session.jwtExpiry} min`} />
-                          <ReadOnlyRow label="Refresh Token Expiry" value={`${settings.session.refreshTokenExpiry} days`} />
-                          <ReadOnlyRow label="Max Login Attempts" value={String(settings.session.maxLoginAttempts)} />
-                          <ReadOnlyRow label="Lockout Duration" value={`${settings.session.lockoutDuration} min`} />
-                          <ReadOnlyRow label="Allow Multiple Sessions" value={settings.session.allowMultipleSessions ? 'Enabled' : 'Disabled'} />
-                        </div>
-
-                        <SectionDivider label="Password Policy (Read-only)" icon={Lock} />
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <ReadOnlyRow label="Minimum Length" value={String(passwordPolicy.minLength)} />
-                          <ReadOnlyRow label="Password History" value={`${passwordPolicy.historyCount} previous passwords`} />
-                          <ReadOnlyRow label="Expiration" value={passwordPolicy.expirationDays > 0 ? `${passwordPolicy.expirationDays} days` : 'Never'} />
-                          <ReadOnlyRow label="Uppercase Required" value={passwordPolicy.requireUppercase ? 'Yes' : 'No'} />
-                          <ReadOnlyRow label="Lowercase Required" value={passwordPolicy.requireLowercase ? 'Yes' : 'No'} />
-                          <ReadOnlyRow label="Numbers Required" value={passwordPolicy.requireNumbers ? 'Yes' : 'No'} />
-                          <ReadOnlyRow label="Special Characters Required" value={passwordPolicy.requireSpecialChars ? 'Yes' : 'No'} />
-                        </div>
-                      </div>
-                    )}
-
                     {/* ── DATA RETENTION ── */}
                     {sec.id === 'data' && (
                       <div className="space-y-4">
@@ -412,6 +440,13 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                           <p className="mt-1 text-[12px] text-teal-700 dark:text-teal-300/90">
                             Archival, trash retention, and backup retention policy are managed here. Operational tabs are read-only for policy values.
                           </p>
+                          {dataLastChanged && (
+                            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-teal-600 dark:text-teal-400">
+                              <Clock className="w-3 h-3 flex-shrink-0" />
+                              Last changed by&nbsp;<span className="font-semibold">{dataLastChanged.by}</span>
+                              {dataLastChanged.at && <>&nbsp;·&nbsp;{new Date(dataLastChanged.at).toLocaleString()}</>}
+                            </p>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -459,49 +494,220 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
 
                     {/* ── NOTIFICATIONS ── */}
                     {sec.id === 'notifications' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {[
-                          { key: 'emailNotifications', label: 'Email Notifications',  sub: 'Send transactional emails on key events' },
-                          { key: 'criticalAlerts',      label: 'Critical Alerts',      sub: 'Immediate notifications for system errors' },
-                          { key: 'dailySummary',        label: 'Daily Summary',        sub: 'Send summary digest each morning' },
-                          { key: 'weeklyReport',        label: 'Weekly Report',        sub: 'Send weekly analytics & activity report' },
-                          { key: 'sendCredentialsEmail', label: 'Send Credentials Email', sub: 'Email username & password to new users on creation' },
-                        ].map(f => (
-                          <div key={f.key} className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
-                            <div>
-                              <div className="text-[13px] font-medium text-[#111827] dark:text-gray-100">{f.label}</div>
-                              <div className="text-[11px] text-[#9CA3AF] dark:text-gray-400 mt-0.5">{f.sub}</div>
+                      <div className="space-y-6">
+                        {/* Sub-section 1: Login Security */}
+                        <div className="rounded-xl border border-[#E4E7EC] dark:border-gray-700 overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F8F9FB] dark:bg-gray-700/60 border-b border-[#E4E7EC] dark:border-gray-700">
+                            <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <span className="text-[12px] font-semibold text-[#111827] dark:text-gray-100">Login Security Notifications</span>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            {[
+                              { key: 'deviceTracking',      label: 'Device & Session Tracking',  sub: 'Track devices used to access the system' },
+                              { key: 'loginNotifications',  label: 'Login Notification Emails',   sub: 'Send emails on each successful login' },
+                              { key: 'newDeviceAlerts',     label: 'New Device Alerts',           sub: 'Alert when login from an unrecognised device' },
+                            ].map(f => (
+                              <div key={f.key} className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
+                                <div>
+                                  <div className="text-[13px] font-medium text-[#111827] dark:text-gray-100">{f.label}</div>
+                                  <div className="text-[11px] text-[#9CA3AF] dark:text-gray-400 mt-0.5">{f.sub}</div>
+                                </div>
+                                <Toggle
+                                  checked={(notifLoginSettings as any)[f.key]}
+                                  onChange={v => setNotifLoginSettings(prev => ({ ...prev, [f.key]: v }))}
+                                />
+                              </div>
+                            ))}
+                            <div className="flex justify-end pt-1">
+                              <button
+                                type="button"
+                                onClick={saveNotifLogin}
+                                disabled={notifLoginSaveAction.isPending}
+                                className="flex items-center gap-2 px-4 py-2 text-[12px] font-semibold text-white rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-60"
+                              >
+                                {notifLoginSaveAction.isPending
+                                  ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+                                  : <><Save className="w-3.5 h-3.5" /> Save Login Settings</>}
+                              </button>
                             </div>
-                            <Toggle checked={(settings.notifications as any)[f.key]}
-                              onChange={v => upd('notifications', { [f.key]: v } as any)} />
                           </div>
-                        ))}
-                        {/* Bypass Email Verification — warning-styled since it lowers security */}
-                        <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-700 sm:col-span-2">
-                          <div>
-                            <div className="text-[13px] font-medium text-amber-800 dark:text-amber-300">Bypass Email Verification</div>
-                            <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">Skip OTP requirement during email MFA setup — use only while waiting for email domain verification</div>
+                        </div>
+
+                        {/* Sub-section 2: Alert Routing */}
+                        <div className="rounded-xl border border-[#E4E7EC] dark:border-gray-700 overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F8F9FB] dark:bg-gray-700/60 border-b border-[#E4E7EC] dark:border-gray-700">
+                            <Mail className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                            <span className="text-[12px] font-semibold text-[#111827] dark:text-gray-100">Alert Routing</span>
                           </div>
-                          <Toggle checked={(settings.notifications as any).bypassEmailVerification ?? false}
-                            onChange={v => upd('notifications', { bypassEmailVerification: v } as any)} />
+                          <div className="p-4 space-y-4">
+                            <div className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
+                              <div>
+                                <div className="text-[13px] font-medium text-[#111827] dark:text-gray-100">Email Alerts Enabled</div>
+                                <div className="text-[11px] text-[#9CA3AF] dark:text-gray-400 mt-0.5">Send email notifications for system events</div>
+                              </div>
+                              <Toggle
+                                checked={notifRouting.emailEnabled}
+                                onChange={v => setNotifRouting(prev => ({ ...prev, emailEnabled: v }))}
+                              />
+                            </div>
+
+                            <div>
+                              <div className={`${labelCls} mb-2`}>Alert Recipients (roles)</div>
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { id: 'super_admin', label: 'Super Admin' },
+                                  { id: 'admin',       label: 'Admin' },
+                                  { id: 'manager',     label: 'Manager' },
+                                  { id: 'supervisor',  label: 'Supervisor' },
+                                ].map(r => {
+                                  const active = notifRouting.alertRecipients.includes(r.id);
+                                  return (
+                                    <button
+                                      key={r.id}
+                                      type="button"
+                                      onClick={() => setNotifRouting(prev => ({
+                                        ...prev,
+                                        alertRecipients: active
+                                          ? prev.alertRecipients.filter(x => x !== r.id)
+                                          : [...prev.alertRecipients, r.id],
+                                      }))}
+                                      className={`px-3 py-1 rounded-full text-[12px] font-medium border transition-colors ${active ? 'bg-amber-600 text-white border-amber-600' : 'bg-white dark:bg-gray-800 text-[#374151] dark:text-gray-300 border-[#D1D5DB] dark:border-gray-600 hover:border-amber-400'}`}
+                                    >
+                                      {r.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className={`${labelCls} mb-2`}>Email on Events</div>
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { id: 'truck_entry_rejected',    label: 'Truck Entry Rejected' },
+                                  { id: 'missing_total_liters',    label: 'Missing Total Liters' },
+                                  { id: 'lpo_created',             label: 'LPO Created' },
+                                  { id: 'lpo_approved',            label: 'LPO Approved' },
+                                  { id: 'fuel_record_flagged',     label: 'Fuel Record Flagged' },
+                                  { id: 'delivery_order_created',  label: 'Delivery Order Created' },
+                                  { id: 'user_account_locked',     label: 'User Account Locked' },
+                                  { id: 'failed_login_threshold',  label: 'Failed Login Threshold' },
+                                  { id: 'maintenance_mode_changed',label: 'Maintenance Mode Changed' },
+                                  { id: 'config_changed',          label: 'Config Changed' },
+                                  { id: 'bulk_operation',          label: 'Bulk Operation' },
+                                ].map(ev => {
+                                  const active = notifRouting.emailOnTypes.includes(ev.id);
+                                  return (
+                                    <button
+                                      key={ev.id}
+                                      type="button"
+                                      onClick={() => setNotifRouting(prev => ({
+                                        ...prev,
+                                        emailOnTypes: active
+                                          ? prev.emailOnTypes.filter(x => x !== ev.id)
+                                          : [...prev.emailOnTypes, ev.id],
+                                      }))}
+                                      className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${active ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700' : 'bg-white dark:bg-gray-800 text-[#374151] dark:text-gray-400 border-[#D1D5DB] dark:border-gray-600 hover:border-amber-300'}`}
+                                    >
+                                      {ev.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
+                                <div>
+                                  <div className="text-[13px] font-medium text-[#111827] dark:text-gray-100">Digest Emails</div>
+                                  <div className="text-[11px] text-[#9CA3AF] dark:text-gray-400 mt-0.5">Bundle alerts into periodic digests</div>
+                                </div>
+                                <Toggle
+                                  checked={notifRouting.digestEnabled}
+                                  onChange={v => setNotifRouting(prev => ({ ...prev, digestEnabled: v }))}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <label className={`${labelCls} ${!notifRouting.digestEnabled ? 'opacity-40' : ''}`}>Digest Schedule</label>
+                                <select
+                                  disabled={!notifRouting.digestEnabled}
+                                  className={`${inputCls} ${!notifRouting.digestEnabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                  value={notifRouting.digestSchedule}
+                                  onChange={e => setNotifRouting(prev => ({ ...prev, digestSchedule: e.target.value as 'daily' | 'weekly' }))}
+                                >
+                                  <option value="daily">Daily</option>
+                                  <option value="weekly">Weekly</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                onClick={saveNotifRouting}
+                                disabled={notifRoutingSaveAction.isPending}
+                                className="flex items-center gap-2 px-4 py-2 text-[12px] font-semibold text-white rounded-lg bg-amber-600 hover:bg-amber-700 transition-colors disabled:opacity-60"
+                              >
+                                {notifRoutingSaveAction.isPending
+                                  ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+                                  : <><Save className="w-3.5 h-3.5" /> Save Alert Routing</>}
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className={labelCls}>Slow Query Threshold (ms)</label>
-                          <input type="number" min={100} className={inputCls}
-                            value={settings.notifications.slowQueryThreshold}
-                            onChange={e => upd('notifications', { slowQueryThreshold: Number(e.target.value) })} />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className={labelCls}>Storage Warning Threshold (%)</label>
-                          <input type="number" min={1} max={100} className={inputCls}
-                            value={settings.notifications.storageWarningThreshold}
-                            onChange={e => upd('notifications', { storageWarningThreshold: Number(e.target.value) })} />
+
+                        {/* Sub-section 3: System Notifications */}
+                        <div className="rounded-xl border border-[#E4E7EC] dark:border-gray-700 overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F8F9FB] dark:bg-gray-700/60 border-b border-[#E4E7EC] dark:border-gray-700">
+                            <Monitor className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                            <span className="text-[12px] font-semibold text-[#111827] dark:text-gray-100">System Notifications</span>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {[
+                                { key: 'emailNotifications',  label: 'Email Notifications',    sub: 'Master switch for outbound email' },
+                                { key: 'criticalAlerts',      label: 'Critical Alerts',         sub: 'Immediate email on critical system events' },
+                                { key: 'dailySummary',        label: 'Daily Summary',           sub: 'End-of-day summary digest' },
+                                { key: 'weeklyReport',        label: 'Weekly Report',           sub: 'Weekly performance report email' },
+                                { key: 'sendCredentialsEmail',label: 'Send Credentials Email',  sub: 'Email login credentials to new users' },
+                              ].map(f => (
+                                <div key={f.key} className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
+                                  <div>
+                                    <div className="text-[13px] font-medium text-[#111827] dark:text-gray-100">{f.label}</div>
+                                    <div className="text-[11px] text-[#9CA3AF] dark:text-gray-400 mt-0.5">{f.sub}</div>
+                                  </div>
+                                  <Toggle
+                                    checked={!!(settings.notifications as any)[f.key]}
+                                    onChange={v => upd('notifications', { [f.key]: v } as any)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {[
+                                { key: 'slowQueryThreshold',     label: 'Slow Query Threshold (ms)', min: 100 },
+                                { key: 'storageWarningThreshold',label: 'Storage Warning Threshold (%)', min: 1, max: 100 },
+                              ].map(f => (
+                                <div key={f.key} className="flex flex-col gap-1.5">
+                                  <label className={labelCls}>{f.label}</label>
+                                  <input
+                                    type="number"
+                                    min={f.min}
+                                    max={f.max}
+                                    className={inputCls}
+                                    value={(settings.notifications as any)[f.key]}
+                                    onChange={e => upd('notifications', { [f.key]: Number(e.target.value) } as any)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
 
                     {/* Save button */}
-                    {sec.id !== 'security' && (
+                    {sec.id !== 'notifications' && (
                       <div className="flex justify-end mt-5 pt-4 border-t border-[#E4E7EC] dark:border-gray-700">
                         <button
                           onClick={() => saveSection(sec.id)}

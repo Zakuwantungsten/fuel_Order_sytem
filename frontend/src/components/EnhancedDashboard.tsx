@@ -36,6 +36,7 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronRight,
+  Search,
 } from 'lucide-react';
 import YardFuelSimple from './YardFuelSimple';
 import Reports from './Reports';
@@ -149,6 +150,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [showMFASettings, setShowMFASettings] = useState(false);
   const [showPendingYardFuel, setShowPendingYardFuel] = useState(false);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
+  const [saNavSearch, setSaNavSearch] = useState('');
   const [editDoId, setEditDoId] = useState<string | null>(null);
   const [, setHighlightParam] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -257,25 +259,32 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     // Super Admin gets only super admin specific sections
     if (user.role === 'super_admin') {
       return [
-        { id: 'sa_overview', label: 'Overview', icon: Shield },
-        { id: 'sa_users', label: 'User Management', icon: Users },
-        { id: 'sa_security', label: 'Security', icon: ShieldCheck },
-        { id: 'sa_fuel_stations', label: 'Fuel Stations', icon: Building2 },
-        { id: 'sa_routes', label: 'Routes', icon: Route },
-        { id: 'sa_fuel_prices', label: 'Fuel Prices', icon: TrendingUp },
-        { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
-        { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
-        { id: 'driver_credentials', label: 'Driver Access', icon: Key },
-        { id: 'sa_monitoring', label: 'Monitoring', icon: Activity },
-        { id: 'sa_analytics', label: 'Analytics', icon: FileBarChart },
-        { id: 'sa_audit', label: 'Audit Logs', icon: FileSearch },
-        { id: 'sa_custom_report', label: 'Custom Reports', icon: FileBarChart },
-        { id: 'sa_backup', label: 'Backup & Recovery', icon: Database },
-        { id: 'sa_archival', label: 'Data Archival', icon: Archive },
-        { id: 'sa_trash', label: 'Trash Management', icon: Trash2 },
-        { id: 'sa_storage', label: 'Storage Manager', icon: HardDrive },
-        { id: 'sa_data_export', label: 'Data Export', icon: Download },
-        { id: 'sa_system', label: 'System', icon: Settings },
+        // ── Overview ─────────────────────────────────────────────────────
+        { id: 'sa_overview',        label: 'Overview',          icon: Shield,       impact: 'low'    as const },
+        // ── Security ─────────────────────────────────────────────────────
+        { id: 'sa_users',           label: 'User Management',   icon: Users,        impact: 'medium' as const, sectionLabel: 'Security' },
+        { id: 'sa_security',        label: 'Security Center',   icon: ShieldCheck,  impact: 'high'   as const, sectionLabel: 'Security' },
+        // ── Platform ─────────────────────────────────────────────────────
+        { id: 'sa_fuel_stations',   label: 'Fuel Stations',     icon: Building2,    impact: 'low'    as const, sectionLabel: 'Platform' },
+        { id: 'sa_routes',          label: 'Routes',            icon: Route,        impact: 'low'    as const, sectionLabel: 'Platform' },
+        { id: 'sa_fuel_prices',     label: 'Fuel Prices',       icon: TrendingUp,   impact: 'medium' as const, sectionLabel: 'Platform' },
+        { id: 'fleet_tracking',     label: 'Fleet Tracking',    icon: Navigation,   impact: 'low'    as const, sectionLabel: 'Platform' },
+        { id: 'checkpoints',        label: 'Checkpoints',       icon: MapPinned,    impact: 'low'    as const, sectionLabel: 'Platform' },
+        { id: 'driver_credentials', label: 'Driver Access',     icon: Key,          impact: 'medium' as const, sectionLabel: 'Platform' },
+        // ── Monitoring & Alerts ───────────────────────────────────────────
+        { id: 'sa_monitoring',      label: 'Monitoring',        icon: Activity,     impact: 'medium' as const, sectionLabel: 'Monitoring & Alerts' },
+        // ── Analytics ────────────────────────────────────────────────────
+        { id: 'sa_analytics',       label: 'Analytics',         icon: FileBarChart, impact: 'low'    as const, sectionLabel: 'Analytics' },
+        { id: 'sa_audit',           label: 'Audit Logs',        icon: FileSearch,   impact: 'low'    as const, sectionLabel: 'Analytics' },
+        { id: 'sa_custom_report',   label: 'Custom Reports',    icon: FileBarChart, impact: 'low'    as const, sectionLabel: 'Analytics' },
+        // ── Data Lifecycle ────────────────────────────────────────────────
+        { id: 'sa_backup',          label: 'Backup & Recovery', icon: Database,     impact: 'high'   as const, sectionLabel: 'Data Lifecycle' },
+        { id: 'sa_archival',        label: 'Data Archival',     icon: Archive,      impact: 'high'   as const, sectionLabel: 'Data Lifecycle' },
+        { id: 'sa_trash',           label: 'Trash Management',  icon: Trash2,       impact: 'medium' as const, sectionLabel: 'Data Lifecycle' },
+        { id: 'sa_storage',         label: 'Storage Manager',   icon: HardDrive,    impact: 'medium' as const, sectionLabel: 'Data Lifecycle' },
+        { id: 'sa_data_export',     label: 'Data Export',       icon: Download,     impact: 'medium' as const, sectionLabel: 'Data Lifecycle' },
+        // ── System ────────────────────────────────────────────────────────
+        { id: 'sa_system',          label: 'System',            icon: Settings,     impact: 'high'   as const, sectionLabel: 'System' },
       ];
     }
 
@@ -508,48 +517,97 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         </div>
 
         <nav className="mt-2 flex-1 overflow-y-auto pb-4">
-          {(menuItems as any[]).map((item, idx) => {
-            const IconComponent = item.icon as React.ElementType;
-            const prevItem = (menuItems as any[])[idx - 1];
-            const showSectionLabel = sidebarOpen && (item as any).sectionLabel && (item as any).sectionLabel !== (prevItem as any)?.sectionLabel;
-            const currentSection = (item as any).sectionLabel;
-            const isCollapsed = currentSection && collapsedSections.has(currentSection);
-            return (
-              <div key={item.id}>
-                {showSectionLabel && (
-                  <button
-                    onClick={() => toggleSidebarSection(currentSection)}
-                    className="w-full px-3 pt-4 pb-1 flex items-center justify-between group hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
-                      {currentSection}
-                    </span>
-                    {isCollapsed
-                      ? <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500" />
-                      : <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500" />
-                    }
-                  </button>
-                )}
-                {!isCollapsed && (
-                <button
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setSidebarOpen(false);
-                  }}
-                  title={!sidebarOpen ? item.label : undefined}
-                  className={`w-full flex items-center px-3 py-2 text-left transition-colors ${
-                    activeTab === item.id
-                      ? 'bg-indigo-50 dark:bg-indigo-900/30 border-r-2 border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  <IconComponent className="w-6 h-6 flex-shrink-0" />
-                  {sidebarOpen && <span className="ml-2.5 text-sm truncate">{item.label}</span>}
-                </button>
-                )}
+          {/* Settings search — only for super_admin when sidebar is expanded */}
+          {user.role === 'super_admin' && sidebarOpen && (
+            <div className="px-3 pb-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-gray-500 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Quick-jump to section…"
+                  value={saNavSearch}
+                  onChange={e => setSaNavSearch(e.target.value)}
+                  className="w-full pl-7 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
+                />
               </div>
-            );
-          })}
+            </div>
+          )}
+          {(() => {
+            const isSA = user.role === 'super_admin';
+            const searchTerm = saNavSearch.trim().toLowerCase();
+            const isSearching = isSA && searchTerm.length > 0;
+
+            // When searching, flatten all items that match by label regardless of collapsed state
+            const displayItems = isSearching
+              ? (menuItems as any[]).filter(item =>
+                  item.label.toLowerCase().includes(searchTerm) ||
+                  (item.sectionLabel && (item.sectionLabel as string).toLowerCase().includes(searchTerm))
+                )
+              : (menuItems as any[]);
+
+            return displayItems.map((item, idx) => {
+              const IconComponent = item.icon as React.ElementType;
+              const prevItem = displayItems[idx - 1];
+              // Show section label when not searching (normal mode) OR show it as a context hint when searching
+              const showSectionLabel = sidebarOpen && item.sectionLabel &&
+                item.sectionLabel !== prevItem?.sectionLabel;
+              const currentSection = item.sectionLabel;
+              const isCollapsed = !isSearching && currentSection && collapsedSections.has(currentSection);
+
+              const impactColor: Record<string, string> = {
+                high:   'bg-red-400 dark:bg-red-500',
+                medium: 'bg-amber-400 dark:bg-amber-500',
+                low:    'bg-green-400 dark:bg-green-500',
+              };
+              const impactDotClass = item.impact ? impactColor[item.impact] ?? '' : '';
+
+              return (
+                <div key={item.id}>
+                  {showSectionLabel && (
+                    <button
+                      onClick={() => !isSearching && toggleSidebarSection(currentSection)}
+                      className="w-full px-3 pt-4 pb-1 flex items-center justify-between group hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
+                    >
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+                        {currentSection}
+                      </span>
+                      {!isSearching && (
+                        isCollapsed
+                          ? <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                          : <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                      )}
+                    </button>
+                  )}
+                  {!isCollapsed && (
+                    <button
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setSidebarOpen(false);
+                        if (isSearching) setSaNavSearch('');
+                      }}
+                      title={!sidebarOpen ? item.label : undefined}
+                      className={`w-full flex items-center px-3 py-2 text-left transition-colors ${
+                        activeTab === item.id
+                          ? 'bg-indigo-50 dark:bg-indigo-900/30 border-r-2 border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <IconComponent className="w-6 h-6 flex-shrink-0" />
+                      {sidebarOpen && (
+                        <span className="ml-2.5 text-sm truncate flex-1">{item.label}</span>
+                      )}
+                      {sidebarOpen && impactDotClass && (
+                        <span
+                          className={`ml-1 flex-shrink-0 w-1.5 h-1.5 rounded-full ${impactDotClass}`}
+                          title={`${item.impact} impact`}
+                        />
+                      )}
+                    </button>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </nav>
 
 

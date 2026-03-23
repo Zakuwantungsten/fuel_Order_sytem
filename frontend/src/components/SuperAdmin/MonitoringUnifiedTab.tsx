@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Activity, Server, BarChart3, Bell } from 'lucide-react';
 import MonitoringInfraSubTab from './MonitoringInfraSubTab';
 import MonitoringAnalyticsSubTab from './MonitoringAnalyticsSubTab';
@@ -18,6 +18,14 @@ interface MonitoringUnifiedTabProps {
 
 export default function MonitoringUnifiedTab({ onMessage }: MonitoringUnifiedTabProps) {
   const [subTab, setSubTab] = useState<SubTab>('infra');
+
+  useEffect(() => {
+    const preferred = sessionStorage.getItem('sa_monitoring_preferred_subtab') as SubTab | null;
+    if (preferred && ['infra', 'analytics', 'alerts'].includes(preferred)) {
+      setSubTab(preferred);
+    }
+    if (preferred) sessionStorage.removeItem('sa_monitoring_preferred_subtab');
+  }, []);
 
   return (
     <div className="space-y-5">

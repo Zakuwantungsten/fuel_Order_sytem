@@ -71,7 +71,6 @@ export { default as ResetPasswordModal } from './components/ResetPasswordModal';
 export { default as BanUserModal } from './components/BanUserModal';
 
 // Phase 4 Components
-export { default as DriverCredentialsView } from './components/DriverCredentialsView';
 export { default as PrivilegeElevationView } from './components/PrivilegeElevationView';
 
 // Phase 5 Components

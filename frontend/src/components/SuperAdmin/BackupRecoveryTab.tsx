@@ -341,21 +341,21 @@ export default function BackupRecoveryTab({ onMessage, onNavigate }: BackupRecov
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <Calendar className="w-5 h-5" />
-            Backup Schedules (Read-only)
+            Backup Schedules
           </h3>
-          <button
-            onClick={openDataLifecyclePolicyEditor}
-            className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Manage in Data Lifecycle Policy
-          </button>
         </div>
 
-        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-          <p className="text-sm text-blue-900 dark:text-blue-300">
-            Retention and backup policy ownership is centralized in System → Data Lifecycle Policy.
-            This section provides operational visibility only.
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3">
+          <p className="text-[12px] text-indigo-800 dark:text-indigo-300">
+            Backup frequency, retention copies, and schedule settings are configured in <strong>System &rarr; Data Lifecycle Policy</strong>.
           </p>
+          <button
+            type="button"
+            onClick={openDataLifecyclePolicyEditor}
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            Configure Policy
+          </button>
         </div>
 
         {schedules.length === 0 ? (

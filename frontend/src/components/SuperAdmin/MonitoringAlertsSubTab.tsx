@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import {
-  Bell, Mail, Server, RefreshCw, ArrowRight, CheckCircle, AlertTriangle,
+  Bell, Mail, Server, RefreshCw, ArrowRight, CheckCircle, AlertTriangle, Settings2,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
@@ -19,11 +19,20 @@ export default function MonitoringAlertsSubTab() {
     emailLogCount: number;
     siemDestinations: number;
     siemActive: number;
+    notifEnabled: boolean;
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadOverview();
+  }, []);
+
+  useEffect(() => {
+    const deep = sessionStorage.getItem('sa_monitoring_alerts_view') as View | null;
+    if (deep && ['thresholds', 'email_logs', 'siem'].includes(deep)) {
+      setView(deep);
+    }
+    if (deep) sessionStorage.removeItem('sa_monitoring_alerts_view');
   }, []);
 
   const loadOverview = async () => {
@@ -32,10 +41,11 @@ export default function MonitoringAlertsSubTab() {
       const token = sessionStorage.getItem('fuel_order_token');
       const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-      const [thresholdRes, emailRes, siemRes] = await Promise.allSettled([
+      const [thresholdRes, emailRes, siemRes, notifRes] = await Promise.allSettled([
         apiClient.get('/system-admin/config/settings/alert-thresholds'),
         apiClient.get('/system-admin/email-logs', { params: { limit: 1 } }),
         fetch(`${API_BASE}/system-admin/siem`, { headers }),
+        apiClient.get('/system-admin/notification-config'),
       ]);
 
       const thresholds = thresholdRes.status === 'fulfilled' ? thresholdRes.value.data.data : null;
@@ -56,7 +66,11 @@ export default function MonitoringAlertsSubTab() {
         }
       }
 
-      setStats({ thresholdCount, emailLogCount, siemDestinations, siemActive });
+      const notifEnabled = notifRes.status === 'fulfilled'
+        ? (notifRes.value.data?.data?.emailEnabled ?? false)
+        : false;
+
+      setStats({ thresholdCount, emailLogCount, siemDestinations, siemActive, notifEnabled });
     } catch {
       // Silent
     } finally {
@@ -106,7 +120,7 @@ export default function MonitoringAlertsSubTab() {
           {loading ? (
             <UnifiedTabLoader label="Loading alerts overview..." heightClassName="h-40" />
           ) : stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">
                 <Bell className="w-5 h-5 text-amber-500 mx-auto mb-2" />
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.thresholdCount}</p>
@@ -130,11 +144,21 @@ export default function MonitoringAlertsSubTab() {
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.siemActive}</p>
                 <p className="text-xs text-gray-400 mt-1">Active Exports</p>
               </div>
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">
+                {stats.notifEnabled
+                  ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto mb-2" />
+                  : <Bell className="w-5 h-5 text-gray-400 mx-auto mb-2" />
+                }
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {stats.notifEnabled ? 'On' : 'Off'}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Email Notify</p>
+              </div>
             </div>
           )}
 
           {/* Quick-link cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
               onClick={() => setView('thresholds')}
               className="flex items-start gap-4 p-5 rounded-xl border text-left transition-all hover:shadow-md bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
@@ -148,6 +172,16 @@ export default function MonitoringAlertsSubTab() {
               </div>
               <ArrowRight className="w-4 h-4 text-gray-400 shrink-0 mt-1" />
             </button>
+            <div className="flex items-start gap-4 p-5 rounded-xl border bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+              <Settings2 className="w-6 h-6 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-900 dark:text-white">Notification Settings</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Event routing, recipient roles, digest schedule, and login alerts are managed in System Configuration
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-gray-400 shrink-0 mt-1" />
+            </div>
             <button
               onClick={() => setView('email_logs')}
               className="flex items-start gap-4 p-5 rounded-xl border text-left transition-all hover:shadow-md bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
