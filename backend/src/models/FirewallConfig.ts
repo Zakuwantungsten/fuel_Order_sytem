@@ -45,6 +45,4 @@ const FirewallConfigSchema = new Schema<IFirewallConfig>(
   },
 );
 
-FirewallConfigSchema.index({ key: 1 }, { unique: true });
-
 export const FirewallConfig = mongoose.model<IFirewallConfig>('FirewallConfig', FirewallConfigSchema);
