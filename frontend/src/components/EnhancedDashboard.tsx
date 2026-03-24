@@ -349,7 +349,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const renderActiveComponent = () => {
     switch (activeTab) {
       case 'overview':
-        return <Dashboard onNavigate={handleNavigate} />;
+      case 'admin_overview':
+        return null; // Always-mounted via CSS hidden below
       case 'do':
         return <DeliveryOrders />;
       case 'fuel_records':
@@ -413,7 +414,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       
       // Admin sections (admin/boss roles)
       case 'admin_overview':
-        return <StandardAdminDashboard user={user} section="overview" />;
+        return null; // Always-mounted via CSS hidden below
       case 'admin_data':
         return <StandardAdminDashboard user={user} section="data" />;
       case 'admin_users':
@@ -436,11 +437,15 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       case 'manager_view':
         return <ManagerView user={user} />;
       default:
-        return <Dashboard />;
+        return null;
     }
   };
 
   const menuItems = getMenuItems();
+
+  // Determine which persistent (always-mounted) dashboards to render
+  const hasOverviewTab = menuItems.some((item: any) => item.id === 'overview');
+  const hasAdminOverviewTab = menuItems.some((item: any) => item.id === 'admin_overview');
   
   // Check if user is a yard-specific role
   const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard', 'yard_personnel'].includes(user.role);
@@ -851,6 +856,17 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               >
                 <X className="w-4 h-4" />
               </button>
+            </div>
+          )}
+          {/* Always-mounted overview dashboards — stay alive when navigating to other tabs */}
+          {hasOverviewTab && (
+            <div className={activeTab === 'overview' ? '' : 'hidden'}>
+              <Dashboard onNavigate={handleNavigate} />
+            </div>
+          )}
+          {hasAdminOverviewTab && (
+            <div className={activeTab === 'admin_overview' ? '' : 'hidden'}>
+              <StandardAdminDashboard user={user} section="overview" />
             </div>
           )}
           {renderActiveComponent()}
