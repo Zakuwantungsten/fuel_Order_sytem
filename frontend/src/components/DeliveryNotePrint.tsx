@@ -116,6 +116,25 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
               </div>
             </div>
 
+            {/* CANCELLED banner — shown only when the DO is cancelled */}
+            {order.isCancelled && (
+              <div style={{
+                backgroundColor: '#FEE2E2',
+                border: '2px solid #DC2626',
+                borderRadius: '4px',
+                padding: '8px 14px',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}>
+                <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#DC2626', letterSpacing: '2px' }}>⊘ CANCELLED</span>
+                {order.cancellationReason && (
+                  <span style={{ fontSize: '9px', color: '#991B1B', marginLeft: '8px' }}>Reason: {order.cancellationReason}</span>
+                )}
+              </div>
+            )}
+
             <div className="do-line" style={{ marginBottom: '15px' }}></div>
 
             {/* Client Information */}
@@ -162,28 +181,28 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
 
             <div className="do-line" style={{ marginBottom: '15px' }}></div>
 
-            {/* Items Table */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15px', fontSize: '8px' }}>
+            {/* Items Table — explicit light-mode colours so dark mode cannot override */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15px', fontSize: '8px', backgroundColor: '#ffffff', color: '#333333' }}>
               <thead>
-                <tr className="do-header-bg">
-                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '19%' }}>CONTAINER NO.</th>
-                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '15.5%' }}>B/L NO</th>
-                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '13.5%' }}>PACKAGES</th>
-                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '18.5%' }}>CONTENTS</th>
-                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '15.5%' }}>WEIGHT</th>
-                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '17.5%' }}>MEASUREMENT</th>
+                <tr>
+                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '19%', backgroundColor: '#F8F9FA', color: '#333333' }}>CONTAINER NO.</th>
+                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '15.5%', backgroundColor: '#F8F9FA', color: '#333333' }}>B/L NO</th>
+                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '13.5%', backgroundColor: '#F8F9FA', color: '#333333' }}>PACKAGES</th>
+                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '18.5%', backgroundColor: '#F8F9FA', color: '#333333' }}>CONTENTS</th>
+                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '15.5%', backgroundColor: '#F8F9FA', color: '#333333' }}>WEIGHT</th>
+                  <th style={{ border: '1px solid #CCCCCC', padding: '6px 5px', textAlign: 'center', width: '17.5%', backgroundColor: '#F8F9FA', color: '#333333' }}>MEASUREMENT</th>
                 </tr>
               </thead>
               <tbody>
                 <tr style={{ fontSize: '9px' }}>
-                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}>{order.containerNo || 'LOOSE CARGO'}</td>
-                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}>{order.borderEntryDRC || ''}</td>
-                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}>1</td>
-                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}>{order.cargoType || 'GOODS'}</td>
-                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}>
+                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center', backgroundColor: '#ffffff', color: '#333333' }}>{order.containerNo || 'LOOSE CARGO'}</td>
+                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center', backgroundColor: '#ffffff', color: '#333333' }}>{order.borderEntryDRC || ''}</td>
+                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center', backgroundColor: '#ffffff', color: '#333333' }}>1</td>
+                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center', backgroundColor: '#ffffff', color: '#333333' }}>{order.cargoType || 'GOODS'}</td>
+                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center', backgroundColor: '#ffffff', color: '#333333' }}>
                     {order.rateType === 'per_ton' ? `${order.tonnages ?? 0} TONS` : '-'}
                   </td>
-                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center' }}></td>
+                  <td style={{ border: '1px solid #CCCCCC', padding: '8px 5px', textAlign: 'center', backgroundColor: '#ffffff', color: '#333333' }}></td>
                 </tr>
               </tbody>
             </table>

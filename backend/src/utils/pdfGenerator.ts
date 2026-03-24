@@ -388,6 +388,22 @@ export const generateBulkDOsPDF = (
       }
     }
 
+    // CANCELLED diagonal watermark — layered on top of logo watermark
+    if (order.isCancelled) {
+      const pageWidth = 595;
+      const pageHeight = 842;
+      doc.save();
+      doc.opacity(0.12); // faint red
+      doc.font('Helvetica-Bold');
+      doc.fontSize(96);
+      doc.fillColor('#DC2626');
+      // Translate to page centre, rotate -45°, then draw centred
+      doc.translate(pageWidth / 2, pageHeight / 2);
+      doc.rotate(-45);
+      doc.text('CANCELLED', -350, -48, { width: 700, align: 'center', lineBreak: false });
+      doc.restore();
+    }
+
     // Header Section - Company details on left
     doc.fontSize(28).fillColor(colors.primary).text('TAHMEED', 40, currentY);
     doc.fontSize(8).fillColor(colors.muted)
