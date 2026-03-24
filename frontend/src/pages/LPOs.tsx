@@ -140,9 +140,31 @@ const LPOs = () => {
   const { data: driverEntries = [] } = useDriverAccountEntries();
   const lpoEntries: LPOEntry[] = lpoQuery.data?.lpos ?? [];
   // Merge server-paginated LPO entries with cached driver account entries
-  // Apply client-side station + status filters to driver account entries
+  // Apply client-side search, date range, station and status filters to driver account entries
   const orders = useMemo(() => {
     let filteredDriverEntries = driverEntries;
+
+    // Mirror the server-side search: filter by truckNo, lpoNo, dieselAt, or doSdo
+    if (searchTerm) {
+      const term = searchTerm.trim().toLowerCase();
+      filteredDriverEntries = filteredDriverEntries.filter(e =>
+        (e.truckNo || '').toLowerCase().startsWith(term) ||
+        (e.lpoNo || '').toLowerCase().startsWith(term) ||
+        (e.dieselAt || '').toLowerCase().startsWith(term) ||
+        (e.doSdo || '').toLowerCase().startsWith(term)
+      );
+    }
+
+    // Respect the selected period so driver entries from other months don't bleed in
+    if (dateRange.dateFrom || dateRange.dateTo) {
+      const from = dateRange.dateFrom ? new Date(dateRange.dateFrom).getTime() : 0;
+      const to = dateRange.dateTo ? new Date(dateRange.dateTo).getTime() : Infinity;
+      filteredDriverEntries = filteredDriverEntries.filter(e => {
+        const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+        return ts >= from && ts <= to;
+      });
+    }
+
     if (stationFilter) {
       filteredDriverEntries = filteredDriverEntries.filter(
         e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase()
@@ -154,7 +176,7 @@ const LPOs = () => {
       filteredDriverEntries = filteredDriverEntries.filter(e => e.isCancelled);
     }
     return [...lpoEntries, ...filteredDriverEntries];
-  }, [lpoEntries, driverEntries, stationFilter, statusFilter]);
+  }, [lpoEntries, driverEntries, stationFilter, statusFilter, searchTerm, dateRange.dateFrom, dateRange.dateTo]);
   const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
   const loading = lpoQuery.isLoading;
@@ -691,63 +713,19 @@ const LPOs = () => {
     }
   }, [orders, loading, filtersInitialized, availablePeriods]);
 
-  // Assign serial numbers to LPOs
-  // - Single month selected: per-month sequential SN (1, 2, 3… within that month)
-  // - Multiple months / all periods: continuous global SN, offset by pagination
+  // Assign serial numbers to LPOs — always continuous across all entries/months
   const lposWithMonthlySerialNumbers = useMemo(() => {
-    const isSingleMonth = selectedPeriods.length === 1;
-
-    if (isSingleMonth) {
-      // Group by month and assign per-month sequential SN
-      const groupedByMonth: { [key: string]: LPOEntry[] } = {};
-
-      orders.forEach(lpo => {
-        const month = getMonthFromDate(lpo.date);
-        const year = getEffectiveYear(lpo);
-        const key = `${year}-${month}`;
-        if (!groupedByMonth[key]) groupedByMonth[key] = [];
-        groupedByMonth[key].push(lpo);
-      });
-
-      const lposWithSN: LPOEntry[] = [];
-      Object.keys(groupedByMonth).forEach(monthKey => {
-        const monthLpos = groupedByMonth[monthKey];
-        monthLpos.sort((a, b) => {
-          const aSn = a.sn || 0;
-          const bSn = b.sn || 0;
-          if (aSn !== bSn) return aSn - bSn;
-          const aNum = parseInt((String(a.lpoNo).match(/(\d+)/) || ['0', '0'])[1]);
-          const bNum = parseInt((String(b.lpoNo).match(/(\d+)/) || ['0', '0'])[1]);
-          return aNum - bNum;
-        });
-        monthLpos.forEach((lpo, index) => {
-          lposWithSN.push({ ...lpo, sn: index + 1 });
-        });
-      });
-
-      lposWithSN.sort((a, b) => {
-        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bDate - aDate;
-      });
-
-      return lposWithSN;
-    } else {
-      // Multi-month: sort by date desc (matches server order), then assign
-      // continuous SN offset by current page so it never resets between months
-      const sorted = [...orders].sort((a, b) => {
-        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bDate - aDate;
-      });
-
-      const pageOffset = (currentPage - 1) * itemsPerPage;
-      return sorted.map((lpo, index) => ({
-        ...lpo,
-        sn: pageOffset + index + 1,
-      }));
-    }
-  }, [orders, selectedPeriods, currentPage, itemsPerPage]);
+    const sorted = [...orders].sort((a, b) => {
+      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bDate - aDate;
+    });
+    const pageOffset = (currentPage - 1) * itemsPerPage;
+    return sorted.map((lpo, index) => ({
+      ...lpo,
+      sn: pageOffset + index + 1,
+    }));
+  }, [orders, currentPage, itemsPerPage]);
 
   // Server already paginates — use the serial-numbered list directly
   const paginatedLpos = lposWithMonthlySerialNumbers;
