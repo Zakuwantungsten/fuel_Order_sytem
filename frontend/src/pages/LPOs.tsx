@@ -409,44 +409,6 @@ const LPOs = () => {
     setCurrentPage(1);
   }, [searchTerm, stationFilter, dateFilter, selectedPeriods]);
 
-  // Helper to parse date from various formats (e.g., "2-Dec", "1-Dec", "2025-12-02")
-  const getMonthFromDate = (dateStr: string): number | null => {
-    if (!dateStr) return null;
-    const MON: Record<string, number> = {
-      jan:1, feb:2, mar:3, apr:4, may:5, jun:6,
-      jul:7, aug:8, sep:9, oct:10, nov:11, dec:12,
-    };
-    // ISO "YYYY-MM-DD"
-    const iso = dateStr.match(/^\d{4}-(\d{2})-\d{2}/);
-    if (iso) return parseInt(iso[1], 10);
-    // "DD-Mon-YYYY" or "DD-Mon"
-    const dmon = dateStr.match(/^\d{1,2}[\-\/\s]([A-Za-z]{3,})/i);
-    if (dmon) return MON[dmon[1].toLowerCase().substring(0, 3)] ?? null;
-    // Native JS fallback
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? null : d.getMonth() + 1;
-  };
-
-  // Extract year from a stored date string (ISO or DD-Mon-YYYY)
-  const getYearFromDate = (dateStr: string): number | null => {
-    if (!dateStr) return null;
-    const iso = dateStr.match(/^(\d{4})-\d{2}-\d{2}/);
-    if (iso) return parseInt(iso[1]);
-    const dmy = dateStr.match(/^\d{1,2}[\-\/\s][A-Za-z]+[\-\/\s](\d{4})$/);
-    if (dmy) return parseInt(dmy[1]);
-    return null;
-  };
-
-  // Get the effective year for an LPO record.
-  // Imported data: year is embedded in the ISO date ("2025-12-15" → 2025).
-  // Manually-created data: date is "DD-Mon" (no year) → fall back to createdAt year.
-  const getEffectiveYear = (lpo: LPOEntry): number => {
-    const fromDate = getYearFromDate(lpo.date);
-    if (fromDate !== null) return fromDate;
-    if (lpo.createdAt) return new Date(lpo.createdAt).getFullYear();
-    return new Date().getFullYear();
-  };
-
   // Auto-clear station filter when it's no longer valid for the selected period(s)
   useEffect(() => {
     if (stationFilter && availableStations.length > 0 && !availableStations.includes(stationFilter)) {
