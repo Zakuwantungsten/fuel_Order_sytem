@@ -4,7 +4,7 @@ import {
   Lock, Key, Fingerprint, ShieldBan, Mail, Save,
   Loader2, AlertTriangle, Send, CheckCircle, XCircle,
   Plus, Trash2, ToggleLeft, ToggleRight,
-  ChevronDown, ChevronRight, X, Shield, Bell, ArrowRight,
+  X, Shield, Bell, ArrowRight,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
@@ -104,13 +104,6 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
   const [error, setError] = useState<string | null>(null);
   const [dlpDeleteTarget, setDlpDeleteTarget] = useState<string | null>(null);
   const [dlpDeleting, setDlpDeleting] = useState(false);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(['session', 'password']));
-
-  const toggle = (s: string) => setExpanded(prev => {
-    const next = new Set(prev);
-    next.has(s) ? next.delete(s) : next.add(s);
-    return next;
-  });
 
   const authHeaders = () => {
     const h: Record<string, string> = {
@@ -311,7 +304,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
     finally { setDlpDeleting(false); }
   };
 
-  const inputCls = 'w-full max-w-xs px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-indigo-500';
+  const inputCls = 'w-full max-w-xs px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500';
 
   if (securityLoadState.isLoading) return <UnifiedTabLoader label="Loading security policies..." heightClassName="py-16" />;
   if (securityLoadState.isError) {
@@ -349,42 +342,42 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
       {/* ── Stats Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
+        <div className="bg-indigo-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
             <Lock className="w-3.5 h-3.5 text-indigo-500" />
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Session Timeout</span>
           </div>
-          <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{sessionSettings.sessionTimeout}<span className="text-sm font-normal text-gray-400">m</span></p>
+          <p className="text-[22px] font-medium text-orange-600">{sessionSettings.sessionTimeout}<span className="text-sm font-normal text-gray-400">m</span></p>
         </div>
-        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
+        <div className="bg-purple-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
             <Key className="w-3.5 h-3.5 text-purple-500" />
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Password Min</span>
           </div>
-          <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{passwordPolicy.minLength}<span className="text-sm font-normal text-gray-400"> chars</span></p>
+          <p className="text-[22px] font-medium text-purple-600">{passwordPolicy.minLength}<span className="text-sm font-normal text-gray-400"> chars</span></p>
         </div>
-        <div className="bg-teal-50 dark:bg-teal-900/20 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
+        <div className="bg-teal-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
             <Fingerprint className="w-3.5 h-3.5 text-teal-500" />
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">MFA Enforcement</span>
           </div>
-          <p className="text-2xl font-bold text-teal-600 dark:text-teal-400">
+          <p className="text-[22px] font-medium text-teal-600">
             {mfaSettings.globalEnabled ? `${mfaSettings.requiredRoles.length} roles` : 'Off'}
           </p>
         </div>
-        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
+        <div className="bg-orange-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
             <ShieldBan className="w-3.5 h-3.5 text-orange-500" />
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Active DLP Rules</span>
           </div>
-          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{dlpStats?.activeRules ?? '—'}</p>
+          <p className="text-[22px] font-medium text-orange-600">{dlpStats?.activeRules ?? '—'}</p>
         </div>
       </div>
 
       {/* ═══════ Session & Security ═══════ */}
-      <SectionCard title="Session & Security" icon={<Lock className="w-5 h-5" />} open={expanded.has('session')} onToggle={() => toggle('session')}>
-        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-3 mb-4 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+      <SectionCard title="Session & Security" icon={<Lock className="w-5 h-5" />}>
+        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3 mb-4 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
           <p className="text-sm text-orange-800 dark:text-orange-200">Changes affect <strong>all users</strong>. Existing sessions remain valid until their current token expires.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
@@ -402,10 +395,10 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
             <label className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox" checked={sessionSettings.allowMultipleSessions}
                 onChange={e => setSessionSettings(p => ({ ...p, allowMultipleSessions: e.target.checked }))}
-                className="w-4 h-4 text-indigo-600 rounded mt-0.5" />
+                className="w-4 h-4 text-orange-600 rounded mt-0.5" />
               <div>
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">Allow multiple concurrent sessions</span>
-                <span className="text-xs text-gray-500">Users can be logged in from multiple devices</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Users can be logged in from multiple devices</span>
               </div>
             </label>
           </div>
@@ -416,7 +409,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
       </SectionCard>
 
       {/* ═══════ Password Policy ═══════ */}
-      <SectionCard title="Password Policy" icon={<Key className="w-5 h-5" />} open={expanded.has('password')} onToggle={() => toggle('password')}>
+      <SectionCard title="Password Policy" icon={<Key className="w-5 h-5" />}>
         <div className="space-y-4 mb-4">
           <InputField label="Minimum Length" value={passwordPolicy.minLength}
             onChange={v => setPasswordPolicy(p => ({ ...p, minLength: parseInt(v) || 12 }))} cls={inputCls} />
@@ -430,7 +423,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
               <label key={key} className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={(passwordPolicy as any)[key]}
                   onChange={e => setPasswordPolicy(p => ({ ...p, [key]: e.target.checked }))}
-                  className="w-4 h-4 rounded text-indigo-600" />
+                  className="w-4 h-4 rounded text-orange-600" />
                 <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
               </label>
             ))}
@@ -440,7 +433,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
           {/* Password Expiration */}
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Password Expiration</h4>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Password Expiration</h4>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expiration Interval</label>
@@ -456,7 +449,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                   <option value={180}>180 days</option>
                   <option value={365}>365 days</option>
                 </select>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Force users to change password after this period</p>
+                <p className="text-xs text-gray-500 mt-1">Force users to change password after this period</p>
               </div>
               {passwordPolicy.expirationDays > 0 && (
                 <>
@@ -480,7 +473,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                             }))}
                             className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
                               active
-                                ? 'bg-indigo-100 dark:bg-indigo-900/40 border-indigo-400 text-indigo-700 dark:text-indigo-300'
+                                ? 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-400 dark:border-indigo-600 text-indigo-700 dark:text-indigo-300'
                                 : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-indigo-300'
                             }`}
                           >
@@ -501,9 +494,9 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
       </SectionCard>
 
       {/* ═══════ MFA Enforcement ═══════ */}
-      <SectionCard title="MFA Enforcement" icon={<Fingerprint className="w-5 h-5" />} open={expanded.has('mfa')} onToggle={() => toggle('mfa')}>
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4 flex items-start gap-2">
-          <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+      <SectionCard title="MFA Enforcement" icon={<Fingerprint className="w-5 h-5" />}>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4 flex items-start gap-2">
+          <Shield className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
           <p className="text-sm text-blue-800 dark:text-blue-200">
             When enabled, users in selected roles must set up MFA before accessing the system. Others can optionally enable MFA from their profile.
           </p>
@@ -519,8 +512,8 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
             </div>
             <button
               onClick={() => setMfaSettings(p => ({ ...p, globalEnabled: !p.globalEnabled }))}
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                mfaSettings.globalEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
+                mfaSettings.globalEnabled ? 'bg-orange-600' : 'bg-gray-300 dark:bg-gray-600'
               }`}>
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
                 mfaSettings.globalEnabled ? 'translate-x-6' : 'translate-x-1'
@@ -537,17 +530,17 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                   <label key={value}
                     className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${
                       mfaSettings.requiredRoles.includes(value)
-                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30'
-                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20'
+                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}>
                     <input type="checkbox" checked={mfaSettings.requiredRoles.includes(value)}
-                      onChange={() => toggleMFARole(value)} className="w-4 h-4 rounded text-indigo-600" />
+                      onChange={() => toggleMFARole(value)} className="w-4 h-4 rounded text-orange-600" />
                     <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
                   </label>
                 ))}
               </div>
               {mfaSettings.requiredRoles.length === 0 && (
-                <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">⚠ MFA is enabled but no roles are selected.</p>
+                <p className="text-xs text-orange-600 mt-2">⚠ MFA is enabled but no roles are selected.</p>
               )}
             </div>
           )}
@@ -564,11 +557,11 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                   <label key={value}
                     className={`flex items-start gap-2 p-3 rounded-lg cursor-pointer border transition-colors flex-1 min-w-[180px] ${
                       mfaSettings.allowedMethods.includes(value)
-                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30'
-                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20'
+                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}>
                     <input type="checkbox" checked={mfaSettings.allowedMethods.includes(value)}
-                      onChange={() => toggleMFAMethod(value)} className="w-4 h-4 rounded text-indigo-600 mt-0.5" />
+                      onChange={() => toggleMFAMethod(value)} className="w-4 h-4 rounded text-orange-600 mt-0.5" />
                     <div>
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{label}</span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">{desc}</span>
@@ -577,7 +570,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                 ))}
               </div>
               {mfaSettings.allowedMethods.length === 1 && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">At least one method must remain enabled.</p>
+                <p className="text-xs text-gray-500 mt-2">At least one method must remain enabled.</p>
               )}
             </div>
           )}
@@ -593,14 +586,14 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                   const hasOverride = !!mfaSettings.roleMethodOverrides[role];
                   const effective = mfaSettings.roleMethodOverrides[role] ?? mfaSettings.allowedMethods;
                   return (
-                    <div key={role} className={`flex items-center gap-3 p-2 rounded-lg border ${hasOverride ? 'border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                    <div key={role} className={`flex items-center gap-3 p-2 rounded-lg border ${hasOverride ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300 min-w-[120px]">{roleLabel}</span>
                       <div className="flex items-center gap-3 flex-1">
                         {[{ value: 'totp', label: 'TOTP' }, { value: 'email', label: 'Email' }].map(m => (
                           <label key={m.value} className="inline-flex items-center gap-1.5 cursor-pointer">
                             <input type="checkbox" checked={effective.includes(m.value)}
                               onChange={() => toggleRoleMethodOverride(role, m.value)}
-                              className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                              className="h-3.5 w-3.5 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
                             <span className="text-xs text-gray-600 dark:text-gray-400">{m.label}</span>
                           </label>
                         ))}
@@ -626,14 +619,14 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
       </SectionCard>
 
       {/* ═══════ Login Security → moved to System > Configuration > Notifications ═══════ */}
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-5 py-4">
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
-            <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <Bell className="w-4 h-4 text-amber-600" />
           </div>
           <div className="min-w-0">
-            <div className="text-[13px] font-bold text-amber-900 dark:text-amber-200">Login Security Notifications</div>
-            <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+            <div className="text-[13px] font-medium text-amber-900 dark:text-amber-200">Login Security Notifications</div>
+            <div className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
               Device tracking · Login notification emails · New device alerts — managed in System Configuration
             </div>
           </div>
@@ -644,26 +637,26 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
             sessionStorage.setItem('sa_system_config_focus_section', 'notifications');
             onNavigate?.('sa_system');
           }}
-          className="shrink-0 flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-amber-700"
+          className="shrink-0 flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-amber-700"
         >
           System Config <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* ═══════ DLP Rules ═══════ */}
-      <SectionCard title="Data Loss Prevention" icon={<ShieldBan className="w-5 h-5" />} open={expanded.has('dlp')} onToggle={() => toggle('dlp')}>
+      <SectionCard title="Data Loss Prevention" icon={<ShieldBan className="w-5 h-5" />}>
         {/* DLP stats */}
         {dlpStats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             {[
-              { label: 'Total Rules', value: dlpStats.totalRules, cls: 'text-indigo-600 dark:text-indigo-400' },
-              { label: 'Active', value: dlpStats.activeRules, cls: 'text-green-600 dark:text-green-400' },
-              { label: 'Total Triggers', value: dlpStats.totalTriggers, cls: 'text-orange-600 dark:text-orange-400' },
-              { label: 'Rule Types', value: Object.keys(dlpStats.rulesByType).length, cls: 'text-purple-600 dark:text-purple-400' },
+              { label: 'Total Rules', value: dlpStats.totalRules, cls: 'text-orange-600' },
+              { label: 'Active', value: dlpStats.activeRules, cls: 'text-green-600' },
+              { label: 'Total Triggers', value: dlpStats.totalTriggers, cls: 'text-orange-600' },
+              { label: 'Rule Types', value: Object.keys(dlpStats.rulesByType).length, cls: 'text-purple-600' },
             ].map(s => (
               <div key={s.label} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-100 dark:border-gray-600">
                 <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
-                <p className={`text-xl font-bold mt-0.5 ${s.cls}`}>{s.value}</p>
+                <p className={`text-[15px] font-medium mt-0.5 ${s.cls}`}>{s.value}</p>
               </div>
             ))}
           </div>
@@ -672,7 +665,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
         {/* Add rule button */}
         <div className="flex justify-end mb-3">
           <button onClick={() => setShowDLPCreate(!showDLPCreate)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition-colors">
+            className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 transition-colors">
             <Plus className="w-4 h-4" /> Add Rule
           </button>
         </div>
@@ -680,36 +673,36 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
         {/* Create form */}
         {showDLPCreate && (
           <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-4 space-y-3 border border-gray-200 dark:border-gray-600">
-            <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">New DLP Rule</h4>
+            <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">New DLP Rule</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Name</label>
                 <input value={dlpForm.name} onChange={e => setDlpForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
               </div>
               <div>
                 <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Rule Type</label>
                 <select value={dlpForm.ruleType} onChange={e => setDlpForm(f => ({ ...f, ruleType: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                   {Object.entries(RULE_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Description</label>
                 <input value={dlpForm.description} onChange={e => setDlpForm(f => ({ ...f, description: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
               </div>
               {dlpForm.ruleType === 'export_limit' && (
                 <div>
                   <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Max Records per Export</label>
                   <input type="number" value={dlpForm.maxRecords} onChange={e => setDlpForm(f => ({ ...f, maxRecords: parseInt(e.target.value) }))}
-                    className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
                 </div>
               )}
               <div>
                 <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Action</label>
                 <select value={dlpForm.action} onChange={e => setDlpForm(f => ({ ...f, action: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                   <option value="block">Block</option><option value="warn">Warn</option><option value="log">Log Only</option>
                 </select>
               </div>
@@ -728,8 +721,8 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
               </div>
             </div>
             <div className="flex gap-2 pt-1">
-              <button onClick={createDLPRule} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">Create</button>
-              <button onClick={() => setShowDLPCreate(false)} className="px-4 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">Cancel</button>
+              <button onClick={createDLPRule} className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700">Create</button>
+              <button onClick={() => setShowDLPCreate(false)} className="px-4 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm">Cancel</button>
             </div>
           </div>
         )}
@@ -745,34 +738,34 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
         ) : (
           <div className="space-y-2">
             {dlpRules.map(rule => (
-              <div key={rule._id} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-100 dark:border-gray-600">
+              <div key={rule._id} className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 border border-gray-100 dark:border-gray-600">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="font-medium text-sm text-gray-900 dark:text-gray-100">{rule.name}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        rule.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        rule.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
                       }`}>{rule.isActive ? 'Active' : 'Inactive'}</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
                         {RULE_TYPES[rule.ruleType] || rule.ruleType}
                       </span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                        rule.action === 'block' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                          : rule.action === 'warn' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        rule.action === 'block' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                          : rule.action === 'warn' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                          : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                       }`}>{rule.action}</span>
                     </div>
                     {rule.description && <p className="text-xs text-gray-500 dark:text-gray-400">{rule.description}</p>}
-                    <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400">
+                    <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
                       <span>Applies to: {rule.appliesTo.join(', ')}</span>
                       <span>Triggered: {rule.triggerCount}x</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => toggleDLPRule(rule._id)} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
+                    <button onClick={() => toggleDLPRule(rule._id)} className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors">
                       {rule.isActive ? <ToggleRight className="w-5 h-5 text-green-500" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
                     </button>
-                    <button onClick={() => deleteDLPRule(rule._id)} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-gray-400 hover:text-red-500 transition-colors">
+                    <button onClick={() => deleteDLPRule(rule._id)} className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -784,7 +777,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
       </SectionCard>
 
       {/* ═══════ Email Notifications ═══════ */}
-      <SectionCard title="Email Notifications" icon={<Mail className="w-5 h-5" />} open={expanded.has('email')} onToggle={() => toggle('email')}>
+      <SectionCard title="Email Notifications" icon={<Mail className="w-5 h-5" />}>
         <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg mb-4">
           <div className="flex items-center gap-3">
             {emailStatus === 'connected' && <CheckCircle className="w-5 h-5 text-green-500" />}
@@ -807,7 +800,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
         {emailStatus === 'connected' && (
           <button onClick={sendTestEmail} disabled={sendingTest}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors text-sm">
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors text-sm">
             <Send className="w-4 h-4" />
             {sendingTest ? 'Sending…' : 'Send Test Email'}
           </button>
@@ -819,7 +812,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
             <p className="text-sm text-red-700 dark:text-red-300 mb-2">
               Configure SMTP credentials in the <strong>Integrations</strong> tab, or add these to your .env file:
             </p>
-            <code className="block text-xs bg-red-100 dark:bg-red-900/40 p-2 rounded leading-relaxed">
+            <code className="block text-xs bg-red-100 dark:bg-red-900/30 p-2 rounded leading-relaxed text-red-900 dark:text-red-200">
               EMAIL_HOST=smtp.gmail.com<br />EMAIL_PORT=587<br />EMAIL_USER=your@email.com<br />EMAIL_PASSWORD=your-app-password
             </code>
           </div>
@@ -845,20 +838,16 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
 /* ───────── Shared Sub-Components ───────── */
 
-function SectionCard({ title, icon, open, onToggle, children }: {
-  title: string; icon: React.ReactNode; open: boolean; onToggle: () => void; children: React.ReactNode;
+function SectionCard({ title, icon, children }: {
+  title: string; icon: React.ReactNode; children: React.ReactNode;
 }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-      <button onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-        <div className="flex items-center gap-3">
-          <div className="text-gray-700 dark:text-gray-300">{icon}</div>
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-        </div>
-        {open ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-      </button>
-      {open && <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-700 pt-4">{children}</div>}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <div className="text-gray-500 dark:text-gray-400">{icon}</div>
+        <h3 className="text-[13px] font-medium text-gray-900 dark:text-gray-100">{title}</h3>
+      </div>
+      <div className="px-5 pb-5 pt-4">{children}</div>
     </div>
   );
 }
@@ -868,9 +857,9 @@ function InputField({ label, hint, value, onChange, cls }: {
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
+      <label className="block text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{label}</label>
       <input type="number" min={0} value={value} onChange={e => onChange(e.target.value)} className={cls} />
-      {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -878,7 +867,7 @@ function InputField({ label, hint, value, onChange, cls }: {
 function SaveBtn({ label, saving, onClick }: { label: string; saving: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick} disabled={saving}
-      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm disabled:opacity-50 transition-colors">
+      className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm disabled:opacity-50 transition-colors">
       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
       {saving ? 'Saving...' : label}
     </button>

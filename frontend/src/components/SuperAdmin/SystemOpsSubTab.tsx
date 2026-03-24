@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Cpu, Wrench, Gauge, Database, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Cpu, Wrench, Database, AlertTriangle, CheckCircle } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import cronJobService from '../../services/cronJobService';
 import maintenanceModeService from '../../services/maintenanceModeService';
 import apiClient from '../../services/api';
 import CronJobsTab from './CronJobsTab';
 import MaintenanceModeTab from './MaintenanceModeTab';
-import RateLimitConfigTab from './RateLimitConfigTab';
 import DbIndexExplorerTab from './DbIndexExplorerTab';
 
 interface Props {
@@ -91,15 +90,13 @@ export default function SystemOpsSubTab({ onMessage }: Props) {
       {loading ? (
         <UnifiedTabLoader label="Loading operations..." heightClassName="h-28" />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <StatTile label="Cron Jobs Active"  value={`${stats?.jobsEnabled ?? 0}/${stats?.jobsTotal ?? 0}`}
             sub={stats?.jobErrors ? `${stats.jobErrors} with errors` : 'All OK'}
             icon={Cpu}      iconBg="#EFF6FF" iconColor="#2563EB" />
           <StatTile label="Maintenance"       value={stats?.maintenanceActive ? 'ON' : 'OFF'}
             icon={Wrench}   iconBg={stats?.maintenanceActive ? '#FEF2F2' : '#F0FDF4'}
             iconColor={stats?.maintenanceActive ? '#DC2626' : '#16A34A'} />
-          <StatTile label="Rate Limit Config" value="Active"
-            icon={Gauge}    iconBg="#FFFBEB" iconColor="#D97706" />
           <StatTile label="DB Indexes"        value={stats?.indexCount ?? 0}
             sub={`${stats?.collectionCount ?? 0} collections`}
             icon={Database} iconBg="#F5F3FF" iconColor="#7C3AED" />
@@ -131,10 +128,6 @@ export default function SystemOpsSubTab({ onMessage }: Props) {
       {/* ── Maintenance Mode ────────────────────────────────────────────────── */}
       <SectionDivider label="Maintenance Mode" icon={Wrench} />
       <MaintenanceModeTab onMessage={fwd} />
-
-      {/* ── Rate Limits ─────────────────────────────────────────────────────── */}
-      <SectionDivider label="Rate Limits" icon={Gauge} />
-      <RateLimitConfigTab onMessage={fwd} />
 
       {/* ── Database Indexes ────────────────────────────────────────────────── */}
       <SectionDivider label="Database Indexes" icon={Database} />

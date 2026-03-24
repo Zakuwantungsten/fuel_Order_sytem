@@ -4,13 +4,27 @@ import MonitoringInfraSubTab from './MonitoringInfraSubTab';
 import MonitoringAnalyticsSubTab from './MonitoringAnalyticsSubTab';
 import MonitoringAlertsSubTab from './MonitoringAlertsSubTab';
 
-const SUB_TABS = [
-  { id: 'infra',     label: 'Infrastructure',      icon: Server },
-  { id: 'analytics', label: 'Analytics',            icon: BarChart3 },
-  { id: 'alerts',    label: 'Alerts & Integration', icon: Bell },
-] as const;
+/* ─── Navigation groups (sidebar pattern) ─────────────────────────── */
 
-type SubTab = typeof SUB_TABS[number]['id'];
+type SubTab = 'infra' | 'analytics' | 'alerts';
+interface NavItem  { id: SubTab; label: string; icon: React.ReactNode }
+interface NavGroup { label: string; items: NavItem[] }
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'System',
+    items: [
+      { id: 'infra',     label: 'Infrastructure', icon: <Server   className="w-3.5 h-3.5" /> },
+      { id: 'analytics', label: 'Analytics',       icon: <BarChart3 className="w-3.5 h-3.5" /> },
+    ],
+  },
+  {
+    label: 'Notifications',
+    items: [
+      { id: 'alerts', label: 'Alerts & Integration', icon: <Bell className="w-3.5 h-3.5" /> },
+    ],
+  },
+];
 
 interface MonitoringUnifiedTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -28,42 +42,54 @@ export default function MonitoringUnifiedTab({ onMessage }: MonitoringUnifiedTab
   }, []);
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <Activity className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-          Monitoring
-        </h2>
+      <div className="flex items-center gap-2">
+        <Activity className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Monitoring</h2>
       </div>
 
-      {/* Sub-tab navigation */}
-      <div className="border-b dark:border-gray-700">
-        <nav className="flex gap-1 -mb-px overflow-x-auto scrollbar-thin">
-          {SUB_TABS.map(tab => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setSubTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  subTab === tab.id
-                    ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      {/* Sidebar + content */}
+      <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ minHeight: 520 }}>
 
-      {/* Tab content */}
-      {subTab === 'infra'     && <MonitoringInfraSubTab onMessage={onMessage} />}
-      {subTab === 'analytics' && <MonitoringAnalyticsSubTab onMessage={onMessage} />}
-      {subTab === 'alerts'    && <MonitoringAlertsSubTab />}
+        {/* LEFT: sidebar nav */}
+        <aside className="w-44 bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 py-2 overflow-y-auto">
+          {NAV_GROUPS.map(group => (
+            <div key={group.label}>
+              <p className="px-3.5 pt-4 pb-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                {group.label}
+              </p>
+              {group.items.map(item => {
+                const active = subTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setSubTab(item.id)}
+                    className={[
+                      'w-full flex items-center gap-2 py-1.5 text-[13px] transition-colors',
+                      active
+                        ? 'border-l-2 border-orange-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium pl-[12px]'
+                        : 'border-l-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/60 dark:hover:bg-gray-700/60 pl-[14px]',
+                    ].join(' ')}
+                  >
+                    <span className={active ? 'text-orange-600 dark:text-orange-500' : 'text-gray-400 dark:text-gray-500'}>
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </aside>
+
+        {/* RIGHT: content panel */}
+        <div className="flex-1 p-5 bg-white dark:bg-gray-900 overflow-y-auto">
+          {subTab === 'infra'     && <MonitoringInfraSubTab onMessage={onMessage} />}
+          {subTab === 'analytics' && <MonitoringAnalyticsSubTab onMessage={onMessage} />}
+          {subTab === 'alerts'    && <MonitoringAlertsSubTab />}
+        </div>
+      </div>
     </div>
   );
 }

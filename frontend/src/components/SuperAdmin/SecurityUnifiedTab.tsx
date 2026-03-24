@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { Shield, Settings, ShieldCheck, Lock, Radar, Bell, Keyboard } from 'lucide-react';
+import { Shield, Settings, ShieldCheck, Lock, Radar, Bell, Keyboard, Flame } from 'lucide-react';
 import SecurityPoliciesSubTab from './SecurityPoliciesSubTab';
+import FirewallTab from './FirewallTab';
 import SecurityAccessControlSubTab from './SecurityAccessControlSubTab';
 import SecuritySessionsSubTab from './SecuritySessionsSubTab';
 import SecurityThreatMonitorSubTab from './SecurityThreatMonitorSubTab';
@@ -8,11 +9,12 @@ import SecurityAlertsSubTab from './SecurityAlertsSubTab';
 import SecurityOverviewBanner from './SecurityOverviewBanner';
 
 const SUB_TABS = [
-  { id: 'policies',       label: 'Policies',         shortLabel: 'Policies',  icon: Settings,    shortcut: '1' },
-  { id: 'access_control', label: 'Access Control',   shortLabel: 'Access',    icon: Lock,        shortcut: '2' },
-  { id: 'sessions',       label: 'Sessions & Users',  shortLabel: 'Sessions',  icon: ShieldCheck, shortcut: '3' },
-  { id: 'threats',        label: 'Threat Monitor',    shortLabel: 'Threats',   icon: Radar,       shortcut: '4' },
-  { id: 'alerts',          label: 'Alerts & Incidents', shortLabel: 'Alerts',    icon: Bell,        shortcut: '5' },
+  { id: 'policies',       label: 'Policies',          shortLabel: 'Policies',  icon: Settings,    shortcut: '1' },
+  { id: 'firewall',       label: 'Firewall',           shortLabel: 'Firewall',  icon: Flame,       shortcut: '2' },
+  { id: 'access_control', label: 'Access Control',    shortLabel: 'Access',    icon: Lock,        shortcut: '3' },
+  { id: 'sessions',       label: 'Sessions & Users',   shortLabel: 'Sessions',  icon: ShieldCheck, shortcut: '4' },
+  { id: 'threats',        label: 'Threat Monitor',     shortLabel: 'Threats',   icon: Radar,       shortcut: '5' },
+  { id: 'alerts',         label: 'Alerts & Incidents', shortLabel: 'Alerts',    icon: Bell,        shortcut: '6' },
 ] as const;
 
 type SubTab = typeof SUB_TABS[number]['id'];
@@ -79,7 +81,7 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
             Security Center
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 ml-[52px]">
-            Manage policies, access control, sessions, threats, and incidents
+            Manage policies, firewall, access control, sessions, threats, and incidents
           </p>
           <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1 ml-[52px] font-medium">
             Canonical owner for security policy and session configuration
@@ -87,7 +89,7 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
         </div>
         <div className="hidden lg:flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
           <Keyboard className="w-3.5 h-3.5" />
-          <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded font-mono">1</kbd>–<kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded font-mono">5</kbd> tabs
+          <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded font-mono">1</kbd>–<kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded font-mono">6</kbd> tabs
           <span className="mx-0.5">·</span>
           <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded font-mono">R</kbd> refresh
         </div>
@@ -135,10 +137,11 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
       {/* Tab content */}
       <div role="tabpanel" id={`security-panel-${subTab}`} aria-label={SUB_TABS.find(t => t.id === subTab)?.label}>
         {subTab === 'policies'       && <SecurityPoliciesSubTab onMessage={onMessage} />}
+        {subTab === 'firewall'        && <FirewallTab onMessage={onMessage} />}
         {subTab === 'access_control' && <SecurityAccessControlSubTab onMessage={onMessage} />}
         {subTab === 'sessions'       && <SecuritySessionsSubTab onMessage={onMessage} />}
         {subTab === 'threats'        && <SecurityThreatMonitorSubTab />}
-        {subTab === 'alerts'          && <SecurityAlertsSubTab />}
+        {subTab === 'alerts'         && <SecurityAlertsSubTab />}
       </div>
     </div>
   );

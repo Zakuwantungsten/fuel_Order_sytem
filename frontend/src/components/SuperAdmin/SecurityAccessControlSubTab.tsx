@@ -1,10 +1,7 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
-  Shield, Network, Key, KeyRound, Loader2,
-  ShieldBan, Ban,
+  Shield, Key, KeyRound, Loader2, ShieldBan,
 } from 'lucide-react';
-import IPRulesTab from './IPRulesTab';
-import SecurityBlocklistTab from './SecurityBlocklistTab';
 import ApiTokenManagerTab from './ApiTokenManagerTab';
 import BreakGlassTab from './BreakGlassTab';
 import RolePermissionMatrix from './RolePermissionMatrix';
@@ -16,148 +13,136 @@ interface Props {
   onMessage: (type: 'success' | 'error', message: string) => void;
 }
 
-type Section = 'ip' | 'tokens' | 'breakglass' | 'permissions' | 'conditional';
+type Section = 'tokens' | 'breakglass' | 'permissions' | 'conditional';
 
 interface OverviewStats {
-  manualRules: number;
-  activeBlocks: number;
   apiTokens: number;
   breakGlassAccounts: number;
 }
 
-const SECTIONS: { id: Section; label: string; shortLabel: string; icon: React.ReactNode }[] = [
-  { id: 'ip',          label: 'IP Management',     shortLabel: 'IP',          icon: <Network className="w-4 h-4" /> },
-  { id: 'tokens',      label: 'API Tokens',        shortLabel: 'Tokens',      icon: <Key className="w-4 h-4" /> },
-  { id: 'breakglass',  label: 'Emergency Access',  shortLabel: 'Emergency',   icon: <KeyRound className="w-4 h-4" /> },
-  { id: 'permissions', label: 'Permissions',        shortLabel: 'Perms',       icon: <Shield className="w-4 h-4" /> },
-  { id: 'conditional', label: 'Conditional Access', shortLabel: 'Conditional', icon: <ShieldBan className="w-4 h-4" /> },
+/* ─── Navigation groups (Cloudflare sidebar pattern) ─────────── */
+
+interface NavItem  { id: Section; label: string; icon: React.ReactNode }
+interface NavGroup { label: string; items: NavItem[] }
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Credentials',
+    items: [
+      { id: 'tokens',     label: 'API Tokens',       icon: <Key      className="w-3.5 h-3.5" /> },
+      { id: 'breakglass', label: 'Emergency Access', icon: <KeyRound className="w-3.5 h-3.5" /> },
+    ],
+  },
+  {
+    label: 'Permissions',
+    items: [
+      { id: 'permissions', label: 'Role Permissions',  icon: <Shield    className="w-3.5 h-3.5" /> },
+      { id: 'conditional', label: 'Conditional Access', icon: <ShieldBan className="w-3.5 h-3.5" /> },
+    ],
+  },
 ];
 
 /* ───────── Component ───────── */
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
-export default function SecurityAccessControlSubTab({ onMessage }: Props) {
-  const [section, setSection] = useState<Section>('ip');
-  const [stats, setStats] = useState<OverviewStats | null>(null);
+export default function SecurityAccessControlSubTab({ onMessage: _onMessage }: Props) {
+  const [section, setSection] = useState<Section>('tokens');
+  const [stats, setStats]     = useState<OverviewStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [ipView, setIpView] = useState<'rules' | 'blocklist'>('rules');
 
-  const authHeaders = () => ({
+  const authHeaders = useCallback(() => ({
     'Content-Type': 'application/json',
     Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
-  });
+  }), []);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     setLoadingStats(true);
     try {
-      const [blocklistRes, tokensRes, breakGlassRes, ipRulesRes] = await Promise.all([
-        fetch(`${API_BASE}/system-admin/security-blocklist/stats`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch(`${API_BASE}/system-admin/api-tokens`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+      const [tokensRes, breakGlassRes] = await Promise.all([
+        fetch(`${API_BASE}/system-admin/api-tokens`,  { headers: authHeaders() }).then(r => r.json()).catch(() => null),
         fetch(`${API_BASE}/system-admin/break-glass`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-        fetch(`${API_BASE}/system-admin/ip-rules`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
       ]);
-
       setStats({
-        manualRules: Array.isArray(ipRulesRes?.data) ? ipRulesRes.data.length : ipRulesRes?.data?.rules?.length ?? 0,
-        activeBlocks: blocklistRes?.data?.activeBlocks ?? 0,
-        apiTokens: Array.isArray(tokensRes?.data) ? tokensRes.data.filter((t: any) => !t.revoked).length : 0,
+        apiTokens:          Array.isArray(tokensRes?.data)     ? tokensRes.data.filter((t: any) => !t.revoked).length : 0,
         breakGlassAccounts: Array.isArray(breakGlassRes?.data) ? breakGlassRes.data.length : 0,
       });
-    } catch {
-      // Stats are non-critical
-    } finally {
-      setLoadingStats(false);
-    }
-  };
+    } catch { /* non-critical */ } finally { setLoadingStats(false); }
+  }, [authHeaders]);
 
-  useEffect(() => { loadStats(); }, []);
+  useEffect(() => { loadStats(); }, [loadStats]);
 
-  const reversedOnMessage = (msg: string, type?: 'success' | 'error' | 'info') => {
-    onMessage((type || 'error') as 'success' | 'error', msg);
-  };
-
-  const STAT_CARDS = [
-    { label: 'IP Rules', value: stats?.manualRules ?? 0, icon: <Network className="w-4 h-4 text-indigo-500" />, color: 'from-indigo-50 to-indigo-100/50 dark:from-indigo-900/20 dark:to-indigo-900/10', valueColor: 'text-indigo-600 dark:text-indigo-400' },
-    { label: 'Active Blocks', value: stats?.activeBlocks ?? 0, icon: <Ban className="w-4 h-4 text-red-500" />, color: 'from-red-50 to-red-100/50 dark:from-red-900/20 dark:to-red-900/10', valueColor: 'text-red-600 dark:text-red-400' },
-    { label: 'Active Tokens', value: stats?.apiTokens ?? 0, icon: <Key className="w-4 h-4 text-blue-500" />, color: 'from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-900/10', valueColor: 'text-blue-600 dark:text-blue-400' },
-    { label: 'Break-Glass', value: stats?.breakGlassAccounts ?? 0, icon: <KeyRound className="w-4 h-4 text-amber-500" />, color: 'from-amber-50 to-amber-100/50 dark:from-amber-900/20 dark:to-amber-900/10', valueColor: 'text-amber-600 dark:text-amber-400' },
+  /* ── Stat tiles ───────────────────────────────────────────── */
+  const STAT_TILES = [
+    { label: 'ACTIVE TOKENS', value: stats?.apiTokens ?? 0,          icon: <Key      className="w-4 h-4 text-gray-400 dark:text-gray-500" />, dot: 'bg-blue-500' },
+    { label: 'BREAK-GLASS',   value: stats?.breakGlassAccounts ?? 0, icon: <KeyRound className="w-4 h-4 text-gray-400 dark:text-gray-500" />, dot: 'bg-amber-500' },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Overview Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {STAT_CARDS.map(card => (
-          <div key={card.label} className={`bg-gradient-to-br ${card.color} rounded-xl p-4 border border-gray-100 dark:border-gray-700`}>
-            <div className="flex items-center gap-2 mb-1">
-              {card.icon}
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{card.label}</span>
+    <div className="flex flex-col gap-4">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 gap-3">
+        {STAT_TILES.map(tile => (
+          <div
+            key={tile.label}
+            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex items-center gap-3"
+          >
+            <div className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 flex items-center justify-center flex-shrink-0">
+              {tile.icon}
             </div>
-            <p className={`text-2xl font-bold ${card.valueColor}`}>
-              {loadingStats ? <Loader2 className="w-5 h-5 animate-spin" /> : card.value}
-            </p>
+            <div>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">{tile.label}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${tile.dot}`} />
+                <p className="text-[20px] font-medium text-gray-900 dark:text-white leading-none">
+                  {loadingStats ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : tile.value}
+                </p>
+              </div>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Section Navigation + Content */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-            {SECTIONS.map(s => (
-              <button
-                key={s.id}
-                onClick={() => setSection(s.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all flex-1 justify-center ${
-                  section === s.id
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}>
-                {s.icon}
-                <span className="hidden lg:inline">{s.label}</span>
-                <span className="lg:hidden">{s.shortLabel}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="p-5">
-          {section === 'ip' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">View:</span>
-                <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+      {/* Sidebar + content */}
+      <div
+        className="flex rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+        style={{ minHeight: 520 }}
+      >
+        {/* LEFT: sidebar nav */}
+        <aside className="w-44 bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 py-2 overflow-y-auto">
+          {NAV_GROUPS.map(group => (
+            <div key={group.label}>
+              <p className="px-3.5 pt-4 pb-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                {group.label}
+              </p>
+              {group.items.map(item => {
+                const active = section === item.id;
+                return (
                   <button
-                    onClick={() => setIpView('rules')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                      ipView === 'rules'
-                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400'
-                    }`}>
-                    <Shield className="w-3.5 h-3.5 inline mr-1" />
-                    Manual Rules
+                    key={item.id}
+                    onClick={() => setSection(item.id)}
+                    className={[
+                      'w-full flex items-center gap-2 py-1.5 text-[13px] transition-colors',
+                      active
+                        ? 'border-l-2 border-orange-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium pl-[12px]'
+                        : 'border-l-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/60 dark:hover:bg-gray-700/60 pl-[14px]',
+                    ].join(' ')}
+                  >
+                    <span className={active ? 'text-orange-600 dark:text-orange-500' : 'text-gray-400 dark:text-gray-500'}>
+                      {item.icon}
+                    </span>
+                    {item.label}
                   </button>
-                  <button
-                    onClick={() => setIpView('blocklist')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                      ipView === 'blocklist'
-                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400'
-                    }`}>
-                    <ShieldBan className="w-3.5 h-3.5 inline mr-1" />
-                    Auto-Blocked &amp; Reputation
-                  </button>
-                </div>
-              </div>
-
-              {ipView === 'rules' && <IPRulesTab onMessage={reversedOnMessage} />}
-              {ipView === 'blocklist' && <SecurityBlocklistTab />}
+                );
+              })}
             </div>
-          )}
+          ))}
+        </aside>
 
-          {section === 'tokens' && <ApiTokenManagerTab />}
-          {section === 'breakglass' && <BreakGlassTab />}
+        {/* RIGHT: content panel */}
+        <div className="flex-1 p-5 bg-white dark:bg-gray-900 overflow-y-auto">
+          {section === 'tokens'      && <ApiTokenManagerTab />}
+          {section === 'breakglass'  && <BreakGlassTab />}
           {section === 'permissions' && <RolePermissionMatrix />}
           {section === 'conditional' && <ConditionalAccessPolicies />}
         </div>

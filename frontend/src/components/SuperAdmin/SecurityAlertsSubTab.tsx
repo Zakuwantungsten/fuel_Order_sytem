@@ -281,9 +281,9 @@ export default function SecurityAlertsSubTab() {
       )}
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
-          <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-600" />
+          <span className="text-sm text-red-700">{error}</span>
         </div>
       )}
 
@@ -291,10 +291,10 @@ export default function SecurityAlertsSubTab() {
       {loading && !alertsPage ? (
         <UnifiedTabLoader label="Loading security alerts..." heightClassName="py-16" />
       ) : !alertsPage || alertsPage.alerts.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-12 text-center">
+        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
           <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-3" />
-          <p className="text-gray-600 dark:text-gray-400 font-medium">No alerts found</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          <p className="text-gray-600 font-medium">No alerts found</p>
+          <p className="text-xs text-gray-400 mt-1">
             {statusFilter.includes('new') ? 'All clear! No active security alerts.' : 'No alerts match the current filter.'}
           </p>
         </div>
@@ -309,7 +309,7 @@ export default function SecurityAlertsSubTab() {
             return (
               <div
                 key={alert._id}
-                className={`border-l-4 ${ss.border} bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden`}
+                className={`border-l-4 ${ss.border} bg-white border border-gray-200 rounded-lg overflow-hidden`}
               >
                 {/* Alert header */}
                 <div className="p-4">
@@ -317,17 +317,17 @@ export default function SecurityAlertsSubTab() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`w-2 h-2 rounded-full ${ss.dot}`} />
-                        <span className={`text-xs font-semibold uppercase ${ss.text}`}>{alert.severity}</span>
+                        <span className={`text-xs font-medium uppercase ${ss.text}`}>{alert.severity}</span>
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${st.color}`}>
                           {st.icon} {st.label}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
                           {TYPE_LABELS[alert.type] || alert.type}
                         </span>
                       </div>
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mt-1.5 line-clamp-1">{alert.title}</h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{alert.message}</p>
-                      <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400 dark:text-gray-500">
+                      <h3 className="text-sm font-medium text-gray-900 mt-1.5 line-clamp-1">{alert.title}</h3>
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{alert.message}</p>
+                      <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400">
                         <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{relativeTime(alert.createdAt)}</span>
                         {alert.relatedIP && <span>IP: {alert.relatedIP}</span>}
                         {alert.relatedUsername && <span>User: {alert.relatedUsername}</span>}
@@ -344,14 +344,14 @@ export default function SecurityAlertsSubTab() {
                           <button
                             onClick={() => performAction(alert._id, 'acknowledge')}
                             disabled={isActioning}
-                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:hover:bg-yellow-900/50 transition-colors"
+                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors"
                           >
                             Acknowledge
                           </button>
                           <button
                             onClick={() => performAction(alert._id, 'investigate')}
                             disabled={isActioning}
-                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 transition-colors"
+                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
                           >
                             Investigate
                           </button>
@@ -362,14 +362,14 @@ export default function SecurityAlertsSubTab() {
                           <button
                             onClick={() => performAction(alert._id, 'resolve')}
                             disabled={isActioning}
-                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 transition-colors"
+                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
                           >
                             Resolve
                           </button>
                           <button
                             onClick={() => performAction(alert._id, 'false-positive')}
                             disabled={isActioning}
-                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600 transition-colors"
+                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
                           >
                             False +
                           </button>
@@ -377,7 +377,7 @@ export default function SecurityAlertsSubTab() {
                       )}
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : alert._id)}
-                        className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded transition-colors"
+                        className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
                       >
                         {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       </button>
@@ -387,16 +387,16 @@ export default function SecurityAlertsSubTab() {
 
                 {/* Expanded details */}
                 {isExpanded && (
-                  <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 space-y-3">
+                  <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-3">
                     {/* Metadata */}
                     {alert.metadata && Object.keys(alert.metadata).length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Details</p>
+                        <p className="text-xs font-medium text-gray-600 mb-1">Details</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                           {Object.entries(alert.metadata).map(([k, v]) => (
-                            <div key={k} className="bg-white dark:bg-gray-700/50 rounded px-2.5 py-1.5">
-                              <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase">{k}</span>
-                              <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{String(v)}</p>
+                            <div key={k} className="bg-white rounded px-2.5 py-1.5">
+                              <span className="text-[10px] text-gray-400 uppercase">{k}</span>
+                              <p className="text-xs font-medium text-gray-800 truncate">{String(v)}</p>
                             </div>
                           ))}
                         </div>
@@ -407,18 +407,18 @@ export default function SecurityAlertsSubTab() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                       <div>
                         <span className="text-gray-400">Created</span>
-                        <p className="text-gray-700 dark:text-gray-300">{new Date(alert.createdAt).toLocaleString()}</p>
+                        <p className="text-gray-700">{new Date(alert.createdAt).toLocaleString()}</p>
                       </div>
                       {alert.acknowledgedBy && (
                         <div>
                           <span className="text-gray-400">Acknowledged by</span>
-                          <p className="text-gray-700 dark:text-gray-300">{alert.acknowledgedBy} · {alert.acknowledgedAt ? relativeTime(alert.acknowledgedAt) : ''}</p>
+                          <p className="text-gray-700">{alert.acknowledgedBy} · {alert.acknowledgedAt ? relativeTime(alert.acknowledgedAt) : ''}</p>
                         </div>
                       )}
                       {alert.resolvedBy && (
                         <div>
                           <span className="text-gray-400">Resolved by</span>
-                          <p className="text-gray-700 dark:text-gray-300">{alert.resolvedBy} · {alert.resolvedAt ? relativeTime(alert.resolvedAt) : ''}</p>
+                          <p className="text-gray-700">{alert.resolvedBy} · {alert.resolvedAt ? relativeTime(alert.resolvedAt) : ''}</p>
                         </div>
                       )}
                     </div>
@@ -426,15 +426,15 @@ export default function SecurityAlertsSubTab() {
                     {/* Notes */}
                     {alert.notes.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Investigation Notes</p>
+                        <p className="text-xs font-medium text-gray-600 mb-1.5">Investigation Notes</p>
                         <div className="space-y-2">
                           {alert.notes.map((note, i) => (
-                            <div key={i} className="bg-white dark:bg-gray-700/50 rounded-lg px-3 py-2">
+                            <div key={i} className="bg-white rounded-lg px-3 py-2">
                               <div className="flex items-center justify-between mb-0.5">
-                                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{note.author}</span>
+                                <span className="text-xs font-medium text-gray-700">{note.author}</span>
                                 <span className="text-[10px] text-gray-400">{relativeTime(note.createdAt)}</span>
                               </div>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">{note.text}</p>
+                              <p className="text-xs text-gray-600">{note.text}</p>
                             </div>
                           ))}
                         </div>
@@ -449,7 +449,7 @@ export default function SecurityAlertsSubTab() {
                           value={expandedId === alert._id ? noteText : ''}
                           onChange={e => setNoteText(e.target.value)}
                           placeholder="Add investigation note..."
-                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-900"
                           onKeyDown={e => { if (e.key === 'Enter') addNote(alert._id); }}
                           maxLength={2000}
                         />
@@ -471,21 +471,21 @@ export default function SecurityAlertsSubTab() {
           {/* Pagination */}
           {alertsPage.pages > 1 && (
             <div className="flex items-center justify-between pt-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">
+              <span className="text-xs text-gray-500">
                 Page {alertsPage.page} of {alertsPage.pages} ({alertsPage.total.toLocaleString()} total)
               </span>
               <div className="flex gap-2">
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage(p => p - 1)}
-                  className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded disabled:opacity-40"
+                  className="px-3 py-1 text-xs bg-gray-100 rounded disabled:opacity-40"
                 >
                   Previous
                 </button>
                 <button
                   disabled={page >= alertsPage.pages}
                   onClick={() => setPage(p => p + 1)}
-                  className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded disabled:opacity-40"
+                  className="px-3 py-1 text-xs bg-gray-100 rounded disabled:opacity-40"
                 >
                   Next
                 </button>
