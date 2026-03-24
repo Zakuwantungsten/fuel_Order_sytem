@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import {
   Lock, Key, Fingerprint, ShieldBan, Mail, Save,
@@ -122,6 +122,14 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
     if (data.mfa) setMfaSettings(prev => ({ ...prev, ...data.mfa }));
   }, []);
 
+  // NOTE: onMessage intentionally omitted from deps — it is not memoised in the
+  // parent component, so including it would cause a new fetch on every parent
+  // re-render (e.g. after a toast). We capture it via a ref-style pattern by
+  // reading the latest value at call-time, which is safe because the function
+  // reference changes but the behaviour is identical.
+  const onMessageRef = useRef(onMessage);
+  useEffect(() => { onMessageRef.current = onMessage; });
+
   const loadSecuritySettings = useCallback(async () => {
     const result = await runSecurityLoad(
       () => systemAdminAPI.getSecuritySettings(),
@@ -133,8 +141,8 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
       return;
     }
 
-    onMessage('error', result.error);
-  }, [applySettings, onMessage, runSecurityLoad]);
+    onMessageRef.current('error', result.error);
+  }, [applySettings, runSecurityLoad]);
 
   useEffect(() => {
     loadSecuritySettings();
@@ -170,10 +178,12 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
   /* ── Save functions ── */
   const saveSession = async () => {
     const result = await sessionSaveAction.run(async () => {
-      await systemAdminAPI.updateSecuritySettings('session', sessionSettings);
+      return systemAdminAPI.updateSecuritySettings('session', sessionSettings);
     }, { errorMessage: 'Failed to save session settings' });
 
     if (result.ok) {
+      // Sync form with what was actually stored in the DB
+      if (result.data?.data?.session) setSessionSettings((prev: any) => ({ ...prev, ...result.data.data.session }));
       onMessage('success', 'Session settings saved. Changes apply to new sessions.');
     } else {
       onMessage('error', result.error);
@@ -182,10 +192,12 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
   const savePassword = async () => {
     const result = await passwordSaveAction.run(async () => {
-      await systemAdminAPI.updateSecuritySettings('password', passwordPolicy);
+      return systemAdminAPI.updateSecuritySettings('password', passwordPolicy);
     }, { errorMessage: 'Failed to save password policy' });
 
     if (result.ok) {
+      // Sync form with what was actually stored in the DB (prevents stale-value on re-mount)
+      if (result.data?.data?.password) setPasswordPolicy((prev: any) => ({ ...prev, ...result.data.data.password }));
       onMessage('success', 'Password policy saved');
     } else {
       onMessage('error', result.error);
@@ -194,10 +206,12 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
   const saveMFA = async () => {
     const result = await mfaSaveAction.run(async () => {
-      await systemAdminAPI.updateSecuritySettings('mfa', mfaSettings);
+      return systemAdminAPI.updateSecuritySettings('mfa', mfaSettings);
     }, { errorMessage: 'Failed to save MFA settings' });
 
     if (result.ok) {
+      // Sync form with what was actually stored in the DB
+      if (result.data?.data?.mfa) setMfaSettings((prev: any) => ({ ...prev, ...result.data.data.mfa }));
       onMessage('success', 'MFA settings saved');
     } else {
       onMessage('error', result.error);

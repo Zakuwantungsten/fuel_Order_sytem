@@ -2184,6 +2184,10 @@ export const getSecuritySettings = async (req: AuthRequest, res: Response): Prom
       requireNumbers: true,
       requireSpecialChars: true,
       historyCount: 5,
+      expirationDays: 0,
+      expirationWarningDays: 7,
+      expirationGraceDays: 3,
+      expirationExemptRoles: [],
     };
 
     const mfa = config?.securitySettings?.mfa || {
@@ -2198,6 +2202,9 @@ export const getSecuritySettings = async (req: AuthRequest, res: Response): Prom
       deviceTracking: true,
     };
 
+    // Prevent browsers and CDN edge nodes from serving a stale cached response
+    // after a PUT update. This endpoint returns user-specific configuration data.
+    setCacheBustingHeaders(res);
     res.status(200).json({
       success: true,
       message: 'Security settings retrieved successfully',
@@ -2225,52 +2232,61 @@ export const updateSecuritySettings = async (req: AuthRequest, res: Response): P
       throw new ApiError(400, 'Invalid security settings type');
     }
 
-    // Both 'session' and 'password' are stored in the system_settings document
-    // so SecurityTab and SystemConfigDashboard always read/write the same values.
-    let config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
-    if (!config) {
+    // Verify the document exists first
+    const existing = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    if (!existing) {
       throw new ApiError(404, 'System configuration not found. Open System Configuration to initialize it.');
     }
 
+    // Build a $set patch using dot-notation paths. This bypasses Mongoose change
+    // tracking entirely and writes atomically straight to MongoDB, which is the
+    // only reliable way to update nested paths on documents that may have been
+    // created before securitySettings was added to the schema.
+    const setFields: Record<string, any> = { lastUpdatedBy: req.user?.username || 'system' };
+
     if (type === 'session') {
-      if (!config.systemSettings) config.systemSettings = {} as any;
-      if (!config.systemSettings!.session) config.systemSettings!.session = {} as any;
-      const s = config.systemSettings!.session!;
       const { sessionTimeout, jwtExpiry, refreshTokenExpiry, maxLoginAttempts, lockoutDuration, allowMultipleSessions } = settings;
-      if (sessionTimeout !== undefined) s.sessionTimeout = sessionTimeout;
-      if (jwtExpiry !== undefined) s.jwtExpiry = jwtExpiry;
-      if (refreshTokenExpiry !== undefined) s.refreshTokenExpiry = refreshTokenExpiry;
-      if (maxLoginAttempts !== undefined) s.maxLoginAttempts = maxLoginAttempts;
-      if (lockoutDuration !== undefined) s.lockoutDuration = lockoutDuration;
-      if (allowMultipleSessions !== undefined) s.allowMultipleSessions = allowMultipleSessions;
-      config.markModified('systemSettings');
+      if (sessionTimeout !== undefined) setFields['systemSettings.session.sessionTimeout'] = sessionTimeout;
+      if (jwtExpiry !== undefined) setFields['systemSettings.session.jwtExpiry'] = jwtExpiry;
+      if (refreshTokenExpiry !== undefined) setFields['systemSettings.session.refreshTokenExpiry'] = refreshTokenExpiry;
+      if (maxLoginAttempts !== undefined) setFields['systemSettings.session.maxLoginAttempts'] = maxLoginAttempts;
+      if (lockoutDuration !== undefined) setFields['systemSettings.session.lockoutDuration'] = lockoutDuration;
+      if (allowMultipleSessions !== undefined) setFields['systemSettings.session.allowMultipleSessions'] = allowMultipleSessions;
     } else if (type === 'password') {
-      if (!config.securitySettings) config.securitySettings = {} as any;
-      if (!config.securitySettings!.password) config.securitySettings!.password = {} as any;
-      Object.assign(config.securitySettings!.password!, settings);
-      config.markModified('securitySettings');
+      if (settings.minLength !== undefined) setFields['securitySettings.password.minLength'] = settings.minLength;
+      if (settings.requireUppercase !== undefined) setFields['securitySettings.password.requireUppercase'] = settings.requireUppercase;
+      if (settings.requireLowercase !== undefined) setFields['securitySettings.password.requireLowercase'] = settings.requireLowercase;
+      if (settings.requireNumbers !== undefined) setFields['securitySettings.password.requireNumbers'] = settings.requireNumbers;
+      if (settings.requireSpecialChars !== undefined) setFields['securitySettings.password.requireSpecialChars'] = settings.requireSpecialChars;
+      if (settings.historyCount !== undefined) setFields['securitySettings.password.historyCount'] = settings.historyCount;
+      if (settings.expirationDays !== undefined) setFields['securitySettings.password.expirationDays'] = settings.expirationDays;
+      if (settings.expirationWarningDays !== undefined) setFields['securitySettings.password.expirationWarningDays'] = settings.expirationWarningDays;
+      if (settings.expirationGraceDays !== undefined) setFields['securitySettings.password.expirationGraceDays'] = settings.expirationGraceDays;
+      if (Array.isArray(settings.expirationExemptRoles)) setFields['securitySettings.password.expirationExemptRoles'] = settings.expirationExemptRoles;
     } else if (type === 'mfa') {
-      if (!config.securitySettings) config.securitySettings = {} as any;
-      if (!config.securitySettings!.mfa) config.securitySettings!.mfa = { globalEnabled: false, requiredRoles: [], allowedMethods: ['totp', 'email'], roleMethodOverrides: {} };
-      if (settings.globalEnabled !== undefined) config.securitySettings!.mfa!.globalEnabled = settings.globalEnabled;
-      if (Array.isArray(settings.requiredRoles)) config.securitySettings!.mfa!.requiredRoles = settings.requiredRoles;
-      if (Array.isArray(settings.allowedMethods)) config.securitySettings!.mfa!.allowedMethods = settings.allowedMethods;
+      if (settings.globalEnabled !== undefined) setFields['securitySettings.mfa.globalEnabled'] = settings.globalEnabled;
+      if (Array.isArray(settings.requiredRoles)) setFields['securitySettings.mfa.requiredRoles'] = settings.requiredRoles;
+      if (Array.isArray(settings.allowedMethods)) setFields['securitySettings.mfa.allowedMethods'] = settings.allowedMethods;
       if (settings.roleMethodOverrides && typeof settings.roleMethodOverrides === 'object') {
-        (config.securitySettings!.mfa as any).roleMethodOverrides = settings.roleMethodOverrides;
+        setFields['securitySettings.mfa.roleMethodOverrides'] = settings.roleMethodOverrides;
       }
-      config.markModified('securitySettings');
     } else if (type === 'notifications') {
-      if (!config.systemSettings) config.systemSettings = {} as any;
-      if (!config.systemSettings!.notifications) config.systemSettings!.notifications = {} as any;
-      const n = config.systemSettings!.notifications!;
-      if (settings.loginNotifications !== undefined) n.loginNotifications = settings.loginNotifications;
-      if (settings.newDeviceAlerts !== undefined) n.newDeviceAlerts = settings.newDeviceAlerts;
-      if (settings.deviceTracking !== undefined) n.deviceTracking = settings.deviceTracking;
-      config.markModified('systemSettings');
+      if (settings.loginNotifications !== undefined) setFields['systemSettings.notifications.loginNotifications'] = settings.loginNotifications;
+      if (settings.newDeviceAlerts !== undefined) setFields['systemSettings.notifications.newDeviceAlerts'] = settings.newDeviceAlerts;
+      if (settings.deviceTracking !== undefined) setFields['systemSettings.notifications.deviceTracking'] = settings.deviceTracking;
     }
 
-    config.lastUpdatedBy = req.user?.username || 'system';
-    await config.save();
+    // findOneAndUpdate with $set + { new: true } returns the post-update document,
+    // so the response always reflects exactly what is now stored in MongoDB.
+    const config = await SystemConfig.findOneAndUpdate(
+      { configType: 'system_settings', isDeleted: false },
+      { $set: setFields },
+      { new: true, runValidators: true }
+    );
+
+    if (!config) {
+      throw new ApiError(500, 'Failed to update security settings');
+    }
 
     // Broadcast to all open super_admin tabs immediately
     if (type === 'session') {

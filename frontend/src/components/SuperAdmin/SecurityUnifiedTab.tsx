@@ -136,7 +136,10 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
 
       {/* Tab content */}
       <div role="tabpanel" id={`security-panel-${subTab}`} aria-label={SUB_TABS.find(t => t.id === subTab)?.label}>
-        {subTab === 'policies'       && <SecurityPoliciesSubTab onMessage={onMessage} />}
+        {/* SecurityPoliciesSubTab is always mounted so form state survives sub-tab switches */}
+        <div className={subTab === 'policies' ? undefined : 'hidden'}>
+          <SecurityPoliciesSubTab onMessage={onMessage} />
+        </div>
         {subTab === 'firewall'        && <FirewallTab onMessage={onMessage} />}
         {subTab === 'access_control' && <SecurityAccessControlSubTab onMessage={onMessage} />}
         {subTab === 'sessions'       && <SecuritySessionsSubTab onMessage={onMessage} />}

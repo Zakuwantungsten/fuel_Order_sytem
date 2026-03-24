@@ -21,11 +21,15 @@ let mongoServer: MongoMemoryServer;
 
 // Connect to in-memory database before all tests
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  // Allow up to 2 minutes for the first-ever binary launch on this machine
+  process.env.MONGOMS_STARTUP_TIMEOUT = '120000';
+  mongoServer = await MongoMemoryServer.create({
+    instance: { args: ['--quiet'] },
+  });
   const mongoUri = mongoServer.getUri();
   
   await mongoose.connect(mongoUri);
-});
+}, 130000); // Jest timeout must exceed the MongoMemoryServer startup timeout
 
 // Clear database between tests
 afterEach(async () => {

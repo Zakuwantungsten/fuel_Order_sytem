@@ -500,14 +500,19 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     }
 
     if (!allowMultipleSessions) {
-      // Single-session policy: kick any existing session for this user.
-      // emitToUser sends to the 'user:<username>' socket room; if nobody is
-      // in that room yet (first login) this is a harmless no-op.
+      // Single-session policy: revoke the existing refresh token in the DB *before*
+      // issuing a new one so that any session not connected via WebSocket also loses
+      // the ability to refresh its access token once the current JWT expires.
+      // The WebSocket force_logout is the fast path for connected clients; this DB
+      // revocation is the reliable fallback for offline/disconnected browsers.
+      user.refreshToken = undefined;
+      await user.save();
+
       emitToUser(user.username, 'session_event', {
         type: 'force_logout',
         message: 'You have been logged out because a new session was started from another location.',
       });
-      logger.info(`Single-session policy: existing session(s) for '${username}' were force-logged out`);
+      logger.info(`Single-session policy: existing session(s) for '${username}' were force-logged out and refresh token revoked`);
     }
 
     // Generate tokens
@@ -662,11 +667,15 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
     }
 
     if (!allowMultipleSessions) {
+      // Revoke old refresh token in DB so disconnected sessions also lose refresh ability
+      user.refreshToken = undefined;
+      await user.save();
+
       emitToUser(user.username, 'session_event', {
         type: 'force_logout',
         message: 'You have been logged out because a new session was started from another location.',
       });
-      logger.info(`Single-session policy: existing session(s) for '${user.username}' were force-logged out`);
+      logger.info(`Single-session policy: existing session(s) for '${user.username}' were force-logged out and refresh token revoked`);
     }
 
     // Generate final tokens
@@ -881,6 +890,10 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
     const allowMultipleSessions = sessionConfig?.systemSettings?.session?.allowMultipleSessions ?? true;
 
     if (!allowMultipleSessions) {
+      // Revoke old refresh token in DB so disconnected sessions also lose refresh ability
+      user.refreshToken = undefined;
+      await user.save();
+
       emitToUser(user.username, 'session_event', {
         type: 'force_logout',
         message: 'You have been logged out because a new session was started from another location.',
@@ -1091,6 +1104,10 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
     const allowMultipleSessions = sessionConfig?.systemSettings?.session?.allowMultipleSessions ?? true;
 
     if (!allowMultipleSessions) {
+      // Revoke old refresh token in DB so disconnected sessions also lose refresh ability
+      user.refreshToken = undefined;
+      await user.save();
+
       emitToUser(user.username, 'session_event', {
         type: 'force_logout',
         message: 'You have been logged out because a new session was started from another location.',

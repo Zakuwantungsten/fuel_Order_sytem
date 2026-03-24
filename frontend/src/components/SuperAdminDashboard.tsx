@@ -191,9 +191,10 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
             {section === 'audit' && (
               <AuditLogsTab onMessage={showMessage} />
             )}
-            {section === 'security' && (
+            {/* SecurityUnifiedTab is always mounted so security policy form state survives main-tab switches */}
+            <div className={section === 'security' ? undefined : 'hidden'}>
               <SecurityUnifiedTab onMessage={showMessage} />
-            )}
+            </div>
             {section === 'trash' && (
               <TrashManagementTab onMessage={showMessage} onNavigate={onNavigate} />
             )}

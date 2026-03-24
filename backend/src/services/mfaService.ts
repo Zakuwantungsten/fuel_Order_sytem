@@ -392,29 +392,38 @@ class MFAService {
   }
   
   /**
-   * Check if user is required to use MFA based on system settings or per-user mandatory flag
+   * Check if user is required to use MFA based on system settings or per-user mandatory flag.
+   *
+   * Priority order (highest → lowest):
+   *  1. Global MFA kill-switch: if globalEnabled is false, NO user is required (even isMandatory
+   *     per-user flags are suppressed). This lets the super-admin globally disable MFA without
+   *     needing to clear every user's individual record.
+   *  2. Per-user exempt flag: explicitly opt this user out of role-based policy.
+   *  3. Per-user mandatory flag: force-require MFA regardless of role list.
+   *  4. Role-based required-roles list from global policy.
    */
   async isMFARequired(userId: string): Promise<boolean> {
     const user = await User.findById(userId);
     if (!user) return false;
-    
+
+    // Read MFA enforcement config from SystemConfig (Security Tab global settings) FIRST.
+    // Global disable overrides everything including per-user isMandatory.
+    const config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    const mfaSettings = config?.securitySettings?.mfa;
+
+    // If MFA is globally disabled or not configured, nobody is required — full stop.
+    if (!mfaSettings?.globalEnabled) return false;
+
     // Check consolidated MFA model first, then fall back to UserMFA for backward compat
     const mfa = await MFA.findOne({ userId });
     const userMfa = await UserMFA.findOne({ userId });
-    
+
+    // If admin explicitly exempted this user, skip role-based check
+    if (mfa?.isExempt || userMfa?.isExempt) return false;
+
     // Per-user mandatory flag (either model — MFA model takes precedence)
     if (mfa?.isMandatory || userMfa?.isMandatory) return true;
-    
-    // If admin explicitly exempted this user (e.g. disabled their MFA), skip role-based check
-    if (mfa?.isExempt || userMfa?.isExempt) return false;
-    
-    // Read MFA enforcement config from SystemConfig (Security Tab global settings)
-    const config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
-    const mfaSettings = config?.securitySettings?.mfa;
-    
-    // If MFA is globally disabled or not configured, not required
-    if (!mfaSettings?.globalEnabled) return false;
-    
+
     // Check if user's role is in the required roles list
     return mfaSettings.requiredRoles.includes(user.role);
   }
