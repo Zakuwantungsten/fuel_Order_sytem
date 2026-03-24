@@ -1,5 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { Server, Plus, Trash2, ToggleLeft, ToggleRight, Zap, CheckCircle, XCircle } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface SIEMConfig {
@@ -46,7 +48,8 @@ export default function SIEMExportTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [form, setForm] = useState({
     name: '', destinationType: 'webhook', webhookUrl: '', syslogHost: '', syslogPort: 514,
@@ -94,10 +97,9 @@ const headers = () => {
       });
       const json = await res.json();
       if (json.success) {
-        setSuccess('SIEM config created');
+        toast.success('SIEM config created');
         setShowCreate(false);
         fetchConfigs();
-        setTimeout(() => setSuccess(null), 3000);
       } else setError(json.message);
     } catch (err: any) { setError(err.message); }
   };
@@ -122,14 +124,20 @@ const headers = () => {
     }
   };
 
-  const deleteConfig = async (id: string) => {
-    if (!confirm('Delete this SIEM configuration?')) return;
+  const deleteConfig = (id: string) => {
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      const res = await fetch(`${API_BASE}/system-admin/siem/${id}`, { method: 'DELETE', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/siem/${deleteTarget}`, { method: 'DELETE', headers: headers() });
       const json = await res.json();
-      if (json.success) { setSuccess('Config deleted'); fetchConfigs(); setTimeout(() => setSuccess(null), 3000); }
+      if (json.success) { toast.success('Config deleted'); fetchConfigs(); setDeleteTarget(null); }
       else setError(json.message);
     } catch (err: any) { setError(err.message); }
+    finally { setDeleting(false); }
   };
 
   if (loading) return <UnifiedTabLoader label="Loading SIEM destinations..." heightClassName="py-12" />;
@@ -147,7 +155,6 @@ const headers = () => {
       </div>
 
       {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
-      {success && <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-sm text-green-700 dark:text-green-300">{success}</div>}
 
       {/* Create Form */}
       {showCreate && (
@@ -301,6 +308,17 @@ const headers = () => {
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete SIEM Configuration"
+        message="This SIEM destination will be permanently removed and will stop receiving security events."
+        confirmLabel={deleting ? 'Deleting…' : 'Delete Config'}
+        variant="danger"
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

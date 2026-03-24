@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ShieldPlus, Clock, CheckCircle, XCircle, RefreshCw, UserCheck, Ban } from 'lucide-react';
+import { toast } from 'react-toastify';
 import apiClient from '../../services/api';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
@@ -32,7 +33,6 @@ export default function PrivilegeElevationTab() {
   const [requests, setRequests] = useState<PrivilegeRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [denyReason, setDenyReason] = useState('');
   const [denyingId, setDenyingId] = useState<string | null>(null);
@@ -57,11 +57,10 @@ export default function PrivilegeElevationTab() {
     try {
       const res = await apiClient.post(`/system-admin/privilege-elevation/${id}/${action}`, { reason });
       if (res.data.success) {
-        setSuccess(res.data.message);
+        toast.success(res.data.message);
         setDenyingId(null);
         setDenyReason('');
         fetchRequests();
-        setTimeout(() => setSuccess(null), 4000);
       } else {
         setError(res.data.message);
         setTimeout(() => setError(null), 5000);
@@ -88,11 +87,6 @@ export default function PrivilegeElevationTab() {
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
           {error}
-        </div>
-      )}
-      {success && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-sm text-green-700 dark:text-green-300">
-          {success}
         </div>
       )}
 

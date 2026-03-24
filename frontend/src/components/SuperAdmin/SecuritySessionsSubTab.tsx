@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import {
   Users, LogOut, Loader2, RefreshCw, MapPin, Clock, Activity,
   ShieldAlert, AlertTriangle, Zap, ShieldCheck, Lock, Unlock,
-  X, CheckCircle, Search, Download, Info,
+  X, Search, Download, Info,
 } from 'lucide-react';
 import { sessionService, ActiveSession } from '../../services/sessionService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -79,7 +80,6 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
 
   /* Messages */
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   /* ── Loaders ── */
   const loadSessions = useCallback(async (silent = false) => {
@@ -114,11 +114,7 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
     return () => clearInterval(iv);
   }, [loadSessions]);
 
-  useEffect(() => {
-    if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t); }
-  }, [success]);
-
-  /* ── Session actions ── */
+/* ── Session actions ── */
   const handleKillOne = async () => {
     if (!killTarget) return;
     setKilling(true);
@@ -151,7 +147,7 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
     setActionLoading(disableTarget.userId);
     try {
       await apiClient.post(`/system-admin/mfa-management/${disableTarget.userId}/disable`);
-      setSuccess(`MFA disabled for ${disableTarget.username}`);
+      toast.success(`MFA disabled for ${disableTarget.username}`);
       setDisableTarget(null);
       await loadMFA();
     } catch { setError('Failed to disable MFA'); }
@@ -162,7 +158,7 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
     setActionLoading(userId + '_req');
     try {
       await apiClient.post(`/system-admin/mfa-management/${userId}/require`, { mandatory: !current });
-      setSuccess(`MFA ${!current ? 'required' : 'optional'} for ${username}`);
+      toast.success(`MFA ${!current ? 'required' : 'optional'} for ${username}`);
       await loadMFA();
     } catch { setError('Failed to update'); }
     finally { setActionLoading(null); }
@@ -188,14 +184,7 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
           <button onClick={() => setError(null)}><X className="w-4 h-4 text-red-400" /></button>
         </div>
       )}
-      {success && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-          <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-          <span className="text-sm text-green-700 dark:text-green-300">{success}</span>
-        </div>
-      )}
-
-      {/* ── Stats Cards ── */}
+{/* ── Stats Cards ── */}
       <div className="flex items-center justify-end -mb-3">
         <button
           onClick={() => exportClientCSV(

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { HardDrive, RefreshCw, Trash2, AlertTriangle, Loader2, X, CheckCircle, FolderOpen } from 'lucide-react';
+import { HardDrive, RefreshCw, Trash2, AlertTriangle, X, FolderOpen } from 'lucide-react';
+import { toast } from 'react-toastify';
+import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import * as storageService from '../../services/storageService';
 import type { StorageInfo } from '../../services/storageService';
@@ -16,7 +18,6 @@ export const StorageManagerTab: React.FC = () => {
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [purging, setPurging] = useState(false);
   const [confirmPurge, setConfirmPurge] = useState(false);
 
@@ -40,7 +41,7 @@ export const StorageManagerTab: React.FC = () => {
     setConfirmPurge(false);
     try {
       const result = await storageService.purgeTempFiles();
-      setSuccess(`${result.deleted} temp file(s) purged${result.failed ? `, ${result.failed} failed` : ''}`);
+      toast.success(`${result.deleted} temp file(s) purged${result.failed ? `, ${result.failed} failed` : ''}`);
       await fetchInfo();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Purge failed';
@@ -92,13 +93,6 @@ export const StorageManagerTab: React.FC = () => {
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {error}
           <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
-        </div>
-      )}
-      {success && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm">
-          <CheckCircle className="h-4 w-4 shrink-0" />
-          {success}
-          <button onClick={() => setSuccess(null)} className="ml-auto"><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -180,37 +174,16 @@ export const StorageManagerTab: React.FC = () => {
         </>
       )}
 
-      {/* Confirm purge modal */}
-      {confirmPurge && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Purge Temp Files</h3>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              All files under the <span className="font-mono bg-gray-100 dark:bg-gray-700 px-1 rounded">temp/</span> prefix will be permanently deleted. This cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setConfirmPurge(false)}
-                className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePurge}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700"
-              >
-                {purging && <Loader2 className="h-4 w-4 animate-spin" />}
-                Delete Temp Files
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={confirmPurge}
+        title="Purge Temp Files"
+        message="All files under the temp/ prefix will be permanently deleted. This cannot be undone."
+        confirmLabel={purging ? 'Purging…' : 'Delete Temp Files'}
+        variant="danger"
+        loading={purging}
+        onConfirm={handlePurge}
+        onCancel={() => setConfirmPurge(false)}
+      />
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import {
   BarChart3,
   Users,
@@ -7,12 +8,11 @@ import {
   Database,
   Activity,
   AlertTriangle,
-  CheckCircle,
-  X,
   Shield,
   TrendingUp,
   TrendingDown,
   HardDrive,
+  CheckCircle,
 } from 'lucide-react';
 import { systemAdminAPI } from '../services/api';
 import { OverviewStats } from '../types';
@@ -55,8 +55,7 @@ interface SuperAdminDashboardProps {
 
 export default function SuperAdminDashboard({ section = 'overview', onNavigate }: SuperAdminDashboardProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewData, setOverviewData] = useState<OverviewStats | null>(null);
 
   useEffect(() => {
@@ -67,12 +66,12 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
 
   const loadData = async () => {
     setLoading(true);
-    setError(null);
+    setOverviewError(null);
     try {
       const data = await systemAdminAPI.getOverviewStats();
       setOverviewData(data);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load overview');
+      setOverviewError(err.response?.data?.message || 'Failed to load overview');
     } finally {
       setLoading(false);
     }
@@ -85,11 +84,9 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
 
   const showMessage = (type: 'success' | 'error', message: string) => {
     if (type === 'success') {
-      setSuccess(message);
-      setTimeout(() => setSuccess(null), 3000);
+      toast.success(message);
     } else {
-      setError(message);
-      setTimeout(() => setError(null), 5000);
+      toast.error(message);
     }
   };
 
@@ -157,26 +154,10 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
 
       {/* Section Content */}
       <div className="px-4 pb-8 pt-3">
-        {(error || success) && (
-          <div className="mb-4 space-y-2">
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-3">
-                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                <span className="text-sm text-red-700 dark:text-red-300 flex-1">{error}</span>
-                <button onClick={() => setError(null)} className="flex-shrink-0">
-                  <X className="w-4 h-4 text-red-400 hover:text-red-600" />
-                </button>
-              </div>
-            )}
-            {success && (
-              <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-3">
-                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-                <span className="text-sm text-green-700 dark:text-green-300 flex-1">{success}</span>
-                <button onClick={() => setSuccess(null)} className="flex-shrink-0">
-                  <X className="w-4 h-4 text-green-400 hover:text-green-600" />
-                </button>
-              </div>
-            )}
+        {overviewError && section === 'overview' && (
+          <div className="mb-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-3">
+            <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+            <span className="text-sm text-red-700 dark:text-red-300 flex-1">{overviewError}</span>
           </div>
         )}
         {loading && section === 'overview' ? (

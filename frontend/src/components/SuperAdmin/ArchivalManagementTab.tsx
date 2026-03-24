@@ -17,18 +17,10 @@ import {
   History
 } from 'lucide-react';
 import { archivalAPI } from '../../services/api';
-import { systemConfigAPI } from '../../services/systemConfigService';
 
 interface ArchivalManagementTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
   onNavigate?: (section: string) => void;
-}
-
-interface CollectionConfig {
-  name: string;
-  label: string;
-  enabled: boolean;
-  retentionMonths: number;
 }
 
 const COLLECTION_OPTIONS = [

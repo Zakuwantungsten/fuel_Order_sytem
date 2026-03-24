@@ -19,6 +19,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { ipRuleService, IPRule, CreateIPRulePayload } from '../../services/ipRuleService';
+import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface Props {
@@ -60,6 +61,7 @@ export default function IPRulesTab({ onMessage }: Props) {
   // IP gating
   const [ipGatingEnabled, setIpGatingEnabled] = useState(false);
   const [gatingLoading, setGatingLoading] = useState(false);
+  const [confirmGating, setConfirmGating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -171,6 +173,7 @@ export default function IPRulesTab({ onMessage }: Props) {
   }
 
   async function handleToggleGating() {
+    setConfirmGating(false);
     setGatingLoading(true);
     try {
       const newVal = !ipGatingEnabled;
@@ -264,7 +267,7 @@ export default function IPRulesTab({ onMessage }: Props) {
             </div>
           </div>
           <button
-            onClick={handleToggleGating}
+            onClick={() => setConfirmGating(true)}
             disabled={gatingLoading}
             className="flex-shrink-0 ml-4"
           >
@@ -589,7 +592,7 @@ export default function IPRulesTab({ onMessage }: Props) {
                 </div>
                 <button
                   type="button"
-                  onClick={handleToggleGating}
+                  onClick={() => setConfirmGating(true)}
                   disabled={gatingLoading}
                   className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${ipGatingEnabled ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'}`}
                 >
@@ -665,6 +668,19 @@ export default function IPRulesTab({ onMessage }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmGating}
+        title={ipGatingEnabled ? 'Disable IP Gating' : 'Enable IP Gating'}
+        message={ipGatingEnabled
+          ? 'Disabling IP gating will stop auto-blocked IPs from being added as persistent block rules. Suspicious IPs blocked in memory will no longer persist across restarts.'
+          : 'Enabling IP gating will automatically add dynamically detected suspicious IPs as persistent block rules. These blocks will survive server restarts and memory clears.'}
+        confirmLabel={ipGatingEnabled ? 'Disable Gating' : 'Enable Gating'}
+        variant={ipGatingEnabled ? 'danger' : 'warning'}
+        loading={gatingLoading}
+        onConfirm={handleToggleGating}
+        onCancel={() => setConfirmGating(false)}
+      />
     </div>
   );
 }

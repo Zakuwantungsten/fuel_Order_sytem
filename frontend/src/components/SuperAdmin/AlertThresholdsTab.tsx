@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Save, RefreshCw, AlertTriangle, Loader2, X, CheckCircle } from 'lucide-react';
+import { Bell, Save, RefreshCw, AlertTriangle, Loader2, X } from 'lucide-react';
+import { toast } from 'react-toastify';
 import apiClient from '../../services/api';
 
 interface Thresholds {
@@ -31,7 +32,6 @@ export const AlertThresholdsTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const fetchThresholds = async () => {
     setLoading(true);
@@ -52,7 +52,7 @@ export const AlertThresholdsTab: React.FC = () => {
     setError(null);
     try {
       await apiClient.put(API, thresholds);
-      setSuccess('Alert thresholds saved');
+      toast.success('Alert thresholds saved');
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Save failed';
       setError(msg);
@@ -99,12 +99,7 @@ export const AlertThresholdsTab: React.FC = () => {
           <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
         </div>
       )}
-      {success && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm">
-          <CheckCircle className="h-4 w-4 shrink-0" />{success}
-          <button onClick={() => setSuccess(null)} className="ml-auto"><X className="h-4 w-4" /></button>
-        </div>
-      )}
+
 
       <div className="grid grid-cols-1 gap-4">
         {FIELDS.map((f) => {

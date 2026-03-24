@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
-import { ShieldCheck, RefreshCw, AlertTriangle, Loader2, X, CheckCircle, Lock, Unlock, ShieldOff } from 'lucide-react';
+import { ShieldCheck, RefreshCw, AlertTriangle, Loader2, X, Lock, Unlock, ShieldOff } from 'lucide-react';
+import { toast } from 'react-toastify';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 
@@ -28,7 +29,6 @@ export const MFAManagementTab: React.FC = () => {
   const [policy, setPolicy] = useState<{ globalEnabled: boolean; requiredRoles: string[]; allowedMethods: string[]; roleMethodOverrides: Record<string, string[]> } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterMfa, setFilterMfa] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export const MFAManagementTab: React.FC = () => {
     setActionLoading(disableTarget.userId);
     try {
       await apiClient.post(`/system-admin/mfa-management/${disableTarget.userId}/disable`);
-      setSuccess(`MFA disabled for ${disableTarget.username}. User is now exempt from role-based MFA policy.`);
+      toast.success(`MFA disabled for ${disableTarget.username}. User is now exempt from role-based MFA policy.`);
       setDisableTarget(null);
       await fetchData();
     } catch {
@@ -76,7 +76,7 @@ export const MFAManagementTab: React.FC = () => {
     setActionLoading(userId + '_req');
     try {
       await apiClient.post(`/system-admin/mfa-management/${userId}/require`, { mandatory: !current });
-      setSuccess(`MFA mandatory=${!current} for ${username}`);
+      toast.success(`MFA mandatory=${!current} for ${username}`);
       await fetchData();
     } catch {
       setError('Failed to update MFA requirement');
@@ -103,7 +103,7 @@ export const MFAManagementTab: React.FC = () => {
     setActionLoading(userId + '_methods');
     try {
       await apiClient.post(`/system-admin/mfa-management/${userId}/allowed-methods`, { allowedMethods: updated });
-      setSuccess(`Allowed methods updated for ${username}`);
+      toast.success(`Allowed methods updated for ${username}`);
       await fetchData();
     } catch {
       setError('Failed to update allowed methods');
@@ -136,7 +136,6 @@ export const MFAManagementTab: React.FC = () => {
       </div>
 
       {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}<button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button></div>}
-      {success && <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm"><CheckCircle className="h-4 w-4 shrink-0" />{success}<button onClick={() => setSuccess(null)} className="ml-auto"><X className="h-4 w-4" /></button></div>}
 
       {/* Policy info banner */}
       {policy && (

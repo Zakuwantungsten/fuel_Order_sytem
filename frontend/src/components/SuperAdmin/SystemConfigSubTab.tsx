@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Settings, Lock, Database, Bell, Clock, GitCompare,
   ChevronDown, RefreshCw, Save, CheckCircle, AlertCircle, ShieldCheck,
-  ArrowRight, Monitor, Mail, ToggleLeft, ToggleRight,
+  ArrowRight, Monitor, Mail,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import AsyncErrorPanel from './common/AsyncErrorPanel';
@@ -80,7 +80,7 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
   const sectionSaveState = useActionState();
   const runSettingsLoad = settingsLoadState.run;
   const runSectionSave = sectionSaveState.run;
-  const [passwordPolicy, setPasswordPolicy] = useState<PasswordPolicySettings>({
+  const [_passwordPolicy, setPasswordPolicy] = useState<PasswordPolicySettings>({
     minLength: 12,
     requireUppercase: true,
     requireLowercase: true,
@@ -113,7 +113,7 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
     digestEnabled: false,
     digestSchedule: 'daily' as 'daily' | 'weekly',
   });
-  const [notifRoutingLoaded, setNotifRoutingLoaded] = useState(false);
+  const [_notifRoutingLoaded, setNotifRoutingLoaded] = useState(false);
 
   const fwd = useCallback((msg: string, type?: 'success' | 'error' | 'info') => {
     onMessage((type || 'error') as 'success' | 'error', msg);
@@ -166,7 +166,7 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
         setNotifLoginSettings(prev => ({ ...prev, ...result.data.secSettings.notifications }));
       }
       if (result.data.routingRes?.data?.data) {
-        setNotifRouting(prev => ({ ...prev, ...result.data.routingRes.data.data }));
+        setNotifRouting(prev => ({ ...prev, ...result.data.routingRes!.data.data }));
       }
       setNotifRoutingLoaded(true);
       return;
@@ -744,11 +744,3 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
   );
 }
 
-function ReadOnlyRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-[#E4E7EC] bg-[#F8F9FB] px-3 py-2 dark:border-gray-600 dark:bg-gray-700/50">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6B7280] dark:text-gray-400">{label}</div>
-      <div className="mt-1 text-[13px] font-medium text-[#111827] dark:text-gray-100">{value}</div>
-    </div>
-  );
-}

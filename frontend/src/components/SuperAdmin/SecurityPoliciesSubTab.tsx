@@ -1,10 +1,12 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import {
   Lock, Key, Fingerprint, ShieldBan, Mail, Save,
   Loader2, AlertTriangle, Send, CheckCircle, XCircle,
   Plus, Trash2, ToggleLeft, ToggleRight,
   ChevronDown, ChevronRight, X, Shield, Bell, ArrowRight,
 } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import AsyncErrorPanel from './common/AsyncErrorPanel';
 import { useAsyncState } from '../../hooks/useAsyncState';
@@ -100,7 +102,8 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
   /* Messages & UI */
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [dlpDeleteTarget, setDlpDeleteTarget] = useState<string | null>(null);
+  const [dlpDeleting, setDlpDeleting] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['session', 'password']));
 
   const toggle = (s: string) => setExpanded(prev => {
@@ -170,7 +173,6 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
   };
 
   useEffect(() => { loadDLP(); }, []);
-  useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t); } }, [success]);
 
   /* ── Save functions ── */
   const saveSession = async () => {
@@ -278,7 +280,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
       const res = await fetch(`${API_BASE}/system-admin/dlp`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(dlpForm) });
       const json = await res.json();
       if (json.success) {
-        setSuccess('DLP rule created');
+        toast.success('DLP rule created');
         setShowDLPCreate(false);
         setDlpForm({ name: '', description: '', ruleType: 'export_limit', maxRecords: 500, appliesTo: ['fuel_records'], action: 'block' });
         loadDLP();
@@ -294,13 +296,19 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
     } catch (err: any) { setError(err.message); }
   };
 
-  const deleteDLPRule = async (id: string) => {
-    if (!confirm('Delete this DLP rule?')) return;
+  const deleteDLPRule = (id: string) => {
+    setDlpDeleteTarget(id);
+  };
+
+  const confirmDLPDelete = async () => {
+    if (!dlpDeleteTarget) return;
+    setDlpDeleting(true);
     try {
-      const res = await fetch(`${API_BASE}/system-admin/dlp/${id}`, { method: 'DELETE', headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/system-admin/dlp/${dlpDeleteTarget}`, { method: 'DELETE', headers: authHeaders() });
       const json = await res.json();
-      if (json.success) { setSuccess('Rule deleted'); loadDLP(); } else setError(json.message);
+      if (json.success) { toast.success('Rule deleted'); loadDLP(); setDlpDeleteTarget(null); } else setError(json.message);
     } catch (err: any) { setError(err.message); }
+    finally { setDlpDeleting(false); }
   };
 
   const inputCls = 'w-full max-w-xs px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-indigo-500';
@@ -325,12 +333,6 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
           <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
           <span className="text-sm text-red-700 dark:text-red-300 flex-1">{error}</span>
           <button onClick={() => setError(null)}><X className="w-4 h-4 text-red-400" /></button>
-        </div>
-      )}
-      {success && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-          <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-          <span className="text-sm text-green-700 dark:text-green-300">{success}</span>
         </div>
       )}
 
@@ -826,6 +828,17 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
       {/* Recent Security Changes */}
       <SecurityChangeLog />
+
+      <ConfirmModal
+        open={!!dlpDeleteTarget}
+        title="Delete DLP Rule"
+        message="This DLP rule will be permanently removed. Any active data protection it provides will no longer be enforced."
+        confirmLabel={dlpDeleting ? 'Deleting…' : 'Delete Rule'}
+        variant="danger"
+        loading={dlpDeleting}
+        onConfirm={confirmDLPDelete}
+        onCancel={() => setDlpDeleteTarget(null)}
+      />
     </div>
   );
 }

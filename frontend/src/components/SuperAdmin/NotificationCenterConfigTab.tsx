@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, RefreshCw, AlertTriangle, Loader2, Save, Info } from 'lucide-react';
+import { Bell, RefreshCw, AlertTriangle, Loader2, Save } from 'lucide-react';
+import { toast } from 'react-toastify';
 import apiClient from '../../services/api';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
@@ -43,7 +44,6 @@ export const NotificationCenterConfigTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
   const fetchConfig = async () => {
     setLoading(true);
@@ -77,11 +77,9 @@ export const NotificationCenterConfigTab: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     setError(null);
-    setSuccess(false);
     try {
       await apiClient.put('/system-admin/notification-config', config);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      toast.success('Notification configuration saved');
     } catch {
       setError('Failed to save configuration');
     } finally {
@@ -108,7 +106,6 @@ export const NotificationCenterConfigTab: React.FC = () => {
       </div>
 
       {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
-      {success && <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm"><Info className="h-4 w-4 shrink-0" />Configuration saved successfully.</div>}
 
       {loading ? (
         <UnifiedTabLoader label="Loading notification settings..." heightClassName="py-16" />

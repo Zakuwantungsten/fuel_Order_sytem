@@ -23,6 +23,7 @@ import {
   Globe,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
+import ConfirmModal from './ConfirmModal';
 
 /* ───────── Types ───────── */
 
@@ -135,6 +136,12 @@ export default function ConditionalAccessPolicies() {
   const [formPriority, setFormPriority] = useState(100);
   const [saving, setSaving] = useState(false);
 
+  // Confirm modals
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [toggleTarget, setToggleTarget] = useState<string | null>(null);
+  const [toggling, setToggling] = useState(false);
+
   const fetchPolicies = useCallback(async () => {
     try {
       setLoading(true);
@@ -196,19 +203,34 @@ export default function ConditionalAccessPolicies() {
     }
   };
 
-  const handleToggle = async (id: string) => {
-    try {
-      await apiFetch(`/${id}/toggle`, { method: 'PATCH' });
-      await fetchPolicies();
-    } catch (e: any) { setError(e.message); }
+  const handleToggle = (id: string) => {
+    setToggleTarget(id);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this policy?')) return;
+  const confirmToggle = async () => {
+    if (!toggleTarget) return;
+    setToggling(true);
     try {
-      await apiFetch(`/${id}`, { method: 'DELETE' });
+      await apiFetch(`/${toggleTarget}/toggle`, { method: 'PATCH' });
       await fetchPolicies();
+      setToggleTarget(null);
     } catch (e: any) { setError(e.message); }
+    finally { setToggling(false); }
+  };
+
+  const handleDelete = (id: string) => {
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/${deleteTarget}`, { method: 'DELETE' });
+      await fetchPolicies();
+      setDeleteTarget(null);
+    } catch (e: any) { setError(e.message); }
+    finally { setDeleting(false); }
   };
 
   // Condition helpers
@@ -528,6 +550,30 @@ export default function ConditionalAccessPolicies() {
           })}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!toggleTarget}
+        title={policies.find(p => p._id === toggleTarget)?.isActive ? 'Deactivate Policy' : 'Activate Policy'}
+        message={policies.find(p => p._id === toggleTarget)?.isActive
+          ? 'Deactivating this policy will stop it from being evaluated for incoming access requests.'
+          : 'Activating this policy will start evaluating it for all incoming access requests immediately.'}
+        confirmLabel={toggling ? 'Updating…' : policies.find(p => p._id === toggleTarget)?.isActive ? 'Deactivate' : 'Activate'}
+        variant="warning"
+        loading={toggling}
+        onConfirm={confirmToggle}
+        onCancel={() => setToggleTarget(null)}
+      />
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete Policy"
+        message="This conditional access policy will be permanently removed and will no longer be evaluated for access requests."
+        confirmLabel={deleting ? 'Deleting…' : 'Delete Policy'}
+        variant="danger"
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

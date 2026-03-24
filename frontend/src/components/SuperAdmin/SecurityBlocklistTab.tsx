@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import {
   ShieldBan,
   RefreshCw,
@@ -157,7 +158,6 @@ export default function SecurityBlocklistTab() {
   const [tab, setTab] = useState<'active' | 'suspicious' | 'history'>('active');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   // Data
   const [blocked, setBlocked] = useState<BlockedIPEntry[]>([]);
@@ -200,13 +200,12 @@ export default function SecurityBlocklistTab() {
       });
       setAutoblockConfig(updated);
       setConfigDraft(updated);
-      setSuccess('Autoblock configuration saved');
+      toast.success('Autoblock configuration saved');
     } catch (err: any) {
       setError(err.message);
     } finally {
       setSavingConfig(false);
     }
-    setTimeout(() => setSuccess(null), 3000);
   };
 
   const configChanged = autoblockConfig && configDraft &&
@@ -252,7 +251,7 @@ export default function SecurityBlocklistTab() {
           reason: blockReason || 'Manually blocked',
         }),
       });
-      setSuccess(`Blocked ${blockIP}`);
+      toast.success(`Blocked ${blockIP}`);
       setShowBlockForm(false);
       setBlockIP('');
       setBlockReason('');
@@ -260,18 +259,16 @@ export default function SecurityBlocklistTab() {
     } catch (err: any) {
       setError(err.message);
     }
-    setTimeout(() => setSuccess(null), 3000);
   };
 
   const handleUnblock = async (ip: string) => {
     try {
       await apiFetch(`/unblock/${encodeURIComponent(ip)}`, { method: 'DELETE' });
-      setSuccess(`Unblocked ${ip}`);
+      toast.success(`Unblocked ${ip}`);
       fetchData();
     } catch (err: any) {
       setError(err.message);
     }
-    setTimeout(() => setSuccess(null), 3000);
   };
 
   const filteredBlocked = searchIP
@@ -321,12 +318,7 @@ export default function SecurityBlocklistTab() {
           <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
         </div>
       )}
-      {success && (
-        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-          <span className="text-sm text-green-700 dark:text-green-300">{success}</span>
-        </div>
-      )}
+
 
       {/* Manual Block Form */}
       {showBlockForm && (

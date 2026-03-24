@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
-import { Key, Plus, Trash2, RefreshCw, AlertTriangle, Loader2, X, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { Key, Plus, Trash2, RefreshCw, AlertTriangle, Loader2, X, Eye, EyeOff } from 'lucide-react';
+import { toast } from 'react-toastify';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 
@@ -24,7 +25,6 @@ export const ApiTokenManagerTab: React.FC = () => {
   const [availableScopes, setAvailableScopes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [newRawToken, setNewRawToken] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', expiresInDays: '', scopes: [] as string[] });
@@ -74,7 +74,7 @@ export const ApiTokenManagerTab: React.FC = () => {
     setRevoking(true);
     try {
       await apiClient.delete(`/system-admin/api-tokens/${revokeTarget.id}`);
-      setSuccess(`Token "${revokeTarget.name}" revoked`);
+      toast.success(`Token "${revokeTarget.name}" revoked`);
       setRevokeTarget(null);
       await fetchTokens();
     } catch {
@@ -114,7 +114,6 @@ export const ApiTokenManagerTab: React.FC = () => {
       </div>
 
       {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}<button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button></div>}
-      {success && <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm"><CheckCircle className="h-4 w-4 shrink-0" />{success}<button onClick={() => setSuccess(null)} className="ml-auto"><X className="h-4 w-4" /></button></div>}
 
       {/* New token reveal */}
       {newRawToken && (
@@ -127,7 +126,7 @@ export const ApiTokenManagerTab: React.FC = () => {
             <button onClick={() => setShowToken((v) => !v)} className="shrink-0 p-1 text-gray-500 hover:text-gray-700">
               {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
-            <button onClick={() => { navigator.clipboard.writeText(newRawToken); setSuccess('Copied!'); }} className="shrink-0 px-2 py-1 text-xs rounded bg-amber-600 text-white hover:bg-amber-700">Copy</button>
+            <button onClick={() => { navigator.clipboard.writeText(newRawToken); toast.success('Copied!'); }} className="shrink-0 px-2 py-1 text-xs rounded bg-amber-600 text-white hover:bg-amber-700">Copy</button>
           </div>
           <button onClick={() => { setNewRawToken(null); setShowToken(false); }} className="mt-2 text-xs text-amber-700 dark:text-amber-400 underline">I've copied it, dismiss</button>
         </div>

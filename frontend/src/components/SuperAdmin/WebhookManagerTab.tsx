@@ -4,6 +4,7 @@ import {
   CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp, RotateCcw, X,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
+import ConfirmModal from './ConfirmModal';
 import webhookService, { Webhook } from '../../services/webhookService';
 
 interface Props {
@@ -53,7 +54,8 @@ export default function WebhookManagerTab({ onMessage }: Props) {
   const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
   const [shownSecret, setShownSecret] = useState<{ id: string; secret: string } | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -114,16 +116,22 @@ export default function WebhookManagerTab({ onMessage }: Props) {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (deleting !== id) { setDeleting(id); return; }
+  const handleDelete = (id: string) => {
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await webhookService.delete(id);
-      setWebhooks((prev) => prev.filter((w) => w._id !== id));
+      await webhookService.delete(deleteTarget);
+      setWebhooks((prev) => prev.filter((w) => w._id !== deleteTarget));
       onMessage('Webhook deleted', 'success');
+      setDeleteTarget(null);
     } catch {
       onMessage('Failed to delete webhook', 'error');
     } finally {
-      setDeleting(null);
+      setDeleting(false);
     }
   };
 
@@ -297,7 +305,7 @@ export default function WebhookManagerTab({ onMessage }: Props) {
                     <button onClick={() => handleRegenSecret(wh._id)} title="Regenerate secret" className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg">
                       <RotateCcw className="w-4 h-4" />
                     </button>
-                    <button onClick={() => handleDelete(wh._id)} title={deleting === wh._id ? 'Click again to confirm' : 'Delete'} className={`p-1.5 rounded-lg ${deleting === wh._id ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'}`}>
+                    <button onClick={() => handleDelete(wh._id)} title="Delete" className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
                       <Trash2 className="w-4 h-4" />
                     </button>
                     <button onClick={() => setExpandedLogs(expandedLogs === wh._id ? null : wh._id)} className="p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
@@ -363,6 +371,17 @@ export default function WebhookManagerTab({ onMessage }: Props) {
           Payloads also include <code className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">event</code>, <code className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">payload</code>, and <code className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">timestamp</code> fields.
         </p>
       </div>
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete Webhook"
+        message="This webhook will be permanently removed and will stop receiving events. This action cannot be undone."
+        confirmLabel={deleting ? 'Deleting…' : 'Delete Webhook'}
+        variant="danger"
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

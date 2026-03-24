@@ -1,5 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { KeyRound, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw, Shield, Eye, EyeOff } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface BreakGlassAccount {
@@ -26,7 +28,12 @@ export default function BreakGlassTab() {
   const [showPassword, setShowPassword] = useState<string | null>(null);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [rotateTarget, setRotateTarget] = useState<string | null>(null);
+  const [rotateNewPassword, setRotateNewPassword] = useState('');
+  const [rotating, setRotating] = useState(false);
+  const [rotateShowPassword, setRotateShowPassword] = useState(false);
 
   const [form, setForm] = useState({ username: '', description: '', password: '', confirmPassword: '' });
 
@@ -65,11 +72,10 @@ const headers = () => {
       });
       const json = await res.json();
       if (json.success) {
-        setSuccess('Break-glass account created');
+        toast.success('Break-glass account created');
         setShowCreate(false);
         setForm({ username: '', description: '', password: '', confirmPassword: '' });
         fetchAccounts();
-        setTimeout(() => setSuccess(null), 3000);
       } else setError(json.message);
     } catch (err: any) { setError(err.message); }
   };
@@ -83,27 +89,41 @@ const headers = () => {
     } catch (err: any) { setError(err.message); }
   };
 
-  const rotatePassword = async (id: string) => {
-    const newPass = prompt('Enter new password (min 20 characters):');
-    if (!newPass || newPass.length < 20) { setError('Password must be at least 20 characters'); return; }
-    try {
-      const res = await fetch(`${API_BASE}/system-admin/break-glass/${id}/rotate`, {
-        method: 'PATCH', headers: headers(), body: JSON.stringify({ newPassword: newPass }),
-      });
-      const json = await res.json();
-      if (json.success) { setSuccess('Password rotated successfully'); fetchAccounts(); setTimeout(() => setSuccess(null), 3000); }
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+  const rotatePassword = (id: string) => {
+    setRotateTarget(id);
+    setRotateNewPassword('');
+    setRotateShowPassword(false);
   };
 
-  const deleteAccount = async (id: string) => {
-    if (!confirm('Permanently delete this break-glass account?')) return;
+  const confirmRotate = async () => {
+    if (!rotateTarget) return;
+    if (rotateNewPassword.length < 20) { setError('Password must be at least 20 characters'); return; }
+    setRotating(true);
     try {
-      const res = await fetch(`${API_BASE}/system-admin/break-glass/${id}`, { method: 'DELETE', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/break-glass/${rotateTarget}/rotate`, {
+        method: 'PATCH', headers: headers(), body: JSON.stringify({ newPassword: rotateNewPassword }),
+      });
       const json = await res.json();
-      if (json.success) { setSuccess('Account deleted'); fetchAccounts(); setTimeout(() => setSuccess(null), 3000); }
+      if (json.success) { toast.success('Password rotated successfully'); fetchAccounts(); setRotateTarget(null); }
       else setError(json.message);
     } catch (err: any) { setError(err.message); }
+    finally { setRotating(false); }
+  };
+
+  const deleteAccount = (id: string) => {
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API_BASE}/system-admin/break-glass/${deleteTarget}`, { method: 'DELETE', headers: headers() });
+      const json = await res.json();
+      if (json.success) { toast.success('Account deleted'); fetchAccounts(); setDeleteTarget(null); }
+      else setError(json.message);
+    } catch (err: any) { setError(err.message); }
+    finally { setDeleting(false); }
   };
 
   const generatePassword = () => {
@@ -139,7 +159,6 @@ const headers = () => {
       </div>
 
       {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
-      {success && <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-sm text-green-700 dark:text-green-300">{success}</div>}
 
       {/* Create Form */}
       {showCreate && (
@@ -236,6 +255,45 @@ const headers = () => {
           ))}
         </div>
       )}
+
+      {/* Rotate Password Modal */}
+      {rotateTarget && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Rotate Password</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Enter a new password for this break-glass account. Minimum 20 characters.</p>
+            <div className="relative">
+              <input
+                type={rotateShowPassword ? 'text' : 'password'}
+                value={rotateNewPassword}
+                onChange={e => setRotateNewPassword(e.target.value)}
+                placeholder="New password (min 20 characters)"
+                className="w-full px-3 py-2 pr-10 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 text-sm"
+              />
+              <button type="button" onClick={() => setRotateShowPassword(!rotateShowPassword)} className="absolute right-2 top-2 text-gray-400 hover:text-gray-600">
+                {rotateShowPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setRotateTarget(null); setRotateNewPassword(''); }} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">Cancel</button>
+              <button onClick={confirmRotate} disabled={rotating || rotateNewPassword.length < 20} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                {rotating ? 'Rotating…' : 'Rotate Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete Break-Glass Account"
+        message="This will permanently remove the break-glass account. This action cannot be undone."
+        confirmLabel={deleting ? 'Deleting…' : 'Delete Account'}
+        variant="danger"
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { ShieldBan, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { toast } from 'react-toastify';
+import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface DLPRule {
@@ -45,7 +47,8 @@ export default function DLPControlsTab() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Form state
   const [form, setForm] = useState({
@@ -91,11 +94,10 @@ const headers = () => {
       });
       const json = await res.json();
       if (json.success) {
-        setSuccess('DLP rule created');
+        toast.success('DLP rule created');
         setShowCreate(false);
         setForm({ name: '', description: '', ruleType: 'export_limit', maxRecords: 500, allowedHoursStart: 8, allowedHoursEnd: 18, appliesTo: ['fuel_records'], action: 'block' });
         fetchData();
-        setTimeout(() => setSuccess(null), 3000);
       } else setError(json.message);
     } catch (err: any) { setError(err.message); }
   };
@@ -110,13 +112,19 @@ const headers = () => {
   };
 
   const deleteRule = async (id: string) => {
-    if (!confirm('Delete this DLP rule?')) return;
+    setDeleteTarget(id);
+  };
+
+  const confirmDeleteRule = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      const res = await fetch(`${API_BASE}/system-admin/dlp/${id}`, { method: 'DELETE', headers: headers() });
+      const res = await fetch(`${API_BASE}/system-admin/dlp/${deleteTarget}`, { method: 'DELETE', headers: headers() });
       const json = await res.json();
-      if (json.success) { setSuccess('Rule deleted'); fetchData(); setTimeout(() => setSuccess(null), 3000); }
+      if (json.success) { toast.success('Rule deleted'); fetchData(); }
       else setError(json.message);
     } catch (err: any) { setError(err.message); }
+    finally { setDeleting(false); setDeleteTarget(null); }
   };
 
   if (loading) return <UnifiedTabLoader label="Loading DLP controls..." heightClassName="py-12" />;
@@ -134,7 +142,6 @@ const headers = () => {
       </div>
 
       {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
-      {success && <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-sm text-green-700 dark:text-green-300">{success}</div>}
 
       {/* Stats */}
       {stats && (
@@ -256,6 +263,17 @@ const headers = () => {
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete DLP Rule"
+        message="This DLP rule will be permanently removed. Any active data protection it provides will no longer be enforced."
+        confirmLabel={deleting ? 'Deleting…' : 'Delete Rule'}
+        variant="danger"
+        loading={deleting}
+        onConfirm={confirmDeleteRule}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
