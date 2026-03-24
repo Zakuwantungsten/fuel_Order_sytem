@@ -5,19 +5,23 @@ import {
   FileText, 
   Fuel, 
   ClipboardList, 
-  TrendingUp, 
+  TrendingUp,
+  ChevronUp,
+  ChevronDown,
   Activity,
   Calendar,
   Package,
   Plus,
   BarChart3,
-  PieChart,
   AlertCircle,
   ArrowRight,
   Loader,
-  X
+  X,
+  Truck,
+  Clock,
+  CheckCircle,
 } from 'lucide-react';
-import { BarChart, Bar, PieChart as RePieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
 import { DashboardStats, FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -465,34 +469,68 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     );
   }
 
+  const TrendBadge = ({ pct }: { pct: number | null | undefined }) => {
+    if (pct === null || pct === undefined) {
+      return (
+        <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-gray-400 bg-gray-100 dark:text-gray-500 dark:bg-gray-700/50">
+          —
+        </span>
+      );
+    }
+    const isUp = pct >= 0;
+    const Icon = isUp ? ChevronUp : ChevronDown;
+    return (
+      <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+        isUp
+          ? 'text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/20'
+          : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20'
+      }`}>
+        <Icon className="w-3 h-3" />
+        {isUp ? '+' : ''}{pct}%
+      </span>
+    );
+  };
+
   const statsCards = [
-    { 
-      name: 'Total Delivery Orders', 
-      value: stats.totalDOs.toString(),
+    {
+      name: 'Delivery Orders',
+      value: stats.totalDOs.toLocaleString(),
+      sub: `${stats.activeTrips} active trip${stats.activeTrips !== 1 ? 's' : ''}`,
+      trend: stats.trends?.dos,
       icon: FileText,
-      color: 'bg-blue-500',
-      lightColor: 'bg-blue-50 dark:bg-blue-900/20'
+      borderColor: 'border-l-blue-500',
+      iconBg: 'bg-blue-50 dark:bg-blue-900/20',
+      iconColor: '#3b82f6',
     },
-    { 
-      name: 'Active Fuel Records', 
-      value: stats.totalFuelRecords.toString(),
+    {
+      name: 'Fuel Records',
+      value: stats.totalFuelRecords.toLocaleString(),
+      sub: `${stats.totalLiters.toLocaleString()} L dispensed`,
+      trend: stats.trends?.fuelRecords,
       icon: Fuel,
-      color: 'bg-green-500',
-      lightColor: 'bg-green-50 dark:bg-green-900/20'
+      borderColor: 'border-l-green-500',
+      iconBg: 'bg-green-50 dark:bg-green-900/20',
+      iconColor: '#10b981',
     },
-    { 
-      name: 'Total LPOs', 
-      value: stats.totalLPOs.toString(),
+    {
+      name: 'LPO Entries',
+      value: stats.totalLPOs.toLocaleString(),
+      sub: stats.pendingYardFuel ? `${stats.pendingYardFuel} yard pending` : 'none pending',
+      trend: stats.trends?.lpos,
       icon: ClipboardList,
-      color: 'bg-purple-500',
-      lightColor: 'bg-purple-50 dark:bg-purple-900/20'
+      borderColor: 'border-l-purple-500',
+      iconBg: 'bg-purple-50 dark:bg-purple-900/20',
+      iconColor: '#8b5cf6',
     },
-    { 
-      name: 'This Month', 
+    {
+      name: 'Tonnage (Month)',
       value: stats.totalTonnage.toLocaleString(),
+      sub: `Ksh ${stats.totalRevenue.toLocaleString()} revenue`,
+      trend: stats.trends?.tonnage,
       icon: TrendingUp,
-      color: 'bg-orange-500',
-      lightColor: 'bg-orange-50 dark:bg-orange-900/20'
+      borderColor: 'border-l-orange-500',
+      iconBg: 'bg-orange-50 dark:bg-orange-900/20',
+      iconColor: '#f59e0b',
     },
   ];
 
@@ -545,7 +583,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           <button
             onClick={performUnifiedSearch}
             disabled={!searchQuery.trim() || searching}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
           >
             <Search className="w-3.5 h-3.5" />
             Search
@@ -681,24 +719,28 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statsCards.map((stat) => (
           <div
             key={stat.name}
-            className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg rounded-xl transition-all hover:shadow-xl border border-gray-200 dark:border-gray-700"
+            className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 border-l-4 ${stat.borderColor} hover:shadow-md transition-shadow`}
           >
-            <div className="p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 truncate">
                     {stat.name}
                   </p>
-                  <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">
-                    {stat.value}
-                  </p>
+                  <div className="mt-1.5 flex items-baseline gap-2">
+                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 leading-none">
+                      {stat.value}
+                    </p>
+                    <TrendBadge pct={stat.trend} />
+                  </div>
+                  <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{stat.sub}</p>
                 </div>
-                <div className={`${stat.lightColor} p-2 rounded-lg`}>
-                  <stat.icon className="w-5 h-5" style={{ color: stat.color.replace('bg-', '#') }} />
+                <div className={`${stat.iconBg} p-2 rounded-lg flex-shrink-0`}>
+                  <stat.icon className="w-4 h-4" style={{ color: stat.iconColor }} />
                 </div>
               </div>
             </div>
@@ -707,53 +749,32 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Plus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Quick Actions</h2>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button
-            onClick={() => handleQuickAction('create-do')}
-            className="flex flex-col items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all hover:scale-105"
-          >
-            <div className="p-2 bg-blue-600 rounded-full">
-              <FileText className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Create DO</span>
-          </button>
-
-          <button
-            onClick={() => handleQuickAction('bulk-create')}
-            className="flex flex-col items-center gap-2 p-3 bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-all hover:scale-105"
-          >
-            <div className="p-2 bg-indigo-600 rounded-full">
-              <Package className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Bulk Create</span>
-          </button>
-
-          <button
-            onClick={() => handleQuickAction('create-lpo')}
-            className="flex flex-col items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all hover:scale-105"
-          >
-            <div className="p-2 bg-purple-600 rounded-full">
-              <ClipboardList className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Create LPO</span>
-          </button>
-
-          <button
-            onClick={() => handleQuickAction('create-fuel')}
-            className="flex flex-col items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-all hover:scale-105"
-          >
-            <div className="p-2 bg-green-600 rounded-full">
-              <Fuel className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Fuel Record</span>
-          </button>
-        </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">Quick:</span>
+        <button
+          onClick={() => handleQuickAction('create-do')}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+        >
+          <Plus className="w-3 h-3" /> New DO
+        </button>
+        <button
+          onClick={() => handleQuickAction('bulk-create')}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+        >
+          <Package className="w-3 h-3" /> Bulk DO
+        </button>
+        <button
+          onClick={() => handleQuickAction('create-lpo')}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-full hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors"
+        >
+          <Plus className="w-3 h-3" /> New LPO
+        </button>
+        <button
+          onClick={() => handleQuickAction('create-fuel')}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-full hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+        >
+          <Plus className="w-3 h-3" /> Fuel Record
+        </button>
       </div>
 
       {/* Charts & Analytics */}
@@ -766,15 +787,24 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           </div>
           {chartData.monthlyFuel.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData.monthlyFuel}>
+              <BarChart
+                data={[...chartData.monthlyFuel].sort((a: any, b: any) => {
+                  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                  return months.indexOf(a.month) - months.indexOf(b.month);
+                })}
+                margin={{ top: 18, right: 8, bottom: 0, left: -16 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#6b7280" />
-                <YAxis tick={{ fontSize: 12 }} stroke="#6b7280" />
-                <Tooltip 
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#6b7280" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#6b7280" />
+                <Tooltip
                   contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                   labelStyle={{ color: '#9ca3af' }}
+                  formatter={(v: any) => [`${Number(v).toLocaleString()} L`, 'Fuel']}
                 />
-                <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="value" position="top" style={{ fontSize: 10, fill: '#6b7280' }} formatter={(v: any) => v > 0 ? Number(v).toLocaleString() : ''} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -808,92 +838,124 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
         {/* Station-wise LPO Distribution */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <PieChart className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Station-wise LPO Distribution</h3>
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Station LPO Distribution</h3>
           </div>
-          {chartData.stationDistribution.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <RePieChart>
-                <Pie
-                  data={chartData.stationDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(entry) => `${entry.name}: ${entry.value.toLocaleString()}L`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {chartData.stationDistribution.map((entry: any, index: number) => (
-                    <Cell key={`station-cell-${entry.name}-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }} />
-              </RePieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-gray-400">No data available</div>
+          {chartData.stationDistribution.length > 0 ? (() => {
+            const total = chartData.stationDistribution.reduce((s: number, d: any) => s + d.value, 0);
+            return (
+              <div className="space-y-3">
+                {[...chartData.stationDistribution]
+                  .sort((a: any, b: any) => b.value - a.value)
+                  .map((station: any, i: number) => {
+                    const pct = total > 0 ? Math.round((station.value / total) * 100) : 0;
+                    return (
+                      <div key={station.name}>
+                        <div className="flex justify-between items-center text-xs mb-1">
+                          <span className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 font-medium">
+                            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                            {station.name}
+                          </span>
+                          <span className="text-gray-500 dark:text-gray-400">
+                            {station.value.toLocaleString()} L
+                            <span className="text-gray-400 dark:text-gray-500 ml-1">({pct}%)</span>
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                          <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 text-right pt-1">Total: {total.toLocaleString()} L</p>
+              </div>
+            );
+          })() : (
+            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data available</div>
           )}
         </div>
 
         {/* Journey Status */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-4">
             <Activity className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Journey Status Overview</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Journey Status</h3>
           </div>
           {chartData.journeyStatus.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <RePieChart>
-                <Pie
-                  data={chartData.journeyStatus}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(entry) => `${entry.name}: ${entry.value}`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {chartData.journeyStatus.map((entry: any, index: number) => (
-                    <Cell key={`journey-cell-${entry.name}-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }} />
-              </RePieChart>
-            </ResponsiveContainer>
+            <div className="grid grid-cols-2 gap-3">
+              {chartData.journeyStatus.map((status: any, i: number) => (
+                <div key={status.name} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700">
+                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate">{status.name}</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{status.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <div className="h-48 flex items-center justify-center text-gray-400">No data available</div>
+            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data available</div>
           )}
         </div>
       </div>
 
       {/* Alerts & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Alerts Section */}
+        {/* Attention / Status */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center gap-2 mb-3">
-            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">System Status</h3>
+            <AlertCircle className="w-4 h-4 text-orange-500" />
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Attention</h3>
           </div>
-          <div className="space-y-3">
-            {stats.activeTrips > 0 && (
-              <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                <p className="text-sm font-medium text-green-800 dark:text-green-300">{stats.activeTrips} Active Trips</p>
-                <p className="text-xs text-green-600 dark:text-green-400 mt-1">Journeys in progress</p>
+          <div className="space-y-2">
+            <div className={`flex items-center justify-between p-2.5 rounded-lg ${
+              stats.activeTrips > 0
+                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800'
+                : 'bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-gray-700'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Truck className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Active Trips</span>
               </div>
-            )}
-            {stats.pendingYardFuel && stats.pendingYardFuel > 0 && (
-              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">{stats.pendingYardFuel} Pending Yard Fuel</p>
-                <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Awaiting approval</p>
+              <span className={`text-sm font-bold ${
+                stats.activeTrips > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'
+              }`}>{stats.activeTrips}</span>
+            </div>
+            <div className={`flex items-center justify-between p-2.5 rounded-lg ${
+              stats.pendingYardFuel && stats.pendingYardFuel > 0
+                ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800'
+                : 'bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-gray-700'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Pending Yard Fuel</span>
               </div>
+              <span className={`text-sm font-bold ${
+                stats.pendingYardFuel && stats.pendingYardFuel > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'
+              }`}>{stats.pendingYardFuel || 0}</span>
+            </div>
+            {stats.yardFuelSummary && (
+              <>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 px-1 pt-1">Yard Dispensed</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { label: 'MMSA', value: stats.yardFuelSummary.mmsa },
+                    { label: 'Tanga', value: stats.yardFuelSummary.tanga },
+                    { label: 'DAR', value: stats.yardFuelSummary.dar },
+                  ].map(y => (
+                    <div key={y.label} className="p-2 bg-gray-50 dark:bg-gray-900/30 rounded-lg text-center border border-gray-100 dark:border-gray-700">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">{y.label}</p>
+                      <p className="text-xs font-bold text-gray-800 dark:text-gray-200">{y.value.toLocaleString()}L</p>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
             {stats.activeTrips === 0 && (!stats.pendingYardFuel || stats.pendingYardFuel === 0) && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-300">All Systems Normal</p>
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">No alerts at this time</p>
+              <div className="flex items-center gap-2 p-2.5 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
+                <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                <span className="text-xs font-medium text-green-700 dark:text-green-300">All systems clear</span>
               </div>
             )}
           </div>
@@ -901,34 +963,82 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
         {/* Recent Delivery Orders */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Recent DOs</h3>
-          <div className="space-y-3">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-blue-500" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent DOs</h3>
+            </div>
+            <button onClick={() => onNavigate?.('do')} className="text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors">View all →</button>
+          </div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {stats.recentActivities?.deliveryOrders && stats.recentActivities.deliveryOrders.length > 0 ? (
               stats.recentActivities.deliveryOrders.slice(0, 5).map((DO: any) => (
-                <div key={DO._id || DO.id} className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30" onClick={() => navigate(`/do?highlight=${DO.doNumber}`)}>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{DO.doNumber}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{DO.truckNo} • {DO.from} → {DO.to}</p>
+                <div
+                  key={DO._id || DO.id}
+                  className="py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded px-1 -mx-1 transition-colors"
+                  onClick={() => onNavigate ? onNavigate('do', `highlight=${DO.doNumber}`) : navigate(`/do?highlight=${DO.doNumber}`)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 truncate">{DO.doNumber}</span>
+                    {DO.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0">{new Date(DO.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</span>}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">
+                    <Truck className="w-3 h-3 flex-shrink-0" />
+                    <span className="font-medium truncate">{DO.truckNo}</span>
+                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                    <span className="truncate">{DO.from} → {DO.to}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {DO.tonnages && <span className="text-[10px] text-gray-500 dark:text-gray-400">{DO.tonnages}t</span>}
+                    {DO.haulier && <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{DO.haulier}</span>}
+                    {DO.importOrExport && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        DO.importOrExport === 'IMPORT'
+                          ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
+                      }`}>{DO.importOrExport}</span>
+                    )}
+                  </div>
                 </div>
               ))
             ) : (
-              <p className="text-center text-gray-400 py-8">No recent DOs</p>
+              <p className="text-center text-gray-400 text-xs py-6">No recent DOs</p>
             )}
           </div>
         </div>
 
         {/* Recent LPOs */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Recent LPOs</h3>
-          <div className="space-y-3">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-purple-500" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent LPOs</h3>
+            </div>
+            <button onClick={() => onNavigate?.('lpo')} className="text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors">View all →</button>
+          </div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {stats.recentActivities?.lpoEntries && stats.recentActivities.lpoEntries.length > 0 ? (
               stats.recentActivities.lpoEntries.slice(0, 5).map((lpo: any) => (
-                <div key={lpo._id || lpo.id} className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30" onClick={() => navigate(`/lpo?highlight=${lpo.lpoNo}`)}>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{lpo.lpoNo}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{lpo.truckNo} • {lpo.dieselAt} • {lpo.ltrs}L</p>
+                <div
+                  key={lpo._id || lpo.id}
+                  className="py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded px-1 -mx-1 transition-colors"
+                  onClick={() => onNavigate ? onNavigate('lpo', `highlight=${lpo.lpoNo}`) : navigate(`/lpo?highlight=${lpo.lpoNo}`)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 truncate">{lpo.lpoNo}</span>
+                    {lpo.ltrs != null && <span className="text-[10px] font-bold text-green-600 dark:text-green-400 flex-shrink-0">{Number(lpo.ltrs).toLocaleString()} L</span>}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">
+                    <Truck className="w-3 h-3 flex-shrink-0" />
+                    <span className="font-medium truncate">{lpo.truckNo}</span>
+                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                    <span className="truncate">{lpo.dieselAt}</span>
+                  </div>
+                  {lpo.doSdo && <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400 truncate">DO: {lpo.doSdo}</p>}
                 </div>
               ))
             ) : (
-              <p className="text-center text-gray-400 py-8">No recent LPOs</p>
+              <p className="text-center text-gray-400 text-xs py-6">No recent LPOs</p>
             )}
           </div>
         </div>

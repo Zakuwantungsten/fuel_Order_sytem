@@ -20,30 +20,86 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
   try {
     const { dateFrom, dateTo } = req.query;
 
-    // Build date filter - default to current month if no dates provided
-    const dateFilter: any = { isDeleted: false };
-    
-    // If specific dates provided, use them
+    // ─── Date helpers ───────────────────────────────────────────────────────
+    const now = new Date();
+    const MONTH_NAMES = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+
+    // Current calendar month boundaries
+    const currMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currMonthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Previous calendar month boundaries (for trend comparison)
+    const prevMonthDate  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthStart = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1);
+    const prevMonthEnd   = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Month name strings used by FuelRecord.month field ("February 2026")
+    const currMonthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
+    const prevMonthLabel = `${MONTH_NAMES[prevMonthDate.getMonth()]} ${prevMonthDate.getFullYear()}`;
+
+    // ─── Per-model filters ──────────────────────────────────────────────────
+    // DeliveryOrder.date is "YYYY-MM-DD" — safe for string $gte/$lte comparison.
+    // FuelRecord.date is mixed formats; use the `month` field ("February 2026") instead.
+    // LPOEntry.date is "DD-MMM" (no year!); use `actualDate` (proper Date) instead.
+
+    // DeliveryOrder current-month filter
+    let doDateFilter: any = { isDeleted: false };
     if (dateFrom || dateTo) {
-      dateFilter.date = {};
-      if (dateFrom) {
-        dateFilter.date.$gte = dateFrom as string;
-      }
-      if (dateTo) {
-        dateFilter.date.$lte = dateTo as string;
-      }
+      doDateFilter.date = {};
+      if (dateFrom) doDateFilter.date.$gte = dateFrom as string;
+      if (dateTo)   doDateFilter.date.$lte = dateTo as string;
     } else {
-      // Default to current month
-      const now = new Date();
-      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      dateFilter.date = { $gte: toDateStr(firstDayOfMonth), $lte: toDateStr(lastDayOfMonth) };
+      doDateFilter.date = { $gte: toDateStr(currMonthStart), $lte: toDateStr(currMonthEnd) };
     }
 
-    // Build filter for all-time data (for total counts)
-    const allTimeFilter = { isDeleted: false };
+    // FuelRecord current-month filter (month field)
+    const frCurrFilter: any = { isDeleted: false, isCancelled: { $ne: true } };
+    if (!dateFrom && !dateTo) {
+      frCurrFilter.month = { $regex: `^${currMonthLabel}`, $options: 'i' };
+    } else {
+      // Fallback to date string for explicit date range requests
+      frCurrFilter.date = {};
+      if (dateFrom) frCurrFilter.date.$gte = dateFrom as string;
+      if (dateTo)   frCurrFilter.date.$lte = dateTo as string;
+    }
 
-    // Get counts and aggregations in parallel
+    // LPOEntry current-month filter (actualDate field)
+    const lpoCurrFilter: any = {
+      isDeleted: false,
+      $or: [
+        { actualDate: { $gte: currMonthStart, $lte: currMonthEnd } },
+        // Legacy records without actualDate: fall back to createdAt
+        { actualDate: { $exists: false }, createdAt: { $gte: currMonthStart, $lte: currMonthEnd } },
+      ],
+    };
+    // Explicit date range override for LPO (convert to actualDate range)
+    if (dateFrom || dateTo) {
+      const lpoFrom = dateFrom ? new Date(dateFrom as string) : undefined;
+      const lpoTo   = dateTo   ? new Date(new Date(dateTo as string).setHours(23, 59, 59, 999)) : undefined;
+      const rangeFilter: any = {};
+      if (lpoFrom) rangeFilter.$gte = lpoFrom;
+      if (lpoTo)   rangeFilter.$lte = lpoTo;
+      lpoCurrFilter.$or = [
+        { actualDate: rangeFilter },
+        { actualDate: { $exists: false }, createdAt: rangeFilter },
+      ];
+    }
+
+    // Trend filters (always previous calendar month, regardless of query params)
+    const prevDOFilter:  any = { isDeleted: false, date: { $gte: toDateStr(prevMonthStart), $lte: toDateStr(prevMonthEnd) } };
+    const prevFRFilter:  any = { isDeleted: false, isCancelled: { $ne: true }, month: { $regex: `^${prevMonthLabel}`, $options: 'i' } };
+    const prevLPOFilter: any = {
+      isDeleted: false,
+      $or: [
+        { actualDate: { $gte: prevMonthStart, $lte: prevMonthEnd } },
+        { actualDate: { $exists: false }, createdAt: { $gte: prevMonthStart, $lte: prevMonthEnd } },
+      ],
+    };
+
+    // ─── Parallel queries ───────────────────────────────────────────────────
     const [
       totalDOs,
       totalLPOs,
@@ -54,37 +110,32 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       lpoEntries,
       activeFuelRecords,
       yardDispenses,
+      prevDOs,
+      prevFuelRecords,
+      prevLPOs,
     ] = await Promise.all([
       // All-time counts
       DeliveryOrder.countDocuments({ isDeleted: false }),
       LPOEntry.countDocuments({ isDeleted: false }),
-      FuelRecord.countDocuments({ 
-        isDeleted: false,
-        isCancelled: { $ne: true }
-      }),
-      // Active trips (fuel records with active or queued status)
-      FuelRecord.countDocuments({
-        isDeleted: false,
-        isCancelled: { $ne: true },
-        journeyStatus: { $in: ['active', 'queued'] }
-      }),
-      // Data for calculations (current month/period)
-      DeliveryOrder.find(dateFilter).select('tonnages ratePerTon date').lean(),
-      FuelRecord.find(dateFilter).select('totalLts mmsaYard tangaYard darYard date').lean(),
-      LPOEntry.find(dateFilter).select('ltrs pricePerLtr date').lean(),
+      FuelRecord.countDocuments({ isDeleted: false, isCancelled: { $ne: true } }),
+      // Active trips
+      FuelRecord.countDocuments({ isDeleted: false, isCancelled: { $ne: true }, journeyStatus: { $in: ['active', 'queued'] } }),
+      // Current month / period data
+      DeliveryOrder.find(doDateFilter).select('tonnages ratePerTon date').lean(),
+      FuelRecord.find(frCurrFilter).select('totalLts mmsaYard tangaYard darYard date month').lean(),
+      LPOEntry.find(lpoCurrFilter).select('ltrs pricePerLtr actualDate createdAt').lean(),
       // Active fuel records for recent activity
-      FuelRecord.find({ 
-        isDeleted: false, 
-        isCancelled: { $ne: true }
-      })
+      FuelRecord.find({ isDeleted: false, isCancelled: { $ne: true } })
         .sort({ date: -1 })
         .limit(5)
         .select('truckNo goingDo date journeyStatus totalLts')
         .lean(),
       // Yard fuel dispenses
-      YardFuelDispense.find({ isDeleted: false })
-        .select('liters yard status')
-        .lean(),
+      YardFuelDispense.find({ isDeleted: false }).select('liters yard status').lean(),
+      // Previous month data for trend calculation
+      DeliveryOrder.find(prevDOFilter).select('tonnages date').lean(),
+      FuelRecord.find(prevFRFilter).select('totalLts date month').lean(),
+      LPOEntry.find(prevLPOFilter).select('ltrs actualDate createdAt').lean(),
     ]);
 
     // Calculate totals from current period
@@ -96,6 +147,21 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       (sum, lpo) => sum + ((lpo.ltrs || 0) * (lpo.pricePerLtr || 0)),
       0
     );
+
+    // Calculate previous month totals for trend computation
+    const prevTonnage = prevDOs.reduce((sum, DO) => sum + (DO.tonnages || 0), 0);
+
+    const computeTrend = (curr: number, prev: number): number | null => {
+      if (prev === 0) return null;
+      return Math.round(((curr - prev) / prev) * 1000) / 10; // 1 decimal place
+    };
+
+    const trends = {
+      dos: computeTrend(deliveryOrders.length, prevDOs.length),
+      fuelRecords: computeTrend(fuelRecords.length, prevFuelRecords.length),
+      lpos: computeTrend(lpoEntries.length, prevLPOs.length),
+      tonnage: computeTrend(totalTonnage, prevTonnage),
+    };
 
     // Get recent delivery orders
     const recentDOs = await DeliveryOrder.find({ isDeleted: false })
@@ -158,6 +224,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
         dar: Math.round(yardFuelSummary.dar),
       },
       pendingYardFuel,
+      trends,
       recentActivities: {
         deliveryOrders: recentDOs,
         lpoEntries: recentLPOs,

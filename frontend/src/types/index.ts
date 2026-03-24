@@ -525,6 +525,12 @@ export interface DashboardStats {
     dar: number;
   };
   pendingYardFuel?: number;
+  trends?: {
+    dos: number | null;
+    fuelRecords: number | null;
+    lpos: number | null;
+    tonnage: number | null;
+  };
   recentActivities?: {
     deliveryOrders: DeliveryOrder[];
     lpoEntries: LPOEntry[];
