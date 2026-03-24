@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Settings, Lock, Database, Bell, Clock, GitCompare,
-  ChevronDown, RefreshCw, Save, CheckCircle, AlertCircle, ShieldCheck,
+  RefreshCw, Save, CheckCircle, AlertCircle, ShieldCheck,
   ArrowRight, Monitor, Mail,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
@@ -39,19 +39,6 @@ function StatTile({ label, value, sub, icon: Icon, iconBg, iconColor }: {
         <div className="text-[12px] text-[#6B7280] dark:text-gray-400 mt-1">{label}</div>
         {sub && <div className="text-[11px] text-[#9CA3AF] dark:text-gray-500 mt-0.5">{sub}</div>}
       </div>
-    </div>
-  );
-}
-
-function SectionDivider({ label, icon: Icon }: { label: string; icon?: React.ElementType }) {
-  return (
-    <div className="flex items-center gap-3 py-1">
-      <div className="h-px flex-1 bg-[#E4E7EC] dark:bg-gray-700" />
-      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#E4E7EC] dark:border-gray-700 bg-white dark:bg-gray-800">
-        {Icon && <Icon className="w-3 h-3 text-[#9CA3AF] dark:text-gray-500" />}
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF] dark:text-gray-500">{label}</span>
-      </div>
-      <div className="h-px flex-1 bg-[#E4E7EC] dark:bg-gray-700" />
     </div>
   );
 }

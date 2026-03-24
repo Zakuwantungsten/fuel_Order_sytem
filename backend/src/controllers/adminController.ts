@@ -211,6 +211,17 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
 
     logger.info(`Fuel station ${stationId} updated by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'FuelStation',
+      resourceId: stationId,
+      details: `Fuel station "${stationId}" updated by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(200).json({
       success: true,
       message: 'Fuel station updated successfully',
@@ -260,6 +271,17 @@ export const addFuelStation = async (req: AuthRequest, res: Response): Promise<v
 
     logger.info(`New fuel station ${name} added by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'FuelStation',
+      resourceId: newStation.name,
+      details: `New fuel station "${name}" added by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(201).json({
       success: true,
       message: 'Fuel station added successfully',
@@ -305,6 +327,17 @@ export const bulkUpdateStationRates = async (req: AuthRequest, res: Response): P
     await config.save();
 
     logger.info(`Bulk update: ${updatedCount} fuel stations updated by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'BULK_OPERATION',
+      resourceType: 'FuelStation',
+      resourceId: 'bulk',
+      details: `Bulk updated ${updatedCount} fuel station rates by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'high',
+    });
 
     res.status(200).json({
       success: true,
@@ -385,6 +418,17 @@ export const updateRoute = async (req: AuthRequest, res: Response): Promise<void
 
     logger.info(`Route ${destination} updated by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'Route',
+      resourceId: destination,
+      details: `Route to "${destination}" updated by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(200).json({
       success: true,
       message: 'Route updated successfully',
@@ -436,6 +480,17 @@ export const addRoute = async (req: AuthRequest, res: Response): Promise<void> =
 
     logger.info(`New route to ${destination} added by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'Route',
+      resourceId: destination,
+      details: `New route to "${destination}" (${totalLiters}L) added by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(201).json({
       success: true,
       message: 'Route added successfully',
@@ -477,6 +532,17 @@ export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void
     await config.save();
 
     logger.info(`Route ${destination} deleted by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'Route',
+      resourceId: destination,
+      details: `Route to "${destination}" deleted by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
 
     res.status(200).json({
       success: true,
@@ -585,6 +651,17 @@ export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<
     const { autoFillFuelRecordsForBatch } = await import('./configController');
     await autoFillFuelRecordsForBatch(suffix, extraLiters, req.user?.username || 'system');
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'TruckBatch',
+      resourceId: truckSuffix,
+      details: `Truck "${truckSuffix}" added to ${extraLiters}L batch by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -593,6 +670,7 @@ export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<
       message: `Truck added to ${extraLiters}L batch successfully`,
       data: config.truckBatches,
     });
+    emitDataChange('truck_batches', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -638,6 +716,17 @@ export const removeTruckFromBatch = async (req: AuthRequest, res: Response): Pro
 
     logger.info(`Truck ${truckSuffix} removed from batches by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'TruckBatch',
+      resourceId: truckSuffix,
+      details: `Truck "${truckSuffix}" removed from all batches by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -646,6 +735,7 @@ export const removeTruckFromBatch = async (req: AuthRequest, res: Response): Pro
       message: 'Truck removed from batch successfully',
       data: config.truckBatches,
     });
+    emitDataChange('truck_batches', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -696,6 +786,17 @@ export const addDestinationRule = async (req: AuthRequest, res: Response): Promi
 
     logger.info(`Destination rule added for truck ${truckSuffix}: ${destination} -> ${extraLiters}L by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'TruckBatch',
+      resourceId: truckSuffix,
+      details: `Destination rule added for truck "${truckSuffix}": ${destination} -> ${extraLiters}L by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -704,6 +805,7 @@ export const addDestinationRule = async (req: AuthRequest, res: Response): Promi
       message: 'Destination rule added successfully',
       data: truck,
     });
+    emitDataChange('truck_batches', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -753,6 +855,17 @@ export const updateDestinationRule = async (req: AuthRequest, res: Response): Pr
 
     logger.info(`Destination rule updated for truck ${truckSuffix}: ${oldDestination} -> ${extraLiters}L by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'TruckBatch',
+      resourceId: truckSuffix,
+      details: `Destination rule updated for truck "${truckSuffix}": ${oldDestination} -> ${newDestination || oldDestination} (${extraLiters}L) by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -761,6 +874,7 @@ export const updateDestinationRule = async (req: AuthRequest, res: Response): Pr
       message: 'Destination rule updated successfully',
       data: config.truckBatches,
     });
+    emitDataChange('truck_batches', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -810,6 +924,17 @@ export const deleteDestinationRule = async (req: AuthRequest, res: Response): Pr
 
     logger.info(`Destination rule deleted for truck ${truckSuffix}: ${destination} by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'TruckBatch',
+      resourceId: truckSuffix,
+      details: `Destination rule "${destination}" deleted for truck "${truckSuffix}" by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -818,6 +943,7 @@ export const deleteDestinationRule = async (req: AuthRequest, res: Response): Pr
       message: 'Destination rule deleted successfully',
       data: config.truckBatches,
     });
+    emitDataChange('truck_batches', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -864,6 +990,17 @@ export const createBatch = async (req: AuthRequest, res: Response): Promise<void
 
     logger.info(`New batch created: ${extraLiters}L by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'TruckBatch',
+      resourceId: String(extraLiters),
+      details: `New ${extraLiters}L truck batch created by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -872,6 +1009,7 @@ export const createBatch = async (req: AuthRequest, res: Response): Promise<void
       message: `Batch ${extraLiters}L created successfully`,
       data: config.truckBatches,
     });
+    emitDataChange('truck_batches', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -926,6 +1064,17 @@ export const updateBatch = async (req: AuthRequest, res: Response): Promise<void
 
     logger.info(`Batch updated: ${oldExtraLiters}L → ${newExtraLiters}L by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'TruckBatch',
+      resourceId: String(oldExtraLiters),
+      details: `Truck batch updated from ${oldExtraLiters}L to ${newExtraLiters}L by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -934,6 +1083,7 @@ export const updateBatch = async (req: AuthRequest, res: Response): Promise<void
       message: `Batch updated from ${oldExtraLiters}L to ${newExtraLiters}L successfully`,
       data: config.truckBatches,
     });
+    emitDataChange('truck_batches', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -976,6 +1126,17 @@ export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void
 
     logger.info(`Batch deleted: ${extraLiters}L by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'TruckBatch',
+      resourceId: extraLiters,
+      details: `Truck batch ${extraLiters}L deleted by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
@@ -984,6 +1145,7 @@ export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void
       message: `Batch ${extraLiters}L deleted successfully`,
       data: config.truckBatches,
     });
+    emitDataChange('truck_batches', 'delete');
   } catch (error: any) {
     throw error;
   }
@@ -1050,6 +1212,17 @@ export const updateStandardAllocations = async (req: AuthRequest, res: Response)
     await config.save();
 
     logger.info(`Standard allocations updated by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'Config',
+      resourceId: 'standard_allocations',
+      details: `Standard fuel allocations updated by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'high',
+    });
 
     // Emit real-time update so all clients refresh
     emitDataChange('standard_allocations', 'update');
@@ -1118,6 +1291,17 @@ export const resetConfig = async (req: AuthRequest, res: Response): Promise<void
     }
 
     logger.info(`Configuration ${configType} reset to defaults by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'Config',
+      resourceId: configType,
+      details: `Configuration "${configType}" reset to defaults by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: configType === 'all' ? 'critical' : 'high',
+    });
 
     res.status(200).json({
       success: true,
@@ -1774,6 +1958,17 @@ export const sendTestEmail = async (req: AuthRequest, res: Response): Promise<vo
       '<p>This is a test email to verify email notifications are working correctly.</p><p>If you received this, the email service is configured properly.</p>'
     );
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'EmailService',
+      resourceId: 'test',
+      details: `Test email sent to "${emailRecipient}" by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
+
     res.status(200).json({
       success: true,
       message: 'Test email sent successfully',
@@ -1791,6 +1986,17 @@ export const sendDailySummary = async (req: AuthRequest, res: Response): Promise
   try {
     await emailService.sendDailySummary();
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'EmailService',
+      resourceId: 'daily_summary',
+      details: `Daily summary email manually triggered by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
+
     res.status(200).json({
       success: true,
       message: 'Daily summary email sent successfully',
@@ -1807,6 +2013,17 @@ export const sendDailySummary = async (req: AuthRequest, res: Response): Promise
 export const sendWeeklySummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     await emailService.sendWeeklySummary();
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'EmailService',
+      resourceId: 'weekly_summary',
+      details: `Weekly summary email manually triggered by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
 
     res.status(200).json({
       success: true,

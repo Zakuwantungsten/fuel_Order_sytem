@@ -169,6 +169,18 @@ export const togglePathRule = async (req: AuthRequest, res: Response): Promise<v
     if (!rule) throw new ApiError(404, 'Path rule not found');
     rule.isActive = !rule.isActive;
     await rule.save();
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'FirewallPathRule',
+      resourceId: id,
+      details: `Firewall path rule for "${rule.pattern}" ${rule.isActive ? 'enabled' : 'disabled'} by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(200).json({ success: true, data: rule });
   } catch (err) {
     if (err instanceof ApiError) throw err;
@@ -785,6 +797,18 @@ export const toggleEgressRule = async (req: AuthRequest, res: Response): Promise
     if (!rule) throw new ApiError(404, 'Egress rule not found');
     rule.isActive = !rule.isActive;
     await rule.save();
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'EgressFilterRule',
+      resourceId: id,
+      details: `Egress filter rule ${rule.isActive ? 'enabled' : 'disabled'} by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(200).json({ success: true, data: rule });
   } catch (err) {
     if (err instanceof ApiError) throw err;

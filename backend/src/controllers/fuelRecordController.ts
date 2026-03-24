@@ -751,14 +751,33 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`Fuel record updated for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
 
-    // Log audit trail
+    // Log audit trail — capture every field that actually changed
+    const auditFields = [
+      'truckNo', 'goingDo', 'totalLts', 'extra', 'balance', 'isLocked',
+      'mmsaYard', 'tangaYard', 'darYard', 'darGoing', 'moroGoing', 'mbeyaGoing',
+      'tdmGoing', 'zambiaGoing', 'congoFuel', 'zambiaReturn', 'tundumaReturn',
+      'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
+      'date', 'month', 'lpoNo', 'routeFrom', 'routeTo',
+    ];
+    const previousSnapshot: Record<string, any> = {};
+    const newSnapshot: Record<string, any> = {};
+    for (const field of auditFields) {
+      const prev = (existingRecord as any)[field];
+      const next = (fuelRecord as any)[field];
+      const prevStr = JSON.stringify(prev);
+      const nextStr = JSON.stringify(next);
+      if (prevStr !== nextStr) {
+        previousSnapshot[field] = prev;
+        newSnapshot[field] = next;
+      }
+    }
     await AuditService.logUpdate(
       req.user?.userId || 'system',
       req.user?.username || 'system',
       'FuelRecord',
       fuelRecord._id.toString(),
-      { truckNo: existingRecord.truckNo, goingDo: existingRecord.goingDo },
-      { truckNo: fuelRecord.truckNo, goingDo: fuelRecord.goingDo, isLocked: fuelRecord.isLocked },
+      Object.keys(previousSnapshot).length > 0 ? previousSnapshot : { truckNo: existingRecord.truckNo, goingDo: existingRecord.goingDo },
+      Object.keys(newSnapshot).length > 0 ? newSnapshot : { truckNo: fuelRecord.truckNo, goingDo: fuelRecord.goingDo, isLocked: fuelRecord.isLocked },
       req.ip
     );
 
@@ -779,45 +798,6 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       data: fuelRecord,
     });
     emitDataChange('fuel_records', 'update');
-  } catch (error: any) {
-    throw error;
-  }
-};
-
-/**
- * Soft delete fuel record
- */
-export const deleteFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-
-    const fuelRecord = await FuelRecord.findByIdAndUpdate(
-      id,
-      { isDeleted: true, deletedAt: new Date() },
-      { new: true }
-    );
-
-    if (!fuelRecord) {
-      throw new ApiError(404, 'Fuel record not found');
-    }
-
-    logger.info(`Fuel record deleted for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
-
-    // Log audit trail
-    await AuditService.logDelete(
-      req.user?.userId || 'system',
-      req.user?.username || 'system',
-      'FuelRecord',
-      fuelRecord._id.toString(),
-      { truckNo: fuelRecord.truckNo, goingDo: fuelRecord.goingDo },
-      req.ip
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'Fuel record deleted successfully',
-    });
-    emitDataChange('fuel_records', 'delete');
   } catch (error: any) {
     throw error;
   }

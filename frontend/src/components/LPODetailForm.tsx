@@ -427,6 +427,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   }, [queryClient]);
   useRealtimeSync('fuel_stations', invalidateStations);
 
+  // Real-time sync for LPO entries and fuel records
+  useRealtimeSync(['lpo_entries', 'fuel_records'], invalidateStations);
+
   // When station rates refresh (admin changed rate), update all existing entry rates
   useEffect(() => {
     if (!formData.station || formData.station === 'CASH' || formData.station === 'CUSTOM') return;

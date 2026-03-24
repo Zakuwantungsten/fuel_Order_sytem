@@ -5,6 +5,7 @@ import { FuelStationConfig } from '../models/FuelStationConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
+import { AuditService } from '../utils/auditService';
 import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
 import { emitDataChange } from '../services/websocket';
@@ -1071,6 +1072,17 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`LPO document created: ${lpoSummary.lpoNo} for year ${year} by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'LPOSummary',
+      resourceId: lpoSummary.lpoNo,
+      details: `LPO document ${lpoSummary.lpoNo} created (${lpoSummary.entries?.length || 0} entries, station: ${data.station}) by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     // Return with id field for frontend compatibility
     const responseData = lpoSummary.toObject();
     
@@ -1384,6 +1396,17 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`LPO document updated: ${lpoSummary?.lpoNo} by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'LPOSummary',
+      resourceId: lpoSummary?.lpoNo || id,
+      details: `LPO document ${lpoSummary?.lpoNo} updated by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     // Return with id field for frontend compatibility
     const responseData = lpoSummary.toObject();
     
@@ -1440,6 +1463,17 @@ export const deleteLPOSummary = async (req: AuthRequest, res: Response): Promise
     await syncLPOEntriesOnDelete(lpoSummary.lpoNo);
 
     logger.info(`LPO document deleted: ${lpoSummary.lpoNo} by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'LPOSummary',
+      resourceId: lpoSummary.lpoNo,
+      details: `LPO document ${lpoSummary.lpoNo} deleted and fuel records reverted by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'high',
+    });
 
     res.status(200).json({
       success: true,
@@ -2180,6 +2214,17 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
     const entryTypeLog = isDriverAccount ? '(Driver Account)' : isNilDO ? '(NIL DO)' : '';
     logger.info(`Truck ${truckNo} cancelled ${entryTypeLog} in LPO ${lpo.lpoNo} at ${cancellationPoint} by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'LPOSummary',
+      resourceId: lpo.lpoNo,
+      details: `Truck "${truckNo}" cancelled in LPO ${lpo.lpoNo} at ${cancellationPoint}${reason ? ` — reason: ${reason}` : ''} by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     // Generate appropriate response message
     let message = `Successfully cancelled truck ${truckNo} in LPO ${lpo.lpoNo}`;
     if (isDriverAccount) {
@@ -2194,6 +2239,9 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
       data: lpo,
       entryType: isDriverAccount ? 'driver-account' : isNilDO ? 'nil-do' : 'regular',
     });
+    emitDataChange('lpo_summaries', 'update');
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('lpo_entries', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -2350,6 +2398,17 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
 
     logger.info(`LPO ${sourceLpo.lpoNo} forwarded to ${targetStation} as LPO ${forwardedLpo.lpoNo} by ${req.user?.username}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'LPOSummary',
+      resourceId: forwardedLpo.lpoNo,
+      details: `LPO ${sourceLpo.lpoNo} forwarded to ${targetStation} as LPO ${forwardedLpo.lpoNo} (${forwardedEntries.length} entries) by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(201).json({
       success: true,
       message: `Successfully forwarded LPO ${sourceLpo.lpoNo} to ${targetStation} as LPO ${forwardedLpo.lpoNo}`,
@@ -2363,6 +2422,8 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
         entriesForwarded: forwardedEntries.length,
       },
     });
+    emitDataChange('lpo_summaries', 'create');
+    emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
   }

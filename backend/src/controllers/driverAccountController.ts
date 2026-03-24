@@ -3,6 +3,8 @@ import { DriverAccountEntry, LPOSummary, LPOEntry } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
+import { AuditService } from '../utils/auditService';
+import { emitDataChange } from '../services/websocket';
 import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
 
@@ -305,11 +307,23 @@ export const createDriverAccountEntry = async (req: AuthRequest, res: Response) 
     }
   }
 
+  await AuditService.log({
+    userId: req.user?.userId,
+    username: req.user?.username || 'system',
+    action: 'CREATE',
+    resourceType: 'DriverAccount',
+    resourceId: entry._id.toString(),
+    details: `Driver account entry created for truck "${truckNo}" (LPO ${finalLpoNo}, ${liters}L, ${station}) by ${req.user?.username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
   res.status(201).json({
     success: true,
     message: 'Driver account entry created successfully',
     data: entry,
   });
+  emitDataChange('driver_accounts', 'create');
 };
 
 /**
@@ -400,6 +414,17 @@ export const createBatchDriverAccountEntries = async (req: AuthRequest, res: Res
     }
   }
 
+  await AuditService.log({
+    userId: req.user?.userId,
+    username: req.user?.username || 'system',
+    action: 'CREATE',
+    resourceType: 'DriverAccount',
+    resourceId: batchLpoNo,
+    details: `Batch of ${createdEntries.length} driver account entries created (LPO ${batchLpoNo}) by ${req.user?.username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
   res.status(201).json({
     success: true,
     message: `${createdEntries.length} driver account entries created successfully`,
@@ -408,6 +433,7 @@ export const createBatchDriverAccountEntries = async (req: AuthRequest, res: Res
       lpoNo: batchLpoNo,
     },
   });
+  emitDataChange('driver_accounts', 'create');
 };
 
 /**
@@ -447,11 +473,23 @@ export const updateDriverAccountEntry = async (req: AuthRequest, res: Response) 
 
   logger.info(`Driver account entry updated: ${id}`);
 
+  await AuditService.log({
+    userId: req.user?.userId,
+    username: req.user?.username || 'system',
+    action: 'UPDATE',
+    resourceType: 'DriverAccount',
+    resourceId: id,
+    details: `Driver account entry ${id} (truck: ${entry.truckNo}, LPO: ${entry.lpoNo}) updated by ${req.user?.username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
   res.json({
     success: true,
     message: 'Driver account entry updated successfully',
     data: entry,
   });
+  emitDataChange('driver_accounts', 'update');
 };
 
 /**
@@ -485,11 +523,23 @@ export const updateDriverAccountStatus = async (req: AuthRequest, res: Response)
 
   logger.info(`Driver account entry ${id} status updated to ${status}`);
 
+  await AuditService.log({
+    userId: req.user?.userId,
+    username: req.user?.username || 'system',
+    action: 'UPDATE',
+    resourceType: 'DriverAccount',
+    resourceId: id,
+    details: `Driver account entry ${id} (truck: ${entry.truckNo}) status changed to "${status}" by ${req.user?.username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
   res.json({
     success: true,
     message: `Entry marked as ${status}`,
     data: entry,
   });
+  emitDataChange('driver_accounts', 'update');
 };
 
 /**
@@ -510,10 +560,22 @@ export const deleteDriverAccountEntry = async (req: AuthRequest, res: Response) 
 
   logger.info(`Driver account entry deleted: ${id}`);
 
+  await AuditService.log({
+    userId: req.user?.userId,
+    username: req.user?.username || 'system',
+    action: 'DELETE',
+    resourceType: 'DriverAccount',
+    resourceId: id,
+    details: `Driver account entry ${id} (truck: ${entry.truckNo}, LPO: ${entry.lpoNo}) deleted by ${req.user?.username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
   res.json({
     success: true,
     message: 'Driver account entry deleted successfully',
   });
+  emitDataChange('driver_accounts', 'delete');
 };
 
 /**

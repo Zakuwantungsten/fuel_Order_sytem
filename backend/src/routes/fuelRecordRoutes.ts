@@ -39,13 +39,4 @@ router.put(
   asyncHandler(fuelRecordController.updateFuelRecord)
 );
 
-// Delete route
-router.delete(
-  '/:id',
-  commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'boss'),
-  validate,
-  asyncHandler(fuelRecordController.deleteFuelRecord)
-);
-
 export default router;

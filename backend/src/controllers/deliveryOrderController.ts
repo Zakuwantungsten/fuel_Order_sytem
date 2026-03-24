@@ -1039,6 +1039,17 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     logger.info(`Delivery order cancelled: ${deliveryOrder.doNumber} by ${username}. Reason: ${reason}. Fuel action: ${fuelResult.action}`);
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: username,
+      action: 'UPDATE',
+      resourceType: 'DeliveryOrder',
+      resourceId: deliveryOrder._id.toString(),
+      details: `DO ${deliveryOrder.doNumber} (truck: ${deliveryOrder.truckNo}) cancelled by ${username}. Reason: ${cancellationReason}`,
+      ipAddress: req.ip,
+      severity: 'high',
+    });
+
     res.status(200).json({
       success: true,
       message,

@@ -872,10 +872,6 @@ export const fuelRecordsAPI = {
     const response = await apiClient.put(`/fuel-records/${id}`, data);
     return response.data.data;
   },
-  
-  delete: async (id: string | number): Promise<void> => {
-    await apiClient.delete(`/fuel-records/${id}`);
-  },
 };
 
 // Dashboard API

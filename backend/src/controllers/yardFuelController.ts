@@ -632,6 +632,17 @@ export const rejectYardFuelDispense = async (req: AuthRequest, res: Response): P
       `Yard fuel dispense rejected: ${yardFuelDispense.truckNo} by ${req.user?.username}. Reason: ${rejectionReason}`
     );
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'YardFuelDispense',
+      resourceId: id,
+      details: `Yard fuel entry for truck "${yardFuelDispense.truckNo}" (${yardFuelDispense.liters}L, ${yardFuelDispense.yard}) rejected by ${req.user?.username}. Reason: ${rejectionReason}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(200).json({
       success: true,
       message: 'Yard fuel dispense rejected and yard personnel notified',

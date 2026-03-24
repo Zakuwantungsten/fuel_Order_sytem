@@ -147,12 +147,4 @@ export function useUpdateFuelRecord() {
   });
 }
 
-export function useDeleteFuelRecord() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string | number) => fuelRecordsAPI.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
-    },
-  });
-}
+

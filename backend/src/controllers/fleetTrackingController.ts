@@ -4,6 +4,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils';
 import { AuditService } from '../utils/auditService';
+import { emitDataChange } from '../services/websocket';
 import { fleetReportParser } from '../services/fleetReportParser';
 import multer from 'multer';
 import path from 'path';
@@ -103,8 +104,16 @@ export const uploadFleetReport = async (req: AuthRequest, res: Response): Promis
       await TruckPosition.insertMany(truckPositions);
     }
 
-    // TODO: Add audit logging once UPLOAD_FLEET_REPORT action is added to AuditLog enum
-    // await AuditService.log({ ... });
+    await AuditService.log({
+      userId: user.userId,
+      username: user.username,
+      action: 'CREATE',
+      resourceType: 'FleetSnapshot',
+      resourceId: snapshot._id.toString(),
+      details: `Fleet report uploaded by ${user.username}: ${parsedData.totalTrucks} trucks in ${parsedData.fleetGroups.length} groups (${parsedData.reportType})`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
 
     if (parsedData.totalTrucks === 0) {
       logger.warn(`⚠️ WARNING: Fleet report processed but found 0 trucks! File: ${file.originalname}`);
@@ -131,6 +140,7 @@ export const uploadFleetReport = async (req: AuthRequest, res: Response): Promis
         checkpointDistribution: Object.fromEntries(parsedData.checkpointDistribution),
       },
     });
+    emitDataChange('fleet_snapshots', 'create');
   } catch (error: any) {
     throw error;
   }
@@ -426,17 +436,16 @@ export const deleteSnapshot = async (req: AuthRequest, res: Response): Promise<v
     // Also delete associated truck positions
     await TruckPosition.deleteMany({ snapshotId: id });
 
-    // TODO: Add audit logging for fleet snapshot deletion
-    // await AuditService.log({
-    //   action: 'DELETE',
-    //   resourceType: 'FLEET_SNAPSHOT',
-    //   resourceId: id,
-    //   userId: user.id,
-    //   username: user.username,
-    //   details: JSON.stringify({ fileName: snapshot.fileName }),
-    //   ipAddress: req.ip,
-    //   userAgent: req.get('user-agent'),
-    // });
+    await AuditService.log({
+      userId: user.userId,
+      username: user.username,
+      action: 'DELETE',
+      resourceType: 'FleetSnapshot',
+      resourceId: id,
+      details: `Fleet snapshot deleted by ${user.username}: ${snapshot.fileName} (${snapshot.totalTrucks} trucks, ${snapshot.reportDate})`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
 
     logger.info(`Fleet snapshot ${id} deleted by ${user.username}`);
 
@@ -444,6 +453,7 @@ export const deleteSnapshot = async (req: AuthRequest, res: Response): Promise<v
       success: true,
       message: 'Fleet snapshot deleted successfully',
     });
+    emitDataChange('fleet_snapshots', 'delete');
   } catch (error: any) {
     throw error;
   }

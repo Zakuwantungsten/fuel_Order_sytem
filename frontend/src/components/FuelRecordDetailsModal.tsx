@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   X,
   MapPin,
@@ -13,6 +13,7 @@ import {
   Ban,
 } from 'lucide-react';
 import { FuelRecordDetails, fuelRecordsAPI } from '../services/api';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface FuelRecordDetailsModalProps {
   isOpen: boolean;
@@ -42,7 +43,7 @@ export default function FuelRecordDetailsModal({
     }
   }, [isOpen, recordId]);
 
-  const fetchDetails = async () => {
+  const fetchDetails = useCallback(async () => {
     if (!recordId) return;
     
     setLoading(true);
@@ -57,7 +58,10 @@ export default function FuelRecordDetailsModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [recordId]);
+
+  // Real-time sync: refresh details when fuel records change
+  useRealtimeSync('fuel_records', fetchDetails);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({

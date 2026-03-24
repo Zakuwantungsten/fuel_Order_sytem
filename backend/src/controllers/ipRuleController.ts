@@ -160,6 +160,17 @@ export const toggleRule = async (req: AuthRequest, res: Response): Promise<void>
     await rule.save();
     await refreshIPRuleCache();
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'IPRule',
+      resourceId: id,
+      details: `IP rule for "${rule.ip}" (${rule.type}) ${rule.isActive ? 'enabled' : 'disabled'} by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
     res.status(200).json({ success: true, data: rule });
   } catch (err) {
     if (err instanceof ApiError) throw err;

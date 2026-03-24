@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Truck, Trash2, Plus, Fuel, Search, MapPin, X, Edit2 } from 'lucide-react';
 import {
   useTruckBatches,
@@ -9,7 +9,10 @@ import {
   useCreateBatch,
   useUpdateBatch,
   useDeleteBatch,
+  truckBatchKeys,
 } from '../hooks/useTruckBatches';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
 interface DestinationRule {
@@ -20,6 +23,7 @@ interface DestinationRule {
 export default function TruckBatches() {
   // Use React Query hooks
   const { data: batches, isLoading: loading } = useTruckBatches();
+  const queryClient = useQueryClient();
   const addTruckMutation = useAddTruckBatch();
   const removeTruckMutation = useRemoveTruckBatch();
   const addRuleMutation = useAddDestinationRule();
@@ -27,6 +31,12 @@ export default function TruckBatches() {
   const createBatchMutation = useCreateBatch();
   const updateBatchMutation = useUpdateBatch();
   const deleteBatchMutation = useDeleteBatch();
+
+  // Real-time sync: refresh when other users modify truck batches
+  const invalidateBatches = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+  }, [queryClient]);
+  useRealtimeSync('truck_batches', invalidateBatches);
 
   const [newTruck, setNewTruck] = useState({ suffix: '', batch: 0 });
   const [searchQuery, setSearchQuery] = useState('');
