@@ -37,6 +37,8 @@ const DEFAULT_SEVERITY: Record<AuditAction, AuditSeverity> = {
   ACCESS_DENIED: 'high', ROLE_CHANGE: 'critical',
   ACCOUNT_LOCKED: 'high', ACCOUNT_UNLOCKED: 'high',
   LOGIN_BLOCKED: 'critical', ELEVATED_RISK_LOGIN: 'high',
+  FORCE_LOGOUT: 'high', CONCURRENT_SESSION_KILL: 'medium', SESSION_TERMINATED: 'high', SESSION_REVOKED: 'low',
+  ACCOUNT_DEACTIVATED: 'high', ACCOUNT_ACTIVATED: 'medium', ACCOUNT_BANNED: 'critical', ACCOUNT_UNBANNED: 'medium',
   VIEW_SENSITIVE_DATA: 'medium', EXPORT: 'low',
   APPROVE: 'low', REJECT: 'low',
   CONFIG_CHANGE: 'critical', BULK_OPERATION: 'medium',

@@ -35,7 +35,7 @@ export const terminateSession = async (req: AuthRequest, res: Response): Promise
     activeSessionTracker.terminate(userId);
 
     await AuditService.log({
-      action: 'CONFIG_CHANGE',
+      action: 'SESSION_TERMINATED',
       resourceType: 'session',
       resourceId: userId,
       userId: req.user?.userId || '',
@@ -63,7 +63,7 @@ export const terminateAllSessions = async (req: AuthRequest, res: Response): Pro
     const terminated = activeSessionTracker.terminateAll(req.user?.userId);
 
     await AuditService.log({
-      action: 'CONFIG_CHANGE',
+      action: 'SESSION_TERMINATED',
       resourceType: 'session',
       userId: req.user?.userId || '',
       username: req.user?.username || '',

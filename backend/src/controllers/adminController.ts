@@ -1659,11 +1659,11 @@ export const forceLogout = async (req: AuthRequest, res: Response): Promise<void
     await AuditService.log({
       userId: req.user.userId,
       username: req.user.username,
-      action: 'LOGOUT',
+      action: 'FORCE_LOGOUT',
       resourceType: 'user_session',
       resourceId: userId,
-      details: `Force logged out user ${user.username}`,
-      severity: 'medium',
+      details: `Force logged out user ${user.username} (${user.role})`,
+      severity: 'high',
       ipAddress: req.ip,
     });
 

@@ -512,6 +512,17 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         type: 'force_logout',
         message: 'You have been logged out because a new session was started from another location.',
       });
+      await AuditService.log({
+        userId: user._id.toString(),
+        username: user.username,
+        action: 'CONCURRENT_SESSION_KILL',
+        resourceType: 'auth',
+        resourceId: user._id.toString(),
+        details: `Existing session terminated by single-session policy — new login from ${req.ip}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        severity: 'medium',
+      });
       logger.info(`Single-session policy: existing session(s) for '${username}' were force-logged out and refresh token revoked`);
     }
 
@@ -674,6 +685,17 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
       emitToUser(user.username, 'session_event', {
         type: 'force_logout',
         message: 'You have been logged out because a new session was started from another location.',
+      });
+      await AuditService.log({
+        userId: user._id.toString(),
+        username: user.username,
+        action: 'CONCURRENT_SESSION_KILL',
+        resourceType: 'auth',
+        resourceId: user._id.toString(),
+        details: `Existing session terminated by single-session policy — new MFA-verified login from ${req.ip}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        severity: 'medium',
       });
       logger.info(`Single-session policy: existing session(s) for '${user.username}' were force-logged out and refresh token revoked`);
     }
@@ -898,6 +920,17 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
         type: 'force_logout',
         message: 'You have been logged out because a new session was started from another location.',
       });
+      await AuditService.log({
+        userId: user._id.toString(),
+        username: user.username,
+        action: 'CONCURRENT_SESSION_KILL',
+        resourceType: 'auth',
+        resourceId: user._id.toString(),
+        details: `Existing session terminated by single-session policy — new TOTP MFA setup login from ${req.ip}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        severity: 'medium',
+      });
     }
 
     // Generate final tokens — user is now fully authenticated
@@ -1111,6 +1144,17 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
       emitToUser(user.username, 'session_event', {
         type: 'force_logout',
         message: 'You have been logged out because a new session was started from another location.',
+      });
+      await AuditService.log({
+        userId: user._id.toString(),
+        username: user.username,
+        action: 'CONCURRENT_SESSION_KILL',
+        resourceType: 'auth',
+        resourceId: user._id.toString(),
+        details: `Existing session terminated by single-session policy — new email MFA setup login from ${req.ip}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        severity: 'medium',
       });
     }
 

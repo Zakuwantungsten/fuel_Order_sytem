@@ -492,6 +492,17 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response): Promise
       });
     }
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: user.isActive ? 'ACCOUNT_ACTIVATED' : 'ACCOUNT_DEACTIVATED',
+      resourceType: 'User',
+      resourceId: user._id.toString(),
+      details: `User ${user.username} (${user.role}) ${user.isActive ? 'activated' : 'deactivated'} by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: user.isActive ? 'medium' : 'high',
+    });
+
     res.status(200).json({
       success: true,
       message: `User ${user.isActive ? 'activated' : 'deactivated'} successfully`,
@@ -543,6 +554,17 @@ export const banUser = async (req: AuthRequest, res: Response): Promise<void> =>
       message: `Your account has been banned by an administrator. Reason: ${reason || 'No reason provided'}.`,
     });
 
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'ACCOUNT_BANNED',
+      resourceType: 'User',
+      resourceId: user._id.toString(),
+      details: `User ${user.username} (${user.role}) banned by ${req.user?.username}. Reason: ${reason || 'No reason provided'}`,
+      ipAddress: req.ip,
+      severity: 'critical',
+    });
+
     res.status(200).json({
       success: true,
       message: 'User banned successfully',
@@ -580,6 +602,17 @@ export const unbanUser = async (req: AuthRequest, res: Response): Promise<void> 
     await user.save();
 
     logger.info(`User unbanned: ${user.username} by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'ACCOUNT_UNBANNED',
+      resourceType: 'User',
+      resourceId: user._id.toString(),
+      details: `User ${user.username} (${user.role}) unbanned by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
 
     res.status(200).json({
       success: true,

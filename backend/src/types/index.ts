@@ -49,6 +49,16 @@ export type AuditAction =
   // ── WORKFLOW ──────────────────────────────────────────────────────────────
   | 'APPROVE'
   | 'REJECT'
+  // ── SESSION MANAGEMENT ──────────────────────────────────────────────────────
+  | 'FORCE_LOGOUT'            // admin or policy forced a user off
+  | 'CONCURRENT_SESSION_KILL' // single-session policy kicked existing session
+  | 'SESSION_TERMINATED'      // admin terminated a specific session
+  | 'SESSION_REVOKED'         // user self-revoked a session
+  // ── ACCOUNT ACTIONS ───────────────────────────────────────────────────────
+  | 'ACCOUNT_DEACTIVATED'     // admin disabled the account
+  | 'ACCOUNT_ACTIVATED'       // admin re-enabled the account
+  | 'ACCOUNT_BANNED'          // admin banned the account
+  | 'ACCOUNT_UNBANNED'        // admin lifted a ban
   // ── SYSTEM MANAGEMENT ─────────────────────────────────────────────────────
   | 'CONFIG_CHANGE'
   | 'BULK_OPERATION'

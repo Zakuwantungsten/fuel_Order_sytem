@@ -548,6 +548,17 @@ export const revokeSession = asyncHandler(async (req: AuthRequest, res: Response
     await user.save();
   }
 
+  await AuditService.log({
+    userId,
+    username: req.user?.username || '',
+    action: 'SESSION_REVOKED',
+    resourceType: 'session',
+    resourceId: sessionId,
+    details: `User self-revoked session ${sessionId}`,
+    ipAddress: req.ip,
+    severity: 'low',
+  });
+
   res.json({ success: true, message: 'Session revoked' });
 });
 
@@ -568,6 +579,16 @@ export const revokeAllOtherSessions = asyncHandler(async (req: AuthRequest, res:
     { userId, isCurrent: true, sessionToken: { $ne: currentHash } },
     { $set: { isCurrent: false, loggedOutAt: new Date() } }
   );
+
+  await AuditService.log({
+    userId,
+    username: req.user?.username || '',
+    action: 'SESSION_REVOKED',
+    resourceType: 'session',
+    details: `User revoked all other sessions (${result.modifiedCount} revoked)`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
 
   res.json({ success: true, data: { revokedCount: result.modifiedCount }, message: `${result.modifiedCount} session(s) revoked` });
 });
