@@ -1063,7 +1063,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">NIL</td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.truckNo}</td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.liters.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.rate.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{(entry.rate ?? 0).toFixed(2)}</td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">NIL</td>
                       <td className="px-3 py-2 text-xs font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(entry.amount)}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>

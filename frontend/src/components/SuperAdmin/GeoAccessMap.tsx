@@ -214,7 +214,9 @@ export default function GeoAccessMap() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-xs text-gray-400">
-                    {loc.lat.toFixed(2)}, {loc.lng.toFixed(2)}
+                    {loc.lat != null && loc.lng != null
+                      ? `${loc.lat.toFixed(2)}, ${loc.lng.toFixed(2)}`
+                      : '—'}
                   </p>
                 </div>
               </div>

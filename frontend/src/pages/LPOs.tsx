@@ -1515,8 +1515,8 @@ const LPOs = () => {
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {lpo.currency === 'USD'
-                            ? `${lpo.ltrs.toLocaleString()}L @ $${lpo.pricePerLtr.toFixed(2)}`
-                            : `${lpo.ltrs.toLocaleString()}L @ TZS ${lpo.pricePerLtr.toLocaleString()}`}
+                            ? `${lpo.ltrs.toLocaleString()}L @ $${(lpo.pricePerLtr ?? 0).toFixed(2)}`
+                            : `${lpo.ltrs.toLocaleString()}L @ TZS ${(lpo.pricePerLtr ?? 0).toLocaleString()}`}
                         </p>
                       </div>
                     </div>
@@ -1706,7 +1706,7 @@ const LPOs = () => {
                           {lpo.ltrs.toLocaleString()}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
-                          {lpo.pricePerLtr.toFixed(2)}
+                          {(lpo.pricePerLtr ?? 0).toFixed(2)}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.destinations}
