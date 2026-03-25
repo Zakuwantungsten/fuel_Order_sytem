@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TrendingUp, Download, Fuel, DollarSign, Truck, FileText, BarChart3 } from 'lucide-react';
 import { dashboardAPI } from '../services/api';
 import { ReportStats } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useAuth } from '../contexts/AuthContext';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 interface ReportsProps {
@@ -10,15 +11,26 @@ interface ReportsProps {
 }
 
 function StatCard({ label, value, sub, icon: Icon, color }: { label: string; value: string; sub?: string; icon: any; color: string }) {
+  const { isDark } = useAuth();
   const colorMap: Record<string, string> = {
-    blue:   'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
-    green:  'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
-    red:    'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
-    purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
-    orange: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
-    yellow: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400',
-    indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
+    blue:   'bg-blue-50 text-blue-700',
+    green:  'bg-green-50 text-green-700',
+    red:    'bg-red-50 text-red-700',
+    purple: 'bg-blue-50 text-blue-700',
+    orange: 'bg-orange-50 text-orange-700',
+    yellow: 'bg-orange-50 text-orange-700',
+    indigo: 'bg-blue-50 text-blue-700',
   };
+  const styleMap: Record<string, React.CSSProperties> = {
+    blue:   { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' },
+    green:  { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' },
+    red:    { background: isDark ? 'rgba(220,38,38,0.2)' : '#FEE2E2', color: isDark ? '#FCA5A5' : '#B91C1C' },
+    purple: { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' },
+    orange: { background: isDark ? 'rgba(234,88,12,0.2)' : '#FFF7ED', color: isDark ? '#FDBA74' : '#EA580C' },
+    yellow: { background: isDark ? 'rgba(234,88,12,0.2)' : '#FFF7ED', color: isDark ? '#FDBA74' : '#EA580C' },
+    indigo: { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' },
+  };
+  const iconStyle = styleMap[color] || styleMap.blue;
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
       <div className="flex items-center justify-between">
@@ -27,7 +39,7 @@ function StatCard({ label, value, sub, icon: Icon, color }: { label: string; val
           <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">{value}</p>
           {sub && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>}
         </div>
-        <div className={`w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center ${colorMap[color] || colorMap.blue}`}>
+        <div className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center" style={iconStyle}>
           <Icon className="w-4 h-4" />
         </div>
       </div>
@@ -101,9 +113,9 @@ export function Reports({}: ReportsProps) {
             {reportData.fuelConsumption.byYard.map((yard, index) => (
               <div key={yard.name} className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    index === 0 ? 'bg-blue-500' : index === 1 ? 'bg-green-500' : index === 2 ? 'bg-yellow-500' : 'bg-purple-500'
-                  }`}></div>
+                  <div className="w-3 h-3 rounded-full" style={{ background:
+                    index === 0 ? '#2563EB' : index === 1 ? '#16A34A' : index === 2 ? '#EA580C' : '#0891B2'
+                  }}></div>
                   <span className="text-sm text-gray-700 dark:text-gray-300">{yard.name}</span>
                 </div>
                 <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{yard.value.toLocaleString()}L</div>
@@ -119,10 +131,10 @@ export function Reports({}: ReportsProps) {
             {reportData.fuelConsumption.byStation.map((station, index) => (
               <div key={station.name} className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    index === 0 ? 'bg-indigo-500' : index === 1 ? 'bg-pink-500' : index === 2 ? 'bg-orange-500' : 
-                    index === 3 ? 'bg-teal-500' : 'bg-gray-500'
-                  }`}></div>
+                  <div className="w-3 h-3 rounded-full" style={{ background:
+                    index === 0 ? '#2563EB' : index === 1 ? '#16A34A' : index === 2 ? '#EA580C' :
+                    index === 3 ? '#0891B2' : '#94A3B8'
+                  }}></div>
                   <span className="text-sm text-gray-700 dark:text-gray-300">{station.name}</span>
                 </div>
                 <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{station.value.toLocaleString()}L</div>
@@ -202,7 +214,7 @@ export function Reports({}: ReportsProps) {
           <select
             value={reportType}
             onChange={(e) => setReportType(e.target.value)}
-            className="flex-1 min-w-[130px] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 min-w-[130px] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-600"
           >
             <option value="overview">Overview</option>
             <option value="financial">Financial</option>
@@ -212,7 +224,7 @@ export function Reports({}: ReportsProps) {
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="flex-1 min-w-[110px] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 min-w-[110px] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-600"
           >
             <option value="week">This Week</option>
             <option value="month">This Month</option>
@@ -221,12 +233,22 @@ export function Reports({}: ReportsProps) {
             <option value="custom">Custom</option>
           </select>
           <div className="flex gap-2">
-            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-sm"
+              style={{ background: '#2563EB' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
+            >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export PDF</span>
               <span className="sm:hidden">PDF</span>
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-sm"
+              style={{ background: '#16A34A' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#15803D')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#16A34A')}
+            >
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">Export Excel</span>
               <span className="sm:hidden">XLS</span>

@@ -25,10 +25,11 @@ import { BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, CartesianGrid,
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
 import { DashboardStats, FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useAuth } from '../contexts/AuthContext';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
-// Colors for charts
-const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+// Colors for charts — aligned with design system palette
+const CHART_COLORS = ['#2563EB', '#16A34A', '#F97316', '#8B5CF6', '#0891B2', '#EC4899'];
 
 interface SearchResult {
   id: string;
@@ -45,6 +46,7 @@ interface DashboardProps {
 
 const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   const navigate = useNavigate();
+  const { isDark } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -469,16 +471,27 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     );
   }
 
-  const TrendBadge = ({ pct }: { pct: number | null | undefined }) => {
+  const TrendBadge = ({ pct, onCard }: { pct: number | null | undefined; onCard?: boolean }) => {
     if (pct === null || pct === undefined) {
       return (
-        <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-gray-400 bg-gray-100 dark:text-gray-500 dark:bg-gray-700/50">
+        <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+          style={onCard ? { background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.80)' } : undefined}
+          {...(!onCard && { className: 'inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-gray-400 bg-gray-100 dark:text-gray-500 dark:bg-gray-700/50' })}>
           —
         </span>
       );
     }
     const isUp = pct >= 0;
     const Icon = isUp ? ChevronUp : ChevronDown;
+    if (onCard) {
+      return (
+        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+          style={{ background: 'rgba(255,255,255,0.18)', color: '#ffffff' }}>
+          <Icon className="w-3 h-3" />
+          {isUp ? '+' : ''}{pct}%
+        </span>
+      );
+    }
     return (
       <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
         isUp
@@ -498,9 +511,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       sub: `${stats.activeTrips} active trip${stats.activeTrips !== 1 ? 's' : ''}`,
       trend: stats.trends?.dos,
       icon: FileText,
-      borderColor: 'border-l-blue-500',
-      iconBg: 'bg-blue-50 dark:bg-blue-900/20',
-      iconColor: '#3b82f6',
+      bg: '#2563EB',
     },
     {
       name: 'Fuel Records',
@@ -508,9 +519,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       sub: `${stats.totalLiters.toLocaleString()} L dispensed`,
       trend: stats.trends?.fuelRecords,
       icon: Fuel,
-      borderColor: 'border-l-green-500',
-      iconBg: 'bg-green-50 dark:bg-green-900/20',
-      iconColor: '#10b981',
+      bg: '#16A34A',
     },
     {
       name: 'LPO Entries',
@@ -518,9 +527,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       sub: stats.pendingYardFuel ? `${stats.pendingYardFuel} yard pending` : 'none pending',
       trend: stats.trends?.lpos,
       icon: ClipboardList,
-      borderColor: 'border-l-purple-500',
-      iconBg: 'bg-purple-50 dark:bg-purple-900/20',
-      iconColor: '#8b5cf6',
+      bg: '#0891B2',
     },
     {
       name: 'Tonnage (Month)',
@@ -528,9 +535,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       sub: `Ksh ${stats.totalRevenue.toLocaleString()} revenue`,
       trend: stats.trends?.tonnage,
       icon: TrendingUp,
-      borderColor: 'border-l-orange-500',
-      iconBg: 'bg-orange-50 dark:bg-orange-900/20',
-      iconColor: '#f59e0b',
+      bg: '#EA580C',
     },
   ];
 
@@ -539,14 +544,17 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Fuel Order Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <h1 className="text-xl font-bold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Fuel Order Dashboard</h1>
+          <p className="mt-1 text-sm" style={{ color: '#64748B' }}>
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
         <button
           onClick={fetchStats}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          className="flex items-center gap-2 px-3 py-1.5 text-sm text-white rounded-lg transition-colors"
+          style={{ background: '#2563EB' }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+          onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
         >
           <Activity className="w-4 h-4" />
           Refresh
@@ -563,11 +571,11 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
             value={searchQuery}
             onChange={(e) => handleSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && performUnifiedSearch(searchQuery)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:border-transparent" style={{ '--tw-ring-color': '#2563EB' } as React.CSSProperties}
           />
           {searching && (
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <Loader className="w-4 h-4 animate-spin text-indigo-600" />
+              <Loader className="w-4 h-4 animate-spin" style={{ color: '#2563EB' }} />
             </div>
           )}
         </div>
@@ -634,8 +642,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           {searchResults.lpos.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <ClipboardList className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                <ClipboardList className="w-4 h-4" style={{ color: '#0891B2' }} />
+                <h3 className="text-sm font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>
                   LPOs
                   <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
                     ({searchResults.lpos.length} found)
@@ -647,18 +655,21 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                   <div
                     key={result.id}
                     onClick={() => handleResultClick(result)}
-                    className="p-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all hover:shadow-sm"
+                    className="p-2 rounded-md cursor-pointer transition-all hover:shadow-sm"
+                    style={{ background: isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE', border: `1px solid ${isDark ? 'rgba(8,145,178,0.3)' : '#BAE6FD'}` }}
+                    onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(8,145,178,0.25)' : '#BAE6FD')}
+                    onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE')}
                   >
                     <div className="flex items-start justify-between gap-1">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1 mb-0.5">
-                          <Calendar className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                          <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 truncate">{result.month}</p>
+                          <Calendar className="w-2.5 h-2.5 flex-shrink-0" style={{ color: '#0891B2' }} />
+                          <p className="text-[10px] font-semibold truncate" style={{ color: '#0891B2' }}>{result.month}</p>
                         </div>
-                        <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{result.primaryText}</p>
-                        <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5 truncate">{result.secondaryText}</p>
+                        <p className="text-xs font-medium truncate" style={{ color: isDark ? '#E2E8F0' : '#0F172A' }}>{result.primaryText}</p>
+                        <p className="text-[10px] mt-0.5 truncate" style={{ color: '#64748B' }}>{result.secondaryText}</p>
                       </div>
-                      <ArrowRight className="w-3 h-3 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+                      <ArrowRight className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#0891B2' }} />
                     </div>
                   </div>
                 ))}
@@ -723,24 +734,31 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         {statsCards.map((stat) => (
           <div
             key={stat.name}
-            className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 border-l-4 ${stat.borderColor} hover:shadow-md transition-shadow`}
+            className="rounded-xl transition-all"
+            style={{
+              background: `linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0.08) 100%), ${stat.bg}`,
+              border: '1px solid rgba(255,255,255,0.15)',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.16), 0 1px 3px rgba(0,0,0,0.08)',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.10)')}
+            onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.16), 0 1px 3px rgba(0,0,0,0.08)')}
           >
             <div className="p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 truncate">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide truncate" style={{ color: 'rgba(255,255,255,0.65)', letterSpacing: '0.07em' }}>
                     {stat.name}
                   </p>
                   <div className="mt-1.5 flex items-baseline gap-2">
-                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 leading-none">
+                    <p className="text-2xl font-bold leading-none text-white">
                       {stat.value}
                     </p>
-                    <TrendBadge pct={stat.trend} />
+                    <TrendBadge pct={stat.trend} onCard />
                   </div>
-                  <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{stat.sub}</p>
+                  <p className="mt-1.5 text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{stat.sub}</p>
                 </div>
-                <div className={`${stat.iconBg} p-2 rounded-lg flex-shrink-0`}>
-                  <stat.icon className="w-4 h-4" style={{ color: stat.iconColor }} />
+                <div className="p-2 rounded-lg flex-shrink-0" style={{ background: 'rgba(255,255,255,0.18)' }}>
+                  <stat.icon className="w-4 h-4 text-white" />
                 </div>
               </div>
             </div>
@@ -753,25 +771,37 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">Quick:</span>
         <button
           onClick={() => handleQuickAction('create-do')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors"
+          style={{ color: isDark ? '#93C5FD' : '#1D4ED8', background: isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF', border: `1px solid ${isDark ? 'rgba(37,99,235,0.3)' : '#BFDBFE'}` }}
+          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.25)' : '#DBEAFE')}
+          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF')}
         >
           <Plus className="w-3 h-3" /> New DO
         </button>
         <button
           onClick={() => handleQuickAction('bulk-create')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors"
+          style={{ color: isDark ? '#93C5FD' : '#1D4ED8', background: isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF', border: `1px solid ${isDark ? 'rgba(37,99,235,0.3)' : '#BFDBFE'}` }}
+          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.25)' : '#DBEAFE')}
+          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF')}
         >
           <Package className="w-3 h-3" /> Bulk DO
         </button>
         <button
           onClick={() => handleQuickAction('create-lpo')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-full hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors"
+          style={{ color: isDark ? '#67E8F9' : '#0369A1', background: isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE', border: `1px solid ${isDark ? 'rgba(8,145,178,0.3)' : '#BAE6FD'}` }}
+          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(8,145,178,0.25)' : '#BAE6FD')}
+          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE')}
         >
           <Plus className="w-3 h-3" /> New LPO
         </button>
         <button
           onClick={() => handleQuickAction('create-fuel')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-full hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors"
+          style={{ color: isDark ? '#86EFAC' : '#15803D', background: isDark ? 'rgba(22,163,74,0.15)' : '#DCFCE7', border: `1px solid ${isDark ? 'rgba(22,163,74,0.3)' : '#BBF7D0'}` }}
+          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(22,163,74,0.25)' : '#BBF7D0')}
+          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(22,163,74,0.15)' : '#DCFCE7')}
         >
           <Plus className="w-3 h-3" /> Fuel Record
         </button>
@@ -802,7 +832,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                   labelStyle={{ color: '#9ca3af' }}
                   formatter={(v: any) => [`${Number(v).toLocaleString()} L`, 'Fuel']}
                 />
-                <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="value" fill="#2563EB" radius={[4, 4, 0, 0]}>
                   <LabelList dataKey="value" position="top" style={{ fontSize: 10, fill: '#6b7280' }} formatter={(v: any) => v > 0 ? Number(v).toLocaleString() : ''} />
                 </Bar>
               </BarChart>
@@ -828,7 +858,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                   contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                   labelStyle={{ color: '#9ca3af' }}
                 />
-                <Line type="monotone" dataKey="count" stroke="#10b981" strokeWidth={3} dot={{ fill: '#10b981', r: 5 }} />
+                <Line type="monotone" dataKey="count" stroke="#16A34A" strokeWidth={3} dot={{ fill: '#16A34A', r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -839,8 +869,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         {/* Station-wise LPO Distribution */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Station LPO Distribution</h3>
+            <BarChart3 className="w-4 h-4" style={{ color: '#0891B2' }} />
+            <h3 className="text-base font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Station LPO Distribution</h3>
           </div>
           {chartData.stationDistribution.length > 0 ? (() => {
             const total = chartData.stationDistribution.reduce((s: number, d: any) => s + d.value, 0);
@@ -968,7 +998,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
               <FileText className="w-4 h-4 text-blue-500" />
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent DOs</h3>
             </div>
-            <button onClick={() => onNavigate?.('do')} className="text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors">View all →</button>
+            <button onClick={() => onNavigate?.('do')} className="text-xs transition-colors" style={{ color: '#2563EB' }} onMouseEnter={e => (e.currentTarget.style.color = '#1D4ED8')} onMouseLeave={e => (e.currentTarget.style.color = '#2563EB')}>View all →</button>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {stats.recentActivities?.deliveryOrders && stats.recentActivities.deliveryOrders.length > 0 ? (
@@ -1011,10 +1041,10 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <ClipboardList className="w-4 h-4 text-purple-500" />
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent LPOs</h3>
+              <ClipboardList className="w-4 h-4" style={{ color: '#0891B2' }} />
+              <h3 className="text-sm font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Recent LPOs</h3>
             </div>
-            <button onClick={() => onNavigate?.('lpo')} className="text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors">View all →</button>
+            <button onClick={() => onNavigate?.('lpo')} className="text-xs transition-colors" style={{ color: '#2563EB' }} onMouseEnter={e => (e.currentTarget.style.color = '#1D4ED8')} onMouseLeave={e => (e.currentTarget.style.color = '#2563EB')}>View all →</button>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {stats.recentActivities?.lpoEntries && stats.recentActivities.lpoEntries.length > 0 ? (
@@ -1025,7 +1055,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                   onClick={() => onNavigate ? onNavigate('lpo', `highlight=${lpo.lpoNo}`) : navigate(`/lpo?highlight=${lpo.lpoNo}`)}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 truncate">{lpo.lpoNo}</span>
+                    <span className="text-xs font-semibold truncate" style={{ color: '#0891B2' }}>{lpo.lpoNo}</span>
                     {lpo.ltrs != null && <span className="text-[10px] font-bold text-green-600 dark:text-green-400 flex-shrink-0">{Number(lpo.ltrs).toLocaleString()} L</span>}
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">

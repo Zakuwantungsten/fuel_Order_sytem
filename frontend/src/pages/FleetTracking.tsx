@@ -178,15 +178,15 @@ const FleetTracking = () => {
   const generateStatusColorMap = (positions: TruckPosition[]): StatusColorMap => {
     const uniqueStatuses = Array.from(new Set(positions.map(p => p.status)));
     const colorPalette = [
-      '#3B82F6', // Blue
-      '#10B981', // Green
+      '#2563EB', // Blue
+      '#16A34A', // Green
       '#F59E0B', // Amber
       '#EF4444', // Red
       '#8B5CF6', // Purple
       '#EC4899', // Pink
-      '#14B8A6', // Teal
-      '#F97316', // Orange
-      '#6366F1', // Indigo
+      '#0891B2', // Teal
+      '#EA580C', // Orange
+      '#1D4ED8', // Dark Blue
       '#84CC16', // Lime
       '#06B6D4', // Cyan
       '#F43F5E', // Rose
@@ -357,7 +357,12 @@ const FleetTracking = () => {
             </p>
           </div>
           
-          <label className={`inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white cursor-pointer ${uploadingFile ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}>
+          <label
+            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white cursor-pointer"
+            style={{ background: uploadingFile ? '#93C5FD' : '#2563EB' }}
+            onMouseEnter={e => { if (!uploadingFile) e.currentTarget.style.background = '#1D4ED8'; }}
+            onMouseLeave={e => { if (!uploadingFile) e.currentTarget.style.background = '#2563EB'; }}
+          >
             <Upload className="w-4 h-4 mr-2" />
             {uploadingFile ? uploadProgress?.stage || 'Uploading...' : 'Upload Report'}
             <input
@@ -376,7 +381,7 @@ const FleetTracking = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow px-6 py-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{uploadProgress.stage}</span>
-            <span className="text-sm font-bold text-primary-600">{uploadProgress.percent}%</span>
+            <span className="text-sm font-bold" style={{ color: '#2563EB' }}>{uploadProgress.percent}%</span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
             <div
@@ -384,16 +389,16 @@ const FleetTracking = () => {
               style={{
                 width: `${uploadProgress.percent}%`,
                 background: uploadProgress.percent === 100
-                  ? 'linear-gradient(90deg, #10B981, #059669)'
-                  : 'linear-gradient(90deg, #3B82F6, #6366F1)',
+                  ? 'linear-gradient(90deg, #16A34A, #15803D)'
+                  : 'linear-gradient(90deg, #2563EB, #1D4ED8)',
               }}
             />
           </div>
           <div className="flex justify-between mt-2 text-xs text-gray-500 dark:text-gray-400">
-            <span className={uploadProgress.percent >= 40 ? 'text-primary-600 font-semibold' : ''}>Upload</span>
-            <span className={uploadProgress.percent >= 60 ? 'text-primary-600 font-semibold' : ''}>Processing</span>
-            <span className={uploadProgress.percent >= 80 ? 'text-primary-600 font-semibold' : ''}>Loading map</span>
-            <span className={uploadProgress.percent === 100 ? 'text-green-600 font-semibold' : ''}>Done</span>
+            <span className={uploadProgress.percent >= 40 ? 'font-semibold' : ''} style={uploadProgress.percent >= 40 ? { color: '#2563EB' } : {}}>Upload</span>
+            <span className={uploadProgress.percent >= 60 ? 'font-semibold' : ''} style={uploadProgress.percent >= 60 ? { color: '#2563EB' } : {}}>Processing</span>
+            <span className={uploadProgress.percent >= 80 ? 'font-semibold' : ''} style={uploadProgress.percent >= 80 ? { color: '#2563EB' } : {}}>Loading map</span>
+            <span className={uploadProgress.percent === 100 ? 'font-semibold' : ''} style={uploadProgress.percent === 100 ? { color: '#16A34A' } : {}}>Done</span>
           </div>
         </div>
       )}
@@ -529,7 +534,7 @@ const FleetTracking = () => {
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <div 
                           className={`w-3 h-3 rounded-full flex-shrink-0`}
-                          style={{ backgroundColor: cp.isMajor ? '#3B82F6' : '#10B981' }}
+                          style={{ backgroundColor: cp.isMajor ? '#2563EB' : '#16A34A' }}
                         ></div>
                         <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
                           {cp.name}
@@ -601,7 +606,7 @@ const FleetTracking = () => {
                   const currentTab = activeStatusTab[checkpointKey] || statuses[0];
                   
                   const size = checkpoint.isMajor ? 40 : 32;
-                  const fillColor = checkpoint.isMajor ? '#3B82F6' : '#10B981';
+                  const fillColor = checkpoint.isMajor ? '#2563EB' : '#16A34A';
                   
                   // Create custom icon with total truck count
                   const customIcon = L.divIcon({
@@ -656,7 +661,7 @@ const FleetTracking = () => {
                           <div className="flex flex-wrap gap-1 mb-3 border-b border-gray-200 pb-2">
                             {statuses.map((status) => {
                               const isActive = currentTab === status;
-                              const statusColor = statusColorMap[status] || '#10B981';
+                              const statusColor = statusColorMap[status] || '#16A34A';
                               const count = statusGroups[status].length;
                               
                               return (
@@ -702,7 +707,7 @@ const FleetTracking = () => {
                             if (status !== currentTab) return null;
                             
                             const trucksInGroup = statusGroups[status];
-                            const statusColor = statusColorMap[status] || '#10B981';
+                            const statusColor = statusColorMap[status] || '#16A34A';
                             const isCopied = copiedCheckpoint === `${checkpoint.name}-${status}`;
                             
                             return (
@@ -843,7 +848,10 @@ const FleetTracking = () => {
                                   alert(`Copied: ${truck.truckNo}`);
                                 }}
                                 onMouseDown={(e) => e.stopPropagation()}
-                                className="w-full text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
+                                className="w-full text-xs text-white px-2 py-1 rounded"
+                                style={{ background: '#2563EB' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+                                onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
                               >
                                 Copy Truck Number
                               </button>
@@ -864,11 +872,11 @@ const FleetTracking = () => {
               <>
                 <div className="flex items-center justify-center space-x-6 text-sm">
                   <div className="flex items-center">
-                    <div className="w-8 h-8 rounded-full bg-blue-500 mr-2"></div>
+                    <div className="w-8 h-8 rounded-full mr-2" style={{ background: '#2563EB' }}></div>
                     <span className="text-gray-700 dark:text-gray-300">Major Checkpoint</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-6 h-6 rounded-full bg-green-500 mr-2"></div>
+                    <div className="w-6 h-6 rounded-full mr-2" style={{ background: '#16A34A' }}></div>
                     <span className="text-gray-700 dark:text-gray-300">Minor Checkpoint</span>
                   </div>
                   <div className="flex items-center">
@@ -912,7 +920,12 @@ const FleetTracking = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             Upload an Excel fleet report to start tracking truck positions
           </p>
-          <label className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 cursor-pointer">
+          <label
+            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white cursor-pointer"
+            style={{ background: '#2563EB' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
+          >
             <Upload className="w-4 h-4 mr-2" />
             Upload Your First Report
             <input

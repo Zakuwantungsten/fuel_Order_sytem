@@ -280,7 +280,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <Settings className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                <Settings className="w-6 h-6" style={{ color: '#2563EB' }} />
                 Admin Dashboard
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -290,7 +290,8 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
             <button
               onClick={loadData}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+          style={{ background: '#2563EB' }}
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -336,7 +337,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
                     onClick={() => setActiveTab(tab.id as TabType)}
                     className={`flex items-center gap-2 px-6 py-4 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                       activeTab === tab.id
-                        ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                        ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
                     }`}
                   >
@@ -352,7 +353,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
           <div className="p-6">
             {loading ? (
               <div className="flex items-center justify-center h-64">
-                <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
+                <RefreshCw className="w-8 h-8 animate-spin" style={{ color: '#2563EB' }} />
               </div>
             ) : (
               <>
@@ -437,46 +438,46 @@ function OverviewTab({ stats }: { stats: AdminStats }) {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white">
+        <div className="rounded-xl p-6 text-white" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0.08) 100%), #2563EB', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 14px rgba(0,0,0,0.16)' }}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-100 text-sm">Total Users</p>
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>Total Users</p>
               <p className="text-3xl font-bold">{stats.users.total}</p>
             </div>
-            <Users className="w-10 h-10 text-blue-200" />
+            <Users className="w-10 h-10" style={{ color: 'rgba(255,255,255,0.65)' }} />
           </div>
-          <p className="text-sm text-blue-100 mt-2">
+          <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.65)' }}>
             {stats.users.active} active, {stats.users.inactive} inactive
           </p>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white">
+        <div className="rounded-xl p-6 text-white" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0.08) 100%), #2563EB', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 14px rgba(0,0,0,0.16)' }}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 text-sm">Delivery Orders</p>
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>Delivery Orders</p>
               <p className="text-3xl font-bold">{stats.records.deliveryOrders}</p>
             </div>
-            <Activity className="w-10 h-10 text-green-200" />
+            <Activity className="w-10 h-10" style={{ color: 'rgba(255,255,255,0.65)' }} />
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white">
+        <div className="rounded-xl p-6 text-white" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0.08) 100%), #0891B2', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 14px rgba(0,0,0,0.16)' }}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-purple-100 text-sm">LPOs</p>
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>LPOs</p>
               <p className="text-3xl font-bold">{stats.records.lpos}</p>
             </div>
-            <DollarSign className="w-10 h-10 text-purple-200" />
+            <DollarSign className="w-10 h-10" style={{ color: 'rgba(255,255,255,0.65)' }} />
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white">
+        <div className="rounded-xl p-6 text-white" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0.08) 100%), #16A34A', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 14px rgba(0,0,0,0.16)' }}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-orange-100 text-sm">Fuel Records</p>
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>Fuel Records</p>
               <p className="text-3xl font-bold">{stats.records.fuelRecords}</p>
             </div>
-            <Fuel className="w-10 h-10 text-orange-200" />
+            <Fuel className="w-10 h-10" style={{ color: 'rgba(255,255,255,0.65)' }} />
           </div>
         </div>
       </div>
@@ -484,7 +485,7 @@ function OverviewTab({ stats }: { stats: AdminStats }) {
       {/* Role Distribution */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 transition-colors">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <TrendingUp className="w-5 h-5" style={{ color: '#2563EB' }} />
           User Role Distribution
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -502,7 +503,7 @@ function OverviewTab({ stats }: { stats: AdminStats }) {
       {/* Recent Users */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 transition-colors">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <Users className="w-5 h-5" style={{ color: '#2563EB' }} />
           Recent Users
         </h3>
         <div className="overflow-x-auto">
@@ -519,8 +520,8 @@ function OverviewTab({ stats }: { stats: AdminStats }) {
                 <tr key={user._id || user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
-                        <span className="text-indigo-600 dark:text-indigo-400 font-medium text-sm">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#EFF6FF' }}>
+                        <span className="font-medium text-sm" style={{ color: '#2563EB' }}>
                           {user.firstName?.[0]}{user.lastName?.[0]}
                         </span>
                       </div>

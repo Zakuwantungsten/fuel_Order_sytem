@@ -413,8 +413,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       // sa_siem_export merged into sa_monitoring
       
       // Admin sections (admin/boss roles)
-      case 'admin_overview':
-        return null; // Always-mounted via CSS hidden below
       case 'admin_data':
         return <StandardAdminDashboard user={user} section="data" />;
       case 'admin_users':
@@ -486,30 +484,34 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden transition-colors">
+    <div className="flex h-screen overflow-hidden" style={{ background: isDark ? '#0F172A' : '#F8FAFC' }}>
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && user.role !== 'super_admin' && (
         <div 
-          className="fixed inset-0 bg-gray-600 bg-opacity-75 z-20 lg:hidden"
+          className="fixed inset-0 z-20 lg:hidden"
+          style={{ background: 'rgba(15,23,42,0.6)' }}
           onClick={() => setSidebarOpen(false)}
         />
       )}
       
       {/* Sidebar */}
-      <div className={`bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-30 transform ${
+      <div className={`transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-30 transform ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      } w-60 ${!sidebarOpen && 'lg:w-14'}`}>
+      } w-60 ${!sidebarOpen && 'lg:w-14'}`} style={{ background: '#0F172A' }}>
         <div className="p-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             {sidebarOpen && (
               <div>
-                <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">Fuel Order</h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Management System</p>
+                <h1 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>Fuel Order</h1>
+                <p className="text-xs" style={{ color: '#94A3B8' }}>Management System</p>
               </div>
             )}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors lg:ml-auto"
+              className="p-2 rounded-lg transition-colors lg:ml-auto"
+              style={{ color: '#94A3B8' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               aria-label={sidebarOpen ? 'Close menu' : 'Toggle menu'}
             >
               {/* On mobile: always show X, on desktop: toggle between X and Menu */}
@@ -526,13 +528,19 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           {user.role === 'super_admin' && sidebarOpen && (
             <div className="px-3 pb-2">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-gray-500 pointer-events-none" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#64748B' }} />
                 <input
                   type="text"
                   placeholder="Quick-jump to section…"
                   value={saNavSearch}
                   onChange={e => setSaNavSearch(e.target.value)}
-                  className="w-full pl-7 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
+                  className="w-full pl-7 pr-3 py-1.5 text-xs rounded-md focus:outline-none focus:ring-1"
+                  style={{
+                    background: '#1E293B',
+                    border: '1px solid #334155',
+                    color: '#CBD5E1',
+                    '--tw-ring-color': '#2563EB',
+                  } as React.CSSProperties}
                 />
               </div>
             </div>
@@ -571,15 +579,15 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   {showSectionLabel && (
                     <button
                       onClick={() => !isSearching && toggleSidebarSection(currentSection)}
-                      className="w-full px-3 pt-4 pb-1 flex items-center justify-between group hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
+                      className="w-full px-3 pt-4 pb-1 flex items-center justify-between group rounded"
                     >
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#475569' }}>
                         {currentSection}
                       </span>
                       {!isSearching && (
                         isCollapsed
-                          ? <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500" />
-                          : <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                          ? <ChevronRight className="w-3 h-3" style={{ color: '#475569' }} />
+                          : <ChevronDown className="w-3 h-3" style={{ color: '#475569' }} />
                       )}
                     </button>
                   )}
@@ -591,13 +599,18 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                         if (isSearching) setSaNavSearch('');
                       }}
                       title={!sidebarOpen ? item.label : undefined}
-                      className={`w-full flex items-center px-3 py-2 text-left transition-colors ${
-                        activeTab === item.id
-                          ? 'bg-indigo-50 dark:bg-indigo-900/30 border-r-2 border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }`}
+                      className="w-full flex items-center px-3 py-2 text-left transition-colors rounded-md mx-0"
+                      style={activeTab === item.id ? {
+                        background: '#2563EB',
+                        color: '#FFFFFF',
+                        fontWeight: 500,
+                      } : {
+                        color: '#94A3B8',
+                      }}
+                      onMouseEnter={e => { if (activeTab !== item.id) { e.currentTarget.style.background = '#1E293B'; e.currentTarget.style.color = '#CBD5E1'; } }}
+                      onMouseLeave={e => { if (activeTab !== item.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94A3B8'; } }}
                     >
-                      <IconComponent className="w-6 h-6 flex-shrink-0" />
+                      <IconComponent className="w-5 h-5 flex-shrink-0" style={{ opacity: activeTab === item.id ? 1 : 0.75 }} />
                       {sidebarOpen && (
                         <span className="ml-2.5 text-sm truncate flex-1">{item.label}</span>
                       )}
@@ -621,16 +634,19 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Header */}
-        <header className="lg:hidden bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-3 flex items-center gap-2 flex-shrink-0 transition-colors">
+        <header className="lg:hidden p-3 flex items-center gap-2 flex-shrink-0" style={{ background: isDark ? '#1E293B' : '#FFFFFF', borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
           <div className="flex-1 min-w-0 mr-2">
-            <h2 className="text-base font-bold text-gray-800 dark:text-gray-100 truncate">
+            <h2 className="text-base font-bold truncate" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>
               {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
             </h2>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button 
               onClick={toggleTheme}
-              className="p-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0"
+              className="p-1.5 rounded-lg transition-colors flex-shrink-0"
+              style={{ color: '#64748B' }}
+              onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -659,9 +675,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             <div className="relative flex-shrink-0">
               <button 
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-1 rounded-lg transition-colors"
+                onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#2563EB' }}>
                   <span className="text-white text-sm font-medium">
                     {user.firstName?.charAt(0).toUpperCase()}
                   </span>
@@ -671,18 +689,21 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               {showProfileMenu && (
                 <>
                   <div className="fixed inset-0 z-[100]" onClick={() => setShowProfileMenu(false)} />
-                    <div className="absolute right-0 mt-2 w-56 max-w-[calc(100vw-20px)] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[110] max-h-[80vh] overflow-y-auto">
-                      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Logged in as</div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.firstName} {user.lastName}</div>
-                        <div className="text-xs text-gray-400 dark:text-gray-500 capitalize">{user.role?.replace('_', ' ')}</div>
+                <div className="absolute right-0 mt-2 w-56 max-w-[calc(100vw-20px)] rounded-lg shadow-xl py-2 z-[110] max-h-[80vh] overflow-y-auto" style={{ background: isDark ? '#1E293B' : '#FFFFFF', border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`, boxShadow: '0 8px 30px rgba(15,23,42,0.12)' }}>
+                      <div className="px-4 py-3" style={{ borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
+                        <div className="text-xs" style={{ color: '#64748B' }}>Logged in as</div>
+                        <div className="text-sm font-medium truncate" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>{user.firstName} {user.lastName}</div>
+                        <div className="text-xs capitalize" style={{ color: '#94A3B8' }}>{user.role?.replace('_', ' ')}</div>
                     </div>
                     <button
                       onClick={() => {
                         setShowProfileMenu(false);
                         setShowChangePassword(true);
                       }}
-                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      className="w-full flex items-center px-4 py-2 text-sm transition-colors"
+                      style={{ color: isDark ? '#CBD5E1' : '#334155' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       <Key className="w-4 h-4 mr-3" />
                       Change Password
@@ -692,7 +713,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                         setShowProfileMenu(false);
                         setShowSecurityPanel(true);
                       }}
-                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      className="w-full flex items-center px-4 py-2 text-sm transition-colors"
+                      style={{ color: isDark ? '#CBD5E1' : '#334155' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       <Shield className="w-4 h-4 mr-3" />
                       Security & Devices
@@ -702,18 +726,24 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                         setShowProfileMenu(false);
                         setShowMFASettings(true);
                       }}
-                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      className="w-full flex items-center px-4 py-2 text-sm transition-colors"
+                      style={{ color: isDark ? '#CBD5E1' : '#334155' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       <ShieldCheck className="w-4 h-4 mr-3" />
                       2FA / MFA Settings
                     </button>
-                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    <div className="my-1" style={{ borderTop: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}></div>
                     <button
                       onClick={() => {
                         setShowProfileMenu(false);
                         logout();
                       }}
-                      className="w-full flex items-center px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="w-full flex items-center px-4 py-2 text-sm transition-colors"
+                      style={{ color: '#B91C1C' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#450A0A' : '#FEE2E2')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       <LogOut className="w-4 h-4 mr-3" />
                       Sign Out
@@ -725,29 +755,35 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0"
+              className="p-1.5 rounded-lg transition-colors flex-shrink-0"
+              style={{ color: '#64748B' }}
+              onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               aria-label="Open menu"
             >
-              <Menu className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              <Menu className="w-5 h-5" />
             </button>
           </div>
         </header>
         
         {/* Desktop Header */}
-        <header className="hidden lg:flex bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 p-3 flex-shrink-0 transition-colors">
+        <header className="hidden lg:flex p-3 flex-shrink-0" style={{ background: isDark ? '#1E293B' : '#FFFFFF', borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
           <div className="flex items-center justify-between w-full">
             <div>
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+              <h2 className="text-lg font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>
                 {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
               </h2>
               {activeTab.startsWith('sa_') && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Super Admin</p>
+                <p className="text-xs mt-0.5" style={{ color: '#64748B' }}>Super Admin</p>
               )}
             </div>
             <div className="flex items-center space-x-3">
               <button 
                 onClick={toggleTheme}
-                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-1.5 rounded-lg transition-colors"
+                style={{ color: '#64748B' }}
+                onMouseEnter={e => { e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9'; e.currentTarget.style.color = isDark ? '#F1F5F9' : '#0F172A'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748B'; }}
                 title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -780,7 +816,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
                   className="flex items-center space-x-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-colors"
                 >
-                  <div className="w-7 h-7 bg-indigo-500 rounded-full flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: '#2563EB' }}>
                     <span className="text-white text-xs font-medium">
                       {user.firstName?.charAt(0).toUpperCase()}
                     </span>
@@ -846,13 +882,13 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           </div>
         </header>
 
-        <main id="main-scroll-container" className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 transition-colors">
+        <main id="main-scroll-container" className="flex-1 overflow-y-auto p-6" style={{ background: isDark ? '#0F172A' : '#F8FAFC' }}>
           {successMessage && (
-            <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center justify-between">
-              <span className="text-green-800 dark:text-green-200">{successMessage}</span>
+            <div className="mb-4 rounded-lg p-4 flex items-center justify-between" style={{ background: isDark ? 'rgba(22,163,74,0.15)' : '#DCFCE7', border: `1px solid ${isDark ? 'rgba(22,163,74,0.3)' : '#86EFAC'}` }}>
+              <span style={{ color: isDark ? '#86EFAC' : '#15803D' }}>{successMessage}</span>
               <button
                 onClick={() => setSuccessMessage(null)}
-                className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
+                style={{ color: isDark ? '#86EFAC' : '#16A34A' }}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -902,7 +938,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           <div className="relative z-[210] w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl">
             <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-indigo-500" />
+                <ShieldCheck className="w-5 h-5" style={{ color: '#2563EB' }} />
                 Two-Factor Authentication
               </h2>
               <button onClick={() => setShowMFASettings(false)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">

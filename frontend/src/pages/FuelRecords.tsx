@@ -15,6 +15,7 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 
 // Map backend standard allocation field names to fuel record column field names
@@ -76,6 +77,7 @@ const toMonthApiFormat = (yyyyMm: string): string => {
 
 const FuelRecords = () => {
   const queryClient = useQueryClient();
+  const { isDark } = useAuth();
   const [searchTerm, setSearchTerm] = usePersistedState('fr:searchTerm', '');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FuelRecord | undefined>();
@@ -743,8 +745,8 @@ const FuelRecords = () => {
     <div>
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Fuel Records</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <h1 className="text-2xl font-bold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Fuel Records</h1>
+          <p className="mt-1 text-sm" style={{ color: '#64748B' }}>
             Track fuel consumption and usage across all trips
           </p>
         </div>
@@ -753,9 +755,10 @@ const FuelRecords = () => {
           <div className="flex border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
             <button
               onClick={() => setViewMode('records')}
+              style={viewMode === 'records' ? { background: '#2563EB', color: '#FFFFFF' } : {}}
               className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium inline-flex items-center ${
                 viewMode === 'records'
-                  ? 'bg-primary-600 text-white'
+                  ? ''
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
@@ -764,9 +767,10 @@ const FuelRecords = () => {
             </button>
             <button
               onClick={() => setViewMode('analytics')}
+              style={viewMode === 'analytics' ? { background: '#2563EB', color: '#FFFFFF' } : {}}
               className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium border-l dark:border-gray-600 inline-flex items-center ${
                 viewMode === 'analytics'
-                  ? 'bg-primary-600 text-white'
+                  ? ''
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
@@ -796,7 +800,7 @@ const FuelRecords = () => {
                         setShowExportYearDropdown(false);
                       }}
                       className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                        exportYear === year ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        exportYear === year ? 'text-blue-600 bg-blue-50' : 'text-gray-900 dark:text-gray-100'
                       }`}
                     >
                       <span>{year}</span>
@@ -817,7 +821,10 @@ const FuelRecords = () => {
           </div>
           <button
             onClick={handleCreate}
-            className="inline-flex items-center px-2 sm:px-4 py-1.5 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+            className="inline-flex items-center px-2 sm:px-4 py-1.5 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white"
+            style={{ background: '#16A34A' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#15803D')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#16A34A')}
           >
             <Plus className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">New Record</span>
@@ -841,7 +848,7 @@ const FuelRecords = () => {
               placeholder="Search by Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm"
+              className="pl-10 w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm"
             />
           </div>
           <div className="relative" ref={routeTypeDropdownRef}>
@@ -863,7 +870,7 @@ const FuelRecords = () => {
                     setShowRouteTypeDropdown(false);
                   }}
                   className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                    routeTypeFilter === 'IMPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                    routeTypeFilter === 'IMPORT' ? 'text-blue-600 bg-blue-50' : 'text-gray-900 dark:text-gray-100'
                   }`}
                 >
                   <span>Import (Going)</span>
@@ -877,7 +884,7 @@ const FuelRecords = () => {
                     setShowRouteTypeDropdown(false);
                   }}
                   className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                    routeTypeFilter === 'EXPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                    routeTypeFilter === 'EXPORT' ? 'text-blue-600 bg-blue-50' : 'text-gray-900 dark:text-gray-100'
                   }`}
                 >
                   <span>Export (Return)</span>
@@ -906,7 +913,7 @@ const FuelRecords = () => {
                     setShowRouteDropdown(false);
                   }}
                   className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                    !routeFilter ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                    !routeFilter ? 'text-blue-600 bg-blue-50' : 'text-gray-900 dark:text-gray-100'
                   }`}
                 >
                   <span>All Routes</span>
@@ -924,7 +931,7 @@ const FuelRecords = () => {
                         setShowRouteDropdown(false);
                       }}
                       className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                        routeFilter === routeKey ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        routeFilter === routeKey ? 'text-blue-600 bg-blue-50' : 'text-gray-900 dark:text-gray-100'
                       }`}
                     >
                       <span>{routeDisplay}</span>
@@ -968,7 +975,7 @@ const FuelRecords = () => {
                         setShowMonthDropdown(false);
                       }}
                       className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                        selectedMonth === month ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                        selectedMonth === month ? 'text-blue-600 bg-blue-50' : 'text-gray-900 dark:text-gray-100'
                       }`}
                     >
                       <span>{getMonthName(month)}</span>
@@ -1067,11 +1074,12 @@ const FuelRecords = () => {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className={`text-xl font-bold ${
-                          isCancelled
-                            ? 'text-red-500 dark:text-red-400 line-through'
-                            : 'text-blue-600 dark:text-blue-400'
-                        }`}>
+                        <p
+                          className={`text-xl font-bold ${
+                            isCancelled ? 'text-red-500 dark:text-red-400 line-through' : ''
+                          }`}
+                          style={!isCancelled ? { color: '#2563EB' } : {}}
+                        >
                           {(record.totalLts || 0).toLocaleString()}L
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
@@ -1121,29 +1129,32 @@ const FuelRecords = () => {
                     {/* Key Fuel Points */}
                     <div className="flex flex-wrap gap-2 mb-3">
                       {record.darYard && (
-                        <div className={`px-2 py-1 text-xs rounded ${
-                          isCancelled
-                            ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                            : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                        }`}>
+                        <div
+                          className="px-2 py-1 text-xs rounded"
+                          style={isCancelled
+                            ? { background: isDark ? 'rgba(220,38,38,0.2)' : '#FEE2E2', color: isDark ? '#FCA5A5' : '#DC2626' }
+                            : { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }}
+                        >
                           Dar: {record.darYard}L
                         </div>
                       )}
                       {record.tangaYard && (
-                        <div className={`px-2 py-1 text-xs rounded ${
-                          isCancelled
-                            ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                            : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                        }`}>
+                        <div
+                          className="px-2 py-1 text-xs rounded"
+                          style={isCancelled
+                            ? { background: isDark ? 'rgba(220,38,38,0.2)' : '#FEE2E2', color: isDark ? '#FCA5A5' : '#DC2626' }
+                            : { background: isDark ? 'rgba(8,145,178,0.2)' : '#E0F2FE', color: isDark ? '#67E8F9' : '#0891B2' }}
+                        >
                           Tanga: {record.tangaYard}L
                         </div>
                       )}
                       {record.mbeyaGoing && (
-                        <div className={`px-2 py-1 text-xs rounded ${
-                          isCancelled
-                            ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                            : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
-                        }`}>
+                        <div
+                          className="px-2 py-1 text-xs rounded"
+                          style={isCancelled
+                            ? { background: isDark ? 'rgba(220,38,38,0.2)' : '#FEE2E2', color: isDark ? '#FCA5A5' : '#DC2626' }
+                            : { background: isDark ? 'rgba(234,88,12,0.2)' : '#FFF7ED', color: isDark ? '#FDBA74' : '#EA580C' }}
+                        >
                           Mbeya: {record.mbeyaGoing}L
                         </div>
                       )}
@@ -1154,7 +1165,10 @@ const FuelRecords = () => {
                       <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
                         <button
                           onClick={(e) => handleEdit(record, e)}
-                          className="flex-1 px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 inline-flex items-center justify-center"
+                          className="flex-1 px-3 py-2 text-xs font-medium rounded-lg inline-flex items-center justify-center"
+                          style={{ color: isDark ? '#93C5FD' : '#2563EB', background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.3)' : '#DBEAFE')}
+                          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF')}
                         >
                           <Edit className="w-4 h-4 mr-1" />
                           Edit
@@ -1266,7 +1280,7 @@ const FuelRecords = () => {
                       className={`cursor-pointer transition-colors ${
                         isCancelled 
                           ? 'hover:bg-red-100 dark:hover:bg-red-900/30' 
-                          : 'hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                          : 'hover:bg-gray-50'
                       }`}
                       onClick={() => handleRowClick(record)}
                       title={isCancelled ? 'This fuel record has been cancelled' : 'Click to view full details'}
@@ -1317,7 +1331,7 @@ const FuelRecords = () => {
                             <>
                               <button
                                 onClick={(e) => handleEdit(record, e)}
-                                className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" style={{ color: '#2563EB' }}
                                 title="Edit"
                               >
                                 <Edit className="w-3 h-3" />

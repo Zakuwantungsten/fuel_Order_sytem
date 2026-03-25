@@ -20,6 +20,7 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { useTruckBatches, getExtraFuelFromBatches } from '../hooks/useTruckBatches';
 import { useRoutes, getTotalLitersFromRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useAuth } from '../contexts/AuthContext';
 import {
   deliveryOrderKeys,
   periodsToDateRange,
@@ -42,6 +43,7 @@ interface DeliveryOrdersProps {
 
 const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const queryClient = useQueryClient();
+  const { isDark } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = usePersistedState('do:searchTerm', '');
   const [filterType, setFilterType] = usePersistedState('do:filterType', 'ALL');
@@ -1120,8 +1122,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       {/* Header */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Delivery Orders</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <h1 className="text-2xl font-bold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Delivery Orders</h1>
+          <p className="mt-1 text-sm" style={{ color: '#64748B' }}>
             Manage all delivery orders and transportation records
           </p>
         </div>
@@ -1161,14 +1163,20 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           </button>
           <button 
             onClick={() => setIsBulkFormOpen(true)}
-            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white"
+            style={{ background: '#16A34A' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#15803D')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#16A34A')}
           >
             <Plus className="w-4 h-4 mr-2" />
             Bulk Create
           </button>
           <button 
             onClick={handleNewDO}
-            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white"
+            style={{ background: '#2563EB' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
           >
             <Plus className="w-4 h-4 mr-2" />
             {filterDoType === 'SDO' ? 'New SDO' : 'New DO'}
@@ -1183,8 +1191,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             onClick={() => setActiveTab('list')}
             className={`${
               activeTab === 'list'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <List className="w-4 h-4 mr-2" />
@@ -1194,8 +1202,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             onClick={() => setActiveTab('summary')}
             className={`${
               activeTab === 'summary'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <BarChart3 className="w-4 h-4 mr-2" />
@@ -1205,8 +1213,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             onClick={() => setActiveTab('workbook')}
             className={`${
               activeTab === 'workbook'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
@@ -1233,22 +1241,22 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   {filterDoType === 'SDO' ? 'SDO Workbooks by Year' : filterDoType === 'ALL' ? 'All Workbooks by Year' : 'DO Workbooks by Year'}
                 </h2>
                 {filterDoType === 'SDO' && (
-                  <span className="px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+                  <span className="px-3 py-1 text-xs font-semibold rounded-full" style={{ background: isDark ? 'rgba(8,145,178,0.2)' : '#E0F2FE', color: isDark ? '#67E8F9' : '#0891B2' }}>
                     Special Delivery Orders
                   </span>
                 )}
                 {filterDoType === 'DO' && (
-                  <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                  <span className="px-3 py-1 text-xs font-semibold rounded-full" style={{ background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }}>
                     Delivery Orders
                   </span>
                 )}
                 {filterDoType === 'ALL' && (
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full" style={{ background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }}>
                       DO
                     </span>
-                    <span className="text-gray-400">+</span>
-                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+                    <span style={{ color: '#94A3B8' }}>+</span>
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full" style={{ background: isDark ? 'rgba(8,145,178,0.2)' : '#E0F2FE', color: isDark ? '#67E8F9' : '#0891B2' }}>
                       SDO
                     </span>
                   </div>
@@ -1272,7 +1280,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                     <button
                       type="button"
                       onClick={() => setShowWorkbookYearDropdown(!showWorkbookYearDropdown)}
-                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2 min-w-[200px]"
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2 min-w-[200px]"
                     >
                       <span>{filterDoType === 'SDO' ? `SDO ${selectedYear}` : `DELIVERY ORDERS ${selectedYear}`}</span>
                       <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -1290,7 +1298,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                           >
                             <span>{filterDoType === 'SDO' ? `SDO ${year}` : `DELIVERY ORDERS ${year}`}</span>
-                            {selectedYear === year && <Check className="w-4 h-4 text-primary-600" />}
+                            {selectedYear === year && <Check className="w-4 h-4 text-blue-600" />}
                           </button>
                         ))}
                       </div>
@@ -1299,7 +1307,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   <button
                     onClick={() => handleExportWorkbook(selectedYear)}
                     disabled={exportingYear !== null}
-                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white disabled:opacity-50"
+                    style={{ background: '#16A34A' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#15803D')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#16A34A')}
                   >
                     {exportingYear === selectedYear ? (
                       <>
@@ -1326,8 +1337,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 {/* DO Workbooks Section */}
                 <div className="mb-8">
                   <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-md font-semibold text-gray-900 dark:text-gray-100">Delivery Order Workbooks</h3>
-                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                    <h3 className="text-md font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Delivery Order Workbooks</h3>
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded" style={{ background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }}>
                       {workbooks.filter(w => w.type === 'DO').length}
                     </span>
                   </div>
@@ -1389,8 +1400,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 {/* SDO Workbooks Section */}
                 <div className="mb-8">
                   <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-md font-semibold text-gray-900 dark:text-gray-100">Special Delivery Order Workbooks</h3>
-                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+                    <h3 className="text-md font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Special Delivery Order Workbooks</h3>
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded" style={{ background: isDark ? 'rgba(8,145,178,0.2)' : '#E0F2FE', color: isDark ? '#67E8F9' : '#0891B2' }}>
                       {workbooks.filter(w => w.type === 'SDO').length}
                     </span>
                   </div>
@@ -1404,7 +1415,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
-                                <FileSpreadsheet className="w-5 h-5 text-purple-600 dark:text-purple-400 mr-1" />
+                                <FileSpreadsheet className="w-5 h-5 mr-1" style={{ color: '#0891B2' }} />
                                 <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                   {workbook.name}
                                 </h3>
@@ -1443,8 +1454,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-6 bg-purple-50 dark:bg-purple-900/10 rounded-lg border-2 border-dashed border-purple-200 dark:border-purple-800">
-                      <FileSpreadsheet className="w-8 h-8 text-purple-300 dark:text-purple-600 mx-auto mb-2" />
+                    <div className="text-center py-6 rounded-lg border-2 border-dashed" style={{ background: isDark ? 'rgba(8,145,178,0.08)' : '#F0F9FF', borderColor: isDark ? 'rgba(8,145,178,0.3)' : '#BAE6FD' }}>
+                      <FileSpreadsheet className="w-8 h-8 mx-auto mb-2" style={{ color: '#7DD3FC' }} />
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">No SDO workbooks yet</p>
                       <p className="text-xs text-gray-500 dark:text-gray-500">Create SDO orders using the filter dropdown above</p>
                     </div>
@@ -1468,7 +1479,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <FileSpreadsheet className={`w-5 h-5 ${workbook.type === 'SDO' ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'} mr-1`} />
+                          <FileSpreadsheet className="w-5 h-5 mr-1" style={{ color: workbook.type === 'SDO' ? '#0891B2' : '#2563EB' }} />
                           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                             {workbook.name}
                           </h3>
@@ -1533,7 +1544,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   placeholder="Search by DO#, Truck, Client..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-10 w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  className="pl-10 w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
               
@@ -1561,7 +1572,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             setCurrentPage(1);
                             setShowMonthDropdown(false);
                           }}
-                          className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                          className="w-full text-left px-2 py-1 text-sm rounded hover:bg-blue-50"
+                          style={{ color: '#2563EB' }}
                         >
                           Current Month ({MONTH_NAMES[new Date().getMonth()]} {new Date().getFullYear()})
                         </button>
@@ -1572,7 +1584,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           setCurrentPage(1);
                           setShowMonthDropdown(false);
                         }}
-                        className="w-full text-left px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                        className="w-full text-left px-2 py-1 text-sm rounded hover:bg-blue-50"
+                        style={{ color: '#2563EB' }}
                       >
                         All Periods ({availablePeriods.length})
                       </button>
@@ -1604,7 +1617,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                                       togglePeriod(Number(yearStr), monthNum);
                                       setCurrentPage(1);
                                     }}
-                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                    className="w-4 h-4 border-gray-300 rounded" style={{ accentColor: '#2563EB' }}
                                   />
                                   <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{MONTH_NAMES[monthNum - 1]}</span>
                                 </label>
@@ -1625,7 +1638,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowDoTypeDropdown(!showDoTypeDropdown)}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterDoType === 'DO' ? 'DO - Delivery Orders' : 
@@ -1648,7 +1661,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                         className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                       >
                         <span>{option.label}</span>
-                        {filterDoType === option.value && <Check className="w-4 h-4 text-primary-600" />}
+                        {filterDoType === option.value && <Check className="w-4 h-4 text-blue-600" />}
                       </button>
                     ))}
                   </div>
@@ -1658,7 +1671,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowFilterTypeDropdown(!showFilterTypeDropdown)}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterType === 'ALL' ? 'All Types' : 
@@ -1680,7 +1693,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                         className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                       >
                         <span>{option.label}</span>
-                        {filterType === option.value && <Check className="w-4 h-4 text-primary-600" />}
+                        {filterType === option.value && <Check className="w-4 h-4 text-blue-600" />}
                       </button>
                     ))}
                   </div>
@@ -1690,7 +1703,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowFilterStatusDropdown(!showFilterStatusDropdown)}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterStatus === 'all' ? 'All Status' : 
@@ -1712,7 +1725,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                         className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                       >
                         <span>{option.label}</span>
-                        {filterStatus === option.value && <Check className="w-4 h-4 text-primary-600" />}
+                        {filterStatus === option.value && <Check className="w-4 h-4 text-blue-600" />}
                       </button>
                     ))}
                   </div>
@@ -1759,7 +1772,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                       {/* Header with S/N and DO number */}
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-semibold">
+                          <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-sm font-semibold" style={{ background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }}>
                             {calculateSerialNumber(order, paginatedOrders.indexOf(order))}
                           </div>
                           <div>
@@ -1775,12 +1788,17 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                         </div>
                         <div className="flex flex-col gap-1">
                           <span className={`px-2 py-1 text-xs font-semibold rounded-full text-center ${
-                            order.isCancelled
-                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                              : order.importOrExport === 'IMPORT'
-                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                                : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                          }`}>
+                              order.isCancelled
+                                ? 'bg-gray-100 text-gray-500'
+                                : order.importOrExport === 'IMPORT'
+                                  ? ''
+                                  : ''
+                            }`}
+                            style={!order.isCancelled ? (
+                              order.importOrExport === 'IMPORT'
+                                ? { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }
+                                : { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }
+                            ) : {}}>
                             {order.importOrExport}
                           </span>
                           {order.isCancelled ? (
@@ -1789,7 +1807,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               Cancelled
                             </span>
                           ) : (
-                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 text-center">
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full text-center" style={{ background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }}>
                               Active
                             </span>
                           )}
@@ -1903,13 +1921,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             {order.date}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
-                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                               order.isCancelled
-                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                                : order.importOrExport === 'IMPORT'
-                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                                  : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                            }`}>
+                                ? 'bg-gray-100 text-gray-500'
+                                : ''
+                            }`}
+                            style={!order.isCancelled ? (
+                              order.importOrExport === 'IMPORT'
+                                ? { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }
+                                : { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }
+                            ) : {}}>
                               {order.importOrExport}
                             </span>
                           </td>
@@ -1920,7 +1941,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                                 Cancelled
                               </span>
                             ) : (
-                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">
+                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" style={{ background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }}>
                                 Active
                               </span>
                             )}

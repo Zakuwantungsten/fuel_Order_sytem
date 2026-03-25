@@ -1096,7 +1096,10 @@ const LPOs = () => {
           <PermissionGuard resource={RESOURCES.LPOS} action={ACTIONS.CREATE}>
             <button
               onClick={handleCreateDetailed}
-              className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+              className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white"
+              style={{ background: '#2563EB' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
             >
               <Plus className="w-4 h-4 mr-2" />
               Create LPO Document
@@ -1121,7 +1124,7 @@ const LPOs = () => {
                 <button
                   type="button"
                   onClick={() => setShowWorkbookYearDropdown(!showWorkbookYearDropdown)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2 min-w-[150px]"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2 min-w-[150px]"
                 >
                   <span>LPOS {selectedYear}</span>
                   <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -1139,7 +1142,7 @@ const LPOs = () => {
                         className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                       >
                         <span>LPOS {year}</span>
-                        {selectedYear === year && <Check className="w-4 h-4 text-primary-600" />}
+                        {selectedYear === year && <Check className="w-4 h-4 text-blue-600" />}
                       </button>
                     ))}
                   </div>
@@ -1221,28 +1224,37 @@ const LPOs = () => {
         <>
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Total Entries</div>
-          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{totalItems}</div>
+        <div className="shadow rounded-lg p-3" style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}>
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-medium text-blue-100">Total Entries</div>
+            <FileSpreadsheet className="w-4 h-4 text-blue-200" />
+          </div>
+          <div className="text-2xl font-bold text-white mt-1">{totalItems}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Total Liters</div>
-          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{totalLiters.toLocaleString()}</div>
+        <div className="shadow rounded-lg p-3" style={{ background: 'linear-gradient(135deg, #0891B2 0%, #0E7490 100%)' }}>
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-medium text-cyan-100">Total Liters</div>
+            <BarChart3 className="w-4 h-4 text-cyan-200" />
+          </div>
+          <div className="text-2xl font-bold text-white mt-1">{totalLiters.toLocaleString()}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 transition-colors">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Total Amount</div>
+        <div className="shadow rounded-lg p-3" style={{ background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)' }}>
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-medium text-green-100">Total Amount</div>
+            <Wallet className="w-4 h-4 text-green-200" />
+          </div>
           {totalAmountTZS > 0 && (
-            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+            <div className="text-lg font-bold text-white mt-1">
               TZS {totalAmountTZS.toLocaleString()}
             </div>
           )}
           {totalAmountUSD > 0 && (
-            <div className="text-lg font-bold text-gray-700 dark:text-gray-300">
+            <div className="text-base font-bold text-green-100">
               $ {totalAmountUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           )}
           {totalAmountTZS === 0 && totalAmountUSD === 0 && (
-            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">—</div>
+            <div className="text-2xl font-bold text-white mt-1">—</div>
           )}
         </div>
       </div>
@@ -1256,7 +1268,7 @@ const LPOs = () => {
               placeholder="Search by LPO#, Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
           
@@ -1342,7 +1354,7 @@ const LPOs = () => {
             <button
               type="button"
               onClick={() => setShowStationDropdown(!showStationDropdown)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
             >
               <span>{stationFilter || 'All Stations'}</span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -1358,7 +1370,7 @@ const LPOs = () => {
                   className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                 >
                   <span>All Stations</span>
-                  {stationFilter === '' && <Check className="w-4 h-4 text-primary-600" />}
+                  {stationFilter === '' && <Check className="w-4 h-4 text-blue-600" />}
                 </button>
                 {availableStations.map((station) => (
                   <button
@@ -1371,7 +1383,7 @@ const LPOs = () => {
                     className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                   >
                     <span>{station}</span>
-                    {stationFilter === station && <Check className="w-4 h-4 text-primary-600" />}
+                    {stationFilter === station && <Check className="w-4 h-4 text-blue-600" />}
                   </button>
                 ))}
               </div>
@@ -1381,13 +1393,13 @@ const LPOs = () => {
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
           {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>

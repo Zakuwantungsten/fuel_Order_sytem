@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useAuth } from '../contexts/AuthContext';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
 interface Checkpoint {
@@ -35,6 +36,7 @@ interface Checkpoint {
 }
 
 const CheckpointManagement = () => {
+  const { isDark } = useAuth();
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -204,7 +206,10 @@ const CheckpointManagement = () => {
               resetForm();
               setShowAddForm(true);
             }}
-            className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+            className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-white rounded-lg text-sm"
+            style={{ background: '#2563EB' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
           >
             <Plus className="w-4 h-4" />
             Add Checkpoint
@@ -214,7 +219,7 @@ const CheckpointManagement = () => {
 
       {/* Messages */}
       {success && (
-        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2 text-green-800 dark:text-green-200">
+        <div className="mb-4 p-4 rounded-lg flex items-center gap-2" style={{ background: isDark ? 'rgba(22,163,74,0.15)' : '#DCFCE7', border: `1px solid ${isDark ? 'rgba(22,163,74,0.4)' : '#86EFAC'}`, color: isDark ? '#86EFAC' : '#15803D' }}>
           <CheckCircle className="w-5 h-5" />
           {success}
         </div>
@@ -369,12 +374,13 @@ const CheckpointManagement = () => {
               {formData.alternativeNames?.map((name, index) => (
                 <span
                   key={index}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm"
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm"
+                  style={{ background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }}
                 >
                   {name}
                   <button
                     onClick={() => removeAlternativeName(index)}
-                    className="hover:text-blue-900 dark:hover:text-blue-100"
+                    style={{ color: '#2563EB' }}
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -440,7 +446,10 @@ const CheckpointManagement = () => {
                   handleCreate();
                 }
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              className="px-4 py-2 text-white rounded-lg flex items-center gap-2"
+              style={{ background: '#2563EB' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
             >
               <Save className="w-4 h-4" />
               {editingId ? 'Update Checkpoint' : 'Create Checkpoint'}
@@ -474,12 +483,16 @@ const CheckpointManagement = () => {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                         checkpoint.isActive
-                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
-                      }`}>{checkpoint.isActive ? 'Active' : 'Inactive'}</span>
+                        ? 'font-medium'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+                    }`}
+                    style={checkpoint.isActive ? { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' } : {}}>{checkpoint.isActive ? 'Active' : 'Inactive'}</span>
                       <button
                         onClick={() => { setEditingId(checkpoint._id); setFormData(checkpoint); setCoordsInput(checkpoint.coordinates ? `${checkpoint.coordinates.latitude}, ${checkpoint.coordinates.longitude}` : ''); setShowAddForm(true); }}
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                        className=""
+                        style={{ color: '#2563EB' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#1D4ED8')}
+                        onMouseLeave={e => (e.currentTarget.style.color = '#2563EB')}
                       ><Edit2 className="w-4 h-4" /></button>
                       <button
                         onClick={() => handleDelete(checkpoint._id)}
@@ -501,9 +514,9 @@ const CheckpointManagement = () => {
                   {/* Tags */}
                   {(checkpoint.isMajor || checkpoint.fuelAvailable || checkpoint.borderCrossing) && (
                     <div className="flex flex-wrap gap-1">
-                      {checkpoint.isMajor && <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">Major</span>}
-                      {checkpoint.fuelAvailable && <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Fuel</span>}
-                      {checkpoint.borderCrossing && <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200">Border</span>}
+                      {checkpoint.isMajor && <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }}>Major</span>}
+                      {checkpoint.fuelAvailable && <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }}>Fuel</span>}
+                      {checkpoint.borderCrossing && <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: isDark ? 'rgba(234,88,12,0.2)' : '#FFF7ED', color: isDark ? '#FDBA74' : '#EA580C' }}>Border</span>}
                     </div>
                   )}
 
@@ -585,17 +598,17 @@ const CheckpointManagement = () => {
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {checkpoint.isMajor && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }}>
                           Major
                         </span>
                       )}
                       {checkpoint.fuelAvailable && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }}>
                           Fuel
                         </span>
                       )}
                       {checkpoint.borderCrossing && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ background: isDark ? 'rgba(234,88,12,0.2)' : '#FFF7ED', color: isDark ? '#FDBA74' : '#EA580C' }}>
                           Border
                         </span>
                       )}
@@ -604,9 +617,10 @@ const CheckpointManagement = () => {
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                       checkpoint.isActive 
-                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                        ? 'font-medium'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
-                    }`}>
+                    }`}
+                    style={checkpoint.isActive ? { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' } : {}}>
                       {checkpoint.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -619,7 +633,10 @@ const CheckpointManagement = () => {
                           setCoordsInput(checkpoint.coordinates ? `${checkpoint.coordinates.latitude}, ${checkpoint.coordinates.longitude}` : '');
                           setShowAddForm(true);
                         }}
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        className=""
+                        style={{ color: '#2563EB' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#1D4ED8')}
+                        onMouseLeave={e => (e.currentTarget.style.color = '#2563EB')}
                         title="Edit"
                       >
                         <Edit2 className="w-4 h-4" />

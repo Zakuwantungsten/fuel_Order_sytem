@@ -1,0 +1,701 @@
+/* ============================================================
+   TAHMEED FUEL ORDER MANAGEMENT SYSTEM — Design System
+   theme.css | Import this at the root of your React app
+   e.g. in index.css or App.jsx: import './theme.css'
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   1. FONT IMPORT
+   Using DM Sans (clean, professional) + JetBrains Mono (data)
+   ----------------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* -----------------------------------------------------------
+   2. ROOT — Core Design Tokens (Light Mode)
+   ----------------------------------------------------------- */
+:root {
+
+  /* --- Color: Backgrounds --- */
+  --color-bg-page:       #F8FAFC;   /* Page / app shell background */
+  --color-bg-card:       #FFFFFF;   /* Cards, panels, modals */
+  --color-bg-sidebar:    #0F172A;   /* Left nav sidebar */
+  --color-bg-sidebar-hover: #1E293B; /* Sidebar item hover */
+  --color-bg-input:      #FFFFFF;   /* Input fields */
+  --color-bg-subtle:     #F1F5F9;   /* Hover rows, zebra stripes */
+
+  /* --- Color: Borders --- */
+  --color-border-default: #E2E8F0;  /* Card, table, input borders */
+  --color-border-strong:  #CBD5E1;  /* Emphasized borders */
+  --color-border-active:  #BFDBFE;  /* Active/focus ring */
+
+  /* --- Color: Text --- */
+  --color-text-primary:   #0F172A;  /* Headings, strong labels */
+  --color-text-secondary: #334155;  /* Body text, table cells */
+  --color-text-muted:     #64748B;  /* Sub-labels, hints, dates */
+  --color-text-disabled:  #94A3B8;  /* Disabled / placeholder */
+  --color-text-inverse:   #FFFFFF;  /* Text on dark backgrounds */
+  --color-text-sidebar:   #94A3B8;  /* Sidebar inactive items */
+  --color-text-sidebar-active: #FFFFFF; /* Sidebar active item */
+
+  /* --- Color: Primary Accent (Blue) --- */
+  --color-primary:        #2563EB;  /* CTAs, active nav, links */
+  --color-primary-hover:  #1D4ED8;  /* Button hover */
+  --color-primary-light:  #EFF6FF;  /* Active nav bg, badge bg */
+  --color-primary-subtle: #DBEAFE;  /* Chip/pill bg */
+  --color-primary-text:   #1D4ED8;  /* Text on primary-light bg */
+
+  /* --- Color: Semantic — Success (Active, Positive) --- */
+  --color-success:        #16A34A;
+  --color-success-light:  #DCFCE7;
+  --color-success-text:   #15803D;
+
+  /* --- Color: Semantic — Danger (Cancelled, Negative) --- */
+  --color-danger:         #DC2626;
+  --color-danger-light:   #FEE2E2;
+  --color-danger-text:    #B91C1C;
+
+  /* --- Color: Semantic — Warning (Pending, Queued) --- */
+  --color-warning:        #D97706;
+  --color-warning-light:  #FEF3C7;
+  --color-warning-text:   #92400E;
+
+  /* --- Color: Semantic — Info (secondary actions) --- */
+  --color-info:           #0891B2;
+  --color-info-light:     #E0F2FE;
+  --color-info-text:      #0369A1;
+
+  /* --- Color: Chart Lines (consistent across all charts) --- */
+  --color-chart-1:        #2563EB;  /* Primary line / bar */
+  --color-chart-2:        #16A34A;  /* Secondary line */
+  --color-chart-3:        #F97316;  /* Tertiary / trend */
+  --color-chart-4:        #8B5CF6;  /* Quaternary */
+  --color-chart-grid:     #F1F5F9;  /* Chart gridlines */
+  --color-chart-axis:     #94A3B8;  /* Axis labels */
+
+  /* --- Color: Stat Cards — System Palette Aligned --- */
+  /* Delivery Orders — Vivid Blue (matches --color-primary) */
+  --stat-do-bg:       #2563EB;
+  --stat-do-text:     #FFFFFF;
+  --stat-do-muted:    rgba(255, 255, 255, 0.65);
+  --stat-do-badge:    rgba(255, 255, 255, 0.18);
+
+  /* Fuel Records — Emerald Green (matches --color-success) */
+  --stat-fuel-bg:     #16A34A;
+  --stat-fuel-text:   #FFFFFF;
+  --stat-fuel-muted:  rgba(255, 255, 255, 0.65);
+  --stat-fuel-badge:  rgba(255, 255, 255, 0.18);
+
+  /* LPO Entries — Teal (matches --color-info) */
+  --stat-lpo-bg:      #0891B2;
+  --stat-lpo-text:    #FFFFFF;
+  --stat-lpo-muted:   rgba(255, 255, 255, 0.65);
+  --stat-lpo-badge:   rgba(255, 255, 255, 0.18);
+
+  /* Tonnage / Revenue — Vivid Orange (matches --color-chart-3) */
+  --stat-tonnage-bg:    #EA580C;
+  --stat-tonnage-text:  #FFFFFF;
+  --stat-tonnage-muted: rgba(255, 255, 255, 0.65);
+  --stat-tonnage-badge: rgba(255, 255, 255, 0.18);
+
+  /* --- Typography --- */
+  --font-sans:   'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:   'JetBrains Mono', 'Fira Code', monospace;
+
+  --font-size-xs:   11px;
+  --font-size-sm:   12px;
+  --font-size-base: 14px;
+  --font-size-md:   15px;
+  --font-size-lg:   18px;
+  --font-size-xl:   24px;
+  --font-size-2xl:  30px;
+
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+
+  --line-height-tight:  1.3;
+  --line-height-normal: 1.6;
+
+  /* --- Spacing Scale --- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+
+  /* --- Border Radius --- */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   10px;
+  --radius-xl:   14px;
+  --radius-pill: 999px;
+
+  /* --- Shadows (minimal — only where needed) --- */
+  --shadow-card:  0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-modal: 0 8px 30px rgba(15, 23, 42, 0.12);
+  --shadow-focus: 0 0 0 3px rgba(37, 99, 235, 0.15);
+
+  /* --- Sidebar Dimensions --- */
+  --sidebar-width: 220px;
+  --topbar-height: 56px;
+
+  /* --- Transition --- */
+  --transition-fast:   120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+
+/* -----------------------------------------------------------
+   3. GLOBAL RESETS & BASE
+   ----------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-page);
+  line-height: var(--line-height-normal);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+a { color: var(--color-primary); text-decoration: none; }
+a:hover { color: var(--color-primary-hover); }
+
+/* -----------------------------------------------------------
+   4. LAYOUT — Sidebar + Content Shell
+   ----------------------------------------------------------- */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--color-bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  z-index: 100;
+  padding: var(--space-5) var(--space-3);
+}
+
+.sidebar-logo {
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.sidebar-logo-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-inverse);
+  line-height: 1.2;
+}
+
+.sidebar-logo-sub {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-sidebar);
+  margin-top: 2px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-sidebar);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  text-decoration: none;
+}
+
+.nav-item:hover {
+  background: var(--color-bg-sidebar-hover);
+  color: #CBD5E1;
+}
+
+.nav-item.active {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-weight: var(--font-weight-medium);
+}
+
+.nav-item .nav-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.75;
+}
+
+.nav-item.active .nav-icon {
+  opacity: 1;
+}
+
+.main-content {
+  margin-left: var(--sidebar-width);
+  flex: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* -----------------------------------------------------------
+   5. TOPBAR
+   ----------------------------------------------------------- */
+.topbar {
+  height: var(--topbar-height);
+  background: var(--color-bg-card);
+  border-bottom: 1px solid var(--color-border-default);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-6);
+  gap: var(--space-4);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.topbar-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  flex: 1;
+}
+
+.page-content {
+  padding: var(--space-6);
+  flex: 1;
+}
+
+/* -----------------------------------------------------------
+   6. CARDS
+   ----------------------------------------------------------- */
+.card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.card-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* -----------------------------------------------------------
+   7. STAT CARDS — System Palette, Modern Design
+   ----------------------------------------------------------- */
+.stat-card {
+  border-radius: var(--radius-xl);
+  padding: var(--space-5) var(--space-6);
+  background: linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0.08) 100%), var(--stat-bg);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+  cursor: default;
+}
+
+.stat-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.10);
+  transform: translateY(-2px);
+}
+
+/* Per-metric solid backgrounds */
+.stat-card--do {
+  --stat-bg:    var(--stat-do-bg);
+  --stat-text:  var(--stat-do-text);
+  --stat-muted: var(--stat-do-muted);
+  --stat-badge: var(--stat-do-badge);
+}
+.stat-card--fuel {
+  --stat-bg:    var(--stat-fuel-bg);
+  --stat-text:  var(--stat-fuel-text);
+  --stat-muted: var(--stat-fuel-muted);
+  --stat-badge: var(--stat-fuel-badge);
+}
+.stat-card--lpo {
+  --stat-bg:    var(--stat-lpo-bg);
+  --stat-text:  var(--stat-lpo-text);
+  --stat-muted: var(--stat-lpo-muted);
+  --stat-badge: var(--stat-lpo-badge);
+}
+.stat-card--tonnage {
+  --stat-bg:    var(--stat-tonnage-bg);
+  --stat-text:  var(--stat-tonnage-text);
+  --stat-muted: var(--stat-tonnage-muted);
+  --stat-badge: var(--stat-tonnage-badge);
+}
+
+.stat-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--stat-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: var(--space-2);
+}
+
+.stat-value {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--stat-text);
+  line-height: 1;
+}
+
+.stat-sub {
+  font-size: var(--font-size-sm);
+  color: var(--stat-muted);
+  margin-top: var(--space-1);
+}
+
+.stat-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  margin-top: var(--space-2);
+  background: var(--stat-badge);
+  color: var(--stat-text);
+}
+
+/* Change arrows stay white on solid cards */
+.stat-change--up::before  { content: '↑ '; }
+.stat-change--down::before { content: '↓ '; }
+
+/* -----------------------------------------------------------
+   8. STATUS BADGES / PILLS
+   ----------------------------------------------------------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.badge--active    { background: var(--color-success-light); color: var(--color-success-text); }
+.badge--cancelled { background: var(--color-danger-light);  color: var(--color-danger-text); }
+.badge--pending   { background: var(--color-warning-light); color: var(--color-warning-text); }
+.badge--queued    { background: var(--color-warning-light); color: var(--color-warning-text); }
+.badge--import    { background: var(--color-primary-subtle); color: var(--color-primary-text); }
+.badge--export    { background: var(--color-success-light); color: var(--color-success-text); }
+.badge--info      { background: var(--color-info-light);    color: var(--color-info-text); }
+
+/* -----------------------------------------------------------
+   9. TABLES
+   ----------------------------------------------------------- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-base);
+}
+
+.data-table th {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-default);
+  background: var(--color-bg-page);
+}
+
+.data-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  vertical-align: middle;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tr:hover td {
+  background: var(--color-bg-subtle);
+}
+
+/* Cancelled row style (strikethrough) */
+.data-table tr.row--cancelled td {
+  color: var(--color-text-disabled);
+  text-decoration: line-through;
+  background: #FFFBFB;
+}
+
+.data-table td.cell--mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+/* -----------------------------------------------------------
+   10. BUTTONS
+   ----------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.btn--primary {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+}
+.btn--primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+
+.btn--secondary {
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+}
+.btn--secondary:hover { background: var(--color-bg-subtle); }
+
+.btn--danger {
+  background: var(--color-danger-light);
+  color: var(--color-danger-text);
+  border-color: #FECACA;
+}
+.btn--danger:hover { background: #FEE2E2; }
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-color: transparent;
+}
+.btn--ghost:hover { background: var(--color-bg-subtle); color: var(--color-text-primary); }
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* -----------------------------------------------------------
+   11. FORM INPUTS
+   ----------------------------------------------------------- */
+.input,
+.select {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  height: 36px;
+}
+
+.input::placeholder { color: var(--color-text-disabled); }
+
+.input:hover,
+.select:hover { border-color: var(--color-border-strong); }
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-bg-input);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.input-group:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.input-group .input-icon {
+  padding: 0 var(--space-3);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.input-group input {
+  border: none;
+  flex: 1;
+  padding: var(--space-2) var(--space-1);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  background: transparent;
+  height: 36px;
+}
+
+.input-group input:focus { outline: none; }
+
+/* -----------------------------------------------------------
+   12. DATA DISPLAY — Monospace Numbers
+   ----------------------------------------------------------- */
+.num {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.num--muted {
+  color: var(--color-text-muted);
+}
+
+/* -----------------------------------------------------------
+   13. PAGE HEADER
+   ----------------------------------------------------------- */
+.page-header {
+  margin-bottom: var(--space-6);
+}
+
+.page-header h1 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.page-header p {
+  font-size: var(--font-size-base);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+/* -----------------------------------------------------------
+   14. FILTER BAR (above tables)
+   ----------------------------------------------------------- */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  flex-wrap: wrap;
+}
+
+/* -----------------------------------------------------------
+   15. PAGINATION
+   ----------------------------------------------------------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-4) 0;
+}
+
+.pagination-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-card);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-fast);
+}
+
+.pagination-btn:hover { background: var(--color-bg-subtle); }
+
+.pagination-btn.active {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+}
+
+/* -----------------------------------------------------------
+   16. UTILITY CLASSES
+   ----------------------------------------------------------- */
+.flex           { display: flex; }
+.flex-col       { flex-direction: column; }
+.items-center   { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2          { gap: var(--space-2); }
+.gap-3          { gap: var(--space-3); }
+.gap-4          { gap: var(--space-4); }
+.gap-6          { gap: var(--space-6); }
+
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+
+.text-muted    { color: var(--color-text-muted); }
+.text-sm       { font-size: var(--font-size-sm); }
+.text-xs       { font-size: var(--font-size-xs); }
+.font-medium   { font-weight: var(--font-weight-medium); }
+.font-semibold { font-weight: var(--font-weight-semibold); }
+.font-mono     { font-family: var(--font-mono); }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -----------------------------------------------------------
+   END OF FILE
+   ============================================================ */
