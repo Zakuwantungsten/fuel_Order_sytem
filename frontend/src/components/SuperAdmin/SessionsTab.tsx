@@ -42,7 +42,7 @@ function durationStr(fromStr: string, toStr: string): string {
 const ROLE_COLORS: Record<string, string> = {
   super_admin: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
   admin: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  boss: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+  boss: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   driver: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
 };
 
@@ -167,10 +167,10 @@ export default function SessionsTab({ onMessage }: Props) {
         </div>
         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full bg-indigo-500" />
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Your Session</span>
           </div>
-          <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">1</p>
+          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">1</p>
         </div>
       </div>
 
@@ -178,7 +178,7 @@ export default function SessionsTab({ onMessage }: Props) {
       <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
         <Activity className="w-3 h-3" />
         <span>Auto-refreshes every 15 seconds</span>
-        {refreshing && <span className="text-indigo-500">Refreshing...</span>}
+        {refreshing && <span className="text-blue-500">Refreshing...</span>}
       </div>
 
       {/* Sessions list */}
@@ -199,7 +199,7 @@ export default function SessionsTab({ onMessage }: Props) {
                 key={session.userId}
                 className={`group bg-white dark:bg-gray-800 rounded-xl border transition-all shadow-sm ${
                   isSelf
-                    ? 'border-indigo-300 dark:border-indigo-700 ring-1 ring-indigo-200 dark:ring-indigo-800'
+                    ? 'border-blue-300 dark:border-indigo-700 ring-1 ring-indigo-200 dark:ring-indigo-800'
                     : 'border-gray-200 dark:border-gray-700 hover:border-orange-200 dark:hover:border-orange-800 hover:shadow-md'
                 }`}
               >
@@ -207,7 +207,7 @@ export default function SessionsTab({ onMessage }: Props) {
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Avatar */}
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
-                      isSelf ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                      isSelf ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
                     }`}>
                       {session.username.charAt(0).toUpperCase()}
                     </div>
@@ -215,7 +215,7 @@ export default function SessionsTab({ onMessage }: Props) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">{session.username}</span>
                         {isSelf && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 rounded-full">You</span>
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 rounded-full">You</span>
                         )}
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${roleColor(session.role)}`}>
                           {session.role.replace(/_/g, ' ')}

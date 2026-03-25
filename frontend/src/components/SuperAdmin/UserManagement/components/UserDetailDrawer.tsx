@@ -155,7 +155,7 @@ export default function UserDetailDrawer({
         {/* Loading / Error overlay */}
         {isLoading && !userDetail && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-800/80 z-10">
-            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
           </div>
         )}
         {isError && !userDetail && (
@@ -163,7 +163,7 @@ export default function UserDetailDrawer({
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Failed to load user details</p>
             <button
               onClick={onRefresh}
-              className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Retry
             </button>
@@ -229,7 +229,7 @@ export default function UserDetailDrawer({
                     onClick={() => onSwitchTab(tab.id)}
                     className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
                       isActive
-                        ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
+                        ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >

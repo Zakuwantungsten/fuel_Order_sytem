@@ -53,7 +53,7 @@ export default function NotesTab({ user, onRefresh }: NotesTabProps) {
           onKeyDown={handleKeyDown}
           placeholder="Add internal notes about this user..."
           rows={8}
-          className="w-full px-3 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors resize-y"
+          className="w-full px-3 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-y"
         />
         <div className="absolute bottom-2 right-2 text-[10px] text-gray-400 dark:text-gray-500">
           Ctrl+S to save
@@ -63,7 +63,7 @@ export default function NotesTab({ user, onRefresh }: NotesTabProps) {
       <button
         onClick={handleSave}
         disabled={!isDirty || saving}
-        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {saving ? (
           <Loader2 className="w-4 h-4 animate-spin" />

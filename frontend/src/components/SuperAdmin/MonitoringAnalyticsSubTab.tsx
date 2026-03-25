@@ -96,7 +96,7 @@ export default function MonitoringAnalyticsSubTab({ onMessage }: Props) {
           ) : stats && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-center">
-                <Activity className="w-5 h-5 text-indigo-500 mx-auto mb-2" />
+                <Activity className="w-5 h-5 text-blue-500 mx-auto mb-2" />
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalEvents.toLocaleString()}</p>
                 <p className="text-xs text-gray-400 mt-1">Events (7d)</p>
               </div>

@@ -117,7 +117,7 @@ export default function SecurityThreatMonitorSubTab() {
 
   /* ── Stats tiles ── */
   const STAT_TILES = [
-    { label: 'SECURITY SCORE', value: loading ? '…' : `${stats?.securityScore ?? 0}`, dot: 'bg-indigo-500', icon: <Shield    className="w-4 h-4 text-gray-400 dark:text-gray-500" /> },
+    { label: 'SECURITY SCORE', value: loading ? '…' : `${stats?.securityScore ?? 0}`, dot: 'bg-blue-500', icon: <Shield    className="w-4 h-4 text-gray-400 dark:text-gray-500" /> },
     { label: 'EVENTS (24H)',   value: loading ? '…' : `${stats?.totalEvents24h ?? 0}`,  dot: 'bg-orange-500', icon: <BarChart3  className="w-4 h-4 text-gray-400 dark:text-gray-500" /> },
     { label: 'HIGH-RISK USERS',value: loading ? '…' : `${stats?.highRiskUsers ?? 0}`,   dot: 'bg-red-500',    icon: <AlertTriangle className="w-4 h-4 text-gray-400 dark:text-gray-500" /> },
     { label: 'THREAT LEVEL',   value: loading ? '…' : (stats?.threatLevel ?? '—'),       dot: stats?.threatLevel === 'critical' ? 'bg-red-500 animate-pulse' : stats?.threatLevel === 'high' ? 'bg-orange-500' : 'bg-green-500', icon: <Radar className="w-4 h-4 text-gray-400 dark:text-gray-500" /> },
@@ -213,7 +213,7 @@ export default function SecurityThreatMonitorSubTab() {
                          stats.securityScore >= 40 ? 'Needs attention' : 'Critical improvements required'}
                       </p>
                       <button onClick={() => setSection('score')}
-                        className="mt-3 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                        className="mt-3 text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium">
                         View full assessment →
                       </button>
                     </div>
@@ -237,10 +237,10 @@ export default function SecurityThreatMonitorSubTab() {
                       <div className="grid grid-cols-3 gap-3">
                         <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-900/20 dark:to-indigo-900/10 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                           <div className="flex items-center gap-2 mb-1">
-                            <BarChart3 className="w-3.5 h-3.5 text-indigo-500" />
+                            <BarChart3 className="w-3.5 h-3.5 text-blue-500" />
                             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Events (24h)</span>
                           </div>
-                          <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{stats.totalEvents24h.toLocaleString()}</p>
+                          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.totalEvents24h.toLocaleString()}</p>
                         </div>
                         <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-900/20 dark:to-orange-900/10 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                           <div className="flex items-center gap-2 mb-1">
@@ -281,15 +281,15 @@ export default function SecurityThreatMonitorSubTab() {
                       {/* Quick links */}
                       <div className="grid grid-cols-3 gap-3">
                         <button onClick={() => setSection('events')}
-                          className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors text-left">
-                          <ShieldAlert className="w-5 h-5 text-indigo-500 shrink-0" />
+                          className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors text-left">
+                          <ShieldAlert className="w-5 h-5 text-blue-500 shrink-0" />
                           <div>
                             <p className="text-sm font-medium text-gray-900 dark:text-white">Security Events</p>
                             <p className="text-xs text-gray-500 dark:text-gray-400">Event timeline & stats</p>
                           </div>
                         </button>
                         <button onClick={() => setSection('threats')}
-                          className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors text-left">
+                          className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors text-left">
                           <Radar className="w-5 h-5 text-orange-500 shrink-0" />
                           <div>
                             <p className="text-sm font-medium text-gray-900 dark:text-white">Threat Detection</p>
@@ -297,7 +297,7 @@ export default function SecurityThreatMonitorSubTab() {
                           </div>
                         </button>
                         <button onClick={() => setSection('score')}
-                          className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors text-left">
+                          className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors text-left">
                           <Shield className="w-5 h-5 text-green-500 shrink-0" />
                           <div>
                             <p className="text-sm font-medium text-gray-900 dark:text-white">Posture Assessment</p>
@@ -319,7 +319,7 @@ export default function SecurityThreatMonitorSubTab() {
                 <div className="text-center py-16 text-gray-400 dark:text-gray-500">
                   <ShieldAlert className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p className="text-sm">Unable to load overview data</p>
-                  <button onClick={loadOverview} className="mt-2 text-xs text-indigo-500 hover:underline">Retry</button>
+                  <button onClick={loadOverview} className="mt-2 text-xs text-blue-500 hover:underline">Retry</button>
                 </div>
               )}
             </div>

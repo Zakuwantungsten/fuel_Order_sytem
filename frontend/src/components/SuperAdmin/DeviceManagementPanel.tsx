@@ -237,7 +237,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
           <input
             type="text" placeholder="Search user, browser, OS, IP…" value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value as any)}
@@ -247,7 +247,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
           <option value="blocked">Blocked</option>
         </select>
         <button onClick={handleSync} disabled={syncing}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium disabled:opacity-50 transition-colors">
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 transition-colors">
           <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
           Sync from History
         </button>
@@ -260,7 +260,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
         <div className="text-center py-12 text-gray-400">
           <Monitor className="w-8 h-8 mx-auto mb-2 opacity-30" />
           <p className="text-sm">No devices found</p>
-          <button onClick={handleSync} className="mt-2 text-xs text-indigo-500 hover:underline">Sync from login history</button>
+          <button onClick={handleSync} className="mt-2 text-xs text-blue-500 hover:underline">Sync from login history</button>
         </div>
       ) : (
         <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">

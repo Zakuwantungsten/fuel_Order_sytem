@@ -356,9 +356,9 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
       {/* ── Stats Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-indigo-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
+        <div className="bg-blue-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
-            <Lock className="w-3.5 h-3.5 text-indigo-500" />
+            <Lock className="w-3.5 h-3.5 text-blue-500" />
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Session Timeout</span>
           </div>
           <p className="text-[22px] font-medium text-orange-600">{sessionSettings.sessionTimeout}<span className="text-sm font-normal text-gray-400">m</span></p>
@@ -487,8 +487,8 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                             }))}
                             className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
                               active
-                                ? 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-400 dark:border-indigo-600 text-indigo-700 dark:text-indigo-300'
-                                : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-indigo-300'
+                                ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300'
+                                : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-300'
                             }`}
                           >
                             {r.label}
@@ -544,7 +544,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                   <label key={value}
                     className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${
                       mfaSettings.requiredRoles.includes(value)
-                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20'
+                        ? 'border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                         : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}>
                     <input type="checkbox" checked={mfaSettings.requiredRoles.includes(value)}
@@ -571,7 +571,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                   <label key={value}
                     className={`flex items-start gap-2 p-3 rounded-lg cursor-pointer border transition-colors flex-1 min-w-[180px] ${
                       mfaSettings.allowedMethods.includes(value)
-                        ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20'
+                        ? 'border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                         : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}>
                     <input type="checkbox" checked={mfaSettings.allowedMethods.includes(value)}
@@ -743,7 +743,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
         {/* Rules list */}
         {dlpLoadState.isLoading ? (
-          <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 text-indigo-500 animate-spin" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 text-blue-500 animate-spin" /></div>
         ) : dlpRules.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
             <ShieldBan className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -760,7 +760,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                         rule.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
                       }`}>{rule.isActive ? 'Active' : 'Inactive'}</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
                         {RULE_TYPES[rule.ruleType] || rule.ruleType}
                       </span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] ${

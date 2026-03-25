@@ -284,7 +284,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
             Fuel Stations Management
           </h2>
         </div>
-        <button onClick={() => openStationModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+        <button onClick={() => openStationModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">
           <Plus className="w-3.5 h-3.5" />Add Station
         </button>
       </div>
@@ -483,7 +483,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                           setShowGoingFieldDropdown(false);
                         }}
                         className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                          !stationForm.fuelRecordFieldGoing ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          !stationForm.fuelRecordFieldGoing ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                         }`}
                       >
                         <span>— None —</span>
@@ -498,7 +498,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                             setShowGoingFieldDropdown(false);
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                            stationForm.fuelRecordFieldGoing === field.value ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                            stationForm.fuelRecordFieldGoing === field.value ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                           }`}
                         >
                           <span>{field.label}</span>
@@ -530,7 +530,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                           setShowReturningFieldDropdown(false);
                         }}
                         className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                          !stationForm.fuelRecordFieldReturning ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                          !stationForm.fuelRecordFieldReturning ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                         }`}
                       >
                         <span>— None —</span>
@@ -545,7 +545,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                             setShowReturningFieldDropdown(false);
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                            stationForm.fuelRecordFieldReturning === field.value ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                            stationForm.fuelRecordFieldReturning === field.value ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                           }`}
                         >
                           <span>{field.label}</span>
@@ -574,7 +574,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                 <button onClick={() => { setShowStationModal(false); setEditingStation(null); resetStationForm(); }}
                   className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={editingStation ? handleUpdateStation : handleCreateStation}
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2">
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2">
                   <Save className="w-4 h-4" />{editingStation ? 'Update' : 'Create'}
                 </button>
               </div>

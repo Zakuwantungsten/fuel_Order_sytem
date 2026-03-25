@@ -140,7 +140,7 @@ export default function SecurityOverviewBanner({ onNavigate }: Props) {
           onClick={() => setCollapsed(!collapsed)}
           className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
-          <Shield className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           Security Overview
           <ChevronRight className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsed ? '' : 'rotate-90'}`} />
         </button>
@@ -214,7 +214,7 @@ export default function SecurityOverviewBanner({ onNavigate }: Props) {
                 onClick={() => onNavigate?.('threats')}
               >
                 <div className="flex items-center gap-1.5 mb-0.5">
-                  <ShieldAlert className="w-3 h-3 text-indigo-500" />
+                  <ShieldAlert className="w-3 h-3 text-blue-500" />
                   <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Events 24h</span>
                 </div>
                 <p className="text-lg font-bold text-gray-900 dark:text-white">{data.totalEvents24h.toLocaleString()}</p>

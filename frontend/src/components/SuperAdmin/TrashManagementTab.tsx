@@ -272,7 +272,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
         <button
           onClick={loadDeletedItems}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -313,7 +313,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
               <button
                 type="button"
                 onClick={() => setShowResourceTypeDropdown(!showResourceTypeDropdown)}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
               >
                 <span>{RESOURCE_TYPES.find(t => t.value === selectedType)?.label}</span>
                 <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -331,7 +331,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
                       className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                     >
                       <span>{type.label}</span>
-                      {selectedType === type.value && <Check className="w-4 h-4 text-indigo-600" />}
+                      {selectedType === type.value && <Check className="w-4 h-4 text-blue-600" />}
                     </button>
                   ))}
                 </div>
@@ -348,7 +348,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
               <button
                 type="button"
                 onClick={() => setShowDateFilterDropdown(!showDateFilterDropdown)}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
               >
                 <span>
                   {dateFilter === '7' ? 'Last 7 Days' :
@@ -371,7 +371,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
                       className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                     >
                       <span>{option.label}</span>
-                      {dateFilter === option.value && <Check className="w-4 h-4 text-indigo-600" />}
+                      {dateFilter === option.value && <Check className="w-4 h-4 text-blue-600" />}
                     </button>
                   ))}
                 </div>
@@ -383,9 +383,9 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
 
       {/* Actions Bar */}
       {selectedItems.size > 0 && (
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800 p-4">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+            <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
               {selectedItems.size} item(s) selected
             </p>
             <div className="flex gap-2">
@@ -419,7 +419,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
                     type="checkbox"
                     checked={selectedItems.size === items.length && items.length > 0}
                     onChange={toggleSelectAll}
-                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                    className="rounded text-blue-600 focus:ring-blue-500"
                   />
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
@@ -461,7 +461,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
                           type="checkbox"
                           checked={selectedItems.has(itemId)}
                           onChange={() => toggleSelectItem(itemId)}
-                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                          className="rounded text-blue-600 focus:ring-blue-500"
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -540,7 +540,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
           <button
             type="button"
             onClick={openDataLifecyclePolicyEditor}
-            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-indigo-700"
+            className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-blue-700"
           >
             Configure Policy
           </button>

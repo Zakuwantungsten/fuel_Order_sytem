@@ -68,13 +68,13 @@ export default function DatabaseMonitorTab({ onMessage }: DatabaseMonitorTabProp
               type="checkbox"
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="rounded text-indigo-600 focus:ring-indigo-500"
+              className="rounded text-blue-600 focus:ring-blue-500"
             />
             Auto-refresh (5s)
           </label>
           <button
             onClick={loadMetrics}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh Now
@@ -153,7 +153,7 @@ export default function DatabaseMonitorTab({ onMessage }: DatabaseMonitorTabProp
       {/* Active Connections */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           Active Connections
         </h3>
         <div className="space-y-2">
@@ -174,7 +174,7 @@ export default function DatabaseMonitorTab({ onMessage }: DatabaseMonitorTabProp
                     </p>
                   </div>
                 </div>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 capitalize">
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 capitalize">
                   {conn.role?.replace(/_/g, ' ')}
                 </span>
               </div>
@@ -223,7 +223,7 @@ export default function DatabaseMonitorTab({ onMessage }: DatabaseMonitorTabProp
       {/* Collection Stats */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <Database className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <Database className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           Collection Statistics
         </h3>
         <div className="overflow-x-auto">

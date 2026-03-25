@@ -182,7 +182,7 @@ export default function MaintenanceModeTab({ onMessage }: Props) {
       {/* Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-5">
         <div className="flex items-center gap-2 mb-2">
-          <Shield className="w-4 h-4 text-indigo-500" />
+          <Shield className="w-4 h-4 text-blue-500" />
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
             Maintenance Settings
           </h3>
@@ -196,7 +196,7 @@ export default function MaintenanceModeTab({ onMessage }: Props) {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="System is under maintenance. Please check back later."
           />
         </div>
@@ -216,7 +216,7 @@ export default function MaintenanceModeTab({ onMessage }: Props) {
                   disabled={isFixed}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                     selected
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                   } ${isFixed ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
                 >
@@ -233,7 +233,7 @@ export default function MaintenanceModeTab({ onMessage }: Props) {
           <button
             onClick={handleSaveMessage}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
           >
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Settings
@@ -246,19 +246,19 @@ export default function MaintenanceModeTab({ onMessage }: Props) {
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">How Maintenance Mode Works</h3>
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
           <li className="flex items-start gap-2">
-            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
+            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
             When enabled, all API requests from non-allowed roles return HTTP 503.
           </li>
           <li className="flex items-start gap-2">
-            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
+            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
             The system checks maintenance status with a 30-second cache — disable invalidates immediately.
           </li>
           <li className="flex items-start gap-2">
-            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
+            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
             Frontend clients receive a WebSocket event <code className="text-xs bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">maintenance:toggle</code> and display the maintenance message.
           </li>
           <li className="flex items-start gap-2">
-            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
+            <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
             All toggle actions are recorded in the audit log with critical severity.
           </li>
         </ul>

@@ -47,7 +47,7 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   return (
     <button type="button" onClick={() => !disabled && onChange(!checked)} disabled={disabled}
       className={`relative inline-flex items-center w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
-        checked ? 'bg-[#4F46E5] dark:bg-indigo-500' : 'bg-[#E4E7EC] dark:bg-gray-600'
+        checked ? 'bg-[#4F46E5] dark:bg-blue-500' : 'bg-[#E4E7EC] dark:bg-gray-600'
       } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
       <span className={`inline-block w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform ${
         checked ? 'translate-x-[18px]' : 'translate-x-[2px]'
@@ -716,7 +716,7 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                   {/* Sub-section 3: System Notifications */}
                   <div className="rounded-xl border border-[#E4E7EC] dark:border-gray-700 overflow-hidden">
                     <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F8F9FB] dark:bg-gray-700/60 border-b border-[#E4E7EC] dark:border-gray-700">
-                      <Monitor className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <Monitor className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       <span className="text-[12px] font-semibold text-[#111827] dark:text-gray-100">System Notifications</span>
                     </div>
                     <div className="p-4 space-y-3">

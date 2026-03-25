@@ -94,7 +94,7 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
             onClick={() => setView(v.id)}
             className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${
               view === v.id
-                ? 'bg-indigo-600 text-white shadow-sm'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
@@ -156,7 +156,7 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
             <UnifiedTabLoader label="Loading monitoring overview..." heightClassName="h-40" />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-              <MetricCard icon={Clock} label="Uptime" value={health ? formatUptime(health.process.uptimeSeconds) : '—'} color="text-indigo-500" />
+              <MetricCard icon={Clock} label="Uptime" value={health ? formatUptime(health.process.uptimeSeconds) : '—'} color="text-blue-500" />
               <MetricCard icon={Database} label="DB Status" value={health?.database?.status || '—'} color={dbOk ? 'text-green-500' : 'text-red-500'} />
               <MetricCard icon={Cpu} label="Heap Usage" value={`${heapPct.toFixed(0)}%`} color={heapPct > 85 ? 'text-red-500' : heapPct > 65 ? 'text-amber-500' : 'text-green-500'} />
               <MetricCard icon={Zap} label="Queries/s" value={dbMetrics?.performance?.queriesPerSecond ?? '—'} color="text-blue-500" />
@@ -191,7 +191,7 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
               {/* Active Sessions */}
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-indigo-500" />
+                  <Activity className="w-4 h-4 text-blue-500" />
                   Active Sessions
                 </h3>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">{health.sessions.active}</p>
@@ -205,7 +205,7 @@ export default function MonitoringInfraSubTab({ onMessage }: Props) {
               {/* Background Jobs */}
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-indigo-500" />
+                  <Cpu className="w-4 h-4 text-blue-500" />
                   Background Jobs
                 </h3>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">

@@ -92,7 +92,7 @@ export default function DataExportTab({ onMessage }: Props) {
       {/* Step 1: Select Resource */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center gap-2 mb-4">
-          <span className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-xs font-bold flex items-center justify-center">1</span>
+          <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center justify-center">1</span>
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Choose Dataset</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -105,16 +105,16 @@ export default function DataExportTab({ onMessage }: Props) {
                 onClick={() => setSelected(r.id)}
                 className={`flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all ${
                   isSelected
-                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-indigo-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                 }`}
               >
-                <Icon className={`w-5 h-5 flex-shrink-0 ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`} />
+                <Icon className={`w-5 h-5 flex-shrink-0 ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`} />
                 <div className="min-w-0">
-                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200'}`}>{r.label}</p>
+                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'}`}>{r.label}</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{r.description}</p>
                 </div>
-                {isSelected && <ChevronRight className="w-4 h-4 text-indigo-500 ml-auto flex-shrink-0" />}
+                {isSelected && <ChevronRight className="w-4 h-4 text-blue-500 ml-auto flex-shrink-0" />}
               </button>
             );
           })}
@@ -124,7 +124,7 @@ export default function DataExportTab({ onMessage }: Props) {
       {/* Step 2: Date Range */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center gap-2 mb-4">
-          <span className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-xs font-bold flex items-center justify-center">2</span>
+          <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center justify-center">2</span>
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Date Range <span className="text-gray-400 font-normal">(optional — leave blank for all)</span></h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -136,7 +136,7 @@ export default function DataExportTab({ onMessage }: Props) {
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
           <div>
@@ -147,7 +147,7 @@ export default function DataExportTab({ onMessage }: Props) {
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
         </div>
@@ -156,7 +156,7 @@ export default function DataExportTab({ onMessage }: Props) {
       {/* Step 3: Format */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center gap-2 mb-4">
-          <span className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-xs font-bold flex items-center justify-center">3</span>
+          <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center justify-center">3</span>
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Export Format</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -169,12 +169,12 @@ export default function DataExportTab({ onMessage }: Props) {
                 onClick={() => setFormat(f.value)}
                 className={`flex flex-col items-start p-4 rounded-xl border text-left transition-all ${
                   isSelected
-                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-indigo-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                 }`}
               >
-                <Icon className={`w-5 h-5 mb-2 ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`} />
-                <p className={`text-sm font-semibold ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200'}`}>{f.label}</p>
+                <Icon className={`w-5 h-5 mb-2 ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`} />
+                <p className={`text-sm font-semibold ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'}`}>{f.label}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{f.desc}</p>
               </button>
             );
@@ -201,7 +201,7 @@ export default function DataExportTab({ onMessage }: Props) {
         <button
           onClick={handleExport}
           disabled={!selected || exporting}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors shadow-sm"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors shadow-sm"
         >
           {exporting
             ? <><RefreshCw className="w-4 h-4 animate-spin" /> Exporting…</>

@@ -131,7 +131,7 @@ function JobCard({ job, onRefresh, onMessage }: { job: CronJob; onRefresh: () =>
                 onClick={handleTrigger}
                 disabled={triggering || job.status === 'running'}
                 title="Trigger now"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
               >
                 {triggering ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                 Run
@@ -230,7 +230,7 @@ export default function CronJobsTab({ onMessage }: Props) {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total Jobs', value: jobs.length, icon: Clock, color: 'text-indigo-500' },
+          { label: 'Total Jobs', value: jobs.length, icon: Clock, color: 'text-blue-500' },
           { label: 'Enabled', value: enabledCount, icon: Power, color: 'text-green-500' },
           { label: 'Running', value: runningCount, icon: Activity, color: 'text-blue-500' },
           { label: 'Errors', value: errorCount, icon: AlertCircle, color: 'text-red-500' },

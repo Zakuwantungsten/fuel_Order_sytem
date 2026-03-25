@@ -81,7 +81,7 @@ export default function UserTableToolbar({
                   value={filters.q}
                   onChange={(e) => onSearchChange(e.target.value)}
                   aria-keyshortcuts="Control+k"
-                  className="w-full pl-9 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+                  className="w-full pl-9 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                 />
                 {filters.q && (
                   <button
@@ -145,7 +145,7 @@ export default function UserTableToolbar({
               <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1" />
               <button
                 onClick={onCreateUser}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm transition-colors"
               >
                 <UserPlus className="w-4 h-4" />
                 Create User

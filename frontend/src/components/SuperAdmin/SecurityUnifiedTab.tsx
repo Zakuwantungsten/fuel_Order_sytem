@@ -75,15 +75,15 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2.5">
-            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl">
-              <Shield className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+              <Shield className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             Security Center
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 ml-[52px]">
             Manage policies, firewall, access control, sessions, threats, and incidents
           </p>
-          <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1 ml-[52px] font-medium">
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 ml-[52px] font-medium">
             Canonical owner for security policy and session configuration
           </p>
         </div>
@@ -114,7 +114,7 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
                 onClick={() => setSubTab(tab.id)}
                 className={`relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap flex-1 justify-center ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                    ? 'bg-blue-600 text-white shadow-md shadow-indigo-600/20'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                 }`}
               >

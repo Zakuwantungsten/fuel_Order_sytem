@@ -58,7 +58,7 @@ export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps)
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+        <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
       </div>
     );
   }
@@ -69,7 +69,7 @@ export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps)
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Failed to load sessions</p>
         <button
           onClick={fetchSessions}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
         >
           <RefreshCw className="w-3.5 h-3.5" />
           Retry
@@ -116,8 +116,8 @@ export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps)
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                    <Monitor className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <Monitor className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">

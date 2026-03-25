@@ -246,15 +246,15 @@ export default function IPRulesTab({ onMessage }: Props) {
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${ipGatingEnabled ? 'bg-indigo-100 dark:bg-indigo-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
-              <ShieldOff className={`w-4 h-4 ${ipGatingEnabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`} />
+            <div className={`p-2 rounded-lg ${ipGatingEnabled ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
+              <ShieldOff className={`w-4 h-4 ${ipGatingEnabled ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`} />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">IP Gating</h3>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
                   ipGatingEnabled
-                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
                     : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
                 }`}>
                   {ipGatingEnabled ? 'Active' : 'Off'}
@@ -274,7 +274,7 @@ export default function IPRulesTab({ onMessage }: Props) {
             {gatingLoading ? (
               <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
             ) : ipGatingEnabled ? (
-              <ToggleRight className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+              <ToggleRight className="w-8 h-8 text-blue-600 dark:text-blue-400" />
             ) : (
               <ToggleLeft className="w-8 h-8 text-gray-400" />
             )}
@@ -285,7 +285,7 @@ export default function IPRulesTab({ onMessage }: Props) {
       {/* IP Tester */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
         <div className="flex items-center gap-2 mb-3">
-          <FlaskConical className="w-4 h-4 text-indigo-500" />
+          <FlaskConical className="w-4 h-4 text-blue-500" />
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">IP Rule Tester</h3>
           <span className="text-xs text-gray-400 dark:text-gray-500">Test what would happen to a specific IP</span>
         </div>
@@ -296,12 +296,12 @@ export default function IPRulesTab({ onMessage }: Props) {
             onChange={(e) => { setTestIP(e.target.value); setTestResult(null); }}
             onKeyDown={(e) => e.key === 'Enter' && handleTestIP()}
             placeholder="e.g. 198.51.100.50"
-            className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-gray-900 dark:text-gray-100"
+            className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 dark:text-gray-100"
           />
           <button
             onClick={handleTestIP}
             disabled={!testIP.trim() || testing}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium transition-colors"
           >
             {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
             Test
@@ -356,7 +356,7 @@ export default function IPRulesTab({ onMessage }: Props) {
             placeholder="Search by IP or description..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-gray-900 dark:text-gray-100"
+            className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 dark:text-gray-100"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -364,7 +364,7 @@ export default function IPRulesTab({ onMessage }: Props) {
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value as any)}
-            className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700 dark:text-gray-300"
+            className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-300"
           >
             <option value="all">All types</option>
             <option value="allow">Allow</option>
@@ -373,7 +373,7 @@ export default function IPRulesTab({ onMessage }: Props) {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700 dark:text-gray-300"
+            className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-300"
           >
             <option value="all">All statuses</option>
             <option value="active">Active</option>
@@ -436,7 +436,7 @@ export default function IPRulesTab({ onMessage }: Props) {
                         </span>
                       )}
                       {(rule.createdBy === 'system:ip-gating' || rule.description?.startsWith('Auto-gated:')) && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                           Auto-gated
                         </span>
                       )}
@@ -515,7 +515,7 @@ export default function IPRulesTab({ onMessage }: Props) {
                   value={form.ip}
                   onChange={(e) => setForm((p) => ({ ...p, ip: e.target.value }))}
                   placeholder="e.g. 198.51.100.1  or  203.0.113.0/24"
-                  className="w-full px-3 py-2 font-mono text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-gray-900 dark:text-gray-100"
+                  className="w-full px-3 py-2 font-mono text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 dark:text-gray-100"
                 />
                 <p className="text-[10px] text-gray-400 mt-1">IPv4 only. CIDR ranges like 203.0.113.0/24 are supported.</p>
               </div>
@@ -560,7 +560,7 @@ export default function IPRulesTab({ onMessage }: Props) {
                   onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
                   placeholder="e.g. Office network, Server cluster..."
                   maxLength={500}
-                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-gray-900 dark:text-gray-100"
+                  className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 dark:text-gray-100"
                 />
               </div>
 
@@ -573,18 +573,18 @@ export default function IPRulesTab({ onMessage }: Props) {
                 <button
                   type="button"
                   onClick={() => setForm((p) => ({ ...p, isActive: !p.isActive }))}
-                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${form.isActive ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'}`}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${form.isActive ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'}`}
                 >
                   <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${form.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
                 </button>
               </div>
 
               {/* IP Gating (global) */}
-              <div className="flex items-center justify-between p-3 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
+              <div className="flex items-center justify-between p-3 bg-blue-50/50 dark:bg-indigo-950/20 rounded-lg border border-blue-100 dark:border-indigo-900/40">
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">IP Gating</p>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${ipGatingEnabled ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${ipGatingEnabled ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
                       {ipGatingEnabled ? 'On' : 'Off'}
                     </span>
                   </div>
@@ -594,7 +594,7 @@ export default function IPRulesTab({ onMessage }: Props) {
                   type="button"
                   onClick={() => setConfirmGating(true)}
                   disabled={gatingLoading}
-                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${ipGatingEnabled ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'}`}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${ipGatingEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'}`}
                 >
                   {gatingLoading ? (
                     <Loader2 className="w-4 h-4 text-white animate-spin" />
@@ -612,7 +612,7 @@ export default function IPRulesTab({ onMessage }: Props) {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg text-sm font-semibold transition-colors"
+                className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-semibold transition-colors"
               >
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {editingId ? 'Save Changes' : 'Add Rule'}

@@ -173,7 +173,7 @@ export default function PrivilegeElevationView() {
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3" role="status" aria-live="polite">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             <p className="text-sm text-gray-500 dark:text-gray-400">Loading privilege requests...</p>
           </div>
         ) : requests.length === 0 ? (
@@ -211,8 +211,8 @@ export default function PrivilegeElevationView() {
                       {/* Requester */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
-                            <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                          <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
                               {req.requestedByUsername.charAt(0).toUpperCase()}
                             </span>
                           </div>
@@ -228,7 +228,7 @@ export default function PrivilegeElevationView() {
                       {/* Elevation */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
-                          <ArrowUpRight className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                          <ArrowUpRight className="w-4 h-4 text-blue-500 flex-shrink-0" />
                           <div>
                             <RoleBadge role={req.targetRole as any} size="sm" showTooltip={false} />
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-[200px] truncate" title={req.reason}>

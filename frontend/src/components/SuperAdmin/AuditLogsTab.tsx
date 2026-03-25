@@ -86,7 +86,7 @@ const actionColor = (a: string) => ({
   ACCOUNT_LOCKED:   'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
   ACCOUNT_UNLOCKED: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
   CONFIG_CHANGE:    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  BULK_OPERATION:   'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+  BULK_OPERATION:   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
   EXPORT:           'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
   VIEW_SENSITIVE_DATA: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
   VERIFY_INTEGRITY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
@@ -144,7 +144,7 @@ function FilterDropdown({ label, value, options, onChange }: {
               className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
             >
               <span>{opt.label}</span>
-              {value === opt.value && <Check className="w-4 h-4 text-indigo-600" />}
+              {value === opt.value && <Check className="w-4 h-4 text-blue-600" />}
             </button>
           ))}
         </div>
@@ -160,7 +160,7 @@ function LogDetailModal({ log, onClose }: { log: any; onClose: () => void }) {
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
           <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Eye className="w-5 h-5 text-indigo-500" />
+            <Eye className="w-5 h-5 text-blue-500" />
             Audit Log Detail
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
@@ -245,7 +245,7 @@ function LogDetailModal({ log, onClose }: { log: any; onClose: () => void }) {
           {log.tags?.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {log.tags.map((t: string) => (
-                <span key={t} className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 text-xs rounded-full">{t}</span>
+                <span key={t} className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-xs rounded-full">{t}</span>
               ))}
             </div>
           )}
@@ -460,7 +460,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
             {exporting ? 'Exporting...' : 'Export CSV'}
@@ -471,7 +471,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
       {/* Stats cards */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <StatCard label="Events Today"        value={stats.todayTotal}         icon={FileSearch}   color="bg-indigo-500" />
+          <StatCard label="Events Today"        value={stats.todayTotal}         icon={FileSearch}   color="bg-blue-500" />
           <StatCard label="Critical Today"      value={stats.todayCritical}      icon={AlertTriangle} color="bg-red-500" />
           <StatCard label="Failed Logins Today" value={stats.todayFailedLogins}  icon={ShieldAlert}   color="bg-orange-500" />
           <StatCard label="Access Denied Today" value={stats.todayAccessDenied}  icon={ShieldAlert}   color="bg-yellow-500" />
@@ -496,7 +496,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
               type="text" value={filters.username}
               onChange={e => updateFilter('username', e.target.value)}
               placeholder="Filter by user..."
-              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
           </div>
           <div>
@@ -504,7 +504,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
             <input
               type="date" value={filters.startDate}
               onChange={e => updateFilter('startDate', e.target.value)}
-              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
           </div>
           <div>
@@ -512,7 +512,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
             <input
               type="date" value={filters.endDate}
               onChange={e => updateFilter('endDate', e.target.value)}
-              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
           </div>
           <div className="flex items-end">

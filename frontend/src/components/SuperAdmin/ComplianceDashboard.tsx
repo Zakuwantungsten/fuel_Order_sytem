@@ -110,7 +110,7 @@ export default function ComplianceDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
           <div className="flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-indigo-500" />
+            <ClipboardCheck className="w-4 h-4 text-blue-500" />
             <span className="text-xs text-gray-500 dark:text-gray-400">Overall Compliance</span>
           </div>
           <p className={`text-2xl font-bold mt-1 ${pctColor(data.overallPercentage)}`}>
@@ -147,7 +147,7 @@ export default function ComplianceDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <ClipboardCheck className="w-5 h-5 text-indigo-500" />
+          <ClipboardCheck className="w-5 h-5 text-blue-500" />
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">Compliance Frameworks</h3>
         </div>
         <button

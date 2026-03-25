@@ -83,7 +83,7 @@ export default function RolePermissionMatrix() {
       <div className="text-center py-12 text-gray-400">
         <Shield className="w-8 h-8 mx-auto mb-2 opacity-30" />
         <p className="text-sm">Unable to load permission data</p>
-        <button onClick={load} className="mt-2 text-xs text-indigo-500 hover:underline">Retry</button>
+        <button onClick={load} className="mt-2 text-xs text-blue-500 hover:underline">Retry</button>
       </div>
     );
   }
@@ -106,7 +106,7 @@ export default function RolePermissionMatrix() {
             <input
               type="text" placeholder="Filter roles…" value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 w-40"
+              className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 w-40"
             />
           </div>
           <button onClick={load} className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
@@ -152,7 +152,7 @@ export default function RolePermissionMatrix() {
                     <span className={`w-2 h-2 rounded-full ${
                       role === 'super_admin' ? 'bg-purple-500' :
                       role === 'admin' ? 'bg-blue-500' :
-                      role === 'boss' ? 'bg-indigo-500' :
+                      role === 'boss' ? 'bg-blue-500' :
                       'bg-gray-400'
                     }`} />
                     {role.replace(/_/g, ' ')}

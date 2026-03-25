@@ -100,7 +100,7 @@ export default function RateLimitConfigTab({ onMessage }: Props) {
       {/* Configurable API rate limit */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
         <div className="flex items-center gap-2 mb-2">
-          <Gauge className="w-4 h-4 text-indigo-500" />
+          <Gauge className="w-4 h-4 text-blue-500" />
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
             API Rate Limit (configurable)
           </h3>
@@ -150,7 +150,7 @@ export default function RateLimitConfigTab({ onMessage }: Props) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
           >
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save

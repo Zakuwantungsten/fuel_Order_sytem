@@ -50,7 +50,7 @@ export function useUndoToast() {
             <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{message}</span>
             <button
               onClick={handleUndo}
-              className="flex-shrink-0 px-3 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+              className="flex-shrink-0 px-3 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
             >
               Undo
             </button>

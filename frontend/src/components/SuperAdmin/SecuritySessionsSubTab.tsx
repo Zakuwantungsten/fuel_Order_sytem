@@ -73,7 +73,7 @@ function timeAgo(dateStr: string): string {
 const ROLE_COLORS: Record<string, string> = {
   super_admin: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
   admin:       'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
-  boss:        'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+  boss:        'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
   driver:      'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
 };
 
@@ -282,7 +282,7 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
                   <Activity className="w-3 h-3" /> Auto-refresh 15s
-                  {refreshing && <span className="text-indigo-400">Updating…</span>}
+                  {refreshing && <span className="text-blue-400">Updating…</span>}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -310,7 +310,7 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
 
               {loadingSessions ? (
                 <div className="flex justify-center py-12">
-                  <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
                 </div>
               ) : sessions.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 dark:text-gray-500">
@@ -324,11 +324,11 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
                     return (
                       <div key={s.userId}
                         className={`group px-4 py-3 flex items-center justify-between gap-4 transition-colors ${
-                          self ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                          self ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                         }`}>
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium text-sm shrink-0 ${
-                            self ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300'
+                            self ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
                                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                           }`}>
                             {s.username.charAt(0).toUpperCase()}
@@ -336,7 +336,7 @@ export default function SecuritySessionsSubTab({ onMessage, onNavigate }: Props)
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-medium text-sm text-gray-900 dark:text-white">{s.username}</span>
-                              {self && <span className="text-[10px] font-medium px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 rounded-full">You</span>}
+                              {self && <span className="text-[10px] font-medium px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-full">You</span>}
                               <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[s.role] ?? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
                                 {s.role.replace(/_/g, ' ')}
                               </span>

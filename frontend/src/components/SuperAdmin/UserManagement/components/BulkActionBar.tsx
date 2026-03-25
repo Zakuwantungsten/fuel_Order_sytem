@@ -85,24 +85,24 @@ export default function BulkActionBar({
   const displayCount = isAllSelected ? totalMatching : selectedCount;
 
   return (
-    <div className="bg-indigo-50 dark:bg-indigo-900/15 border border-indigo-200 dark:border-indigo-800 rounded-xl px-4 py-3 shadow-sm">
+    <div className="bg-blue-50 dark:bg-blue-900/15 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 shadow-sm">
       <div className="flex items-center justify-between flex-wrap gap-3">
         {/* Selection info */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2" aria-live="polite" aria-atomic="true">
-            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold">
               {displayCount > 99 ? '99+' : displayCount}
             </span>
             <div>
-              <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+              <span className="text-sm font-medium text-blue-900 dark:text-blue-200">
                 {displayCount.toLocaleString()} user{displayCount !== 1 ? 's' : ''} selected
               </span>
               {!isAllSelected && selectedCount < totalMatching && selectedCount === pageCount && (
-                <span className="text-xs text-indigo-600 dark:text-indigo-400 block">
+                <span className="text-xs text-blue-600 dark:text-blue-400 block">
                   All {pageCount} on this page selected.{' '}
                   <button
                     onClick={onSelectAllMatching}
-                    className="underline underline-offset-2 font-medium hover:text-indigo-800 dark:hover:text-indigo-300"
+                    className="underline underline-offset-2 font-medium hover:text-blue-800 dark:hover:text-blue-300"
                   >
                     Select all {totalMatching.toLocaleString()} matching
                   </button>
@@ -112,7 +112,7 @@ export default function BulkActionBar({
           </div>
           <button
             onClick={onClearSelection}
-            className="p-1 rounded-md text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors"
+            className="p-1 rounded-md text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
             aria-label="Clear selection"
           >
             <X className="w-4 h-4" />
@@ -179,7 +179,7 @@ export default function BulkActionBar({
             )}
           </div>
 
-          <div className="w-px h-5 bg-indigo-200 dark:bg-indigo-700 mx-1" />
+          <div className="w-px h-5 bg-blue-200 dark:bg-blue-700 mx-1" />
 
           <button
             onClick={() => onBulkAction('reset_password')}

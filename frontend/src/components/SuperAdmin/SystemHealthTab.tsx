@@ -33,7 +33,7 @@ function StatusDot({ ok }: { ok: boolean }) {
 }
 
 function MetricCard({
-  label, value, sub, icon: Icon, color = 'text-indigo-500',
+  label, value, sub, icon: Icon, color = 'text-blue-500',
 }: {
   label: string; value: string | number; sub?: string; icon: React.ElementType; color?: string;
 }) {
@@ -129,7 +129,7 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
               type="checkbox"
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="rounded text-indigo-600"
+              className="rounded text-blue-600"
             />
             Auto-refresh (10s)
           </label>
@@ -179,7 +179,7 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
           label="Uptime"
           value={formatUptime(health.process.uptimeSeconds)}
           icon={Clock}
-          color="text-indigo-500"
+          color="text-blue-500"
         />
         <MetricCard
           label="DB Status"
@@ -210,7 +210,7 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
       {/* Memory Details */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center gap-2 mb-4">
-          <Cpu className="w-4 h-4 text-indigo-500" />
+          <Cpu className="w-4 h-4 text-blue-500" />
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
             Memory Usage
           </h3>
@@ -235,7 +235,7 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
       {/* Database Details */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center gap-2 mb-4">
-          <Database className="w-4 h-4 text-indigo-500" />
+          <Database className="w-4 h-4 text-blue-500" />
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
             Database
           </h3>
@@ -298,7 +298,7 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
       {/* Jobs Summary */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center gap-2 mb-4">
-          <Activity className="w-4 h-4 text-indigo-500" />
+          <Activity className="w-4 h-4 text-blue-500" />
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
             Background Jobs
           </h3>
@@ -350,7 +350,7 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
       {/* System Info */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center gap-2 mb-4">
-          <Server className="w-4 h-4 text-indigo-500" />
+          <Server className="w-4 h-4 text-blue-500" />
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
             Process Info
           </h3>

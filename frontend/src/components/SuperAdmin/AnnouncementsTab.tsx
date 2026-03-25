@@ -56,7 +56,7 @@ function formatDate(d: string | null | undefined): string {
 function getStatus(ann: SystemAnnouncement): { label: string; color: string } {
   const now = new Date();
   if (!ann.isActive) return { label: 'Inactive', color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' };
-  if (new Date(ann.showFrom) > now) return { label: 'Scheduled', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' };
+  if (new Date(ann.showFrom) > now) return { label: 'Scheduled', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' };
   if (ann.showUntil && new Date(ann.showUntil) < now) return { label: 'Expired', color: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' };
   return { label: 'Live', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' };
 }
@@ -221,8 +221,8 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
-              <Megaphone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+              <Megaphone className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">System Announcements</h2>
@@ -232,7 +232,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" />
           New Announcement
@@ -243,7 +243,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Live', count: live.length, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', dot: 'bg-green-500' },
-          { label: 'Scheduled', count: scheduled.length, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20', dot: 'bg-indigo-500' },
+          { label: 'Scheduled', count: scheduled.length, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', dot: 'bg-blue-500' },
           { label: 'Expired', count: expired.length, color: 'text-gray-500 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800', dot: 'bg-gray-400' },
           { label: 'Inactive', count: inactive.length, color: 'text-gray-400 dark:text-gray-500', bg: 'bg-gray-50 dark:bg-gray-800', dot: 'bg-gray-300' },
         ].map((s) => (
@@ -266,7 +266,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
             placeholder="Search announcements..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-gray-900 dark:text-gray-100"
+            className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 dark:text-gray-100"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -274,7 +274,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
           <select
             value={filterSeverity}
             onChange={(e) => setFilterSeverity(e.target.value as any)}
-            className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700 dark:text-gray-300"
+            className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-300"
           >
             <option value="all">All severities</option>
             <option value="info">Info</option>
@@ -285,7 +285,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700 dark:text-gray-300"
+            className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-300"
           >
             <option value="all">All statuses</option>
             <option value="live">Live</option>
@@ -314,7 +314,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
             return (
               <div
                 key={ann._id}
-                className="group relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all shadow-sm hover:shadow-md overflow-hidden"
+                className="group relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-indigo-700 transition-all shadow-sm hover:shadow-md overflow-hidden"
               >
                 {/* severity left bar */}
                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${sevConfig.bar}`} />
@@ -419,13 +419,13 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
             <div className="flex items-center gap-2 px-6 pt-4">
               <button
                 onClick={() => setShowPreview(false)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${!showPreview ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${!showPreview ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
               >
                 Edit
               </button>
               <button
                 onClick={() => setShowPreview(true)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${showPreview ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${showPreview ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
               >
                 <Eye className="w-3 h-3" />
                 Preview
@@ -450,7 +450,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
                       onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
                       placeholder="e.g. System maintenance tonight"
                       maxLength={200}
-                      className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-gray-900 dark:text-gray-100"
+                      className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 dark:text-gray-100"
                     />
                   </div>
 
@@ -463,7 +463,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
                       rows={3}
                       placeholder="Describe what users should know..."
                       maxLength={2000}
-                      className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition resize-none text-gray-900 dark:text-gray-100"
+                      className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none text-gray-900 dark:text-gray-100"
                     />
                     <p className="text-[10px] text-gray-400 text-right mt-0.5">{form.message.length}/2000</p>
                   </div>
@@ -502,7 +502,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
                           key={role}
                           type="button"
                           onClick={() => toggleRole(role)}
-                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${form.targetRoles.includes(role) ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600 hover:border-indigo-300'}`}
+                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${form.targetRoles.includes(role) ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600 hover:border-blue-300'}`}
                         >
                           {role.replace(/_/g, ' ')}
                         </button>
@@ -518,7 +518,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
                         type="datetime-local"
                         value={form.showFrom}
                         onChange={(e) => setForm((p) => ({ ...p, showFrom: e.target.value }))}
-                        className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700 dark:text-gray-300"
+                        className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-300"
                       />
                     </div>
                     <div>
@@ -529,7 +529,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
                         type="datetime-local"
                         value={form.showUntil ?? ''}
                         onChange={(e) => setForm((p) => ({ ...p, showUntil: e.target.value || null }))}
-                        className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700 dark:text-gray-300"
+                        className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-300"
                       />
                     </div>
                   </div>
@@ -548,7 +548,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
                         <button
                           type="button"
                           onClick={() => setForm((p) => ({ ...p, [key]: !p[key as keyof typeof p] }))}
-                          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${(form as any)[key] ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'}`}
+                          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${(form as any)[key] ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'}`}
                         >
                           <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${(form as any)[key] ? 'translate-x-4' : 'translate-x-0'}`} />
                         </button>
@@ -567,7 +567,7 @@ export default function AnnouncementsTab({ onMessage }: AnnouncementsTabProps) {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg text-sm font-semibold transition-colors"
+                className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-semibold transition-colors"
               >
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {editingId ? 'Save Changes' : 'Publish Announcement'}

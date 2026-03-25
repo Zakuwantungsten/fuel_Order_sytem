@@ -103,7 +103,7 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
     return (
       <button
         onClick={handleDone}
-        className="px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-lg shadow-indigo-500/20"
+        className="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-lg shadow-indigo-500/20"
       >
         Done
       </button>
@@ -212,7 +212,7 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
                 />
                 <button
                   onClick={handleCopy}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 flex-shrink-0"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2 flex-shrink-0"
                 >
                   {copied ? (
                     <><CheckCheck className="w-4 h-4" /> Copied</>

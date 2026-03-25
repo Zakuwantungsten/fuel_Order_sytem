@@ -273,8 +273,8 @@ export default function ConditionalAccessPolicies() {
                 }}
                 className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
                   active
-                    ? 'bg-indigo-100 dark:bg-indigo-900/40 border-indigo-400 text-indigo-700 dark:text-indigo-300'
-                    : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-indigo-300'
+                    ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-400 text-blue-700 dark:text-blue-300'
+                    : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-300'
                 }`}
               >
                 {opt.replace(/_/g, ' ')}
@@ -293,7 +293,7 @@ export default function ConditionalAccessPolicies() {
           value={val}
           onChange={e => updateCondition(idx, { value: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
           placeholder="198.51.100.0/24, 203.0.113.0/24"
-          className="mt-1 w-full px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
+          className="mt-1 w-full px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
         />
       );
     }
@@ -329,8 +329,8 @@ export default function ConditionalAccessPolicies() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl">
-            <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+            <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Conditional Access Policies</h3>
@@ -339,7 +339,7 @@ export default function ConditionalAccessPolicies() {
         </div>
         <button
           onClick={() => { resetForm(); setShowForm(true); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" /> New Policy
         </button>
@@ -365,7 +365,7 @@ export default function ConditionalAccessPolicies() {
                 onChange={e => setFormName(e.target.value)}
                 maxLength={200}
                 placeholder="Policy name"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
@@ -376,7 +376,7 @@ export default function ConditionalAccessPolicies() {
                 onChange={e => setFormPriority(Math.max(0, Math.min(1000, parseInt(e.target.value) || 0)))}
                 min={0}
                 max={1000}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -388,7 +388,7 @@ export default function ConditionalAccessPolicies() {
               onChange={e => setFormDesc(e.target.value)}
               maxLength={1000}
               placeholder="Optional description"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -396,7 +396,7 @@ export default function ConditionalAccessPolicies() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Conditions (all must match)</label>
-              <button onClick={addCondition} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
+              <button onClick={addCondition} className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
                 <Plus className="w-3 h-3" /> Add condition
               </button>
             </div>
@@ -444,8 +444,8 @@ export default function ConditionalAccessPolicies() {
                   onClick={() => setFormAction(a.value)}
                   className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                     formAction === a.value
-                      ? 'bg-indigo-100 dark:bg-indigo-900/40 border-indigo-400 text-indigo-700 dark:text-indigo-300 font-medium'
-                      : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-indigo-300'
+                      ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-400 text-blue-700 dark:text-blue-300 font-medium'
+                      : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-300'
                   }`}
                 >
                   {a.label}
@@ -462,7 +462,7 @@ export default function ConditionalAccessPolicies() {
             <button
               onClick={handleSave}
               disabled={saving || !formName.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {editing ? 'Update' : 'Create'}
@@ -512,7 +512,7 @@ export default function ConditionalAccessPolicies() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={e => { e.stopPropagation(); startEdit(p); }} className="p-1 text-gray-400 hover:text-indigo-500" title="Edit">
+                    <button onClick={e => { e.stopPropagation(); startEdit(p); }} className="p-1 text-gray-400 hover:text-blue-500" title="Edit">
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button onClick={e => { e.stopPropagation(); handleDelete(p._id); }} className="p-1 text-gray-400 hover:text-red-500" title="Delete">

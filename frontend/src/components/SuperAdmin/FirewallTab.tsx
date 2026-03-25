@@ -844,9 +844,9 @@ function HoneypotsSection({ fwd }: { fwd: (msg: string, type?: 'success' | 'erro
       </div>
 
       {/* Info */}
-      <div className="flex items-start gap-2 p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl">
-        <Siren className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-indigo-700 dark:text-indigo-300">
+      <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+        <Siren className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-blue-700 dark:text-blue-300">
           Honeypots are decoy endpoints not linked anywhere in the app. Any request reaching them is automatically suspicious.
           Events appear in <strong>Security Events</strong> as <code>honeypot_hit</code>.
           Set action to <strong>Block</strong> to auto-ban the requesting IP immediately.
@@ -1343,7 +1343,7 @@ function NetworkZonesSection({ fwd }: { fwd: (msg: string, type?: 'success' | 'e
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {form.cidrs.map((c, i) => (
-                    <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 rounded text-xs font-mono">
+                    <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-indigo-700 text-blue-700 dark:text-blue-300 rounded text-xs font-mono">
                       {c} <button onClick={() => removeCidr(i)}><X className="w-3 h-3" /></button>
                     </span>
                   ))}

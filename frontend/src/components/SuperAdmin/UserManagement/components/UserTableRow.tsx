@@ -37,7 +37,7 @@ export default memo(function UserTableRow({
       tabIndex={0}
       className={`group transition-colors cursor-pointer ${
         isSelected
-          ? 'bg-indigo-50/70 dark:bg-indigo-900/10'
+          ? 'bg-blue-50/70 dark:bg-blue-900/10'
           : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
       }`}
     >
@@ -48,7 +48,7 @@ export default memo(function UserTableRow({
           checked={isSelected}
           onChange={(e) => { e.stopPropagation(); onSelect(userId); }}
           onClick={(e) => e.stopPropagation()}
-          className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+          className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
           aria-label={`Select ${user.firstName} ${user.lastName}`}
         />
       </td>

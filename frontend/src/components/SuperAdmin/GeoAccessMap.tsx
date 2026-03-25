@@ -65,7 +65,7 @@ export default function GeoAccessMap() {
       <div className="text-center py-12 text-gray-400">
         <Globe className="w-8 h-8 mx-auto mb-2 opacity-30" />
         <p className="text-sm">Unable to load geographic access data</p>
-        <button onClick={load} className="mt-2 text-xs text-indigo-500 hover:underline">Retry</button>
+        <button onClick={load} className="mt-2 text-xs text-blue-500 hover:underline">Retry</button>
       </div>
     );
   }
@@ -102,12 +102,12 @@ export default function GeoAccessMap() {
           </div>
           <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{data.totalLogins.toLocaleString()}</p>
         </div>
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
-            <Globe className="w-3.5 h-3.5 text-indigo-500" />
+            <Globe className="w-3.5 h-3.5 text-blue-500" />
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Unique IPs</span>
           </div>
-          <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{data.uniqueIPs}</p>
+          <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{data.uniqueIPs}</p>
         </div>
         <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2 mb-1">
@@ -138,7 +138,7 @@ export default function GeoAccessMap() {
                 <div key={c.country} className="flex items-center gap-3">
                   <span className="text-sm text-gray-700 dark:text-gray-300 w-28 truncate">{c.country}</span>
                   <div className="flex-1 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
+                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
                   </div>
                   <span className="text-xs text-gray-500 w-16 text-right">{c.count} ({pct}%)</span>
                 </div>
@@ -151,7 +151,7 @@ export default function GeoAccessMap() {
       {/* Location list */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-3">
-          <MapPin className="w-4 h-4 text-indigo-500" />
+          <MapPin className="w-4 h-4 text-blue-500" />
           <span className="font-medium text-sm text-gray-900 dark:text-gray-100">Access Locations</span>
           <span className="text-xs text-gray-400">{data.locations.length} locations</span>
         </div>

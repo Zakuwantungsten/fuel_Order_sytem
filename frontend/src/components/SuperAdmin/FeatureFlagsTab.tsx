@@ -16,7 +16,7 @@ function RoleBadge({ role }: { role: string }) {
   const colors: Record<string, string> = {
     super_admin: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
     admin: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    boss: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
+    boss: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
     store: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     driver: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
   };
@@ -98,7 +98,7 @@ function FlagSlideOver({
                 value={key}
                 onChange={(e) => setKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
                 placeholder="e.g. my_feature"
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <p className="text-xs text-gray-400 mt-1">Lowercase letters, numbers, underscores only. Cannot be changed later.</p>
             </div>
@@ -110,7 +110,7 @@ function FlagSlideOver({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Human-readable name"
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
           <div>
@@ -119,7 +119,7 @@ function FlagSlideOver({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
             />
           </div>
           <div className="flex items-center justify-between">
@@ -127,7 +127,7 @@ function FlagSlideOver({
             <button
               type="button"
               onClick={() => setIsEnabled((v) => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
@@ -144,8 +144,8 @@ function FlagSlideOver({
                   onClick={() => toggleRole(role)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     enabledForRoles.includes(role)
-                      ? 'bg-indigo-600 border-indigo-600 text-white'
-                      : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-indigo-400'
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400'
                   }`}
                 >
                   {role}
@@ -156,7 +156,7 @@ function FlagSlideOver({
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
           >
             {saving ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving…</> : <><Check className="w-4 h-4" /> {isEditing ? 'Save Changes' : 'Create Flag'}</>}
           </button>
@@ -208,7 +208,7 @@ function FlagRow({
         <button
           onClick={handleToggle}
           disabled={toggling}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flag.isEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${flag.isEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
         >
           {toggling
             ? <RefreshCw className="w-3.5 h-3.5 text-white absolute left-1/2 -translate-x-1/2 animate-spin" />
@@ -217,7 +217,7 @@ function FlagRow({
         </button>
         <button
           onClick={onEdit}
-          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-indigo-600"
+          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-blue-600"
         >
           <Edit3 className="w-4 h-4" />
         </button>
@@ -314,7 +314,7 @@ export default function FeatureFlagsTab({ onMessage }: Props) {
           </button>
           <button
             onClick={() => setSlideOver({ open: true })}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             New Flag
@@ -325,7 +325,7 @@ export default function FeatureFlagsTab({ onMessage }: Props) {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total', value: flags.length, color: 'text-indigo-500' },
+          { label: 'Total', value: flags.length, color: 'text-blue-500' },
           { label: 'Enabled', value: enabledCount, color: 'text-green-500' },
           { label: 'Disabled', value: flags.length - enabledCount, color: 'text-gray-400' },
         ].map(({ label, value, color }) => (

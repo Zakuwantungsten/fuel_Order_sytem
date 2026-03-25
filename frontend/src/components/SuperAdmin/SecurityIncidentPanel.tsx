@@ -259,7 +259,7 @@ export default function SecurityIncidentPanel() {
           </div>
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-indigo-500" />
+              <BarChart3 className="w-4 h-4 text-blue-500" />
               <span className="text-xs text-gray-500 dark:text-gray-400">MTTR</span>
             </div>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">
@@ -272,7 +272,7 @@ export default function SecurityIncidentPanel() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <FileText className="w-5 h-5 text-indigo-500" />
+          <FileText className="w-5 h-5 text-blue-500" />
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">Incidents</h3>
         </div>
         <div className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export default function SecurityIncidentPanel() {
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" /> New
           </button>
@@ -373,7 +373,7 @@ export default function SecurityIncidentPanel() {
             <button
               onClick={createIncident}
               disabled={!createForm.title.trim() || actionLoading === 'create'}
-              className="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {actionLoading === 'create' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
             </button>
@@ -383,7 +383,7 @@ export default function SecurityIncidentPanel() {
 
       {/* Root Cause Dialog */}
       {rootCauseId && (
-        <div className="bg-white dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded-xl p-4 space-y-3">
+        <div className="bg-white dark:bg-gray-800 border border-blue-300 dark:border-indigo-700 rounded-xl p-4 space-y-3">
           <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Set Root Cause Analysis</h4>
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Root Cause *</label>
@@ -412,7 +412,7 @@ export default function SecurityIncidentPanel() {
             <button
               onClick={submitRootCause}
               disabled={!rootCauseForm.rootCause.trim() || actionLoading === rootCauseId}
-              className="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >Save</button>
           </div>
         </div>
@@ -595,7 +595,7 @@ export default function SecurityIncidentPanel() {
                     {!incident.rootCause && incident.status !== 'new' && (
                       <button
                         onClick={() => { setRootCauseId(incident._id); setRootCauseForm({ rootCause: '', impactAssessment: '' }); }}
-                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                       >+ Set Root Cause Analysis</button>
                     )}
 
@@ -632,7 +632,7 @@ export default function SecurityIncidentPanel() {
                         <button
                           onClick={() => addNote(incident._id)}
                           disabled={!noteText.trim() || isActioning}
-                          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           <Send className="w-4 h-4" />
                         </button>

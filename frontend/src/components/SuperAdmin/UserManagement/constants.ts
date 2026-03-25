@@ -43,7 +43,7 @@ export const USER_ROLES: RoleDefinition[] = [
   {
     value: 'boss',
     label: 'Boss',
-    color: 'text-indigo-600 dark:text-indigo-400',
+    color: 'text-blue-600 dark:text-indigo-400',
     bgColor: 'bg-indigo-50 dark:bg-indigo-900/30',
     description: 'Executive-level overview and approval authority',
     permissionSummary: ['Dashboard overview', 'Approval workflows', 'Reports', 'Financial data'],

@@ -71,8 +71,8 @@ export default function SystemUnifiedTab({ onMessage, onNavigate }: Props) {
         {/* Title row */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#EEF2FF] dark:bg-indigo-900/30 flex-shrink-0">
-              <Settings className="w-[18px] h-[18px] text-[#4F46E5] dark:text-indigo-400" />
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#EEF2FF] dark:bg-blue-900/30 flex-shrink-0">
+              <Settings className="w-[18px] h-[18px] text-[#4F46E5] dark:text-blue-400" />
             </div>
             <div>
               <h1 className="text-[15px] font-bold text-[#111827] dark:text-gray-100 leading-none">
@@ -144,7 +144,7 @@ export default function SystemUnifiedTab({ onMessage, onNavigate }: Props) {
                 onClick={() => setTab(t.id)}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap ${
                   active
-                    ? 'border-[#4F46E5] text-[#4F46E5] dark:border-indigo-400 dark:text-indigo-400'
+                    ? 'border-[#4F46E5] text-[#4F46E5] dark:border-blue-400 dark:text-blue-400'
                     : 'border-transparent text-[#6B7280] dark:text-gray-400 hover:text-[#111827] dark:hover:text-gray-200 hover:border-[#E4E7EC] dark:hover:border-gray-600'
                 }`}
               >

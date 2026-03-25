@@ -197,7 +197,7 @@ export default function SecurityEventsTab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <ShieldAlert className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+          <ShieldAlert className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Security Events</h2>
         </div>
         <div className="flex items-center gap-2">
@@ -256,7 +256,7 @@ export default function SecurityEventsTab() {
                 onClick={() => setStatsHours(h)}
                 className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
                   statsHours === h
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
               >

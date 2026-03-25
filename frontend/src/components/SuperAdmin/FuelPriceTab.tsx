@@ -113,7 +113,7 @@ function ScheduleSlideOver({
             <select
               value={stationId}
               onChange={(e) => setStationId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             >
               {stations.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -129,7 +129,7 @@ function ScheduleSlideOver({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               New Price <span className="text-gray-400 font-normal">({selectedStation?.currency ?? 'TZS'} / L)</span>
             </label>
-            <div className="flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
+            <div className="flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
               <span className="px-3 py-2.5 text-sm font-bold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-r border-gray-300 dark:border-gray-600 select-none">
                 {selectedStation?.currency === 'USD' ? '$' : 'TZS'}
               </span>
@@ -150,13 +150,13 @@ function ScheduleSlideOver({
               type="datetime-local"
               value={effectiveAt}
               onChange={(e) => setEffectiveAt(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
           >
             {saving ? <><RefreshCw className="w-4 h-4 animate-spin" /> Scheduling…</> : <><Clock className="w-4 h-4" /> Schedule Change</>}
           </button>
@@ -206,8 +206,8 @@ function EditPriceModal({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center flex-shrink-0">
-              <Edit3 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+              <Edit3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{station.name}</p>
@@ -228,8 +228,8 @@ function EditPriceModal({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">New Price</label>
-            <div className="flex items-center rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden focus-within:border-indigo-500 transition-colors">
-              <span className="px-3 py-2.5 text-sm font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border-r border-gray-200 dark:border-gray-700 select-none">
+            <div className="flex items-center rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden focus-within:border-blue-500 transition-colors">
+              <span className="px-3 py-2.5 text-sm font-bold bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-r border-gray-200 dark:border-gray-700 select-none">
                 {station.currency === 'USD' ? '$' : 'TZS'}
               </span>
               <input
@@ -260,7 +260,7 @@ function EditPriceModal({
           <button
             onClick={save}
             disabled={saving}
-            className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5"
+            className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5"
           >
             {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
             {saving ? 'Saving…' : 'Update Price'}
@@ -282,7 +282,7 @@ function StationRow({
   onEdit: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-indigo-200 dark:hover:border-indigo-800 hover:shadow-sm transition-all group">
+    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-sm transition-all group">
       <div className="flex items-center gap-2.5">
         <span className="w-2 h-6 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
         <div>
@@ -296,7 +296,7 @@ function StationRow({
         </span>
         <button
           onClick={onEdit}
-          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-xs font-semibold transition-all"
+          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-semibold transition-all"
         >
           <Edit3 className="w-3 h-3" />
           Edit
@@ -453,7 +453,7 @@ export default function FuelPriceTab({ onMessage }: Props) {
           )}
           <button
             onClick={() => setShowSchedulePanel(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             Schedule Change
@@ -465,7 +465,7 @@ export default function FuelPriceTab({ onMessage }: Props) {
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
           <div className="flex items-center gap-1.5 mb-0.5">
-            <DollarSign className="w-3.5 h-3.5 text-indigo-500" />
+            <DollarSign className="w-3.5 h-3.5 text-blue-500" />
             <span className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Stations</span>
           </div>
           <p className="text-xl font-bold text-gray-900 dark:text-white">{stations.filter((s) => s.isActive).length}</p>

@@ -74,8 +74,8 @@ const TEMPLATES: {
     name: 'Standard',
     description: 'Balanced security — reasonable defaults for most organizations.',
     icon: <Shield className="w-5 h-5" />,
-    color: 'text-indigo-600 dark:text-indigo-400',
-    borderColor: 'border-indigo-300 dark:border-indigo-700',
+    color: 'text-blue-600 dark:text-blue-400',
+    borderColor: 'border-blue-300 dark:border-indigo-700',
     values: {
       session: { sessionTimeout: 30, jwtExpiry: 24, refreshTokenExpiry: 7, maxLoginAttempts: 5, lockoutDuration: 15, allowMultipleSessions: true },
       password: { minLength: 12, requireUppercase: true, requireLowercase: true, requireNumbers: true, requireSpecialChars: true, historyCount: 5, expirationDays: 90, expirationWarningDays: 7, expirationGraceDays: 3, expirationExemptRoles: [] },
@@ -157,11 +157,11 @@ export default function SecurityTemplates({ currentSession, currentPassword, cur
     : [];
 
   return (
-    <div className="bg-gradient-to-r from-indigo-50 via-white to-purple-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border border-indigo-200/60 dark:border-gray-700 rounded-xl overflow-hidden">
+    <div className="bg-gradient-to-r from-indigo-50 via-white to-purple-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border border-blue-200/60 dark:border-gray-700 rounded-xl overflow-hidden">
       <div className="px-4 pt-4 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-            <ShieldAlert className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+            <ShieldAlert className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Quick Apply — Security Templates</h3>
@@ -176,7 +176,7 @@ export default function SecurityTemplates({ currentSession, currentPassword, cur
             className={`relative p-4 rounded-xl border-2 ${tpl.borderColor} bg-white dark:bg-gray-700/40 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200`}
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className={`p-1.5 rounded-lg ${tpl.id === 'strict' ? 'bg-red-100 dark:bg-red-900/30' : tpl.id === 'standard' ? 'bg-indigo-100 dark:bg-indigo-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+              <div className={`p-1.5 rounded-lg ${tpl.id === 'strict' ? 'bg-red-100 dark:bg-red-900/30' : tpl.id === 'standard' ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
                 <span className={tpl.color}>{tpl.icon}</span>
               </div>
               <span className={`font-semibold ${tpl.color}`}>{tpl.name}</span>
@@ -196,7 +196,7 @@ export default function SecurityTemplates({ currentSession, currentPassword, cur
               <button
                 onClick={() => apply(tpl)}
                 disabled={applying !== null}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors"
               >
                 {applying === tpl.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRight className="w-3 h-3" />}
                 Apply

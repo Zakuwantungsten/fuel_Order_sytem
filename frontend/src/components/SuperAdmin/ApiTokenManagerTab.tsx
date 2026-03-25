@@ -95,8 +95,8 @@ export const ApiTokenManagerTab: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
-            <Key className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+          <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+            <Key className="h-6 w-6 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">API Token Manager</h2>
@@ -107,7 +107,7 @@ export const ApiTokenManagerTab: React.FC = () => {
           <button onClick={fetchTokens} disabled={loading} className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 disabled:opacity-50 transition-colors">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh
           </button>
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
             <Plus className="h-4 w-4" />New Token
           </button>
         </div>
@@ -153,7 +153,7 @@ export const ApiTokenManagerTab: React.FC = () => {
                   </div>
                   {t.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.description}</p>}
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {t.scopes.map((s) => <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">{s}</span>)}
+                    {t.scopes.map((s) => <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">{s}</span>)}
                   </div>
                   <div className="flex gap-4 mt-2 text-xs text-gray-400 dark:text-gray-500">
                     <span>Prefix: <code>{t.tokenPrefix}…</code></span>
@@ -179,14 +179,14 @@ export const ApiTokenManagerTab: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full mx-4 p-6 space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Create API Token</h3>
-            <input type="text" placeholder="Token name *" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <input type="text" placeholder="Description (optional)" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <input type="number" placeholder="Expires in days (leave blank = no expiry)" value={form.expiresInDays} onChange={(e) => setForm((f) => ({ ...f, expiresInDays: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input type="text" placeholder="Token name *" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" placeholder="Description (optional)" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="number" placeholder="Expires in days (leave blank = no expiry)" value={form.expiresInDays} onChange={(e) => setForm((f) => ({ ...f, expiresInDays: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <div>
               <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Scopes</p>
               <div className="flex flex-wrap gap-2">
                 {availableScopes.map((s) => (
-                  <button key={s} onClick={() => toggleScope(s)} className={`text-xs px-2 py-1 rounded-full border transition-colors ${form.scopes.includes(s) ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-indigo-400'}`}>
+                  <button key={s} onClick={() => toggleScope(s)} className={`text-xs px-2 py-1 rounded-full border transition-colors ${form.scopes.includes(s) ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-blue-400'}`}>
                     {s}
                   </button>
                 ))}
@@ -194,7 +194,7 @@ export const ApiTokenManagerTab: React.FC = () => {
             </div>
             <div className="flex gap-3 justify-end pt-2">
               <button onClick={() => { setShowCreate(false); setForm({ name: '', description: '', expiresInDays: '', scopes: [] }); }} className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Cancel</button>
-              <button onClick={handleCreate} disabled={creating} className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+              <button onClick={handleCreate} disabled={creating} className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}Create Token
               </button>
             </div>

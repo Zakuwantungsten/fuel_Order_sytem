@@ -263,7 +263,7 @@ export default function TruckBatches() {
     blue:   { bg: 'bg-blue-50 dark:bg-blue-900/20',     border: 'border-blue-200 dark:border-blue-800',     text: 'text-blue-900 dark:text-blue-100',     badge: 'bg-blue-600',   subtext: 'text-blue-700 dark:text-blue-300' },
     purple: { bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800', text: 'text-purple-900 dark:text-purple-100', badge: 'bg-purple-600', subtext: 'text-purple-700 dark:text-purple-300' },
     pink:   { bg: 'bg-pink-50 dark:bg-pink-900/20',     border: 'border-pink-200 dark:border-pink-800',     text: 'text-pink-900 dark:text-pink-100',     badge: 'bg-pink-600',   subtext: 'text-pink-700 dark:text-pink-300' },
-    indigo: { bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800', text: 'text-indigo-900 dark:text-indigo-100', badge: 'bg-indigo-600', subtext: 'text-indigo-700 dark:text-indigo-300' },
+    indigo: { bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800', text: 'text-blue-900 dark:text-blue-100', badge: 'bg-blue-600', subtext: 'text-blue-700 dark:text-blue-300' },
     red:    { bg: 'bg-red-50 dark:bg-red-900/20',       border: 'border-red-200 dark:border-red-800',       text: 'text-red-900 dark:text-red-100',       badge: 'bg-red-600',    subtext: 'text-red-700 dark:text-red-300' },
     orange: { bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-800', text: 'text-orange-900 dark:text-orange-100', badge: 'bg-orange-600', subtext: 'text-orange-700 dark:text-orange-300' },
     teal:   { bg: 'bg-teal-50 dark:bg-teal-900/20',     border: 'border-teal-200 dark:border-teal-800',     text: 'text-teal-900 dark:text-teal-100',     badge: 'bg-teal-600',   subtext: 'text-teal-700 dark:text-teal-300' },
@@ -401,7 +401,7 @@ export default function TruckBatches() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
-            <Truck className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            <Truck className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                 Truck Batch Configuration
@@ -414,7 +414,7 @@ export default function TruckBatches() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowAddTruckModal(true)}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
               Add Truck
@@ -461,7 +461,7 @@ export default function TruckBatches() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search truck suffixes..."
-            className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+            className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
       </div>
@@ -524,7 +524,7 @@ export default function TruckBatches() {
                       value={newRule.destination}
                       onChange={(e) => setNewRule({ ...newRule, destination: e.target.value })}
                       placeholder="e.g., LUBUMBASHI"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
                     />
                   </div>
                   <div>
@@ -535,14 +535,14 @@ export default function TruckBatches() {
                       type="number"
                       value={newRule.extraLiters}
                       onChange={(e) => setNewRule({ ...newRule, extraLiters: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
                     />
                   </div>
                 </div>
                 <button
                   onClick={handleAddRule}
                   disabled={addRuleMutation.isPending}
-                  className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  className="mt-3 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
                   {addRuleMutation.isPending ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -573,7 +573,7 @@ export default function TruckBatches() {
                         className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4 flex items-center justify-between"
                       >
                         <div className="flex items-center gap-3">
-                          <MapPin className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                          <MapPin className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                           <div>
                             <div className="font-medium text-gray-900 dark:text-gray-100">
                               {rule.destination}
@@ -641,7 +641,7 @@ export default function TruckBatches() {
                   value={newTruck.suffix}
                   onChange={(e) => setNewTruck({ ...newTruck, suffix: e.target.value })}
                   placeholder="e.g., DNH, EAG, BAB"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100 uppercase"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 uppercase"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       handleAddTruck();
@@ -656,7 +656,7 @@ export default function TruckBatches() {
                 <select
                   value={newTruck.batch}
                   onChange={(e) => setNewTruck({ ...newTruck, batch: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
                 >
                   <option value={0}>-- Select Batch --</option>
                   {batchList.map((batch) => (
@@ -680,7 +680,7 @@ export default function TruckBatches() {
                   await handleAddTruck();
                 }}
                 disabled={!newTruck.suffix.trim() || newTruck.batch <= 0}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 Add Truck
@@ -720,7 +720,7 @@ export default function TruckBatches() {
                   value={newBatchLiters === 0 ? '' : newBatchLiters}
                   onChange={(e) => setNewBatchLiters(Number(e.target.value))}
                   placeholder="Enter liter amount (e.g., 120, 150, 200)"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Must be between 0 and 10,000 liters
@@ -738,7 +738,7 @@ export default function TruckBatches() {
               <button
                 onClick={handleCreateBatch}
                 disabled={newBatchLiters <= 0 || newBatchLiters > 10000}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 Create Batch
@@ -793,7 +793,7 @@ export default function TruckBatches() {
                   value={newBatchLiters === 0 ? '' : newBatchLiters}
                   onChange={(e) => setNewBatchLiters(Number(e.target.value))}
                   placeholder="Enter new liter amount"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Must be between 0 and 10,000 liters
@@ -822,7 +822,7 @@ export default function TruckBatches() {
               <button
                 onClick={handleUpdateBatch}
                 disabled={newBatchLiters <= 0 || newBatchLiters > 10000 || newBatchLiters === editingBatch.extraLiters}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <Edit2 className="w-4 h-4" />
                 Update Batch

@@ -200,7 +200,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
     return `w-full px-4 py-2.5 text-sm border rounded-lg transition-colors focus:ring-2 focus:outline-none
       ${hasError
         ? 'border-red-300 dark:border-red-600 focus:ring-red-500 bg-red-50/50 dark:bg-red-900/10'
-        : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700'
+        : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700'
       }
       text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500`;
   };
@@ -226,7 +226,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
       title="Create New User"
       subtitle="Password will be generated and sent via email"
       icon={UserPlus}
-      iconBg="bg-indigo-100 dark:bg-indigo-900/30"
+      iconBg="bg-blue-100 dark:bg-blue-900/30"
       size="lg"
       footer={
         <div className="flex items-center justify-between w-full">
@@ -246,7 +246,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
               type="submit"
               form="create-user-form"
               disabled={submitting || success}
-              className="px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/20"
+              className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/20"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {success && <Check className="w-4 h-4" />}
@@ -330,8 +330,8 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
         {/* ── Account Information ──────────────────────────────────────── */}
         <fieldset disabled={submitting || success} className="space-y-4">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center">
-              <UserIcon className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <div className="w-7 h-7 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+              <UserIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             </div>
             <legend className="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">
               Account Information

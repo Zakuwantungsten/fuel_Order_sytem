@@ -154,7 +154,7 @@ export default function BackupRecoveryTab({ onMessage, onNavigate }: BackupRecov
         <button 
           onClick={handleCreateBackup}
           disabled={creating}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
           {creating ? (
             <>
@@ -246,7 +246,7 @@ export default function BackupRecoveryTab({ onMessage, onNavigate }: BackupRecov
             <p className="mt-2 text-gray-500 dark:text-gray-400">No backups found</p>
             <button
               onClick={handleCreateBackup}
-              className="mt-4 text-indigo-600 dark:text-indigo-400 hover:underline"
+              className="mt-4 text-blue-600 dark:text-blue-400 hover:underline"
             >
               Create your first backup
             </button>
@@ -315,7 +315,7 @@ export default function BackupRecoveryTab({ onMessage, onNavigate }: BackupRecov
                     </button>
                     <button
                       onClick={() => handleDownload(backup)}
-                      className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors flex items-center gap-1"
+                      className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
                       title="Download backup file"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -345,14 +345,14 @@ export default function BackupRecoveryTab({ onMessage, onNavigate }: BackupRecov
           </h3>
         </div>
 
-        <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3">
-          <p className="text-[12px] text-indigo-800 dark:text-indigo-300">
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
+          <p className="text-[12px] text-blue-800 dark:text-blue-300">
             Backup frequency, retention copies, and schedule settings are configured in <strong>System &rarr; Data Lifecycle Policy</strong>.
           </p>
           <button
             type="button"
             onClick={openDataLifecyclePolicyEditor}
-            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-indigo-700"
+            className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-blue-700"
           >
             Configure Policy
           </button>
@@ -375,7 +375,7 @@ export default function BackupRecoveryTab({ onMessage, onNavigate }: BackupRecov
                     checked={schedule.enabled}
                     readOnly
                     disabled
-                    className="rounded text-indigo-600"
+                    className="rounded text-blue-600"
                   />
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100">

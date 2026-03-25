@@ -24,13 +24,13 @@ export default function FilterChips({ chips, onRemove, onClearAll }: FilterChips
         <span
           key={chip.key}
           role="listitem"
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
         >
-          <span className="text-indigo-400 dark:text-indigo-500">{chip.label}:</span>
+          <span className="text-blue-400 dark:text-blue-500">{chip.label}:</span>
           <span>{chip.value}</span>
           <button
             onClick={() => onRemove(chip.key)}
-            className="ml-0.5 p-0.5 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+            className="ml-0.5 p-0.5 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
             aria-label={`Remove ${chip.label} filter`}
           >
             <X className="w-3 h-3" />

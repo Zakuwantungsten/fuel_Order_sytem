@@ -45,7 +45,7 @@ export default function MonitoringUnifiedTab({ onMessage }: MonitoringUnifiedTab
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <Activity className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Monitoring</h2>
       </div>
 

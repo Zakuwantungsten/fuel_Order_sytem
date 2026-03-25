@@ -33,7 +33,7 @@ export default function SortableColumnHeader({
         onClick={() => onSort(field)}
         className={`inline-flex items-center gap-1 group transition-colors ${
           isActive
-            ? 'text-indigo-600 dark:text-indigo-400'
+            ? 'text-blue-600 dark:text-blue-400'
             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
         } ${alignClass}`}
         aria-label={`Sort by ${label}${direction ? `, currently ${direction}ending` : ''}`}

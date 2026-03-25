@@ -21,8 +21,8 @@ const VARIANTS: Record<EmptyStateVariant, { icon: React.ComponentType<{ classNam
     icon: Search,
     defaultTitle: 'No users match your filters',
     defaultDescription: 'Try adjusting your search or filter criteria to find what you are looking for.',
-    iconBg: 'bg-indigo-50 dark:bg-indigo-900/20',
-    iconColor: 'text-indigo-400 dark:text-indigo-500',
+    iconBg: 'bg-blue-50 dark:bg-blue-900/20',
+    iconColor: 'text-blue-400 dark:text-blue-500',
   },
   'no-data': {
     icon: Users,
@@ -70,7 +70,7 @@ export default function EmptyState({
                 onClick={action.onClick}
                 className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                   action.variant === 'primary'
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
+                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
                     : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
               >

@@ -170,7 +170,7 @@ const headers = () => {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className={`text-lg font-bold ${u.riskScore >= 80 ? 'text-red-600' : u.riskScore >= 60 ? 'text-orange-600' : 'text-yellow-600'}`}>{u.riskScore}</span>
-                      <button onClick={() => fetchBaseline(u.userId)} className="px-2 py-1 text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 rounded hover:bg-indigo-200">
+                      <button onClick={() => fetchBaseline(u.userId)} className="px-2 py-1 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded hover:bg-blue-200">
                         Baseline
                       </button>
                     </div>
@@ -274,7 +274,7 @@ const headers = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setSelectedUser(null); setBaseline(null); }}>
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100 mb-4">User Behavioral Baseline</h3>
-            {baselineLoading ? <RefreshCw className="w-5 h-5 animate-spin mx-auto text-indigo-500" /> : baseline ? (
+            {baselineLoading ? <RefreshCw className="w-5 h-5 animate-spin mx-auto text-blue-500" /> : baseline ? (
               <div className="space-y-4">
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Top Actions</h4>

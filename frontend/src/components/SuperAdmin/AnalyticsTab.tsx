@@ -136,7 +136,7 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
                     className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                   >
                     <span>{option.label}</span>
-                    {period === option.value && <Check className="w-4 h-4 text-indigo-600" />}
+                    {period === option.value && <Check className="w-4 h-4 text-blue-600" />}
                   </button>
                 ))}
               </div>
@@ -155,7 +155,7 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
           <button
             onClick={() => handleExport('comprehensive')}
             disabled={exporting || !analytics}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             <Download className="w-4 h-4" />
             Export Report
@@ -358,7 +358,7 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
               <button
                 onClick={() => handleExport('comprehensive')}
                 disabled={exporting}
-                className="px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 text-sm font-medium transition-colors disabled:opacity-50"
+                className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-sm font-medium transition-colors disabled:opacity-50"
               >
                 Full Report
               </button>
@@ -375,7 +375,7 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
               <div className="space-y-3">
                 {analytics.recentActivity.slice(0, 10).map((activity, index) => (
                   <div key={index} className="flex items-center gap-3 text-sm">
-                    <div className="w-2 h-2 bg-indigo-600 rounded-full flex-shrink-0" />
+                    <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0" />
                     <span className="font-medium text-gray-900 dark:text-gray-100">{activity.user}</span>
                     <span className="text-gray-600 dark:text-gray-400">{activity.action}</span>
                     <span className="text-gray-500 dark:text-gray-500">{activity.resource}</span>

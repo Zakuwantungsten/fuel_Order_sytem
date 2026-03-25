@@ -100,7 +100,7 @@ export default function SecurityChangeLog() {
         className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <History className="w-4.5 h-4.5 text-indigo-500" />
+          <History className="w-4.5 h-4.5 text-blue-500" />
           <span className="text-sm font-semibold text-gray-900 dark:text-white">Recent Security Changes</span>
         </div>
         <div className="flex items-center gap-2">
@@ -129,8 +129,8 @@ export default function SecurityChangeLog() {
             <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-80 overflow-y-auto">
               {entries.map(entry => (
                 <div key={entry._id} className="px-5 py-3 flex items-start gap-3">
-                  <div className="shrink-0 mt-0.5 w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                    <User className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <div className="shrink-0 mt-0.5 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <User className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-gray-800 dark:text-gray-200">

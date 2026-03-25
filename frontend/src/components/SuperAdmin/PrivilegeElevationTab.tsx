@@ -98,7 +98,7 @@ export default function PrivilegeElevationTab() {
             onClick={() => setStatusFilter(s)}
             className={`px-3 py-1.5 text-xs rounded-full transition-colors ${
               statusFilter === s
-                ? 'bg-indigo-600 text-white'
+                ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
@@ -132,7 +132,7 @@ export default function PrivilegeElevationTab() {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold text-gray-900 dark:text-gray-100">{req.requestedByUsername}</span>
                       <span className="text-gray-400 mx-1">→</span>
-                      <span className="font-medium text-indigo-600 dark:text-indigo-400">{formatRole(req.targetRole)}</span>
+                      <span className="font-medium text-blue-600 dark:text-blue-400">{formatRole(req.targetRole)}</span>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${badge.color}`}>
                         <BadgeIcon className="w-3 h-3" />{req.status}
                       </span>

@@ -634,9 +634,9 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Header */}
-        <header className="lg:hidden p-3 flex items-center gap-2 flex-shrink-0" style={{ background: isDark ? '#1E293B' : '#FFFFFF', borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
+        <header className="lg:hidden p-3 flex items-center gap-2 flex-shrink-0" style={{ background: '#0F172A', borderBottom: '1px solid #1E293B' }}>
           <div className="flex-1 min-w-0 mr-2">
-            <h2 className="text-base font-bold truncate" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>
+            <h2 className="text-base font-bold truncate" style={{ color: '#F1F5F9' }}>
               {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
             </h2>
           </div>
@@ -644,8 +644,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             <button 
               onClick={toggleTheme}
               className="p-1.5 rounded-lg transition-colors flex-shrink-0"
-              style={{ color: '#64748B' }}
-              onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9')}
+              style={{ color: '#94A3B8' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
@@ -676,7 +676,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               <button 
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                 className="p-1 rounded-lg transition-colors"
-                onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')}
+                onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
                 <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#2563EB' }}>
@@ -756,8 +756,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             <button
               onClick={() => setSidebarOpen(true)}
               className="p-1.5 rounded-lg transition-colors flex-shrink-0"
-              style={{ color: '#64748B' }}
-              onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9')}
+              style={{ color: '#94A3B8' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               aria-label="Open menu"
             >
@@ -767,10 +767,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         </header>
         
         {/* Desktop Header */}
-        <header className="hidden lg:flex p-3 flex-shrink-0" style={{ background: isDark ? '#1E293B' : '#FFFFFF', borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
+        <header className="hidden lg:flex p-3 flex-shrink-0" style={{ background: '#0F172A', borderBottom: '1px solid #1E293B' }}>
           <div className="flex items-center justify-between w-full">
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>
+              <h2 className="text-lg font-semibold" style={{ color: '#FFFFFF' }}>
                 {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
               </h2>
               {activeTab.startsWith('sa_') && (
@@ -781,9 +781,9 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               <button 
                 onClick={toggleTheme}
                 className="p-1.5 rounded-lg transition-colors"
-                style={{ color: '#64748B' }}
-                onMouseEnter={e => { e.currentTarget.style.background = isDark ? '#334155' : '#F1F5F9'; e.currentTarget.style.color = isDark ? '#F1F5F9' : '#0F172A'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748B'; }}
+                style={{ color: '#94A3B8' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#1E293B'; e.currentTarget.style.color = '#F1F5F9'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
                 title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -814,14 +814,15 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               <div className="relative">
                 <button 
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className="flex items-center space-x-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-colors"
-                >
+                  className="flex items-center space-x-2 rounded-lg p-1.5 transition-colors"
+                  onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                   <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: '#2563EB' }}>
                     <span className="text-white text-xs font-medium">
                       {user.firstName?.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <span className="text-gray-700 dark:text-gray-200 font-medium">{user.firstName} {user.lastName}</span>
+                  <span className="text-slate-200 font-medium">{user.firstName} {user.lastName}</span>
                 </button>
                 
                 {showProfileMenu && (

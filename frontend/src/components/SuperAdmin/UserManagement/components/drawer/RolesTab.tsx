@@ -36,7 +36,7 @@ export default function RolesTab({ user }: RolesTabProps) {
               <ul className="space-y-1">
                 {currentRole.permissionSummary.map((perm, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
-                    <ArrowRight className="w-3 h-3 text-indigo-400 mt-0.5 flex-shrink-0" />
+                    <ArrowRight className="w-3 h-3 text-blue-400 mt-0.5 flex-shrink-0" />
                     {perm}
                   </li>
                 ))}
@@ -60,22 +60,22 @@ export default function RolesTab({ user }: RolesTabProps) {
                   key={role.value}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                     isCurrent
-                      ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200 dark:ring-indigo-700'
+                      ? 'bg-blue-50 dark:bg-blue-900/30 ring-1 ring-indigo-200 dark:ring-indigo-700'
                       : 'hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
                 >
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    isCurrent ? 'bg-indigo-600 dark:bg-indigo-400' : 'bg-gray-300 dark:bg-gray-600'
+                    isCurrent ? 'bg-blue-600 dark:bg-blue-400' : 'bg-gray-300 dark:bg-gray-600'
                   }`} />
                   <span className={`flex-1 ${
                     isCurrent
-                      ? 'font-semibold text-indigo-700 dark:text-indigo-300'
+                      ? 'font-semibold text-blue-700 dark:text-blue-300'
                       : 'text-gray-600 dark:text-gray-400'
                   }`}>
                     {role.label}
                   </span>
                   {isCurrent && (
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-1.5 py-0.5 rounded">
                       Current
                     </span>
                   )}

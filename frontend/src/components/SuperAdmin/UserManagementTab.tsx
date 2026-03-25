@@ -36,7 +36,7 @@ const USER_ROLES = [
   { value: 'super_admin', label: 'Super Admin', color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/30' },
   { value: 'admin', label: 'Admin', color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/30' },
   { value: 'super_manager', label: 'Super Manager', color: 'text-purple-600', bgColor: 'bg-purple-50 dark:bg-purple-900/30' },
-  { value: 'boss', label: 'Boss', color: 'text-indigo-600', bgColor: 'bg-indigo-50 dark:bg-indigo-900/30' },
+  { value: 'boss', label: 'Boss', color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/30' },
   { value: 'fuel_order_maker', label: 'Fuel Order Maker', color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-900/30' },
   { value: 'payment_manager', label: 'Payment Manager', color: 'text-yellow-600', bgColor: 'bg-yellow-50 dark:bg-yellow-900/30' },
   { value: 'import_officer', label: 'Import Officer', color: 'text-cyan-600', bgColor: 'bg-cyan-50 dark:bg-cyan-900/30' },
@@ -224,14 +224,14 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2">
-          <Users className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+          <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
             User Management
           </h2>
         </div>
         <button 
           onClick={handleCreateUser}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
         >
           <UserPlus className="w-4 h-4" />
           Create User
@@ -293,7 +293,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                 placeholder="Search by username, email, name, department, truck..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100"
+                className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
               />
             </div>
           </div>
@@ -330,7 +330,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                 <button
                   type="button"
                   onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100 flex items-center justify-between"
+                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 flex items-center justify-between"
                 >
                   <span>{filterRole ? USER_ROLES.find(r => r.value === filterRole)?.label : 'All Roles'}</span>
                   <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -346,7 +346,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                       className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-100 flex items-center justify-between"
                     >
                       <span>All Roles</span>
-                      {filterRole === '' && <Check className="w-4 h-4 text-indigo-600" />}
+                      {filterRole === '' && <Check className="w-4 h-4 text-blue-600" />}
                     </button>
                     {USER_ROLES.map(role => (
                       <button
@@ -359,7 +359,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                         className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-100 flex items-center justify-between"
                       >
                         <span>{role.label}</span>
-                        {filterRole === role.value && <Check className="w-4 h-4 text-indigo-600" />}
+                        {filterRole === role.value && <Check className="w-4 h-4 text-blue-600" />}
                       </button>
                     ))}
                   </div>
@@ -375,7 +375,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                 <button
                   type="button"
                   onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-100 flex items-center justify-between"
+                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 flex items-center justify-between"
                 >
                   <span>
                     {filterStatus === '' ? 'All Status' :
@@ -397,7 +397,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                         className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-100 flex items-center justify-between"
                       >
                         <span>{option.label}</span>
-                        {filterStatus === option.value && <Check className="w-4 h-4 text-indigo-600" />}
+                        {filterStatus === option.value && <Check className="w-4 h-4 text-blue-600" />}
                       </button>
                     ))}
                   </div>
@@ -469,8 +469,8 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                     <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
-                            <UserIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                            <UserIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                           </div>
                           <div>
                             <p className="font-medium text-gray-900 dark:text-gray-100">
@@ -1210,7 +1210,7 @@ function EditUserModal({
               <h3 className="text-lg font-semibold text-white">
                 Edit User
               </h3>
-              <p className="text-sm text-indigo-100">{user.username}</p>
+              <p className="text-sm text-blue-100">{user.username}</p>
             </div>
           </div>
           <button
@@ -1227,8 +1227,8 @@ function EditUserModal({
             {/* Personal Information Section */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-medium">
-                <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center">
-                  <UserIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                  <UserIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <h4 className="text-sm font-semibold uppercase tracking-wide">Personal Information</h4>
               </div>
@@ -1243,7 +1243,7 @@ function EditUserModal({
                     required
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
                     placeholder="Enter first name"
                   />
                 </div>
@@ -1257,7 +1257,7 @@ function EditUserModal({
                     required
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
                     placeholder="Enter last name"
                   />
                 </div>
@@ -1271,7 +1271,7 @@ function EditUserModal({
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
                     placeholder="user@example.com"
                   />
                 </div>
@@ -1295,7 +1295,7 @@ function EditUserModal({
                   required
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole, station: '', yard: '' })}
-                  className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
+                  className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.25rem' }}
                 >
                   {USER_ROLES.map(role => (
@@ -1333,7 +1333,7 @@ function EditUserModal({
                         required={requiresStation}
                         value={formData.station}
                         onChange={(e) => setFormData({ ...formData, station: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
+                        className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
                         style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.25rem' }}
                       >
                         <option value="">Select a station</option>
@@ -1370,7 +1370,7 @@ function EditUserModal({
                     required={requiresYard}
                     value={formData.yard}
                     onChange={(e) => setFormData({ ...formData, yard: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all appearance-none bg-white dark:bg-gray-700"
                     style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.25rem' }}
                   >
                     <option value="">Select a yard</option>
@@ -1648,7 +1648,7 @@ function ResetPasswordModal({
                         />
                         <button
                           onClick={handleCopy}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
                         >
                           {copied ? (
                             <>
@@ -1675,7 +1675,7 @@ function ResetPasswordModal({
                   <div className="flex justify-end">
                     <button
                       onClick={handleClose}
-                      className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                     >
                       Done
                     </button>

@@ -9,7 +9,7 @@ interface UserAvatarProps {
 
 // Deterministic color from name hash (consistent for the same user)
 const AVATAR_COLORS = [
-  'bg-indigo-600',
+  'bg-blue-600',
   'bg-blue-600',
   'bg-emerald-600',
   'bg-amber-600',

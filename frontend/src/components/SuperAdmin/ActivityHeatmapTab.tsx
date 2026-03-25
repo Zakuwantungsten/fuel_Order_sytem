@@ -93,7 +93,7 @@ function TopList({ items, labelKey, countKey, title }: { items: Record<string, u
                 <span className="text-gray-500">{count}</span>
               </div>
               <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
-                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
               </div>
             </div>
           );
@@ -134,7 +134,7 @@ export default function ActivityHeatmapTab({ onMessage }: Props) {
             <button
               key={d}
               onClick={() => setDays(d)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${days === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${days === d ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
             >
               {d}d
             </button>
@@ -152,7 +152,7 @@ export default function ActivityHeatmapTab({ onMessage }: Props) {
           {/* Stats row */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
-              <Activity className="w-5 h-5 text-indigo-500 mx-auto mb-2" />
+              <Activity className="w-5 h-5 text-blue-500 mx-auto mb-2" />
               <p className="text-2xl font-bold text-gray-900 dark:text-white">{data.total.toLocaleString()}</p>
               <p className="text-xs text-gray-400">Total events ({days}d)</p>
             </div>

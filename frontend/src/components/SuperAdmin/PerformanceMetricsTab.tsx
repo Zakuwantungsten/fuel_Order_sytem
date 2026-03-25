@@ -153,7 +153,7 @@ export const PerformanceMetricsTab: React.FC = () => {
                         <span className="text-xs text-gray-500">{u.requests.toLocaleString()}</span>
                       </div>
                       <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
-                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(u.requests / max) * 100}%` }} />
+                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(u.requests / max) * 100}%` }} />
                       </div>
                     </div>
                   </div>

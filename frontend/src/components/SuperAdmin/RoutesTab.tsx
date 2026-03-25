@@ -238,7 +238,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
             Routes Management
           </h2>
         </div>
-        <button onClick={() => openRouteModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+        <button onClick={() => openRouteModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">
           <Plus className="w-3.5 h-3.5" />Add Route
         </button>
       </div>
@@ -430,7 +430,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                             setShowRouteTypeDropdown(false);
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                            routeForm.routeType === 'IMPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                            routeForm.routeType === 'IMPORT' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                           }`}
                         >
                           <span>Import (Going/Outbound)</span>
@@ -443,7 +443,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                             setShowRouteTypeDropdown(false);
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                            routeForm.routeType === 'EXPORT' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
+                            routeForm.routeType === 'EXPORT' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                           }`}
                         >
                           <span>Export (Return/Inbound)</span>
@@ -470,7 +470,7 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
                 <button onClick={() => { setShowRouteModal(false); setEditingRoute(null); resetRouteForm(); }}
                   className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={editingRoute ? handleUpdateRoute : handleCreateRoute}
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2">
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2">
                   <Save className="w-4 h-4" />{editingRoute ? 'Update' : 'Create'}
                 </button>
               </div>

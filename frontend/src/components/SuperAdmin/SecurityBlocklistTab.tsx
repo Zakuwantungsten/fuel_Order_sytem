@@ -385,7 +385,7 @@ export default function SecurityBlocklistTab() {
             { label: 'Permanent', value: stats.permanentBlocks, icon: ShieldBan, color: 'text-red-700 dark:text-red-300' },
             { label: 'Expired', value: stats.expiredBlocks, icon: Clock, color: 'text-gray-500' },
             { label: 'Suspicious IPs', value: stats.suspiciousIPs, icon: AlertTriangle, color: 'text-yellow-600 dark:text-yellow-400' },
-            { label: 'Total Ever', value: stats.totalBlocked, icon: Activity, color: 'text-indigo-600 dark:text-indigo-400' },
+            { label: 'Total Ever', value: stats.totalBlocked, icon: Activity, color: 'text-blue-600 dark:text-blue-400' },
           ].map(card => (
             <div key={card.label} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
               <div className="flex items-center gap-2 mb-1">
@@ -405,7 +405,7 @@ export default function SecurityBlocklistTab() {
           className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
         >
           <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <Settings className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span className="text-sm font-semibold text-gray-900 dark:text-white">Autoblock Configuration</span>
             {autoblockConfig && (
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -485,7 +485,7 @@ export default function SecurityBlocklistTab() {
                 <select
                   value={configDraft.blockDurationMs}
                   onChange={e => setConfigDraft({ ...configDraft, blockDurationMs: parseInt(e.target.value) })}
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 >
                   {DURATION_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -505,7 +505,7 @@ export default function SecurityBlocklistTab() {
                   max={100}
                   value={configDraft.suspiciousThreshold}
                   onChange={e => setConfigDraft({ ...configDraft, suspiciousThreshold: parseInt(e.target.value) || 1 })}
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -521,7 +521,7 @@ export default function SecurityBlocklistTab() {
                   max={500}
                   value={configDraft.threshold404Count}
                   onChange={e => setConfigDraft({ ...configDraft, threshold404Count: parseInt(e.target.value) || 5 })}
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -534,7 +534,7 @@ export default function SecurityBlocklistTab() {
                 <select
                   value={configDraft.threshold404WindowMs}
                   onChange={e => setConfigDraft({ ...configDraft, threshold404WindowMs: parseInt(e.target.value) })}
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 >
                   {WINDOW_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -562,7 +562,7 @@ export default function SecurityBlocklistTab() {
                   disabled={!configChanged || savingConfig}
                   className={`flex items-center gap-1.5 px-4 py-1.5 text-sm rounded-lg transition-colors ${
                     configChanged
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
                       : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                   }`}
                 >
