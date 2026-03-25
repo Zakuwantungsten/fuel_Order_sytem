@@ -12,15 +12,6 @@ interface ReportsProps {
 
 function StatCard({ label, value, sub, icon: Icon, color }: { label: string; value: string; sub?: string; icon: any; color: string }) {
   const { isDark } = useAuth();
-  const colorMap: Record<string, string> = {
-    blue:   'bg-blue-50 text-blue-700',
-    green:  'bg-green-50 text-green-700',
-    red:    'bg-red-50 text-red-700',
-    purple: 'bg-blue-50 text-blue-700',
-    orange: 'bg-orange-50 text-orange-700',
-    yellow: 'bg-orange-50 text-orange-700',
-    indigo: 'bg-blue-50 text-blue-700',
-  };
   const styleMap: Record<string, React.CSSProperties> = {
     blue:   { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' },
     green:  { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' },
