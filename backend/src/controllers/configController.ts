@@ -901,6 +901,37 @@ export const getYardFuelTimeLimit = async (req: AuthRequest, res: Response): Pro
 };
 
 /**
+ * Get company branding - accessible to all authenticated users
+ */
+export const getBranding = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const config = await SystemConfig.findOne({
+      configType: 'system_settings',
+      isDeleted: false,
+    }).lean();
+
+    const g = (config as any)?.systemSettings?.general;
+
+    res.status(200).json({
+      success: true,
+      message: 'Company branding retrieved successfully',
+      data: {
+        companyName: g?.companyName || '',
+        companyWebsite: g?.companyWebsite || '',
+        companyEmail: g?.companyEmail || '',
+        companyPhone: g?.companyPhone || '',
+        logoUrl: g?.logoUrl || '',
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch company branding',
+    });
+  }
+};
+
+/**
  * Update yard fuel dispense time limit configuration
  */
 export const updateYardFuelTimeLimit = async (req: AuthRequest, res: Response): Promise<void> => {

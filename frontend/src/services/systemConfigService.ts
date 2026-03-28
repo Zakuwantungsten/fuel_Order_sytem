@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { measureSettingsAction } from './settingsTelemetry';
+import { getCsrfToken } from './api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
@@ -9,14 +10,22 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
-// Add auth token to requests
+// Add auth token + CSRF token to requests
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const token = sessionStorage.getItem('fuel_order_token');
     if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // Attach CSRF token for all state-changing requests
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(config.method?.toUpperCase() || '')) {
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        config.headers['X-XSRF-TOKEN'] = csrfToken;
+      }
     }
     return config;
   },
@@ -258,7 +267,14 @@ export const systemConfigAPI = {
   uploadLogo: async (file: File): Promise<{ logoUrl: string }> => {
     const formData = new FormData();
     formData.append('logo', file);
-    const response = await apiClient.post('/system-admin/config/logo', formData);
+    const csrfToken = getCsrfToken();
+    const response = await apiClient.post('/system-admin/config/logo', formData, {
+      headers: {
+        // Let axios set Content-Type automatically (with multipart boundary)
+        'Content-Type': undefined,
+        ...(csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {}),
+      },
+    });
     return response.data.data;
   },
 

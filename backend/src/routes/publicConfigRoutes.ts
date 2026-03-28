@@ -29,4 +29,7 @@ router.get('/standard-allocations', adminController.getStandardAllocations);
 // Yard fuel time limit (read-only for all authenticated users)
 router.get('/yard-fuel-time-limit', configController.getYardFuelTimeLimit);
 
+// Company branding (read-only for all authenticated users)
+router.get('/branding', configController.getBranding);
+
 export default router;

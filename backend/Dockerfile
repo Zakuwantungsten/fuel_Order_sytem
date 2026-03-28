@@ -39,7 +39,7 @@ USER appuser
 EXPOSE 5000
 
 # Health check (matches /api/health endpoint)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=5 \
   CMD wget -qO- http://localhost:${PORT:-5000}/api/health || exit 1
 
 CMD ["node", "dist/entrypoint.js"]

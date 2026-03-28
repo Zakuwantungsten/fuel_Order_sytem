@@ -1223,7 +1223,25 @@ export const uploadLogo = async (req: AuthRequest, res: Response): Promise<void>
 
     let systemConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
     if (!systemConfig) {
-      throw new ApiError(404, 'System configuration not found. Save general settings first.');
+      // Auto-create a minimal config document so logo can be saved without
+      // requiring the user to save General Settings first.
+      systemConfig = new SystemConfig({
+        configType: 'system_settings',
+        systemSettings: {
+          general: {
+            systemName: 'FuelOrder',
+            timezone: 'UTC',
+            dateFormat: 'DD/MM/YYYY',
+            language: 'en',
+            companyName: '',
+            companyWebsite: '',
+            companyEmail: '',
+            companyPhone: '',
+            logoUrl: '',
+          },
+        },
+        lastUpdatedBy: req.user?.username || 'system',
+      });
     }
 
     if (systemConfig.systemSettings?.general) {

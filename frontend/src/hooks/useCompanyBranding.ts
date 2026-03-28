@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { systemConfigAPI } from '../services/systemConfigService';
+import apiClient from '../services/api';
 import fallbackLogo from '../assets/logo.png';
 
 export interface CompanyBranding {
@@ -25,10 +25,10 @@ let fetchPromise: Promise<CompanyBranding> | null = null;
 async function fetchBranding(): Promise<CompanyBranding> {
   if (cachedBranding) return cachedBranding;
   if (!fetchPromise) {
-    fetchPromise = systemConfigAPI
-      .getSystemSettings()
-      .then(settings => {
-        const g = settings.general;
+    fetchPromise = apiClient
+      .get('/config/branding')
+      .then(res => {
+        const g = res.data.data;
         const result: CompanyBranding = {
           companyName: g.companyName || DEFAULT_BRANDING.companyName,
           companyWebsite: g.companyWebsite || DEFAULT_BRANDING.companyWebsite,

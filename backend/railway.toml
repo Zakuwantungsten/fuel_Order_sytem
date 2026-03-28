@@ -1,13 +1,12 @@
 [build]
-builder = "nixpacks"
-buildCommand = "npm run build"
+builder = "dockerfile"
 
 [deploy]
 startCommand = "node dist/entrypoint.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 5
 healthcheckPath = "/api/health"
-healthcheckTimeout = 10
+healthcheckTimeout = 120
 # Number of replicas — increase when scaling horizontally.
 # Requires Redis for Socket.io adapter + BullMQ (already configured in Phases 1-2).
 numReplicas = 1
