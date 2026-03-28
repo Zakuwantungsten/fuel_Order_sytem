@@ -1,6 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { DeliveryOrder } from '../types';
-import logoUrl from '../assets/logo.png';
+import { useCompanyBranding } from '../hooks/useCompanyBranding';
+import fallbackLogo from '../assets/logo.png';
 import { cleanDriverName } from '../utils/dataCleanup';
 import { formatDateOnly } from '../utils/timezone';
 
@@ -13,6 +14,7 @@ interface DeliveryNotePrintProps {
 const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: DeliveryNotePrintProps) => {
   const { user } = useAuth();
   const preparedByName = preparedBy || user?.username || '';
+  const branding = useCompanyBranding();
   
   const formatDate = (dateString: string) => {
     if (!dateString) return formatDateOnly(new Date());
@@ -70,7 +72,7 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
           
           {/* Watermark Logo */}
           <div className="do-watermark">
-            <LogoComponent size={280} isWatermark={true} />
+            <LogoComponent src={branding.logoUrl} size={280} isWatermark={true} />
           </div>
 
           {/* Content */}
@@ -81,16 +83,16 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
               {/* Company Details - Left Side */}
               <div>
                 <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#E67E22', marginBottom: '8px' }}>
-                  TAHMEED
+                  {branding.companyName}
                 </div>
-                <div style={{ fontSize: '8px', color: '#666666' }}>www.tahmeedcoach.co.ke</div>
-                <div style={{ fontSize: '8px', color: '#666666' }}>Email: info@tahmeedcoach.co.ke</div>
-                <div style={{ fontSize: '8px', color: '#666666' }}>Tel: +254 700 000 000</div>
+                <div style={{ fontSize: '8px', color: '#666666' }}>{branding.companyWebsite}</div>
+                <div style={{ fontSize: '8px', color: '#666666' }}>Email: {branding.companyEmail}</div>
+                <div style={{ fontSize: '8px', color: '#666666' }}>Tel: {branding.companyPhone}</div>
               </div>
               
               {/* Logo - Right Side */}
               <div style={{ width: '80px', height: '60px' }}>
-                <LogoComponent size={80} />
+                <LogoComponent src={branding.logoUrl} size={80} />
               </div>
             </div>
 
@@ -293,11 +295,11 @@ const DeliveryNotePrint = ({ order, showOnScreen = false, preparedBy }: Delivery
 };
 
 // Logo component with watermark support
-const LogoComponent = ({ size = 80, isWatermark = false }: { size?: number; isWatermark?: boolean }) => {
+const LogoComponent = ({ src, size = 80, isWatermark = false }: { src: string; size?: number; isWatermark?: boolean }) => {
   return (
     <img 
-      src={logoUrl} 
-      alt="Tahmeed Logo" 
+      src={src} 
+      alt="Company Logo" 
       style={{ 
         width: isWatermark ? `${size}px` : '100%',
         height: isWatermark ? `${size}px` : '100%',
@@ -305,6 +307,7 @@ const LogoComponent = ({ size = 80, isWatermark = false }: { size?: number; isWa
         background: 'white',
         display: 'block'
       }}
+      onError={e => { (e.target as HTMLImageElement).src = fallbackLogo; }}
     />
   );
 };

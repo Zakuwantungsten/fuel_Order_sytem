@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import archiver from 'archiver';
-import { Readable } from 'stream';
+import zlib from 'zlib';
+import { promisify } from 'util';
 import Backup from '../models/Backup';
 import { AuditLog } from '../models/AuditLog';
 import r2Service from './r2Service';
@@ -124,26 +124,9 @@ class BackupService {
       const jsonString = JSON.stringify(backupData, null, 2);
       const jsonBuffer = Buffer.from(jsonString);
 
-      // Create gzip archive
-      const archive = archiver('tar', {
-        gzip: true,
-        gzipOptions: { level: 9 }
-      });
-
-      // Convert archive to buffer
-      const chunks: Buffer[] = [];
-      archive.on('data', (chunk: Buffer) => chunks.push(chunk));
-
-      const archivePromise = new Promise<Buffer>((resolve, reject) => {
-        archive.on('end', () => resolve(Buffer.concat(chunks)));
-        archive.on('error', reject);
-      });
-
-      // Append JSON to archive
-      archive.append(jsonBuffer, { name: 'backup.json' });
-      archive.finalize();
-
-      const archiveBuffer = await archivePromise;
+      // Compress JSON with gzip
+      const gzip = promisify(zlib.gzip);
+      const archiveBuffer = await gzip(jsonBuffer);
 
       // ✅ SECURITY: Encrypt backup before uploading to R2
       const encryptionKey = this.validateEncryptionKey();
@@ -162,7 +145,7 @@ class BackupService {
       }
 
       // Upload to R2
-      await r2Service.uploadFile(r2Key, fileToUpload, uploadContentType);
+      await r2Service.uploadFile(r2Key, fileToUpload, uploadContentType, config.r2BackupBucketName);
 
       // Update backup record
       backup.status = 'completed';
@@ -173,10 +156,10 @@ class BackupService {
         totalDocuments,
         databaseSize: archiveBuffer.length,
         compression: 'gzip',
+        encrypted: encryptionKey ? true : false,
+        encryptionAlgorithm: encryptionKey ? 'aes-256-gcm' : undefined,
       };
       (backup as any).excludedCollections = Array.from(excludedCollections);
-      (backup as any).encrypted = encryptionKey ? true : false;
-      (backup as any).encryptionAlgorithm = encryptionKey ? 'aes-256-gcm' : null;
       await backup.save();
 
       // Create audit log
@@ -226,7 +209,7 @@ class BackupService {
       logger.info(`Starting restore from backup: ${backup.fileName}`);
 
       // Download backup from R2
-      const stream = await r2Service.downloadFile(backup.r2Key);
+      const stream = await r2Service.downloadFile(backup.r2Key, config.r2BackupBucketName);
       
       // Read stream to buffer
       const chunks: Buffer[] = [];
@@ -252,9 +235,10 @@ class BackupService {
         }
       }
 
-      // Extract and parse (simplified - in production you'd use tar extraction)
-      // For now, assume the backup is JSON format
-      const backupData = JSON.parse(buffer.toString());
+      // Decompress gzip and parse JSON
+      const gunzip = promisify(zlib.gunzip);
+      const decompressed = await gunzip(buffer);
+      const backupData = JSON.parse(decompressed.toString());
 
       // Restore each collection
       const session = await mongoose.startSession();
@@ -318,7 +302,7 @@ class BackupService {
     for (const backup of oldBackups) {
       try {
         // Delete from R2
-        await r2Service.deleteFile(backup.r2Key);
+        await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
         
         // Delete backup record
         await Backup.findByIdAndDelete(backup.id);

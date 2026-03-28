@@ -83,6 +83,8 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
   const [stats, setStats] = useState<{ snapshots: number; changes: number } | null>(null);
   const [generalLastChanged, setGeneralLastChanged] = useState<{ by: string; at: string } | null>(null);
   const [dataLastChanged, setDataLastChanged] = useState<{ by: string; at: string } | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   // ── Login-security notification state (owned here, moved from SecurityPoliciesSubTab) ──
   const notifLoginSaveAction = useActionState();
@@ -234,6 +236,20 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
     }
 
     setSavingSection(null);
+  };
+
+  const handleLogoUpload = async (file: File) => {
+    setLogoUploading(true);
+    try {
+      const result = await systemConfigAPI.uploadLogo(file);
+      upd('general', { logoUrl: result.logoUrl });
+      setLogoPreview(result.logoUrl);
+      onMessage('success', 'Logo uploaded successfully');
+    } catch {
+      onMessage('error', 'Failed to upload logo');
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   // ── Section definitions ────────────────────────────────────────────────────
@@ -451,7 +467,62 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                       <option value="sw">Swahili</option>
                     </select>
                   </div>
-                </div>
+
+                  {/* ── Company Branding ── */}
+                  <div className="pt-3 border-t border-[#E4E7EC] dark:border-gray-700">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#4F46E5] dark:text-indigo-400 mb-3">Company Branding</p>
+                    <div className="space-y-3">
+                      <div className="flex flex-col gap-1.5">
+                        <label className={labelCls}>Company Name</label>
+                        <input className={inputCls} value={settings.general.companyName ?? ''}
+                          onChange={e => upd('general', { companyName: e.target.value })} placeholder="e.g. TAHMEED" />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className={labelCls}>Company Website</label>
+                        <input className={inputCls} value={settings.general.companyWebsite ?? ''}
+                          onChange={e => upd('general', { companyWebsite: e.target.value })} placeholder="e.g. www.example.co.ke" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className={labelCls}>Company Email</label>
+                          <input className={inputCls} type="email" value={settings.general.companyEmail ?? ''}
+                            onChange={e => upd('general', { companyEmail: e.target.value })} placeholder="info@example.co.ke" />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className={labelCls}>Company Phone</label>
+                          <input className={inputCls} value={settings.general.companyPhone ?? ''}
+                            onChange={e => upd('general', { companyPhone: e.target.value })} placeholder="+254 700 000 000" />
+                        </div>
+                      </div>
+
+                      {/* Logo upload */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className={labelCls}>Company Logo</label>
+                        <div className="flex items-center gap-3">
+                          {(logoPreview || settings.general.logoUrl) && (
+                            <img
+                              src={logoPreview || settings.general.logoUrl}
+                              alt="Company logo preview"
+                              className="h-12 w-auto max-w-[96px] rounded border border-gray-200 dark:border-gray-600 object-contain bg-white p-1"
+                            />
+                          )}
+                          <label className={`flex items-center gap-2 px-3 py-2 text-[12px] font-medium rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-400 hover:text-orange-600 cursor-pointer transition-colors ${logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                            {logoUploading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Monitor className="w-3.5 h-3.5" />}
+                            {logoUploading ? 'Uploading…' : 'Upload Logo'}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                              className="hidden"
+                              disabled={logoUploading}
+                              onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ''; }}
+                            />
+                          </label>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500">PNG, JPG, SVG · max 2 MB</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>{/* end space-y-4 */}
 
                 <div className="flex justify-end mt-5 pt-4 border-t border-[#E4E7EC] dark:border-gray-700">
                   <button

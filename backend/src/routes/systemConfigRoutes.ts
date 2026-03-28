@@ -1,8 +1,15 @@
 import express from 'express';
+import multer from 'multer';
 import { authenticate, authorize } from '../middleware/auth';
 import * as systemConfigController from '../controllers/systemConfigController';
 
 const router = express.Router();
+
+// Memory storage for logo upload (max 2 MB, image types only)
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
 
 // All routes require authentication and super_admin role
 router.use(authenticate, authorize('super_admin'));
@@ -23,6 +30,9 @@ router.put('/settings/security/password-policy', systemConfigController.updatePa
 router.put('/settings/data-retention', systemConfigController.updateDataRetentionSettings);
 router.put('/settings/notifications', systemConfigController.updateNotificationSettings);
 router.put('/settings/maintenance', systemConfigController.updateMaintenanceMode);
+
+// Company logo upload
+router.post('/logo', logoUpload.single('logo'), systemConfigController.uploadLogo);
 
 /**
  * External Integration Configuration Routes

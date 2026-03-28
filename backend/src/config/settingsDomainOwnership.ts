@@ -24,6 +24,11 @@ const KEY_OWNERSHIP: Record<string, SettingsDomain> = {
   'general.timezone': 'platform',
   'general.dateFormat': 'platform',
   'general.language': 'platform',
+  'general.companyName': 'platform',
+  'general.companyWebsite': 'platform',
+  'general.companyEmail': 'platform',
+  'general.companyPhone': 'platform',
+  'general.logoUrl': 'platform',
 
   'session.sessionTimeout': 'security',
   'session.jwtExpiry': 'security',

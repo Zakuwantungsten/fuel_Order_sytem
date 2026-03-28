@@ -155,6 +155,8 @@ const legacyApiBasePath = '/api';
 
 // Import archival scheduler
 import { startArchivalScheduler } from './jobs/archivalScheduler';
+// Import backup scheduler
+import { startBackupScheduler } from './jobs/backupScheduler';
 // Import fuel price scheduler (registers itself with jobRegistry on import)
 import './jobs/fuelPriceScheduler';
 import './jobs/securityEventRetention';
@@ -299,6 +301,9 @@ const startServer = async () => {
 
     // Start archival scheduler (runs monthly at 2 AM on 1st day)
     startArchivalScheduler();
+
+    // Start backup scheduler (polls every minute for due user-defined schedules)
+    startBackupScheduler();
 
     // Start all registered cron jobs via central registry
     jobRegistry.startAll();

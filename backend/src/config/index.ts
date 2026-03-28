@@ -33,7 +33,13 @@ export const config = {
   r2Endpoint: process.env.R2_ENDPOINT || '',
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || '',
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
-  r2BucketName: process.env.R2_BUCKET_NAME || 'fuel-order-backups',
+  // Assets bucket — stores public files such as company logos
+  r2BucketName: process.env.R2_BUCKET_NAME || 'fuel-order-assets',
+  // Public base URL for R2 assets (e.g. https://pub-xxx.r2.dev or https://assets.yourdomain.com)
+  r2PublicUrl: process.env.R2_PUBLIC_URL || '',
+  // Backups bucket — private, encrypted database backups (separate from assets)
+  // Falls back to r2BucketName only as a last resort so existing single-bucket setups still work.
+  r2BackupBucketName: process.env.R2_BACKUP_BUCKET_NAME || process.env.R2_BUCKET_NAME || 'fuel-order-backups',
 
   // Email Configuration
   emailHost: process.env.EMAIL_HOST || process.env.SMTP_HOST || '',

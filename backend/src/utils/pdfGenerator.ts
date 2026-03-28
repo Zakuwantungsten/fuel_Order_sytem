@@ -2,12 +2,45 @@ import PDFDocument from 'pdfkit';
 import { IDeliveryOrder } from '../types';
 import path from 'path';
 
+/** Company branding injected at PDF generation time (loaded from SystemConfig). */
+export interface CompanyBranding {
+  companyName: string;
+  companyWebsite: string;
+  companyEmail: string;
+  companyPhone: string;
+  /** base64 data URL "data:image/png;base64,..." or empty string */
+  logoUrl: string;
+}
+
+const DEFAULT_BRANDING: CompanyBranding = {
+  companyName: '',
+  companyWebsite: '',
+  companyEmail: '',
+  companyPhone: '',
+  logoUrl: '',
+};
+
+/**
+ * Decode a base64 data URL to a Buffer, or return null if empty/invalid.
+ */
+function logoToBuffer(logoUrl: string): Buffer | null {
+  if (!logoUrl || !logoUrl.startsWith('data:')) return null;
+  try {
+    const base64 = logoUrl.split(',')[1];
+    if (!base64) return null;
+    return Buffer.from(base64, 'base64');
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Generate a PDF document for amended and cancelled Delivery Orders
  */
 export const generateAmendedDOsPDF = (
   deliveryOrders: IDeliveryOrder[],
-  options?: { includeEditHistory?: boolean }
+  options?: { includeEditHistory?: boolean },
+  branding: CompanyBranding = DEFAULT_BRANDING
 ): PDFKit.PDFDocument => {
   const doc = new PDFDocument({
     size: 'A4',
@@ -58,8 +91,8 @@ export const generateAmendedDOsPDF = (
   // Generate cover page
   const generateCoverPage = () => {
     // Header
-    doc.fontSize(28).fillColor(colors.primary).text('TAHMEED', 40, 60, { align: 'center' });
-    doc.fontSize(10).fillColor(colors.muted).text('www.tahmeedcoach.co.ke', { align: 'center' });
+    doc.fontSize(28).fillColor(colors.primary).text(branding.companyName, 40, 60, { align: 'center' });
+    doc.fontSize(10).fillColor(colors.muted).text(branding.companyWebsite, { align: 'center' });
     
     doc.moveDown(2);
     
@@ -114,11 +147,11 @@ export const generateAmendedDOsPDF = (
     doc.addPage();
     
     // Header
-    doc.fontSize(24).fillColor(colors.primary).text('TAHMEED', 40, 40);
+    doc.fontSize(24).fillColor(colors.primary).text(branding.companyName, 40, 40);
     doc.fontSize(8).fillColor(colors.muted)
-      .text('www.tahmeedcoach.co.ke', 40, 65)
-      .text('Email: info@tahmeedcoach.co.ke', 40, 75)
-      .text('Tel: +254 700 000 000', 40, 85);
+      .text(branding.companyWebsite, 40, 65)
+      .text(`Email: ${branding.companyEmail}`, 40, 75)
+      .text(`Tel: ${branding.companyPhone}`, 40, 85);
     
     // Status stamp - CANCELLED or AMENDED
     if (order.isCancelled) {
@@ -286,7 +319,8 @@ export const generateAmendedDOsFilename = (doNumbers: string[]): string => {
  */
 export const generateBulkDOsPDF = (
   deliveryOrders: IDeliveryOrder[],
-  username?: string
+  username?: string,
+  branding: CompanyBranding = DEFAULT_BRANDING
 ): PDFKit.PDFDocument => {
   const doc = new PDFDocument({
     size: 'A4',
@@ -309,15 +343,9 @@ export const generateBulkDOsPDF = (
     red: '#dc3545',
   };
 
-  // Logo path
-  const logoPath = path.join(__dirname, '../../assets/logo.png');
-  let hasLogo = false;
-  try {
-    require('fs').accessSync(logoPath);
-    hasLogo = true;
-  } catch (error) {
-    console.warn('Logo file not found at:', logoPath);
-  }
+  // Logo: decode base64 data URL from branding (no file-system dependency)
+  const logoBuffer = logoToBuffer(branding.logoUrl);
+  const hasLogo = logoBuffer !== null;
 
   // Helper functions
   const drawLine = (y: number, startX = 40, endX = 555, lineWidth = 0.5) => {
@@ -380,7 +408,7 @@ export const generateBulkDOsPDF = (
         
         doc.save();
         doc.opacity(0.3);
-        doc.image(logoPath, watermarkX, watermarkY, { width: watermarkSize });
+        doc.image(logoBuffer!, watermarkX, watermarkY, { width: watermarkSize });
         doc.opacity(1);
         doc.restore();
       } catch (error) {
@@ -405,11 +433,11 @@ export const generateBulkDOsPDF = (
     }
 
     // Header Section - Company details on left
-    doc.fontSize(28).fillColor(colors.primary).text('TAHMEED', 40, currentY);
+    doc.fontSize(28).fillColor(colors.primary).text(branding.companyName, 40, currentY);
     doc.fontSize(8).fillColor(colors.muted)
-      .text('www.tahmeedcoach.co.ke', 40, currentY + 25)
-      .text('Email: info@tahmeedcoach.co.ke', 40, currentY + 35)
-      .text('Tel: +254 700 000 000', 40, currentY + 45);
+      .text(branding.companyWebsite, 40, currentY + 25)
+      .text(`Email: ${branding.companyEmail}`, 40, currentY + 35)
+      .text(`Tel: ${branding.companyPhone}`, 40, currentY + 45);
     
     // Logo on the right side (opposite to company details)
     if (hasLogo) {
@@ -417,7 +445,7 @@ export const generateBulkDOsPDF = (
         const logoWidth = 80;
         const logoHeight = 60;
         const logoX = 555 - logoWidth; // Right aligned
-        doc.image(logoPath, logoX, currentY, { width: logoWidth, height: logoHeight, fit: [logoWidth, logoHeight] });
+        doc.image(logoBuffer!, logoX, currentY, { width: logoWidth, height: logoHeight, fit: [logoWidth, logoHeight] });
       } catch (error) {
         console.warn('Failed to add header logo:', error);
       }

@@ -15,6 +15,40 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import { formatDONumber, parseDONumber, getNextDONumber as getNextFormattedDONumber } from '../utils/doNumberFormatter';
+import type { CompanyBranding } from '../utils/pdfGenerator';
+
+// Month names for sheet naming
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+/**
+ * Load company branding from SystemConfig.
+ * Falls back to original hardcoded defaults if not yet configured.
+ */
+const getCompanyBranding = async (): Promise<CompanyBranding> => {
+  try {
+    const { SystemConfig } = await import('../models/SystemConfig');
+    const config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false }).lean();
+    const g = config?.systemSettings?.general;
+    return {
+      companyName: g?.companyName || '',
+      companyWebsite: g?.companyWebsite || '',
+      companyEmail: g?.companyEmail || '',
+      companyPhone: g?.companyPhone || '',
+      logoUrl: g?.logoUrl || '',
+    };
+  } catch {
+    return {
+      companyName: '',
+      companyWebsite: '',
+      companyEmail: '',
+      companyPhone: '',
+      logoUrl: '',
+    };
+  }
+};
 
 // Month names for sheet naming
 const MONTH_NAMES = [
@@ -1703,14 +1737,25 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
     excelWorkbook.creator = 'Fuel Order System';
     excelWorkbook.created = new Date();
 
-    // Load logo image
+    // Load company branding (logo + text) from DB settings
+    const branding = await getCompanyBranding();
+
+    // Add logo to workbook if configured
     let logoId: number | null = null;
-    const logoPath = path.join(__dirname, '../../assets/logo.png');
-    if (fs.existsSync(logoPath)) {
-      logoId = excelWorkbook.addImage({
-        filename: logoPath,
-        extension: 'png',
-      });
+    if (branding.logoUrl && branding.logoUrl.startsWith('data:')) {
+      try {
+        const base64 = branding.logoUrl.split(',')[1];
+        const mimeMatch = branding.logoUrl.match(/data:image\/([a-z]+);/);
+        const ext = (mimeMatch?.[1] === 'jpeg' ? 'jpeg' : mimeMatch?.[1] || 'png') as 'png' | 'jpeg';
+        if (base64) {
+          logoId = excelWorkbook.addImage({
+            buffer: Buffer.from(base64, 'base64'),
+            extension: ext,
+          });
+        }
+      } catch {
+        // Logo decode failed — continue without logo
+      }
     }
 
     // Create individual sheets for each DO FIRST (like LPO workbook)
@@ -1764,22 +1809,22 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       // Row 1-2: Company name (adjusted for cancelled orders)
       const companyRow = order.isCancelled ? 'B2:D3' : 'B1:D2';
       sheet.mergeCells(companyRow);
-      sheet.getCell(order.isCancelled ? 'B2' : 'B1').value = 'TAHMEED';
+      sheet.getCell(order.isCancelled ? 'B2' : 'B1').value = branding.companyName;
       sheet.getCell(order.isCancelled ? 'B2' : 'B1').font = { bold: true, size: 24, color: { argb: 'FFE67E22' } };
 
       // Row 3: Website
       const websiteRow = order.isCancelled ? 4 : 3;
-      sheet.getCell(`B${websiteRow}`).value = 'www.tahmeedcoach.co.ke';
+      sheet.getCell(`B${websiteRow}`).value = branding.companyWebsite;
       sheet.getCell(`B${websiteRow}`).font = { size: 9 };
 
       // Row 4: Email
       const emailRow = order.isCancelled ? 5 : 4;
-      sheet.getCell(`B${emailRow}`).value = 'Email: info@tahmeedcoach.co.ke';
+      sheet.getCell(`B${emailRow}`).value = `Email: ${branding.companyEmail}`;
       sheet.getCell(`B${emailRow}`).font = { size: 9 };
 
       // Row 5: Tel
       const telRow = order.isCancelled ? 6 : 5;
-      sheet.getCell(`B${telRow}`).value = 'Tel: +254 700 000 000';
+      sheet.getCell(`B${telRow}`).value = `Tel: ${branding.companyPhone}`;
       sheet.getCell(`B${telRow}`).font = { size: 9 };
 
       // Row 7: Title
@@ -2373,8 +2418,11 @@ export const downloadAmendedDOsPDF = async (req: AuthRequest, res: Response): Pr
     // Import PDF generator
     const { generateAmendedDOsPDF, generateAmendedDOsFilename } = await import('../utils/pdfGenerator');
 
+    // Load company branding from DB
+    const branding = await getCompanyBranding();
+
     // Generate PDF
-    const doc = generateAmendedDOsPDF(deliveryOrders as any, { includeEditHistory: true });
+    const doc = generateAmendedDOsPDF(deliveryOrders as any, { includeEditHistory: true }, branding);
 
     // Generate filename
     const doNumbers = deliveryOrders.map(d => d.doNumber);
@@ -2420,9 +2468,12 @@ export const downloadBulkDOsPDF = async (req: AuthRequest, res: Response): Promi
     // Import PDF generator
     const { generateBulkDOsPDF, generateBulkDOsFilename } = await import('../utils/pdfGenerator');
 
+    // Load company branding from DB
+    const branding = await getCompanyBranding();
+
     // Generate PDF with username
     const username = req.user?.username || 'system';
-    const doc = generateBulkDOsPDF(deliveryOrders as any, username);
+    const doc = generateBulkDOsPDF(deliveryOrders as any, username, branding);
 
     // Generate filename
     const firstDO = deliveryOrders[0].doNumber;
@@ -2702,14 +2753,25 @@ export const exportSDOWorkbook = async (req: AuthRequest, res: Response): Promis
     excelWorkbook.creator = 'Fuel Order System';
     excelWorkbook.created = new Date();
 
-    // Load logo image
+    // Load company branding (logo + text) from DB settings
+    const branding = await getCompanyBranding();
+
+    // Add logo to workbook if configured
     let logoId: number | null = null;
-    const logoPath = path.join(__dirname, '../../assets/logo.png');
-    if (fs.existsSync(logoPath)) {
-      logoId = excelWorkbook.addImage({
-        filename: logoPath,
-        extension: 'png',
-      });
+    if (branding.logoUrl && branding.logoUrl.startsWith('data:')) {
+      try {
+        const base64 = branding.logoUrl.split(',')[1];
+        const mimeMatch = branding.logoUrl.match(/data:image\/([a-z]+);/);
+        const ext = (mimeMatch?.[1] === 'jpeg' ? 'jpeg' : mimeMatch?.[1] || 'png') as 'png' | 'jpeg';
+        if (base64) {
+          logoId = excelWorkbook.addImage({
+            buffer: Buffer.from(base64, 'base64'),
+            extension: ext,
+          });
+        }
+      } catch {
+        // Logo decode failed — continue without logo
+      }
     }
 
     // Create individual sheets for each SDO FIRST
@@ -2763,22 +2825,22 @@ export const exportSDOWorkbook = async (req: AuthRequest, res: Response): Promis
       // Row 1-2: Company name (adjusted for cancelled orders)
       const companyRow = order.isCancelled ? 'B2:D3' : 'B1:D2';
       sheet.mergeCells(companyRow);
-      sheet.getCell(order.isCancelled ? 'B2' : 'B1').value = 'TAHMEED';
+      sheet.getCell(order.isCancelled ? 'B2' : 'B1').value = branding.companyName;
       sheet.getCell(order.isCancelled ? 'B2' : 'B1').font = { bold: true, size: 24, color: { argb: 'FFE67E22' } };
 
       // Row 3: Website
       const websiteRow = order.isCancelled ? 4 : 3;
-      sheet.getCell(`B${websiteRow}`).value = 'www.tahmeedcoach.co.ke';
+      sheet.getCell(`B${websiteRow}`).value = branding.companyWebsite;
       sheet.getCell(`B${websiteRow}`).font = { size: 9 };
 
       // Row 4: Email
       const emailRow = order.isCancelled ? 5 : 4;
-      sheet.getCell(`B${emailRow}`).value = 'Email: info@tahmeedcoach.co.ke';
+      sheet.getCell(`B${emailRow}`).value = `Email: ${branding.companyEmail}`;
       sheet.getCell(`B${emailRow}`).font = { size: 9 };
 
       // Row 5: Tel
       const telRow = order.isCancelled ? 6 : 5;
-      sheet.getCell(`B${telRow}`).value = 'Tel: +254 700 000 000';
+      sheet.getCell(`B${telRow}`).value = `Tel: ${branding.companyPhone}`;
       sheet.getCell(`B${telRow}`).font = { size: 9 };
 
       // Row 7: Title
@@ -3660,9 +3722,12 @@ export const downloadSingleDOPDF = async (req: AuthRequest, res: Response): Prom
     // Import PDF generator
     const { generateBulkDOsPDF } = await import('../utils/pdfGenerator');
 
+    // Load company branding from DB
+    const branding = await getCompanyBranding();
+
     // Generate PDF with username (using the bulk function with single DO)
     const username = req.user?.username || 'system';
-    const doc = generateBulkDOsPDF([deliveryOrder as any], username);
+    const doc = generateBulkDOsPDF([deliveryOrder as any], username, branding);
 
     // Generate filename
     const doType = deliveryOrder.doType || 'DO';

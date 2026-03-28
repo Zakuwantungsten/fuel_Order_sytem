@@ -36,6 +36,11 @@ export interface SystemSettings {
     timezone: string;
     dateFormat: string;
     language: string;
+    companyName: string;
+    companyWebsite: string;
+    companyEmail: string;
+    companyPhone: string;
+    logoUrl: string;
   };
   session: {
     sessionTimeout: number;
@@ -244,6 +249,17 @@ export const systemConfigAPI = {
       apiClient.put('/system-admin/config/settings/maintenance', settings)
     );
     return response.data;
+  },
+
+  /**
+   * Upload company logo
+   * POST /api/system-admin/config/logo
+   */
+  uploadLogo: async (file: File): Promise<{ logoUrl: string }> => {
+    const formData = new FormData();
+    formData.append('logo', file);
+    const response = await apiClient.post('/system-admin/config/logo', formData);
+    return response.data.data;
   },
 
   // ===== External Integrations =====

@@ -16,6 +16,8 @@ export interface IBackup extends Document {
     totalDocuments: number;
     databaseSize: number;
     compression: string;
+    encrypted?: boolean;
+    encryptionAlgorithm?: string;
   };
 }
 
@@ -64,6 +66,8 @@ const BackupSchema: Schema = new Schema(
       totalDocuments: Number,
       databaseSize: Number,
       compression: String,
+      encrypted: Boolean,
+      encryptionAlgorithm: String,
     },
   },
   {

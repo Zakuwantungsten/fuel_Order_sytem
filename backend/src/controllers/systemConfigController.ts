@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import AuditService from '../utils/auditService';
 import { config } from '../config';
+import r2Service from '../services/r2Service';
 import { emitMaintenanceEvent, emitGeneralSettingsEvent, emitSecuritySettingsEvent } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
 import { isSafeUrl } from '../utils/ssrfGuard';
@@ -103,6 +104,11 @@ export const getSystemSettings = async (req: AuthRequest, res: Response): Promis
             timezone: 'Africa/Nairobi',
             dateFormat: 'DD/MM/YYYY',
             language: 'en',
+            companyName: 'TAHMEED',
+            companyWebsite: 'www.tahmeedcoach.co.ke',
+            companyEmail: 'info@tahmeedcoach.co.ke',
+            companyPhone: '+254 700 000 000',
+            logoUrl: '',
           },
           session: {
             sessionTimeout: 30,
@@ -155,7 +161,7 @@ export const getSystemSettings = async (req: AuthRequest, res: Response): Promis
  */
 export const updateGeneralSettings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { systemName, timezone, dateFormat, language } = req.body;
+    const { systemName, timezone, dateFormat, language, companyName, companyWebsite, companyEmail, companyPhone, logoUrl } = req.body;
 
     enforceSettingsOwnership('general', req.body || {}, req);
 
@@ -176,6 +182,11 @@ export const updateGeneralSettings = async (req: AuthRequest, res: Response): Pr
       if (timezone !== undefined) systemConfig.systemSettings.general.timezone = timezone;
       if (dateFormat !== undefined) systemConfig.systemSettings.general.dateFormat = dateFormat;
       if (language !== undefined) systemConfig.systemSettings.general.language = language;
+      if (companyName !== undefined) systemConfig.systemSettings.general.companyName = companyName;
+      if (companyWebsite !== undefined) systemConfig.systemSettings.general.companyWebsite = companyWebsite;
+      if (companyEmail !== undefined) systemConfig.systemSettings.general.companyEmail = companyEmail;
+      if (companyPhone !== undefined) systemConfig.systemSettings.general.companyPhone = companyPhone;
+      if (logoUrl !== undefined) systemConfig.systemSettings.general.logoUrl = logoUrl;
     }
 
     systemConfig.markModified('systemSettings');
@@ -1173,6 +1184,70 @@ export const updateAlertThresholds = async (req: AuthRequest, res: Response): Pr
     res.json({ success: true, data: thresholds, message: 'Alert thresholds saved' });
   } catch (error: any) {
     logger.error('Error updating alert thresholds:', error);
+    throw error;
+  }
+};
+
+/**
+ * Upload company logo — converts uploaded image to base64 data URL and persists in SystemConfig.
+ * POST /api/system-admin/config/logo
+ * Super Admin Only
+ * Accepts: multipart/form-data with field name "logo"
+ * Allowed types: image/png, image/jpeg, image/webp, image/svg+xml  (max 2 MB)
+ */
+export const uploadLogo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.file) {
+      throw new ApiError(400, 'No logo file provided. Send a PNG, JPG, WEBP, or SVG file in the "logo" field.');
+    }
+
+    const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+    if (!ALLOWED_MIME_TYPES.includes(req.file.mimetype)) {
+      throw new ApiError(400, `Invalid file type "${req.file.mimetype}". Allowed: PNG, JPG, WEBP, SVG.`);
+    }
+
+    if (req.file.size > 2 * 1024 * 1024) {
+      throw new ApiError(400, 'Logo file exceeds the 2 MB size limit.');
+    }
+
+    // Store logo: prefer R2 (returns a public HTTPS URL), fall back to base64 data URL
+    let logoUrl: string;
+    if (r2Service.isEnabled() && config.r2PublicUrl) {
+      const ext = req.file.mimetype.split('/')[1].replace('svg+xml', 'svg');
+      const key = `logos/company-logo-${Date.now()}.${ext}`;
+      logoUrl = await r2Service.uploadLogoToR2(req.file.buffer, key, req.file.mimetype);
+    } else {
+      // R2 not configured — store as base64 data URL in MongoDB
+      logoUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    }
+
+    let systemConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    if (!systemConfig) {
+      throw new ApiError(404, 'System configuration not found. Save general settings first.');
+    }
+
+    if (systemConfig.systemSettings?.general) {
+      systemConfig.systemSettings.general.logoUrl = logoUrl;
+    }
+    systemConfig.markModified('systemSettings');
+    systemConfig.lastUpdatedBy = req.user?.username || 'system';
+    await systemConfig.save();
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CONFIG_CHANGE',
+      resourceType: 'company_logo',
+      details: `Company logo updated (${req.file.size} bytes, ${req.file.mimetype})`,
+      severity: 'medium',
+      ipAddress: req.ip,
+    });
+
+    logger.info(`Company logo updated by ${req.user?.username} (${req.file.mimetype}, ${req.file.size} bytes)`);
+
+    sendSuccess(res, 200, 'Logo uploaded successfully', { logoUrl });
+  } catch (error: any) {
+    logger.error('Error uploading company logo:', error);
     throw error;
   }
 };

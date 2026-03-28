@@ -76,6 +76,12 @@ export interface ISystemSettings {
     timezone: string;
     dateFormat: string;
     language: string;
+    // Company branding (used in generated PDFs, Excel exports, and DO previews)
+    companyName: string;
+    companyWebsite: string;
+    companyEmail: string;
+    companyPhone: string;
+    logoUrl: string; // base64 data URL (e.g. "data:image/png;base64,...") or empty string
   };
   // Session & Security Settings
   session?: {
@@ -299,6 +305,11 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         timezone: { type: String, default: 'Africa/Nairobi' },
         dateFormat: { type: String, default: 'DD/MM/YYYY' },
         language: { type: String, default: 'en' },
+        companyName: { type: String, default: 'TAHMEED' },
+        companyWebsite: { type: String, default: 'www.tahmeedcoach.co.ke' },
+        companyEmail: { type: String, default: 'info@tahmeedcoach.co.ke' },
+        companyPhone: { type: String, default: '+254 700 000 000' },
+        logoUrl: { type: String, default: '' },
       },
       session: {
         sessionTimeout: { type: Number, default: 30 },

@@ -1,5 +1,6 @@
 import { DeliveryOrder } from '../types';
-import logoUrl from '../assets/logo.png';
+import { useCompanyBranding } from '../hooks/useCompanyBranding';
+import fallbackLogo from '../assets/logo.png';
 import { cleanDriverName } from '../utils/dataCleanup';
 import { formatDateOnly } from '../utils/timezone';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,6 +17,7 @@ interface DOSheetViewProps {
 const DOSheetView = ({ order, preparedBy }: DOSheetViewProps) => {
   const { user } = useAuth();
   const preparedByName = preparedBy || user?.username || '';
+  const branding = useCompanyBranding();
   
   const formatDate = (dateString: string) => {
     if (!dateString) return formatDateOnly(new Date());
@@ -35,17 +37,17 @@ const DOSheetView = ({ order, preparedBy }: DOSheetViewProps) => {
           <div className="flex-1 pr-4">
             <div className="mb-2">
               <div className="text-orange-600 font-bold text-4xl tracking-wider">
-                TAHMEED
+                {branding.companyName}
               </div>
-              <div className="text-xs mt-1 text-gray-600">www.tahmeedcoach.co.ke</div>
-              <div className="text-xs text-gray-600">Email: info@tahmeedcoach.co.ke</div>
-              <div className="text-xs text-gray-600">Tel: +254 700 000 000</div>
+              <div className="text-xs mt-1 text-gray-600">{branding.companyWebsite}</div>
+              <div className="text-xs text-gray-600">Email: {branding.companyEmail}</div>
+              <div className="text-xs text-gray-600">Tel: {branding.companyPhone}</div>
             </div>
           </div>
           
           {/* Logo */}
           <div className="w-40 h-24 flex items-center justify-center flex-shrink-0 bg-white">
-            <LogoComponent />
+            <LogoComponent src={branding.logoUrl} />
           </div>
         </div>
 
@@ -250,13 +252,14 @@ const DOSheetView = ({ order, preparedBy }: DOSheetViewProps) => {
   );
 };
 
-// Logo component
-const LogoComponent = () => {
+// Logo component — receives src from parent so it can use the hook
+const LogoComponent = ({ src }: { src: string }) => {
   return (
     <img 
-      src={logoUrl} 
-      alt="Tahmeed Logo" 
+      src={src} 
+      alt="Company Logo" 
       className="w-full h-full object-contain"
+      onError={e => { (e.target as HTMLImageElement).src = fallbackLogo; }}
     />
   );
 };
