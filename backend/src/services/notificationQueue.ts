@@ -8,7 +8,7 @@
  */
 
 import { Queue, Worker, Job } from 'bullmq';
-import { getRedisClient, isRedisAvailable } from '../config/redis';
+import { createBullMQConnection, isRedisAvailable } from '../config/redis';
 import logger from '../utils/logger';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -41,11 +41,17 @@ export function initNotificationQueue(): void {
     return;
   }
 
-  const connection = getRedisClient()!;
+  const queueConnection = createBullMQConnection();
+  const workerConnection = createBullMQConnection();
+
+  if (!queueConnection || !workerConnection) {
+    logger.warn('NotificationQueue: Could not create BullMQ connections — falling back to synchronous sending.');
+    return;
+  }
 
   // Create the queue (producer side)
   pushQueue = new Queue<PushJobData>(QUEUE_NAME, {
-    connection,
+    connection: queueConnection,
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
@@ -63,7 +69,7 @@ export function initNotificationQueue(): void {
       await sendPushDirect(job.data.recipients, job.data.payload);
     },
     {
-      connection,
+      connection: workerConnection,
       concurrency: 5, // process up to 5 push jobs in parallel
       limiter: {
         max: 50,       // max 50 jobs

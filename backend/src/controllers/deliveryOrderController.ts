@@ -1743,7 +1743,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
         const ext = (mimeMatch?.[1] === 'jpeg' ? 'jpeg' : mimeMatch?.[1] || 'png') as 'png' | 'jpeg';
         if (base64) {
           logoId = excelWorkbook.addImage({
-            buffer: Buffer.from(base64, 'base64') as Buffer,
+            base64: base64,
             extension: ext,
           });
         }
@@ -2759,7 +2759,7 @@ export const exportSDOWorkbook = async (req: AuthRequest, res: Response): Promis
         const ext = (mimeMatch?.[1] === 'jpeg' ? 'jpeg' : mimeMatch?.[1] || 'png') as 'png' | 'jpeg';
         if (base64) {
           logoId = excelWorkbook.addImage({
-            buffer: Buffer.from(base64, 'base64') as Buffer,
+            base64: base64,
             extension: ext,
           });
         }

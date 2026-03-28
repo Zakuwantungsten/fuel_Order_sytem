@@ -93,6 +93,23 @@ export function isRedisAvailable(): boolean {
 }
 
 /**
+ * Create a fresh ioredis connection suitable for BullMQ.
+ * BullMQ requires maxRetriesPerRequest: null for its blocking commands.
+ * Each Queue / Worker should get its own dedicated connection.
+ */
+export function createBullMQConnection(): Redis | null {
+  if (!REDIS_URL) return null;
+  return new Redis(REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    retryStrategy(times) {
+      if (times > 10) return null;
+      return Math.min(times * 200, 5000);
+    },
+  });
+}
+
+/**
  * Graceful shutdown — close all Redis connections.
  */
 export async function disconnectRedis(): Promise<void> {
