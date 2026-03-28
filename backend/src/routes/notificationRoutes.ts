@@ -44,6 +44,20 @@ router.post('/push-subscribe', asyncHandler(notificationController.subscribePush
 router.delete('/push-subscribe', asyncHandler(notificationController.unsubscribePush));
 
 /**
+ * @route   POST /api/notifications/mobile-subscribe
+ * @desc    Register an Expo push token for the current user (mobile app)
+ * @access  Private
+ */
+router.post('/mobile-subscribe', asyncHandler(notificationController.subscribeMobilePush));
+
+/**
+ * @route   DELETE /api/notifications/mobile-subscribe
+ * @desc    Remove the Expo push token for the current user (mobile app)
+ * @access  Private
+ */
+router.delete('/mobile-subscribe', asyncHandler(notificationController.unsubscribeMobilePush));
+
+/**
  * @route   DELETE /api/notifications
  * @desc    Dismiss all notifications for current user
  * @access  Private

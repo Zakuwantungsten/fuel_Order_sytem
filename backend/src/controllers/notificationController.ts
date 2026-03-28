@@ -313,8 +313,8 @@ export const createMissingConfigNotification = async (
     });
 
     emitNotification(creatorRecipients, wsPayload(creatorNotif));
-    // Also send browser push to creator
-    await sendPushToRecipients(creatorRecipients, { title, body: message.split('\n')[0] });
+    // Send browser push to creator (async via BullMQ — does not block)
+    sendPushToRecipients(creatorRecipients, { title, body: message.split('\n')[0] });
     logger.info(`Config notification sent to creator: ${createdBy}`);
 
     // ── Admin notification (only if creator is NOT admin) ──
@@ -331,8 +331,8 @@ export const createMissingConfigNotification = async (
       });
 
       emitNotification(['admin'], wsPayload(adminNotif));
-      // Also send browser push to all connected admins
-      await sendPushToRecipients(['admin'], { title, body: message.split('\n')[0] });
+      // Send browser push to admins (async via BullMQ — does not block)
+      sendPushToRecipients(['admin'], { title, body: message.split('\n')[0] });
       logger.info('Config notification sent to admin role');
     }
 
@@ -533,6 +533,9 @@ export const createYardFuelRecordedNotification = async (
       logger.error('Failed to emit yard fuel WebSocket notification:', wsError);
     }
 
+    // Send push notification (async via BullMQ — does not block)
+    sendPushToRecipients(['fuel_order_maker'], { title, body: message.split('.')[0] });
+
     logger.info(`Created yard fuel recorded notification for truck ${metadata.truckNo} (${metadata.status})`);
   } catch (error) {
     logger.error('Failed to create yard fuel recorded notification:', error);
@@ -597,6 +600,9 @@ export const createTruckPendingLinkingNotification = async (
     } catch (wsError) {
       logger.error('Failed to emit pending linking WebSocket notification:', wsError);
     }
+
+    // Send push notification (async via BullMQ — does not block)
+    sendPushToRecipients(['fuel_order_maker'], { title, body: message.split('.')[0] });
 
     logger.info(`Created truck pending linking notification for truck ${metadata.truckNo}`);
   } catch (error) {
@@ -903,6 +909,9 @@ export const createLPOCreatedNotification = async (
       logger.error('Failed to emit WebSocket notification:', wsError);
       // Don't fail the function if WebSocket emission fails
     }
+
+    // Send push notification to recipients (async via BullMQ — does not block)
+    sendPushToRecipients(recipients, { title, body: message });
   } catch (error) {
     logger.error('Failed to create LPO notification:', error);
   }
@@ -967,6 +976,52 @@ export const unsubscribePush = async (req: AuthRequest, res: Response): Promise<
   }
 };
 
+/**
+ * POST /api/v1/notifications/mobile-subscribe
+ * Stores an Expo push token for the authenticated user (mobile app).
+ * Body: { expoPushToken }
+ */
+export const subscribeMobilePush = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { expoPushToken } = req.body;
+    if (!expoPushToken || typeof expoPushToken !== 'string') {
+      throw new ApiError(400, 'expoPushToken is required');
+    }
+
+    const userId = req.user!.userId;
+    const role   = req.user!.role || 'user';
+
+    await PushSubscription.findOneAndUpdate(
+      { expoPushToken },
+      { userId, role, platform: 'expo', expoPushToken },
+      { upsert: true, new: true }
+    );
+
+    logger.info(`Expo push token registered for user ${req.user?.username} (${role})`);
+    res.status(201).json({ success: true, message: 'Mobile push subscription registered' });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * DELETE /api/v1/notifications/mobile-subscribe
+ * Removes the Expo push token for the authenticated user.
+ * Body: { expoPushToken }
+ */
+export const unsubscribeMobilePush = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { expoPushToken } = req.body;
+    if (!expoPushToken) throw new ApiError(400, 'expoPushToken is required');
+
+    await PushSubscription.deleteOne({ expoPushToken, userId: req.user!.userId });
+    logger.info(`Expo push token removed for user ${req.user?.username}`);
+    res.status(200).json({ success: true, message: 'Mobile push subscription removed' });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
 export default {
   getNotifications,
   getNotificationCount,
@@ -977,6 +1032,8 @@ export default {
   getVapidPublicKey,
   subscribePush,
   unsubscribePush,
+  subscribeMobilePush,
+  unsubscribeMobilePush,
   createMissingConfigNotification,
   createUnlinkedExportDONotification,
   resolveUnlinkedDONotification,

@@ -11,10 +11,12 @@ export const connectDatabase = async (): Promise<void> => {
     // already handled by express-mongo-sanitize middleware.
 
     const options: mongoose.ConnectOptions = {
-      maxPoolSize: 10,
-      minPoolSize: 5,
+      maxPoolSize: 50,
+      minPoolSize: 10,
       socketTimeoutMS: 45000,
       serverSelectionTimeoutMS: 30000,
+      heartbeatFrequencyMS: 10000,
+      maxIdleTimeMS: 60000,
     };
 
     await mongoose.connect(config.mongodbUri, options);

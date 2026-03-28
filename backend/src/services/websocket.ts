@@ -1,7 +1,9 @@
 import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
+import { getRedisPub, getRedisSub } from '../config/redis';
 import logger from '../utils/logger';
 
 let io: SocketIOServer | null = null;
@@ -39,7 +41,23 @@ export const initializeWebSocket = (server: HTTPServer): SocketIOServer => {
       credentials: true,
     },
     transports: ['websocket', 'polling'],
+    pingInterval: 25000,
+    pingTimeout: 20000,
+    maxHttpBufferSize: 1e6,
+    connectionStateRecovery: {
+      maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+    },
   });
+
+  // Attach Redis adapter for multi-instance pub/sub (if Redis is available)
+  const pub = getRedisPub();
+  const sub = getRedisSub();
+  if (pub && sub) {
+    io.adapter(createAdapter(pub, sub));
+    logger.info('Socket.io: Redis adapter attached — multi-instance pub/sub enabled');
+  } else {
+    logger.warn('Socket.io: Running in-memory only (no Redis). Multi-instance broadcasting will NOT work.');
+  }
 
   // Authentication middleware
   io.use((socket: AuthSocket, next) => {

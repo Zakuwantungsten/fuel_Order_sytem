@@ -7,8 +7,10 @@
  */
 
 import webPush from 'web-push';
+import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 import { config } from '../config';
 import { PushSubscription } from '../models/PushSubscription';
+import { enqueuePush } from './notificationQueue';
 import logger from '../utils/logger';
 
 // Known role identifiers (kept in sync with websocket.ts ROLE_NAMES)
@@ -19,6 +21,8 @@ const ROLE_NAMES = new Set([
 ]);
 
 let _initialized = false;
+
+const expo = new Expo();
 
 function ensureVapidConfigured(): boolean {
   if (_initialized) return true;
@@ -33,10 +37,34 @@ function ensureVapidConfigured(): boolean {
 
 /**
  * Send a push notification to all subscriptions that match the given recipients.
- * Each recipient is either a userId (MongoDB ObjectId) or a role name.
- * Silently skips if VAPID keys are not configured.
+ * Tries to enqueue via BullMQ (async, non-blocking). Falls back to direct send
+ * if Redis/BullMQ is not available.
+ *
+ * This is the function all controllers should call — it never blocks the HTTP response.
  */
 export async function sendPushToRecipients(
+  recipients: string[],
+  payload: { title: string; body: string; url?: string; tag?: string }
+): Promise<void> {
+  if (!ensureVapidConfigured()) return;
+
+  // Try async queue first (returns false if queue is unavailable)
+  const enqueued = await enqueuePush(recipients, payload);
+  if (enqueued) {
+    logger.debug(`Push notification enqueued for recipients: ${recipients.join(', ')}`);
+    return;
+  }
+
+  // Fallback: send directly (blocks, but only when Redis is down)
+  await sendPushDirect(recipients, payload);
+}
+
+/**
+ * Direct push send — called by the BullMQ worker or as a fallback.
+ * This is the actual push-sending logic. Do NOT call from request handlers
+ * unless the queue is unavailable.
+ */
+export async function sendPushDirect(
   recipients: string[],
   payload: { title: string; body: string; url?: string; tag?: string }
 ): Promise<void> {
@@ -55,6 +83,9 @@ export async function sendPushToRecipients(
     const subscriptions = await PushSubscription.find({ $or: orClauses }).lean();
     if (!subscriptions.length) return;
 
+    const webSubs  = subscriptions.filter((s) => (s.platform || 'web') === 'web');
+    const expoSubs = subscriptions.filter((s) => s.platform === 'expo' && s.expoPushToken);
+
     const pushPayload = JSON.stringify({
       title: payload.title,
       body:  payload.body,
@@ -62,15 +93,15 @@ export async function sendPushToRecipients(
       tag:   payload.tag || 'fuel-order-notification',
     });
 
-    const sends = subscriptions.map(async (sub) => {
+    // --- Web Push (VAPID) ---
+    const webSends = webSubs.map(async (sub) => {
       try {
         await webPush.sendNotification(
-          { endpoint: sub.endpoint, keys: sub.keys },
+          { endpoint: sub.endpoint, keys: sub.keys as { p256dh: string; auth: string } },
           pushPayload
         );
       } catch (err: any) {
         if (err.statusCode === 410 || err.statusCode === 404) {
-          // Subscription expired — delete it
           await PushSubscription.deleteOne({ _id: sub._id });
           logger.info(`Removed expired push subscription: ${sub.endpoint}`);
         } else {
@@ -79,7 +110,42 @@ export async function sendPushToRecipients(
       }
     });
 
-    await Promise.allSettled(sends);
+    // --- Expo Push (FCM/APNs) ---
+    const expoMessages: ExpoPushMessage[] = expoSubs
+      .filter((sub) => Expo.isExpoPushToken(sub.expoPushToken))
+      .map((sub) => ({
+        to: sub.expoPushToken,
+        title: payload.title,
+        body:  payload.body,
+        data:  { url: payload.url || '/' },
+        sound: 'default' as const,
+        channelId: 'default',
+      }));
+
+    const expoSend = (async () => {
+      if (!expoMessages.length) return;
+      try {
+        const chunks = expo.chunkPushNotifications(expoMessages);
+        for (const chunk of chunks) {
+          const tickets = await expo.sendPushNotificationsAsync(chunk);
+          // Log any ticket-level errors and clean up bad tokens
+          for (let i = 0; i < tickets.length; i++) {
+            const ticket = tickets[i];
+            if (ticket.status === 'error') {
+              logger.error(`Expo push error for token ${(chunk[i] as any).to}: ${ticket.message}`);
+              if (ticket.details?.error === 'DeviceNotRegistered') {
+                await PushSubscription.deleteOne({ expoPushToken: (chunk[i] as any).to });
+                logger.info(`Removed unregistered Expo token: ${(chunk[i] as any).to}`);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        logger.error('Expo push batch send failed:', err);
+      }
+    })();
+
+    await Promise.allSettled([...webSends, expoSend]);
     logger.info(`Push notifications sent to ${subscriptions.length} subscription(s) for recipients: ${recipients.join(', ')}`);
   } catch (error) {
     logger.error('Failed to send push notifications:', error);

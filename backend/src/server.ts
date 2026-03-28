@@ -22,6 +22,8 @@ import { fingerprintObfuscationMiddleware } from './middleware/fingerprintObfusc
 import honeypotRoutes from './routes/honeypotRoutes';
 import logger from './utils/logger';
 import { initializeWebSocket } from './services/websocket';
+import { connectRedis, disconnectRedis } from './config/redis';
+import { initNotificationQueue, closeNotificationQueue } from './services/notificationQueue';
 import BlocklistService from './services/blocklistService';
 import { requestId } from './middleware/requestId';
 
@@ -281,12 +283,19 @@ const startServer = async () => {
     // Connect to database
     await connectDatabase();
 
+    // Connect to Redis (for Socket.io adapter, caching, sessions)
+    // If REDIS_URL is not set, operates in single-instance mode
+    await connectRedis();
+
     // Load persisted autoblock config from DB into runtime config
     await BlocklistService.initConfig();
 
-    // Initialize WebSocket server
+    // Initialize WebSocket server (will attach Redis adapter if available)
     initializeWebSocket(httpServer);
     logger.info('WebSocket server initialized');
+
+    // Initialize BullMQ notification queue (uses Redis for async push dispatch)
+    initNotificationQueue();
 
     // Start archival scheduler (runs monthly at 2 AM on 1st day)
     startArchivalScheduler();
@@ -302,6 +311,27 @@ const startServer = async () => {
       logger.info('Archival scheduler: Active (runs monthly on 1st day at 2:00 AM)');
       logger.info('WebSocket server: Active');
     });
+
+    // Graceful shutdown — handles SIGTERM (Railway, Docker, K8s) and SIGINT (Ctrl+C)
+    let shuttingDown = false;
+    const shutdown = async (signal: string) => {
+      if (shuttingDown) return;          // prevent double-shutdown
+      shuttingDown = true;
+      logger.info(`${signal} received — shutting down gracefully`);
+
+      // Stop accepting new connections, let in-flight requests drain (15s max)
+      httpServer.close(() => logger.info('HTTP server closed'));
+      setTimeout(() => {
+        logger.warn('Shutdown timeout reached — forcing exit');
+        process.exit(1);
+      }, 15_000).unref();
+
+      await closeNotificationQueue();
+      await disconnectRedis();
+      process.exit(0);
+    };
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT',  () => shutdown('SIGINT'));
   } catch (error) {
     logger.error('Failed to start server:', error);
     console.error('FAILED TO START SERVER:', error);

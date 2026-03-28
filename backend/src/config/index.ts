@@ -67,6 +67,9 @@ export const config = {
   securityIpGating: process.env.SECURITY_IP_GATING === 'true',           // disabled by default
   securityEventRetentionDays: parseInt(process.env.SECURITY_EVENT_RETENTION_DAYS || '90', 10),
 
+  // Redis — used for Socket.io adapter, caching, and session sharing
+  redisUrl: process.env.REDIS_URL || '',
+
   // Web Push (VAPID) — used for browser push notifications
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
@@ -83,6 +86,7 @@ export const validateEnv = () => {
   const productionRequired = process.env.NODE_ENV === 'production' ? [
     'BACKUP_ENCRYPTION_KEY',
     'FIELD_ENCRYPTION_KEY',
+    'REDIS_URL',
   ] : [];
 
   // Validate all required variables
