@@ -14,6 +14,7 @@ import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
+import axios from 'axios';
 import { formatDONumber, parseDONumber, getNextDONumber as getNextFormattedDONumber } from '../utils/doNumberFormatter';
 import type { CompanyBranding } from '../utils/pdfGenerator';
 
@@ -26,18 +27,40 @@ const MONTH_NAMES = [
 /**
  * Load company branding from SystemConfig.
  * Falls back to original hardcoded defaults if not yet configured.
+ * If logoUrl is an HTTPS URL (R2), fetches and converts it to a base64 data URL
+ * so that pdfGenerator.ts can embed it without file-system access.
  */
 const getCompanyBranding = async (): Promise<CompanyBranding> => {
   try {
     const { SystemConfig } = await import('../models/SystemConfig');
     const config = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false }).lean();
     const g = config?.systemSettings?.general;
+
+    let logoUrl: string = g?.logoUrl || '';
+
+    // If the logo is stored as an external HTTPS URL (e.g. Cloudflare R2),
+    // fetch it and convert to base64 data URL so PDFKit can embed it.
+    if (logoUrl && logoUrl.startsWith('http')) {
+      try {
+        const response = await axios.get(logoUrl, {
+          responseType: 'arraybuffer',
+          timeout: 10000,
+        });
+        const mimeType = (response.headers['content-type'] as string)?.split(';')[0] || 'image/png';
+        const base64 = Buffer.from(response.data as ArrayBuffer).toString('base64');
+        logoUrl = `data:${mimeType};base64,${base64}`;
+      } catch (fetchErr) {
+        logger.warn(`getCompanyBranding: failed to fetch logo from "${logoUrl}", omitting from PDF. ${fetchErr}`);
+        logoUrl = '';
+      }
+    }
+
     return {
       companyName: g?.companyName || '',
       companyWebsite: g?.companyWebsite || '',
       companyEmail: g?.companyEmail || '',
       companyPhone: g?.companyPhone || '',
-      logoUrl: g?.logoUrl || '',
+      logoUrl,
     };
   } catch {
     return {
