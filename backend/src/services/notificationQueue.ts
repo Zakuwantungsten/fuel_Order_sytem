@@ -70,7 +70,7 @@ export function initNotificationQueue(): void {
     },
     {
       connection: workerConnection,
-      concurrency: 5, // process up to 5 push jobs in parallel
+      concurrency: 300, // process up to 300 push jobs in parallel
       limiter: {
         max: 50,       // max 50 jobs
         duration: 10000, // per 10 seconds — prevents flooding push APIs
@@ -90,7 +90,7 @@ export function initNotificationQueue(): void {
     logger.error('Push worker error:', err.message);
   });
 
-  logger.info('NotificationQueue: BullMQ queue + worker initialized (concurrency=5)');
+  logger.info('NotificationQueue: BullMQ queue + worker initialized (concurrency=300)');
 }
 
 /**
