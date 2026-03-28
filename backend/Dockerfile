@@ -27,8 +27,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy static assets if they exist
-COPY assets ./assets 2>/dev/null || true
+# Static assets directory (created empty; populate via volume or CI if needed)
+RUN mkdir -p ./assets
 
 # Own everything by non-root user
 RUN chown -R appuser:appgroup /app
