@@ -50,12 +50,6 @@ const getCompanyBranding = async (): Promise<CompanyBranding> => {
   }
 };
 
-// Month names for sheet naming
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
 /**
  * Helper: Cascade updates to related fuel records when DO is edited
  * Updates truck number, destination (to/from), loading point, and recalculates totalLts based on new route
@@ -1749,7 +1743,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
         const ext = (mimeMatch?.[1] === 'jpeg' ? 'jpeg' : mimeMatch?.[1] || 'png') as 'png' | 'jpeg';
         if (base64) {
           logoId = excelWorkbook.addImage({
-            buffer: Buffer.from(base64, 'base64'),
+            buffer: Buffer.from(base64, 'base64') as Buffer,
             extension: ext,
           });
         }
@@ -2765,7 +2759,7 @@ export const exportSDOWorkbook = async (req: AuthRequest, res: Response): Promis
         const ext = (mimeMatch?.[1] === 'jpeg' ? 'jpeg' : mimeMatch?.[1] || 'png') as 'png' | 'jpeg';
         if (base64) {
           logoId = excelWorkbook.addImage({
-            buffer: Buffer.from(base64, 'base64'),
+            buffer: Buffer.from(base64, 'base64') as Buffer,
             extension: ext,
           });
         }

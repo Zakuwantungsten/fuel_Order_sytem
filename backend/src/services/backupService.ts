@@ -126,11 +126,11 @@ class BackupService {
 
       // Compress JSON with gzip
       const gzip = promisify(zlib.gzip);
-      const archiveBuffer = await gzip(jsonBuffer);
+      const archiveBuffer: Buffer = Buffer.from(await gzip(jsonBuffer));
 
       // ✅ SECURITY: Encrypt backup before uploading to R2
       const encryptionKey = this.validateEncryptionKey();
-      let fileToUpload = archiveBuffer;
+      let fileToUpload: Buffer = archiveBuffer;
       let uploadContentType = 'application/gzip';
       
       if (encryptionKey) {
