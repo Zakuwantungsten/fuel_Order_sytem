@@ -1,5 +1,8 @@
+import nodemailer from 'nodemailer';
 import { User, SystemConfig } from '../models';
 import logger from '../utils/logger';
+import { decryptData } from '../utils/cryptoUtils';
+import { isEncrypted } from '../utils/fieldEncryption';
 
 interface CriticalEmailOptions {
   subject: string;
@@ -30,28 +33,36 @@ class EmailService {
     const from = process.env.EMAIL_FROM || '';
     const fromName = process.env.EMAIL_FROM_NAME || 'Fuel Order System';
 
-    if (!apiKey) {
-      logger.warn('Email service not configured — RESEND_API_KEY is missing');
-      this.isConfigured = false;
-      return;
-    }
-
-    this.resendApiKey = apiKey;
     this.fromName = fromName;
 
+    if (!apiKey) {
+      logger.warn('Email service: RESEND_API_KEY not set — will attempt SMTP fallback if configured');
+      this.resendApiKey = '';
+    } else {
+      this.resendApiKey = apiKey;
+    }
+
     if (!from) {
-      // Resend test address — only delivers to your own Resend account email
       this.fromAddress = 'onboarding@resend.dev';
-      logger.warn(
-        'EMAIL_FROM not set — using onboarding@resend.dev. ' +
-        'Set EMAIL_FROM=noreply@yourdomain.com after verifying a domain in Resend.'
-      );
+      if (apiKey) {
+        logger.warn(
+          'EMAIL_FROM not set — using onboarding@resend.dev. ' +
+          'Set EMAIL_FROM=noreply@yourdomain.com after verifying a domain in Resend.',
+        );
+      }
     } else {
       this.fromAddress = from;
     }
 
-    this.isConfigured = true;
-    logger.info(`Email service initialized with Resend (from: ${this.fromAddress})`);
+    // Considered configured if Resend key is present OR SMTP env vars are set
+    this.isConfigured = !!(apiKey || process.env.SMTP_HOST || process.env.EMAIL_HOST);
+
+    if (this.isConfigured) {
+      logger.info(
+        `Email service initialized — primary: ${apiKey ? 'Resend' : 'SMTP'}, ` +
+        `fallback: ${apiKey && (process.env.SMTP_HOST || process.env.EMAIL_HOST) ? 'SMTP' : 'none'}`,
+      );
+    }
   }
 
   /**
@@ -61,8 +72,98 @@ class EmailService {
     this.initialize();
   }
 
+  // ─── SMTP fallback helpers ────────────────────────────────────────────────
+
+  /**
+   * Attempt to load SMTP credentials from SystemConfig (DB), falling back to env vars.
+   * Returns null if no SMTP config is available.
+   */
+  private async loadSmtpConfig(): Promise<{
+    host: string; port: number; secure: boolean;
+    user: string; password: string; from: string; fromName: string;
+  } | null> {
+    try {
+      const cfg = await SystemConfig.findOne({ configType: 'system_settings' }).lean();
+      const email = (cfg as any)?.systemSettings?.email;
+      if (email?.host && email?.user) {
+        let password = email.password || '';
+        if (isEncrypted(password)) {
+          const encKey = process.env.FIELD_ENCRYPTION_KEY || '';
+          if (encKey) {
+            try {
+              password = decryptData(password.slice('encrypted:'.length), encKey);
+            } catch {
+              logger.warn('[EmailService] Failed to decrypt stored SMTP password, using raw value');
+            }
+          }
+        }
+        return {
+          host: email.host,
+          port: Number(email.port) || 587,
+          secure: email.secure === true,
+          user: email.user,
+          password,
+          from: email.from || email.user,
+          fromName: email.fromName || this.fromName,
+        };
+      }
+    } catch {
+      // DB read error — fall through to env
+    }
+
+    // Fall back to env vars
+    const host = process.env.SMTP_HOST || process.env.EMAIL_HOST || '';
+    const user = process.env.SMTP_USER || process.env.EMAIL_USER || '';
+    if (!host || !user) return null;
+
+    return {
+      host,
+      port: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true' || process.env.EMAIL_SECURE === 'true',
+      user,
+      password: process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || '',
+      from: process.env.EMAIL_FROM || user,
+      fromName: process.env.EMAIL_FROM_NAME || this.fromName,
+    };
+  }
+
+  /**
+   * Send via SMTP using nodemailer.
+   */
+  private async sendViaSMTP(options: {
+    from: string;
+    to: string[];
+    subject: string;
+    html: string;
+  }): Promise<void> {
+    const smtp = await this.loadSmtpConfig();
+    if (!smtp) {
+      throw new Error('SMTP fallback not configured — no SMTP credentials available');
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      auth: { user: smtp.user, pass: smtp.password },
+    });
+
+    await transporter.sendMail({
+      from: options.from,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+    });
+
+    logger.info(`[EmailService] Mail sent via SMTP fallback to ${options.to.length} recipient(s)`);
+  }
+
   // ─── Core dispatch ────────────────────────────────────────────────────────
 
+  /**
+   * Dispatch a mail message.
+   * Primary: Resend API.  Fallback: SMTP (nodemailer) if Resend fails or is not configured.
+   */
   private async dispatchMail(options: {
     from: string;
     to: string | string[];
@@ -70,30 +171,40 @@ class EmailService {
     html: string;
   }): Promise<void> {
     if (!this.isConfigured) {
-      throw new Error('Email service is not configured — set RESEND_API_KEY in Railway variables');
+      throw new Error('Email service is not configured — set RESEND_API_KEY or SMTP credentials');
     }
 
     const toArray = Array.isArray(options.to) ? options.to : [options.to];
 
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: options.from,
-        to: toArray,
-        subject: options.subject,
-        html: options.html,
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
+    // ── Try Resend first ──────────────────────────────────────────────────
+    if (this.resendApiKey) {
+      try {
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: options.from,
+            to: toArray,
+            subject: options.subject,
+            html: options.html,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Resend API error ${response.status}: ${errText}`);
+        if (response.ok) return; // success — done
+
+        const errText = await response.text();
+        logger.warn(`[EmailService] Resend API error ${response.status}: ${errText} — falling back to SMTP`);
+      } catch (resendErr) {
+        logger.warn(`[EmailService] Resend request failed: ${(resendErr as Error).message} — falling back to SMTP`);
+      }
     }
+
+    // ── SMTP fallback ─────────────────────────────────────────────────────
+    await this.sendViaSMTP({ ...options, to: toArray });
   }
 
   /** Build the "From" header string */

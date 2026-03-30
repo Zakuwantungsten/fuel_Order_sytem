@@ -129,16 +129,6 @@ function PathRulesSection({ fwd }: { fwd: (msg: string, type?: 'success' | 'erro
         </button>
       </div>
 
-      {/* Hint */}
-      <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
-        <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-amber-700 dark:text-amber-300">
-          <strong>Common patterns to block:</strong>{' '}
-          <code>/.env</code>, <code>/wp-admin/*</code>, <code>/phpMyAdmin/*</code>, <code>/adminer*</code>, <code>/.git/*</code>, <code>/config/*</code>.
-          Use <code>*</code> as a wildcard suffix.
-        </p>
-      </div>
-
       {/* Search */}
       <div className="relative max-w-sm">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -152,7 +142,7 @@ function PathRulesSection({ fwd }: { fwd: (msg: string, type?: 'success' | 'erro
       {/* List */}
       {filtered.length === 0 ? (
         <div className="text-center py-10 text-gray-400 text-sm border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-          {search ? 'No rules match your search.' : 'No path rules defined. Click "Add Rule" to create one.'}
+          {search ? 'No rules match your search.' : 'No path rules configured. Add a rule to get started.'}
         </div>
       ) : (
         <div className="space-y-2">
@@ -856,7 +846,7 @@ function HoneypotsSection({ fwd }: { fwd: (msg: string, type?: 'success' | 'erro
       {/* List */}
       {paths.length === 0 ? (
         <div className="text-center py-10 text-gray-400 text-sm border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-          No honeypot paths configured. Add paths like <code>/admin-portal</code> or <code>/api/v1/internal</code> to trap scanners.
+          No honeypot paths configured. Add a path to start trapping scanners.
         </div>
       ) : (
         <div className="space-y-2">
@@ -987,8 +977,23 @@ const DEFAULT_BOT: BotConfig = {
   botScoreThreshold: 70,
   blockEmptyUA: false,
   challengeMode: false,
-  userAgentBlocklist: ['masscan','zgrab','nmap','nikto','sqlmap','dirbuster','curl/7.','python-requests','go-http-client','libwww-perl'],
-  userAgentAllowlist: ['Googlebot','Bingbot','Slurp','DuckDuckBot','Baiduspider','YandexBot','facebot','Twitterbot','LinkedInBot'],
+  userAgentBlocklist: [
+    'nikto','sqlmap','nmap','masscan','zmap','dirbuster','gobuster','dirb','wfuzz','ffuf',
+    'nuclei','acunetix','nessus','openvas','qualys','burpsuite','owasp zap','arachni','w3af',
+    'skipfish','webscarab','havij','metasploit','commix','hydra','medusa/','slowloris',
+    'slowhttptest','hping','loic','semrushbot','ahrefsbot','mj12bot','dotbot','blexbot',
+    'petalbot','megaindex','bytespider','sogou','yandexbot','python-requests','python-urllib',
+    'python-httpx','go-http-client','ruby/','perl/','libwww-perl','wget/','curl/7.','curl/8.',
+    'httpie','axios/','node-fetch','java/','apache-httpclient','okhttp','phantomjs',
+    'headlesschrome','selenium','webdriver','puppeteer','playwright','zgrab','censys','shodan',
+    'httrack','scrapy','wpscan','wpscanner','wp-login',
+  ],
+  userAgentAllowlist: [
+    'Googlebot','Googlebot-Image','Bingbot','msnbot','Slurp','DuckDuckBot','Baiduspider',
+    'Applebot','Twitterbot','facebot','facebookexternalhit','LinkedInBot','WhatsApp',
+    'Discordbot','TelegramBot','Slackbot','ia_archiver','archive.org_bot','CCBot',
+    'MojeekBot','SeznamBot',
+  ],
 };
 
 function BotProtectionSection({ fwd }: { fwd: (msg: string, type?: 'success' | 'error' | 'info') => void }) {

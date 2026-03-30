@@ -18,6 +18,7 @@
     "seed:all": "ts-node src/scripts/seedAllRoles.ts",
     "seed:super": "ts-node src/scripts/seedSuperAdmin.ts",
     "seed:email": "ts-node --transpile-only src/scripts/seedEmailConfig.ts",
+    "seed:firewall": "ts-node --transpile-only src/scripts/seedFirewallDefaults.ts",
     "seed:branding": "ts-node --transpile-only src/scripts/seedCompanyBranding.ts",
     "seed:checkpoints": "ts-node --transpile-only src/scripts/seedCheckpoints.ts",
     "setup-driver-credentials": "ts-node src/scripts/setupDriverCredentials.ts",
