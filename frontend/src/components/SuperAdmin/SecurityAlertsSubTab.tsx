@@ -3,6 +3,7 @@
  * Shows unresolved alerts with acknowledge/investigate/resolve workflow.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { getCsrfToken } from '../../services/api';
 import {
   Bell, RefreshCw, AlertTriangle, CheckCircle, Eye, Search as SearchIcon,
   ShieldAlert, XCircle, ChevronDown, ChevronRight, MessageSquare,
@@ -85,11 +86,18 @@ const API_BASE = '/api/v1/system-admin/security-alerts';
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = sessionStorage.getItem('fuel_order_token');
+  const method = (options?.method ?? 'GET').toUpperCase();
+  const csrfHeaders: Record<string, string> = {};
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) csrfHeaders['X-XSRF-TOKEN'] = csrfToken;
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...csrfHeaders,
       ...options?.headers,
     },
   });

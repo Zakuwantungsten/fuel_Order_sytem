@@ -175,6 +175,10 @@ const userSchema = new Schema<IUserDocument>(
       type: Boolean,
       default: false,
     },
+    tempPasswordExpiresAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

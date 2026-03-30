@@ -6,22 +6,16 @@
  *   2. Common honeypot trap paths (firewall_configs: honeypot_config)
  *   3. Comprehensive bot User-Agent blocklist (firewall_configs: bot_protection)
  *
- * Usage (from backend/):
- *   npx ts-node -e "require('dotenv').config(); require('./src/scripts/seedFirewallDefaults')"
- * Or:
+ * Called automatically at server startup (server.ts → startServer).
+ * Also available as a standalone script:
  *   npm run seed:firewall
  *
- * Safe to re-run — uses upsert / skip-if-exists logic.
+ * Safe to re-run — skips rows that already exist.
  */
-
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-import path from 'path';
-
-dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 import { FirewallPathRule } from '../models/FirewallPathRule';
 import { FirewallConfig } from '../models/FirewallConfig';
+import logger from '../utils/logger';
 
 /* ══════════════════════════════════════════════════════════════════════════
  *  BLOCKED PATH RULES
@@ -288,110 +282,105 @@ const HONEYPOT_CONFIG = {
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
- *  RUNNER
+ *  EXPORTED SEED FUNCTION — called from server.ts on every startup
  * ══════════════════════════════════════════════════════════════════════════ */
 
-const run = async () => {
-  if (!process.env.MONGODB_URI) {
-    console.error('❌  MONGODB_URI is not set in .env');
-    process.exit(1);
-  }
-
-  console.log('🔌  Connecting to MongoDB...');
-  await mongoose.connect(process.env.MONGODB_URI);
-  console.log('✅  Connected\n');
-
-  /* ── 1. Seed path rules ────────────────────────────────────────────────── */
-  console.log('📋  Seeding firewall path rules...');
+/**
+ * Idempotent firewall seed — safe to call on every boot.
+ * Skips rules that are already in the DB; merges new entries into existing configs.
+ */
+export async function runFirewallSeed(): Promise<void> {
+  /* ── 1. Path rules ───────────────────────────────────────────────────── */
   let inserted = 0;
   let skipped = 0;
 
   for (const rule of BLOCKED_PATHS) {
-    const exists = await FirewallPathRule.findOne({ pattern: rule.pattern });
-    if (exists) {
-      skipped++;
-      continue;
-    }
+    const exists = await FirewallPathRule.findOne({ pattern: rule.pattern }).lean();
+    if (exists) { skipped++; continue; }
     await FirewallPathRule.create({
       pattern: rule.pattern,
       action: rule.action,
       methods: [],
       description: rule.description,
       isActive: true,
-      createdBy: 'seed-script',
+      createdBy: 'system',
     });
     inserted++;
   }
 
-  console.log(`   ✅  Path rules — inserted: ${inserted}, already existed: ${skipped}\n`);
+  if (inserted > 0) {
+    logger.info(`[FirewallSeed] Path rules — inserted: ${inserted}, already existed: ${skipped}`);
+  }
 
-  /* ── 2. Seed honeypot config ───────────────────────────────────────────── */
-  console.log('🍯  Seeding honeypot paths...');
-
+  /* ── 2. Honeypot config ──────────────────────────────────────────────── */
   const existingHoneypot = await FirewallConfig.findOne({ key: 'honeypot_config' });
   if (existingHoneypot) {
     const current = existingHoneypot.value as typeof HONEYPOT_CONFIG;
     const existingPaths = new Set((current.paths || []).map((p: any) => p.path));
-    const newPaths = HONEYPOT_PATHS.filter(h => !existingPaths.has(h.path)).map(h => ({
-      path: h.path,
-      action: h.action,
-      description: h.description,
-      isActive: true,
-    }));
+    const newPaths = HONEYPOT_PATHS
+      .filter(h => !existingPaths.has(h.path))
+      .map(h => ({ path: h.path, action: h.action, description: h.description, isActive: true }));
 
     if (newPaths.length > 0) {
-      existingHoneypot.value = {
-        ...current,
-        paths: [...(current.paths || []), ...newPaths],
-      };
+      existingHoneypot.value = { ...current, paths: [...(current.paths || []), ...newPaths] };
       await existingHoneypot.save();
-      console.log(`   ✅  Honeypot config updated — added ${newPaths.length} new paths (${existingPaths.size} already existed)\n`);
-    } else {
-      console.log(`   ✅  All ${HONEYPOT_PATHS.length} honeypot paths already seeded — no changes\n`);
+      logger.info(`[FirewallSeed] Honeypot — added ${newPaths.length} new trap paths`);
     }
   } else {
-    await FirewallConfig.create({
-      key: 'honeypot_config',
-      value: HONEYPOT_CONFIG,
-      updatedBy: 'seed-script',
-    });
-    console.log(`   ✅  Honeypot config created with ${HONEYPOT_PATHS.length} trap paths\n`);
+    await FirewallConfig.create({ key: 'honeypot_config', value: HONEYPOT_CONFIG, updatedBy: 'system' });
+    logger.info(`[FirewallSeed] Honeypot config seeded with ${HONEYPOT_PATHS.length} trap paths`);
   }
 
-  /* ── 3. Seed bot protection config ────────────────────────────────────── */
-  console.log('🤖  Seeding bot protection UA lists...');
-
+  /* ── 3. Bot protection config ────────────────────────────────────────── */
   const existingBot = await FirewallConfig.findOne({ key: 'bot_protection' });
   if (existingBot) {
     const current = existingBot.value as typeof BOT_PROTECTION_CONFIG;
-    const existingBlock = new Set(current.userAgentBlocklist || []);
-    const existingAllow = new Set(current.userAgentAllowlist || []);
+    const existingBlock = new Set<string>(current.userAgentBlocklist || []);
+    const existingAllow = new Set<string>(current.userAgentAllowlist || []);
 
     const mergedBlock = [...existingBlock, ...BOT_UA_BLOCKLIST.filter(ua => !existingBlock.has(ua))];
     const mergedAllow = [...existingAllow, ...BOT_UA_ALLOWLIST.filter(ua => !existingAllow.has(ua))];
 
-    existingBot.value = { ...current, userAgentBlocklist: mergedBlock, userAgentAllowlist: mergedAllow };
-    await existingBot.save();
-    console.log(
-      `   ✅  Bot protection updated — blocklist: ${mergedBlock.length} entries, allowlist: ${mergedAllow.length} entries\n`,
-    );
+    const changed = mergedBlock.length !== existingBlock.size || mergedAllow.length !== existingAllow.size;
+    if (changed) {
+      existingBot.value = { ...current, userAgentBlocklist: mergedBlock, userAgentAllowlist: mergedAllow };
+      await existingBot.save();
+      logger.info(`[FirewallSeed] Bot protection updated — blocklist: ${mergedBlock.length}, allowlist: ${mergedAllow.length}`);
+    }
   } else {
-    await FirewallConfig.create({
-      key: 'bot_protection',
-      value: BOT_PROTECTION_CONFIG,
-      updatedBy: 'seed-script',
-    });
-    console.log(
-      `   ✅  Bot protection config created — ${BOT_UA_BLOCKLIST.length} blocked UAs, ${BOT_UA_ALLOWLIST.length} allowed UAs\n`,
-    );
+    await FirewallConfig.create({ key: 'bot_protection', value: BOT_PROTECTION_CONFIG, updatedBy: 'system' });
+    logger.info(`[FirewallSeed] Bot protection seeded — ${BOT_UA_BLOCKLIST.length} blocked UAs, ${BOT_UA_ALLOWLIST.length} allowed`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ *  STANDALONE SCRIPT WRAPPER  (npm run seed:firewall)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+// Only execute when run directly as a script, not when imported by server.ts
+if (require.main === module) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mongoose = require('mongoose');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
+
+  if (!process.env.MONGODB_URI) {
+    console.error('❌  MONGODB_URI is not set in .env');
+    process.exit(1);
   }
 
-  await mongoose.disconnect();
-  console.log('🎉  Firewall defaults seeded successfully!');
-  process.exit(0);
-};
+  console.log('🔌  Connecting to MongoDB...');
+  mongoose.connect(process.env.MONGODB_URI)
+    .then(async () => {
+      console.log('✅  Connected\n');
+      await runFirewallSeed();
+      console.log('\n🎉  Firewall defaults seeded successfully!');
+      await mongoose.disconnect();
+      process.exit(0);
+    })
+    .catch((err: Error) => {
+      console.error('❌  Seed failed:', err);
+      mongoose.disconnect().finally(() => process.exit(1));
+    });
+}
 
-run().catch(err => {
-  console.error('❌  Seed failed:', err);
-  mongoose.disconnect().finally(() => process.exit(1));
-});

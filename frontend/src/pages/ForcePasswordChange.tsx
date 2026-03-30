@@ -1,33 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader, ShieldCheck, LogOut } from 'lucide-react';
+import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader, ShieldCheck, LogOut, XCircle } from 'lucide-react';
 import { authAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
 
-interface StrengthInfo {
-  score: number; // 0-4
-  label: string;
-  color: string;
+interface PasswordPolicy {
+  minLength: number;
+  requireUppercase: boolean;
+  requireLowercase: boolean;
+  requireNumbers: boolean;
+  requireSpecialChars: boolean;
 }
 
-function getStrength(password: string): StrengthInfo {
-  let score = 0;
-  if (password.length >= 8) score++;
-  if (password.length >= 12) score++;
-  if (/[A-Z]/.test(password)) score++;
-  if (/[0-9]/.test(password)) score++;
-  if (/[^A-Za-z0-9]/.test(password)) score++;
+const DEFAULT_POLICY: PasswordPolicy = {
+  minLength: 12,
+  requireUppercase: true,
+  requireLowercase: true,
+  requireNumbers: true,
+  requireSpecialChars: true,
+};
 
-  const capped = Math.min(score, 4) as 0 | 1 | 2 | 3 | 4;
-  const map: Record<0 | 1 | 2 | 3 | 4, { label: string; color: string }> = {
-    0: { label: 'Too short',  color: 'bg-red-500'    },
-    1: { label: 'Weak',       color: 'bg-red-400'    },
-    2: { label: 'Fair',       color: 'bg-amber-400'  },
-    3: { label: 'Good',       color: 'bg-blue-500'   },
-    4: { label: 'Strong',     color: 'bg-green-500'  },
-  };
-  return { score: capped, ...map[capped] };
+interface RuleCheck {
+  label: string;
+  met: boolean;
+}
+
+function buildRules(password: string, policy: PasswordPolicy): RuleCheck[] {
+  return [
+    { label: `At least ${policy.minLength} characters`,   met: password.length >= policy.minLength },
+    ...(policy.requireUppercase  ? [{ label: 'One uppercase letter',   met: /[A-Z]/.test(password) }] : []),
+    ...(policy.requireLowercase  ? [{ label: 'One lowercase letter',   met: /[a-z]/.test(password) }] : []),
+    ...(policy.requireNumbers    ? [{ label: 'One number',             met: /[0-9]/.test(password) }] : []),
+    ...(policy.requireSpecialChars ? [{ label: 'One special character (@, #, $, !, …)', met: /[^A-Za-z0-9]/.test(password) }] : []),
+  ];
 }
 
 interface Props {
@@ -37,6 +43,7 @@ interface Props {
 const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
   const { user, logout } = useAuth();
 
+  const [policy, setPolicy]                   = useState<PasswordPolicy>(DEFAULT_POLICY);
   const [newPassword, setNewPassword]         = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNew, setShowNew]                 = useState(false);
@@ -44,18 +51,17 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
   const [isLoading, setIsLoading]             = useState(false);
   const [error, setError]                     = useState<string | null>(null);
   const [success, setSuccess]                 = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
-  const strength = getStrength(newPassword);
-
-  // Live validation
+  // Fetch the live password policy from the server on mount
   useEffect(() => {
-    if (!newPassword) { setValidationErrors([]); return; }
-    const errs: string[] = [];
-    if (newPassword.length < 8)                              errs.push('At least 8 characters');
-    if (confirmPassword && newPassword !== confirmPassword)  errs.push('Passwords do not match');
-    setValidationErrors(errs);
-  }, [newPassword, confirmPassword]);
+    authAPI.getPasswordPolicy?.()
+      .then((p: PasswordPolicy) => setPolicy({ ...DEFAULT_POLICY, ...p }))
+      .catch(() => { /* silently use defaults */ });
+  }, []);
+
+  const rules       = buildRules(newPassword, policy);
+  const allRulesMet = rules.every(r => r.met);
+  const passwordsMatch = confirmPassword.length > 0 && newPassword === confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,8 +71,8 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
       setError('Please fill in both fields.');
       return;
     }
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters.');
+    if (!allRulesMet) {
+      setError('Password does not meet all the requirements below.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -175,20 +181,6 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
             </div>
           )}
 
-          {/* Validation hints */}
-          {validationErrors.length > 0 && !error && (
-            <div className="mb-5 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
-              <ul className="space-y-1">
-                {validationErrors.map((e, i) => (
-                  <li key={i} className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                    {e}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           {/* Form */}
           {!success && (
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -208,7 +200,7 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
                     value={newPassword}
                     onChange={(e) => { setNewPassword(e.target.value); setError(null); }}
                     disabled={isLoading}
-                    placeholder="Minimum 8 characters"
+                    placeholder={`Minimum ${policy.minLength} characters`}
                     className="block w-full pl-9 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-xl
                                bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                                placeholder-gray-400 dark:placeholder-gray-500
@@ -222,28 +214,31 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
                       : <Eye    className="h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />}
                   </button>
                 </div>
+              </div>
 
-                {/* Strength bar */}
-                {newPassword && (
-                  <div className="mt-2">
-                    <div className="flex gap-1 h-1.5">
-                      {[1, 2, 3, 4].map((n) => (
-                        <div
-                          key={n}
-                          className={`flex-1 rounded-full transition-all duration-300 ${
-                            n <= strength.score ? strength.color : 'bg-gray-200 dark:bg-gray-600'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <p className={`text-xs mt-1 font-medium ${
-                      strength.score <= 1 ? 'text-red-500'
-                      : strength.score === 2 ? 'text-amber-500'
-                      : strength.score === 3 ? 'text-blue-500'
-                      : 'text-green-500'
-                    }`}>{strength.label}</p>
-                  </div>
-                )}
+              {/* Password rules — always visible, turn green as requirements are met */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Password must include:</p>
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-y-1.5 gap-x-4">
+                  {rules.map((rule, i) => (
+                    <li key={i} className={`text-xs flex items-center gap-2 transition-colors duration-200 ${
+                      rule.met ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
+                    }`}>
+                      {rule.met
+                        ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 text-green-500" />
+                        : <XCircle    className="w-3.5 h-3.5 flex-shrink-0 text-gray-300 dark:text-gray-600" />}
+                      {rule.label}
+                    </li>
+                  ))}
+                  <li className={`text-xs flex items-center gap-2 transition-colors duration-200 ${
+                    passwordsMatch ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {passwordsMatch
+                      ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 text-green-500" />
+                      : <XCircle    className="w-3.5 h-3.5 flex-shrink-0 text-gray-300 dark:text-gray-600" />}
+                    Passwords match
+                  </li>
+                </ul>
               </div>
 
               {/* Confirm password */}
@@ -281,7 +276,7 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
               {/* Submit */}
               <button
                 type="submit"
-                disabled={isLoading || validationErrors.length > 0 || !newPassword || !confirmPassword}
+                disabled={isLoading || !allRulesMet || !passwordsMatch}
                 className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl
                            text-sm font-semibold text-white
                            bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600

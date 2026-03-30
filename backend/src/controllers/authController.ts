@@ -349,6 +349,21 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     // Auto-clear stale mustChangePassword flags AFTER password validation.
     // This prevents unauthenticated requests from clearing the flag.
     if (user.mustChangePassword) {
+      // ── Expiry enforcement ──────────────────────────────────────────────
+      // If the temporary credentials have a hard expiry and it has passed,
+      // deactivate the account and refuse login with a clear message.
+      if (user.tempPasswordExpiresAt && new Date() > user.tempPasswordExpiresAt) {
+        user.isActive = false;
+        user.mustChangePassword = false;
+        user.tempPasswordExpiresAt = undefined;
+        await user.save();
+        logger.warn(`[TEMP-CREDS] Expired temporary credentials blocked login for: ${username}`);
+        throw new ApiError(
+          403,
+          'Your temporary password has expired. Please contact your administrator to receive new credentials.',
+        );
+      }
+
       let shouldClear = false;
       let clearReason = '';
 
@@ -357,13 +372,14 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         shouldClear = true;
         clearReason = 'no passwordResetAt set (legacy data)';
       }
-      // Rule 2: passwordResetAt is older than 5 minutes — admin reset happened a while ago,
-      // and the user is already logging in with working credentials, so the flag is stale.
-      else {
+      // Rule 2: passwordResetAt is older than 5 minutes AND no live expiry is set —
+      // admin reset happened a while ago and the user is logging in with working
+      // credentials, so the flag is stale.
+      else if (!user.tempPasswordExpiresAt) {
         const minutesSincePwdReset = (Date.now() - new Date(user.passwordResetAt).getTime()) / (1000 * 60);
         if (minutesSincePwdReset > 5) {
           shouldClear = true;
-          clearReason = `passwordResetAt is ${minutesSincePwdReset.toFixed(0)} min old (stale)`;
+          clearReason = `passwordResetAt is ${minutesSincePwdReset.toFixed(0)} min old and no expiry set (stale legacy)`;
         }
       }
 
@@ -1579,6 +1595,7 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
     user.password = newPassword;
     user.mustChangePassword = false;
     user.passwordResetAt = undefined;
+    user.tempPasswordExpiresAt = undefined; // Credentials no longer temporary
 
     logger.info(`First-login password set for user: ${user.username}`);
 

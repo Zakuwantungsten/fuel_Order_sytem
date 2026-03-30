@@ -121,6 +121,7 @@ export interface ISystemSettings {
     newDeviceAlerts: boolean; // Extra alert for new device sign-ins
     deviceTracking: boolean; // Track login devices and sessions
     sendCredentialsEmail: boolean; // Send welcome email with username/password to new users
+    credentialsExpiryHours: number; // Hours before a temporary password expires (0 = never)
     bypassEmailVerification: boolean; // Skip OTP requirement for email MFA setup (use when email service is not yet verified)
   };
   // Email Configuration
@@ -338,6 +339,8 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         loginNotifications: { type: Boolean, default: true },
         newDeviceAlerts: { type: Boolean, default: true },
         deviceTracking: { type: Boolean, default: true },
+        sendCredentialsEmail: { type: Boolean, default: true },
+        credentialsExpiryHours: { type: Number, default: 24 },
       },
       email: {
         host: { type: String, default: '' },

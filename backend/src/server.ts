@@ -26,6 +26,7 @@ import { connectRedis, disconnectRedis } from './config/redis';
 import { initNotificationQueue, closeNotificationQueue } from './services/notificationQueue';
 import BlocklistService from './services/blocklistService';
 import { requestId } from './middleware/requestId';
+import { runFirewallSeed } from './scripts/seedFirewallDefaults';
 
 // Validate environment variables
 try {
@@ -284,6 +285,14 @@ const startServer = async () => {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Seed firewall defaults (path rules, honeypots, bot UAs) on every boot.
+    // Idempotent — skips rows that already exist, only inserts new ones.
+    try {
+      await runFirewallSeed();
+    } catch (seedErr) {
+      logger.warn('Firewall seed failed (non-fatal):', seedErr);
+    }
 
     // Connect to Redis (for Socket.io adapter, caching, sessions)
     // If REDIS_URL is not set, operates in single-instance mode

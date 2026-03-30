@@ -15,6 +15,7 @@
  *  - Egress Rules (CRUD)         → /egress-rules
  */
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
 import { ApiError } from '../middleware/errorHandler';
 import { FirewallPathRule } from '../models/FirewallPathRule';
@@ -370,6 +371,148 @@ export const saveHoneypotConfig = async (req: AuthRequest, res: Response): Promi
     if (err instanceof ApiError) throw err;
     logger.error('saveHoneypotConfig error:', err);
     throw new ApiError(500, 'Failed to save honeypot config');
+  }
+};
+
+/* ══════════════════════════════════════════════════════════════════
+ *  HONEYPOT PATHS — per-item CRUD  (used by FirewallTab UI)
+ *  Routes: GET /honeypots · POST /honeypots
+ *          PUT /honeypots/:id · DELETE /honeypots/:id
+ * ══════════════════════════════════════════════════════════════════ */
+
+type HoneypotEntry = {
+  id: string;
+  path: string;
+  action: 'block' | 'alert' | 'log';
+  description: string;
+  isActive: boolean;
+};
+
+/** Auto-assigns stable IDs to any paths that were seeded without one, then returns the array. */
+async function loadHoneypotPaths(): Promise<{ doc: InstanceType<typeof FirewallConfig> | null; paths: HoneypotEntry[] }> {
+  const doc = await FirewallConfig.findOne({ key: HONEYPOT_CONFIG_KEY });
+  if (!doc) return { doc: null, paths: [] };
+
+  const config = doc.value as Record<string, unknown>;
+  const raw: Record<string, unknown>[] = Array.isArray(config.paths) ? (config.paths as Record<string, unknown>[]) : [];
+
+  let dirty = false;
+  const paths: HoneypotEntry[] = raw.map((p) => {
+    if (!p.id) {
+      dirty = true;
+      return { ...p, id: new mongoose.Types.ObjectId().toHexString() } as HoneypotEntry;
+    }
+    return p as HoneypotEntry;
+  });
+
+  if (dirty) {
+    doc.value = { ...config, paths };
+    doc.markModified('value');
+    await doc.save();
+  }
+
+  return { doc, paths };
+}
+
+export const listHoneypots = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { paths } = await loadHoneypotPaths();
+    res.status(200).json({ success: true, data: paths });
+  } catch (err) {
+    logger.error('listHoneypots error:', err);
+    throw new ApiError(500, 'Failed to fetch honeypot paths');
+  }
+};
+
+export const addHoneypot = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { path: pathVal, action = 'block', description = '', isActive = true } = req.body as Record<string, unknown>;
+
+    if (typeof pathVal !== 'string' || !pathVal.trim()) throw new ApiError(400, 'Path is required');
+    if (!['block', 'alert', 'log'].includes(action as string)) throw new ApiError(400, 'Invalid action');
+
+    const { doc, paths } = await loadHoneypotPaths();
+    if (!doc) throw new ApiError(500, 'Honeypot config not initialised — restart the server to seed defaults');
+
+    const newEntry: HoneypotEntry = {
+      id: new mongoose.Types.ObjectId().toHexString(),
+      path: pathVal.trim(),
+      action: action as HoneypotEntry['action'],
+      description: typeof description === 'string' ? description.trim() : '',
+      isActive: isActive !== false,
+    };
+
+    const config = doc.value as Record<string, unknown>;
+    doc.value = { ...config, paths: [...paths, newEntry] };
+    doc.markModified('value');
+    await doc.save();
+
+    res.status(201).json({ success: true, data: newEntry });
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    logger.error('addHoneypot error:', err);
+    throw new ApiError(500, 'Failed to add honeypot path');
+  }
+};
+
+export const updateHoneypot = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { path: pathVal, action, description, isActive } = req.body as Record<string, unknown>;
+
+    if (pathVal !== undefined && (typeof pathVal !== 'string' || !pathVal.trim())) {
+      throw new ApiError(400, 'Path cannot be empty');
+    }
+    if (action !== undefined && !['block', 'alert', 'log'].includes(action as string)) {
+      throw new ApiError(400, 'Invalid action');
+    }
+
+    const { doc, paths } = await loadHoneypotPaths();
+    if (!doc) throw new ApiError(404, 'Honeypot config not found');
+
+    const idx = paths.findIndex((p) => p.id === id);
+    if (idx === -1) throw new ApiError(404, 'Honeypot path not found');
+
+    paths[idx] = {
+      ...paths[idx],
+      ...(pathVal !== undefined ? { path: (pathVal as string).trim() } : {}),
+      ...(action !== undefined ? { action: action as HoneypotEntry['action'] } : {}),
+      ...(description !== undefined ? { description: (description as string).trim() } : {}),
+      ...(isActive !== undefined ? { isActive: !!isActive } : {}),
+    };
+
+    const config = doc.value as Record<string, unknown>;
+    doc.value = { ...config, paths };
+    doc.markModified('value');
+    await doc.save();
+
+    res.status(200).json({ success: true, data: paths[idx] });
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    logger.error('updateHoneypot error:', err);
+    throw new ApiError(500, 'Failed to update honeypot path');
+  }
+};
+
+export const deleteHoneypot = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { doc, paths } = await loadHoneypotPaths();
+    if (!doc) throw new ApiError(404, 'Honeypot config not found');
+
+    const filtered = paths.filter((p) => p.id !== id);
+    if (filtered.length === paths.length) throw new ApiError(404, 'Honeypot path not found');
+
+    const config = doc.value as Record<string, unknown>;
+    doc.value = { ...config, paths: filtered };
+    doc.markModified('value');
+    await doc.save();
+
+    res.status(200).json({ success: true, message: 'Honeypot path removed' });
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    logger.error('deleteHoneypot error:', err);
+    throw new ApiError(500, 'Failed to delete honeypot path');
   }
 };
 

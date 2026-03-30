@@ -241,6 +241,8 @@ export interface IUser {
   accountExpiresAt?: Date;
   /** True until the user completes their first successful login */
   pendingActivation?: boolean;
+  /** When set, the temporary password issued at account creation / admin reset expires at this time */
+  tempPasswordExpiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

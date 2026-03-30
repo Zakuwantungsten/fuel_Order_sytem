@@ -21,6 +21,11 @@ import {
   // Honeypot Config
   getHoneypotConfig,
   saveHoneypotConfig,
+  // Honeypot per-item CRUD
+  listHoneypots,
+  addHoneypot,
+  updateHoneypot,
+  deleteHoneypot,
   // Bot Protection
   getBotProtection,
   saveBotProtection,
@@ -66,6 +71,12 @@ router.put('/security-headers', saveSecurityHeaders);
 /* ── Honeypot Config (admin-managed trap paths) ───────────────── */
 router.get('/honeypot-config', getHoneypotConfig);
 router.put('/honeypot-config', saveHoneypotConfig);
+
+/* ── Honeypot per-item CRUD (used by FirewallTab UI) ─────────── */
+router.get('/honeypots', listHoneypots);
+router.post('/honeypots', addHoneypot);
+router.put('/honeypots/:id', updateHoneypot);
+router.delete('/honeypots/:id', deleteHoneypot);
 
 /* ── Bot Protection ──────────────────────────────────────────── */
 router.get('/bot-protection', getBotProtection);

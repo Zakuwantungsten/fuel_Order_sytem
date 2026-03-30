@@ -815,6 +815,7 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                         {[
                           { key: 'slowQueryThreshold',     label: 'Slow Query Threshold (ms)', min: 100 },
                           { key: 'storageWarningThreshold',label: 'Storage Warning Threshold (%)', min: 1, max: 100 },
+                          { key: 'credentialsExpiryHours', label: 'Temp Credentials Expiry (hours, 0 = never)', min: 0 },
                         ].map(f => (
                           <div key={f.key} className="flex flex-col gap-1.5">
                             <label className={labelCls}>{f.label}</label>

@@ -3,6 +3,7 @@
  * Create, track, investigate, and resolve security incidents.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { getCsrfToken } from '../../services/api';
 import {
   AlertTriangle, RefreshCw, CheckCircle, Eye, Search as SearchIcon,
   ShieldAlert, ChevronDown, ChevronRight, MessageSquare,
@@ -85,11 +86,18 @@ const API_BASE = '/api/v1/system-admin/incidents';
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = sessionStorage.getItem('fuel_order_token');
+  const method = (options?.method ?? 'GET').toUpperCase();
+  const csrfHeaders: Record<string, string> = {};
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) csrfHeaders['X-XSRF-TOKEN'] = csrfToken;
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...csrfHeaders,
       ...options?.headers,
     },
   });

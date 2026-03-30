@@ -156,6 +156,22 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
     // Generate secure temporary password
     const temporaryPassword = crypto.randomBytes(8).toString('hex'); // 16 character password
 
+    // Check whether credentials email is enabled in system settings
+    let sendCredentialsEmail = true; // default ON
+    let credentialsExpiryHours = 24; // default 24h
+    try {
+      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+      const notifSettings = sysConfig?.systemSettings?.notifications as any;
+      if (notifSettings?.sendCredentialsEmail === false) {
+        sendCredentialsEmail = false;
+      }
+      if (typeof notifSettings?.credentialsExpiryHours === 'number') {
+        credentialsExpiryHours = notifSettings.credentialsExpiryHours;
+      }
+    } catch {
+      // If config fetch fails, use defaults
+    }
+
     // Create new user
     const user = await User.create({
       username,
@@ -176,19 +192,11 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       // Set passwordResetAt so the auto-clear in login knows this is a legitimate
       // forced-change (not stale legacy data) and preserves the flag.
       passwordResetAt: new Date(),
+      // Expire the temporary credentials after the configured window (0 = never)
+      ...(credentialsExpiryHours > 0
+        ? { tempPasswordExpiresAt: new Date(Date.now() + credentialsExpiryHours * 60 * 60 * 1000) }
+        : {}),
     });
-
-    // Check whether credentials email is enabled in system settings
-    let sendCredentialsEmail = true; // default ON
-    try {
-      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
-      const notifSettings = sysConfig?.systemSettings?.notifications as any;
-      if (notifSettings?.sendCredentialsEmail === false) {
-        sendCredentialsEmail = false;
-      }
-    } catch {
-      // If config fetch fails, default to sending the email
-    }
 
     // Send welcome email with credentials (unless disabled by admin)
     let emailSent = false;
@@ -198,7 +206,8 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
           email,
           `${firstName} ${lastName}`,
           username,
-          temporaryPassword
+          temporaryPassword,
+          credentialsExpiryHours
         );
         emailSent = true;
         logger.info(`Welcome email sent to ${email}`);
@@ -401,11 +410,26 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
     // Generate temporary password
     const temporaryPassword = crypto.randomBytes(8).toString('hex');
 
+    // Read configured expiry window
+    let credentialsExpiryHoursReset = 24;
+    try {
+      const sc = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+      const notif = sc?.systemSettings?.notifications as any;
+      if (typeof notif?.credentialsExpiryHours === 'number') {
+        credentialsExpiryHoursReset = notif.credentialsExpiryHours;
+      }
+    } catch { /* use default */ }
+
     // Update password, clear refresh token and flag for password change
     user.password = temporaryPassword;
     user.mustChangePassword = true;
     user.passwordResetAt = new Date();
     user.refreshToken = undefined;
+    if (credentialsExpiryHoursReset > 0) {
+      user.tempPasswordExpiresAt = new Date(Date.now() + credentialsExpiryHoursReset * 60 * 60 * 1000);
+    } else {
+      user.tempPasswordExpiresAt = undefined;
+    }
     await user.save();
 
     logger.info(`Password reset for user: ${user.username} by ${req.user?.username}`);
@@ -423,7 +447,8 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
         user.email,
         `${user.firstName} ${user.lastName}`,
         user.username,
-        temporaryPassword
+        temporaryPassword,
+        credentialsExpiryHoursReset
       );
       emailSent = true;
       logger.info(`Password reset email sent to ${user.email}`);

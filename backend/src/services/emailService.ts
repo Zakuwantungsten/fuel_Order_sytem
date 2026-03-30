@@ -549,6 +549,7 @@ class EmailService {
     name: string,
     username: string,
     temporaryPassword: string,
+    expiryHours = 24,
   ): Promise<void> {
     if (!this.isConfigured) await this.reinitialize();
     if (!this.isConfigured) {
@@ -590,6 +591,7 @@ class EmailService {
                 <ul style="color:#991b1b;font-size:14px;line-height:1.6;margin:0;padding-left:20px">
                   <li>This is a <strong>temporary password</strong></li>
                   <li>You <strong>must change it</strong> immediately after logging in</li>
+                  <li>${expiryHours > 0 ? `These credentials <strong>expire in ${expiryHours} hour${expiryHours === 1 ? '' : 's'}</strong> — log in before then` : 'These credentials do not expire automatically'}</li>
                   <li>Your previous password is no longer valid</li>
                   <li>Keep your credentials <strong>confidential</strong></li>
                   <li>If you didn't request this, contact your administrator immediately</li>
@@ -624,6 +626,7 @@ class EmailService {
     name: string,
     username: string,
     temporaryPassword: string,
+    expiryHours = 24,
   ): Promise<void> {
     if (!this.isConfigured) await this.reinitialize();
     if (!this.isConfigured) {
@@ -665,6 +668,7 @@ class EmailService {
                 <ul style="color:#78350f;font-size:14px;line-height:1.6;margin:0;padding-left:20px">
                   <li>This is a <strong>temporary password</strong></li>
                   <li>You will be required to <strong>change it</strong> on your first login</li>
+                  <li>${expiryHours > 0 ? `These credentials <strong>expire in ${expiryHours} hour${expiryHours === 1 ? '' : 's'}</strong> — log in before then` : 'These credentials do not expire automatically'}</li>
                   <li>Keep your credentials <strong>confidential</strong></li>
                   <li>Never share your password with anyone</li>
                 </ul>
