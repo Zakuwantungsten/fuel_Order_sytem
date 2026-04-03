@@ -1,11 +1,12 @@
 import { Response } from 'express';
 import { matchedData } from 'express-validator';
-import { LPOEntry } from '../models';
+import { LPOEntry, Counter } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
+import { filterLPOEntryFields } from '../utils/roleFieldPolicy';
 
 /**
  * Get all LPO entries with pagination and filters
@@ -275,6 +276,18 @@ export const getLPOEntryById = async (req: AuthRequest, res: Response): Promise<
 export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const payload = matchedData(req, { locations: ['body'] }) as any;
+
+    // Generate LPO number server-side using atomic counter (prevents duplicates)
+    const currentYear = new Date().getFullYear();
+    const counterId = `lpoNo_${currentYear}`;
+    const counter = await Counter.findOneAndUpdate(
+      { _id: counterId },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    payload.lpoNo = counter.seq.toString();
+    payload.year = currentYear;
+
     const lpoEntry = await LPOEntry.create(payload);
 
     logger.info(`LPO entry created: ${lpoEntry.lpoNo} by ${req.user?.username}`);
@@ -285,7 +298,17 @@ export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<v
       req.user?.username || 'system',
       'LPOEntry',
       lpoEntry._id.toString(),
-      { lpoNo: lpoEntry.lpoNo, truckNo: lpoEntry.truckNo, station: lpoEntry.dieselAt },
+      {
+        lpoNo: lpoEntry.lpoNo,
+        truckNo: lpoEntry.truckNo,
+        dieselAt: lpoEntry.dieselAt,
+        ltrs: lpoEntry.ltrs,
+        pricePerLtr: lpoEntry.pricePerLtr,
+        paymentMode: lpoEntry.paymentMode,
+        currency: lpoEntry.currency,
+        doSdo: lpoEntry.doSdo,
+        destinations: lpoEntry.destinations,
+      },
       req.ip
     );
 
@@ -303,7 +326,7 @@ export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<v
       message: 'LPO entry created successfully',
       data: lpoEntry,
     });
-    emitDataChange('lpo_entries', 'create');
+    emitDataChange('lpo_entries', 'create', lpoEntry.toObject());
   } catch (error: any) {
     throw error;
   }
@@ -315,28 +338,78 @@ export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<v
 export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const updates = matchedData(req, { locations: ['body'] }) as any;
+    const { clientUpdatedAt, reason, ...rawUpdates } = matchedData(req, { locations: ['body'] }) as any;
+
+    // Require justification when changing sensitive fields
+    const SENSITIVE_LPO_FIELDS = ['ltrs', 'pricePerLtr', 'paymentMode', 'isCancelled'];
+    const hasSensitiveChange = SENSITIVE_LPO_FIELDS.some(f => rawUpdates[f] !== undefined);
+    if (hasSensitiveChange && (!reason || reason.length < 10)) {
+      throw new ApiError(400, 'A reason of at least 10 characters is required when changing quantity, pricing, or payment fields');
+    }
+
+    // Strip fields the caller’s role is not allowed to write
+    const safeUpdates = filterLPOEntryFields(rawUpdates, req.user?.role || 'fuel_order_maker') as any;
+
+    // Read the existing entry BEFORE update so we can build a proper audit diff
+    const existingEntry = await LPOEntry.findOne({ _id: id, isDeleted: false }).lean();
+    if (!existingEntry) {
+      throw new ApiError(404, 'LPO entry not found');
+    }
+
+    // Build version-guarded filter
+    const updateFilter: any = { _id: id, isDeleted: false };
+    if (clientUpdatedAt) {
+      updateFilter.updatedAt = new Date(clientUpdatedAt);
+    }
+
+    // Detect liters amendment — populate originalLtrs / amendedAt
+    if (safeUpdates.ltrs !== undefined && safeUpdates.ltrs !== existingEntry.ltrs) {
+      // Only set originalLtrs the FIRST time (preserve the true original)
+      if (existingEntry.originalLtrs === null || existingEntry.originalLtrs === undefined) {
+        safeUpdates.originalLtrs = existingEntry.ltrs;
+      }
+      safeUpdates.amendedAt = new Date();
+    }
 
     const lpoEntry = await LPOEntry.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      updates,
+      updateFilter,
+      safeUpdates,
       { new: true, runValidators: true }
     );
 
     if (!lpoEntry) {
+      // Distinguish: version conflict vs deleted
+      const stillExists = await LPOEntry.exists({ _id: id, isDeleted: false });
+      if (stillExists && clientUpdatedAt) {
+        const current = await LPOEntry.findOne({ _id: id, isDeleted: false })
+          .select('updatedAt lpoNo truckNo');
+        throw new ApiError(409, 'LPO entry was modified by another user since you opened it. Refresh to see the latest version.').withData({ current });
+      }
       throw new ApiError(404, 'LPO entry not found');
     }
 
     logger.info(`LPO entry updated: ${lpoEntry.lpoNo} by ${req.user?.username}`);
 
-    // Log audit trail
+    // Log audit trail with actual field-level diff
+    const auditFields = ['lpoNo', 'truckNo', 'doSdo', 'sn', 'dieselAt', 'destinations', 'ltrs', 'pricePerLtr', 'paymentMode', 'currency', 'originalLtrs', 'amendedAt', 'date'];
+    const previousSnapshot: Record<string, any> = {};
+    const newSnapshot: Record<string, any> = {};
+    for (const field of auditFields) {
+      const prev = (existingEntry as any)[field];
+      const next = (lpoEntry as any)[field];
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        previousSnapshot[field] = prev;
+        newSnapshot[field] = next;
+      }
+    }
+
     await AuditService.logUpdate(
       req.user?.userId || 'system',
       req.user?.username || 'system',
       'LPOEntry',
       lpoEntry._id.toString(),
-      {},
-      { lpoNo: lpoEntry.lpoNo, truckNo: lpoEntry.truckNo },
+      { lpoNo: existingEntry.lpoNo, truckNo: existingEntry.truckNo, ...previousSnapshot },
+      { lpoNo: lpoEntry.lpoNo, truckNo: lpoEntry.truckNo, ...newSnapshot },
       req.ip
     );
 
@@ -345,7 +418,7 @@ export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<v
       message: 'LPO entry updated successfully',
       data: lpoEntry,
     });
-    emitDataChange('lpo_entries', 'update');
+    emitDataChange('lpo_entries', 'update', lpoEntry.toObject());
   } catch (error: any) {
     throw error;
   }
@@ -375,27 +448,22 @@ export const getLPOEntriesByLPONo = async (req: AuthRequest, res: Response): Pro
 
 /**
  * Get next LPO number
- * Resets to 1 every new year
+ * Uses atomic Counter to prevent duplicate numbers under concurrency.
+ * Resets to 1 every new year.
  */
 export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const currentYear = new Date().getFullYear();
-    
-    const lastLPO = await LPOEntry.findOne({ 
-      year: currentYear 
-    })
-      .sort({ lpoNo: -1 })
-      .limit(1)
-      .lean();
+    const counterId = `lpoNo_${currentYear}`;
 
-    let nextLPONo = '1'; // Start from 1 each year
-    
-    if (lastLPO && lastLPO.lpoNo) {
-      const currentNumber = parseInt(lastLPO.lpoNo);
-      if (!isNaN(currentNumber)) {
-        nextLPONo = (currentNumber + 1).toString();
-      }
-    }
+    // Atomic increment — findOneAndUpdate with upsert guarantees uniqueness
+    const counter = await Counter.findOneAndUpdate(
+      { _id: counterId },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+
+    const nextLPONo = counter.seq.toString();
 
     res.status(200).json({
       success: true,

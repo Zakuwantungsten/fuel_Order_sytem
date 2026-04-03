@@ -21,6 +21,8 @@ import { useTruckBatches, getExtraFuelFromBatches } from '../hooks/useTruckBatch
 import { useRoutes, getTotalLitersFromRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
+import ConflictModal from '../components/ConflictModal';
+import EditLockBadge from '../components/EditLockBadge';
 import {
   deliveryOrderKeys,
   periodsToDateRange,
@@ -64,6 +66,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [cancellingOrder, setCancellingOrder] = useState<DeliveryOrder | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
+  const [conflictData, setConflictData] = useState<{ currentRecord: any; pendingData: any } | null>(null);
   const [activeTab, setActiveTab] = usePersistedState<'list' | 'summary' | 'workbook'>('do:activeTab', 'list');
   
   // Pagination state
@@ -561,11 +564,34 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     console.log('Form should now be open');
   };
 
-  const handleEditOrder = (order: DeliveryOrder) => {
+  const handleEditOrder = async (order: DeliveryOrder) => {
     console.log('Editing order:', order);
     console.log('Order ID:', order.id, 'Order _id:', (order as any)._id);
+    const orderId = order.id || (order as any)._id;
+    if (orderId) {
+      try {
+        await deliveryOrdersAPI.acquireLock(orderId);
+      } catch (err: any) {
+        if (err.response?.status === 423) {
+          const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+          alert(`This delivery order is being edited by ${lockHolder}.`);
+          return;
+        }
+      }
+    }
     setEditingOrder(order);
     setIsFormOpen(true);
+  };
+
+  const handleCloseForm = async () => {
+    if (editingOrder) {
+      const orderId = editingOrder.id || (editingOrder as any)?._id;
+      if (orderId) {
+        try { await deliveryOrdersAPI.releaseLock(orderId); } catch { /* ignore */ }
+      }
+    }
+    setEditingOrder(null);
+    setIsFormOpen(false);
   };
 
   const handleSaveOrder = async (orderData: Partial<DeliveryOrder>): Promise<DeliveryOrder | void> => {
@@ -598,7 +624,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         });
         
         // Update existing DO - now returns { order, cascadeResults }
-        const result = await deliveryOrdersAPI.update(orderId, orderData);
+        // Include clientUpdatedAt for optimistic locking
+        const updatePayload = {
+          ...orderData,
+          clientUpdatedAt: (editingOrder as any)?.updatedAt || (editingOrder as any)?.createdAt,
+        };
+        const result = await deliveryOrdersAPI.update(orderId, updatePayload);
         savedOrder = result.order;
         
         // Add to amended DOs session list if any fields changed
@@ -684,10 +715,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
       console.log('=== handleSaveOrder END - SUCCESS ===');
       return savedOrder;
-    } catch (error) {
+    } catch (error: any) {
       console.error('=== handleSaveOrder END - ERROR ===');
       console.error('Failed to save order:', error);
-      alert('Failed to save delivery order. Error: ' + (error as any).message);
+      if (error.response?.status === 409) {
+        setConflictData({ currentRecord: error.response?.data?.data?.current, pendingData: orderData });
+        queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+      } else if (error.response?.status === 423) {
+        const lockHolder = error.response?.data?.data?.editLock?.lockedByName || 'another user';
+        alert(`This delivery order is being edited by ${lockHolder}. Please try again later.`);
+      } else {
+        alert('Failed to save delivery order. Error: ' + (error.response?.data?.message || error.message));
+      }
       throw error;
     }
   };
@@ -1811,6 +1850,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               Active
                             </span>
                           )}
+                          <EditLockBadge editLock={(order as any).editLock} />
                         </div>
                       </div>
 
@@ -2044,7 +2084,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       <DOForm
         order={editingOrder || undefined}
         isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
+        onClose={handleCloseForm}
         onSave={handleSaveOrder}
         defaultDoType={filterDoType === 'SDO' ? 'SDO' : 'DO'}
         user={user}
@@ -2073,6 +2113,37 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       <AmendedDOsModal
         isOpen={isAmendedDOsModalOpen}
         onClose={() => setIsAmendedDOsModalOpen(false)}
+      />
+
+      <ConflictModal
+        isOpen={!!conflictData}
+        onClose={() => setConflictData(null)}
+        onUseLatest={() => {
+          setConflictData(null);
+          handleCloseForm();
+          queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+        }}
+        onRetry={async () => {
+          if (conflictData) {
+            const payload = {
+              ...conflictData.pendingData,
+              clientUpdatedAt: conflictData.currentRecord?.updatedAt,
+            };
+            const orderId = editingOrder?.id || (editingOrder as any)?._id;
+            try {
+              await deliveryOrdersAPI.update(orderId!, payload);
+              queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+              queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+              handleCloseForm();
+            } catch (err: any) {
+              alert(err.response?.data?.message || 'Retry failed');
+            }
+          }
+          setConflictData(null);
+        }}
+        currentRecord={conflictData?.currentRecord}
+        modifiedBy={conflictData?.currentRecord?.lastEditedBy?.name}
+        modifiedAt={conflictData?.currentRecord?.updatedAt}
       />
     </div>
   );

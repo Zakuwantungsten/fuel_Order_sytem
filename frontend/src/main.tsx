@@ -11,7 +11,7 @@ import './index.css';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,      // Consider data fresh for 5 minutes
+      staleTime: 30 * 1000,           // Consider data fresh for 30 seconds (was 5 min — caused stale reads after WebSocket pushes)
       gcTime: 10 * 60 * 1000,        // Keep unused data in cache for 10 minutes (formerly cacheTime)
       refetchOnWindowFocus: true,     // Refetch when user returns to window
       refetchOnReconnect: true,       // Refetch when internet reconnects

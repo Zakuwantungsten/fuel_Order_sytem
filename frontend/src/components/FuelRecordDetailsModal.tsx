@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { FuelRecordDetails, fuelRecordsAPI } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import RecordTimeline from './RecordTimeline';
 
 interface FuelRecordDetailsModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export default function FuelRecordDetailsModal({
     returnFuel: true,
     lpos: true,
     yardDispenses: false,
+    history: false,
   });
 
   useEffect(() => {
@@ -579,6 +581,31 @@ export default function FuelRecordDetailsModal({
                           </table>
                         </div>
                       )}
+                    </div>
+                  )}
+                </div>
+                {/* Audit History */}
+                <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => toggleSection('history')}
+                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <Clock className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">Audit History</span>
+                    </div>
+                    {expandedSections.history ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
+                  {expandedSections.history && (
+                    <div className="p-4 dark:bg-gray-800">
+                      <RecordTimeline
+                        fetchHistory={() => fuelRecordsAPI.getHistory(recordId!)}
+                        isOpen={expandedSections.history}
+                      />
                     </div>
                   )}
                 </div>

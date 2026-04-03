@@ -22,6 +22,7 @@ import { fingerprintObfuscationMiddleware } from './middleware/fingerprintObfusc
 import honeypotRoutes from './routes/honeypotRoutes';
 import logger from './utils/logger';
 import { initializeWebSocket } from './services/websocket';
+import { startChangeStreams } from './services/changeStreamListener';
 import { connectRedis, disconnectRedis } from './config/redis';
 import { initNotificationQueue, closeNotificationQueue } from './services/notificationQueue';
 import BlocklistService from './services/blocklistService';
@@ -304,6 +305,9 @@ const startServer = async () => {
     // Initialize WebSocket server (will attach Redis adapter if available)
     initializeWebSocket(httpServer);
     logger.info('WebSocket server initialized');
+
+    // Start MongoDB Change Streams for real-time push (requires replica set)
+    startChangeStreams();
 
     // Initialize BullMQ notification queue (uses Redis for async push dispatch)
     initNotificationQueue();

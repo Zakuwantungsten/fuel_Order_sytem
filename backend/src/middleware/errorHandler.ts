@@ -8,12 +8,19 @@ import logger from '../utils/logger';
 export class ApiError extends Error {
   statusCode: number;
   isOperational: boolean;
+  data?: Record<string, any>;
 
   constructor(statusCode: number, message: string, isOperational = true) {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = isOperational;
     Error.captureStackTrace(this, this.constructor);
+  }
+
+  /** Attach extra payload (e.g. current record for 409 conflicts) */
+  withData(data: Record<string, any>): this {
+    this.data = data;
+    return this;
   }
 }
 
@@ -84,7 +91,7 @@ export const errorHandler = (
   }
 
   // Handle body-parser PayloadTooLargeError
-  else if (err.type === 'entity.too.large' || err.status === 413 || err.statusCode === 413) {
+  else if ((err as any).type === 'entity.too.large' || (err as any).status === 413 || (err as any).statusCode === 413) {
     statusCode = 413;
     message = 'Request body too large';
     isOperational = true;
@@ -110,11 +117,18 @@ export const errorHandler = (
   }
 
   // Send error response — never include stack traces (even in dev, use server logs)
-  res.status(statusCode).json({
+  const response: Record<string, any> = {
     success: false,
     message,
     requestId: (req as any).requestId,
-  });
+  };
+
+  // Attach extra data (e.g. current record for 409 version conflicts)
+  if (err instanceof ApiError && err.data) {
+    response.data = err.data;
+  }
+
+  res.status(statusCode).json(response);
 };
 
 /**

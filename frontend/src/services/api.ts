@@ -295,6 +295,21 @@ export const deliveryOrdersAPI = {
     );
     return response.data;
   },
+
+  // Edit lock management
+  acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
+    const response = await apiClient.post(`/delivery-orders/${id}/lock`);
+    return response.data;
+  },
+
+  releaseLock: async (id: string | number): Promise<void> => {
+    await apiClient.delete(`/delivery-orders/${id}/lock`);
+  },
+
+  getHistory: async (id: string | number): Promise<any[]> => {
+    const response = await apiClient.get(`/delivery-orders/${id}/history`);
+    return response.data.data || [];
+  },
 };
 
 // DO Workbook API (Excel-like workbook management - one workbook per year with monthly sheets)
@@ -736,6 +751,21 @@ export const lpoDocumentsAPI = {
     const response = await apiClient.post('/lpo-documents/forward', data);
     return response.data.data;
   },
+
+  // Edit lock management
+  acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
+    const response = await apiClient.post(`/lpo-entries/${id}/lock`);
+    return response.data;
+  },
+
+  releaseLock: async (id: string | number): Promise<void> => {
+    await apiClient.delete(`/lpo-entries/${id}/lock`);
+  },
+
+  getHistory: async (id: string | number): Promise<any[]> => {
+    const response = await apiClient.get(`/lpo-entries/${id}/history`);
+    return response.data.data || [];
+  },
 };
 
 // Fuel Record Details Interface
@@ -871,6 +901,21 @@ export const fuelRecordsAPI = {
   update: async (id: string | number, data: Partial<FuelRecord>): Promise<FuelRecord> => {
     const response = await apiClient.put(`/fuel-records/${id}`, data);
     return response.data.data;
+  },
+
+  // Edit lock management
+  acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
+    const response = await apiClient.post(`/fuel-records/${id}/lock`);
+    return response.data;
+  },
+
+  releaseLock: async (id: string | number): Promise<void> => {
+    await apiClient.delete(`/fuel-records/${id}/lock`);
+  },
+
+  getHistory: async (id: string | number): Promise<any[]> => {
+    const response = await apiClient.get(`/fuel-records/${id}/history`);
+    return response.data.data || [];
   },
 };
 

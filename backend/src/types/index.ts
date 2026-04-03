@@ -285,6 +285,7 @@ export interface IDeliveryOrder {
   // Soft delete fields
   isDeleted: boolean;
   deletedAt?: Date;
+  editLock?: { lockedBy?: string | null; lockedAt?: Date | null; lockedUntil?: Date | null };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -306,6 +307,7 @@ export interface ILPOEntry {
   sn: number;
   date: string;
   actualDate?: Date;  // Full date with year for proper filtering
+  year?: number;      // Calendar year for LPO number scoping
   lpoNo: string;
   dieselAt: string;
   doSdo: string;
@@ -325,6 +327,7 @@ export interface ILPOEntry {
   currency?: string;          // Currency for this entry (USD or TZS)
   isCancelled?: boolean;
   cancelledAt?: Date | null;
+  editLock?: { lockedBy?: string | null; lockedAt?: Date | null; lockedUntil?: Date | null };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -515,6 +518,7 @@ export interface IFuelRecord {
   cancelledBy?: string;
   isDeleted: boolean;
   deletedAt?: Date;
+  editLock?: { lockedBy?: string | null; lockedAt?: Date | null; lockedUntil?: Date | null };
   createdAt: Date;
   updatedAt: Date;
 }

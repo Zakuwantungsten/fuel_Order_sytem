@@ -186,6 +186,8 @@ export const deliveryOrderValidation = {
     body('rateType').optional().isIn(['per_ton', 'fixed_total']).withMessage('Invalid rate type'),
     body('totalAmount').optional().isFloat({ min: 0 }).withMessage('Total amount must be a non-negative number'),
     body('editReason').optional().trim(),
+    body('clientUpdatedAt').optional().isISO8601().withMessage('clientUpdatedAt must be a valid ISO 8601 date'),
+    body('reason').optional().trim().isLength({ min: 10, max: 500 }).withMessage('Reason must be between 10 and 500 characters'),
   ],
 };
 
@@ -235,6 +237,8 @@ export const lpoEntryValidation = {
     body('referenceDo').optional().trim(),
     body('paymentMode').optional().isIn(['STATION', 'CASH', 'DRIVER_ACCOUNT']).withMessage('Invalid payment mode'),
     body('currency').optional().isIn(['USD', 'TZS']).withMessage('Invalid currency'),
+    body('clientUpdatedAt').optional().isISO8601().withMessage('clientUpdatedAt must be a valid ISO 8601 date'),
+    body('reason').optional().trim().isLength({ min: 10, max: 500 }).withMessage('Reason must be between 10 and 500 characters'),
   ],
 };
 
@@ -320,6 +324,8 @@ export const fuelRecordValidation = {
     body('balance').optional().isFloat().withMessage('Balance must be a number'),
     body('originalGoingFrom').optional().isString().trim(),
     body('originalGoingTo').optional().isString().trim(),
+    body('clientUpdatedAt').optional().isISO8601().withMessage('clientUpdatedAt must be a valid ISO 8601 date'),
+    body('reason').optional().trim().isLength({ min: 10, max: 500 }).withMessage('Reason must be between 10 and 500 characters'),
   ],
 };
 

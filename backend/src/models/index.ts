@@ -25,6 +25,7 @@ export { SecurityAlert, ISecurityAlertDocument } from './SecurityAlert';
 export { KnownDevice, IKnownDeviceDocument } from './KnownDevice';
 export { SecurityIncident, ISecurityIncidentDocument } from './SecurityIncident';
 export { ConditionalAccessPolicy, IConditionalAccessPolicyDocument } from './ConditionalAccessPolicy';
+export { Counter, ICounter } from './Counter';
 
 // Export fleet tracking models
 export { Checkpoint, ICheckpoint } from './Checkpoint';

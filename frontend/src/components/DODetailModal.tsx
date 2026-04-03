@@ -1,10 +1,12 @@
-import { X, Edit, Ban, Download } from 'lucide-react';
+import { X, Edit, Ban, Download, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatDate as formatSystemDate } from '../utils/timezone';
 import { DeliveryOrder } from '../types';
 import DeliveryNotePrint from './DeliveryNotePrint';
+import RecordTimeline from './RecordTimeline';
 import { useState } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { deliveryOrdersAPI } from '../services/api';
 
 interface DODetailModalProps {
   order: DeliveryOrder;
@@ -15,6 +17,7 @@ interface DODetailModalProps {
 
 const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   if (!isOpen) return null;
 
@@ -191,6 +194,32 @@ const DODetailModal = ({ order, isOpen, onClose, onEdit }: DODetailModalProps) =
           {/* Content - Show the actual DO form */}
           <div className="bg-white px-6 py-6 print:p-0 overflow-x-auto">
             <DeliveryNotePrint order={order} showOnScreen={true} />
+          </div>
+
+          {/* Audit History */}
+          <div className="border-t dark:border-gray-700">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="w-full flex items-center justify-between px-6 py-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors no-print"
+            >
+              <div className="flex items-center">
+                <Clock className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <span className="font-medium text-gray-900 dark:text-gray-100">Audit History</span>
+              </div>
+              {showHistory ? (
+                <ChevronUp className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              )}
+            </button>
+            {showHistory && (
+              <div className="px-6 py-4 dark:bg-gray-800">
+                <RecordTimeline
+                  fetchHistory={() => deliveryOrdersAPI.getHistory(order.id || (order as any)._id)}
+                  isOpen={showHistory}
+                />
+              </div>
+            )}
           </div>
 
           {/* Footer */}

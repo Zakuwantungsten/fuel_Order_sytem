@@ -22,6 +22,10 @@ const lpoEntrySchema = new Schema<ILPOEntryDocument>(
       required: [true, 'LPO number is required'],
       trim: true,
     },
+    year: {
+      type: Number,
+      default: () => new Date().getFullYear(),
+    },
     dieselAt: {
       type: String,
       required: [true, 'Diesel station is required'],
@@ -96,6 +100,12 @@ const lpoEntrySchema = new Schema<ILPOEntryDocument>(
       type: Date,
       default: null,
     },
+    // Soft edit lock — prevents concurrent edits with 5-min TTL
+    editLock: {
+      lockedBy: { type: String, default: null },
+      lockedAt: { type: Date, default: null },
+      lockedUntil: { type: Date, default: null },
+    },
   },
   {
     timestamps: true,
@@ -115,6 +125,7 @@ lpoEntrySchema.index({ referenceDo: 1 });
 lpoEntrySchema.index({ paymentMode: 1 });
 
 // Compound indexes for common queries (includes lpoNo)
+lpoEntrySchema.index({ lpoNo: 1, year: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
 lpoEntrySchema.index({ lpoNo: 1, date: -1 });
 lpoEntrySchema.index({ dieselAt: 1, date: -1 });
 lpoEntrySchema.index({ truckNo: 1, referenceDo: 1 }); // For fetching NIL entries by journey

@@ -4,6 +4,9 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { lpoEntryValidation, commonValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
+import { createEditLockHandlers } from '../controllers/editLockController';
+import { getResourceHistory } from '../controllers/historyController';
+import { LPOEntry } from '../models';
 
 const router = Router();
 
@@ -35,5 +38,13 @@ router.put(
   validate,
   asyncHandler(lpoEntryController.updateLPOEntry)
 );
+
+// Edit lock routes
+const lpoLock = createEditLockHandlers(LPOEntry, 'lpo_entries');
+router.post('/:id/lock', commonValidation.mongoId, validate, asyncHandler(lpoLock.acquireEditLock));
+router.delete('/:id/lock', commonValidation.mongoId, validate, asyncHandler(lpoLock.releaseEditLock));
+
+// Audit history route
+router.get('/:id/history', commonValidation.mongoId, validate, asyncHandler(getResourceHistory('lpo_entry')));
 
 export default router;

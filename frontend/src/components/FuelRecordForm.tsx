@@ -54,6 +54,12 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
   });
 
   const [lockedFields, setLockedFields] = useState<Set<string>>(new Set());
+  const [reason, setReason] = useState('');
+
+  const SENSITIVE_FIELDS = ['totalLts', 'extra'];
+  const hasSensitiveChange = initialData && SENSITIVE_FIELDS.some(
+    (f) => formData[f as keyof FuelRecord] !== initialData[f as keyof FuelRecord]
+  );
 
   useEffect(() => {
     if (initialData) {
@@ -199,7 +205,8 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    const submitData = hasSensitiveChange ? { ...formData, reason } : formData;
+    onSubmit(submitData);
     onClose();
   };
 
@@ -429,6 +436,27 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
               value={formData.balance || 0}
             />
           </div>
+
+          {/* Reason for sensitive field change */}
+          {hasSensitiveChange && (
+            <div className="col-span-full">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Reason for change <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Explain why you are modifying Total Ltrs or Extra (min 10 characters)"
+                rows={2}
+                className="w-full px-3 py-2 border rounded-md text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                required
+                minLength={10}
+              />
+              {reason.length > 0 && reason.length < 10 && (
+                <p className="text-xs text-red-500 mt-1">Reason must be at least 10 characters ({reason.length}/10)</p>
+              )}
+            </div>
+          )}
 
           {/* Form Actions */}
           <div className="flex justify-end space-x-3 pt-4 border-t dark:border-gray-700">

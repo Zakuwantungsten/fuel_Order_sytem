@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import mongoose, { ClientSession } from 'mongoose';
 import { matchedData } from 'express-validator';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../models';
 import { RouteConfig } from '../models/RouteConfig';
@@ -9,6 +10,7 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sa
 import { AuditService } from '../utils/auditService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { emitDataChange } from '../services/websocket';
+import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
@@ -82,9 +84,11 @@ const getCompanyBranding = async (): Promise<CompanyBranding> => {
 const cascadeUpdateToFuelRecord = async (
   originalDO: any,
   updatedData: any,
-  username: string
+  username: string,
+  session?: ClientSession
 ): Promise<{ updated: boolean; fuelRecordId?: string; changes?: string[]; routeNotificationCreated?: boolean }> => {
   const changes: string[] = [];
+  const opts = session ? { session } : {};
   
   try {
     // Skip cascade for SDO - they don't interact with fuel records
@@ -101,13 +105,13 @@ const cascadeUpdateToFuelRecord = async (
       fuelRecord = await FuelRecord.findOne({
         goingDo: originalDO.doNumber,
         isDeleted: false,
-      });
+      }).session(session || null);
     } else if (originalDO.importOrExport === 'EXPORT') {
       // Find fuel record where this DO is the returnDo
       fuelRecord = await FuelRecord.findOne({
         returnDo: originalDO.doNumber,
         isDeleted: false,
-      });
+      }).session(session || null);
     }
     
     if (!fuelRecord) {
@@ -328,7 +332,7 @@ const cascadeUpdateToFuelRecord = async (
       delete (updates as any)._needsRouteNotification;
       
       // Update fuel record
-      await FuelRecord.findByIdAndUpdate(fuelRecord._id, updates);
+      await FuelRecord.findByIdAndUpdate(fuelRecord._id, updates, opts);
       logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
       
       // Create notification if route was not found
@@ -366,8 +370,10 @@ const cascadeUpdateToFuelRecord = async (
 const cascadeCancelFuelRecord = async (
   deliveryOrder: any,
   cancellationReason: string,
-  username: string
+  username: string,
+  session?: ClientSession
 ): Promise<{ cancelled: boolean; fuelRecordId?: string; action?: string }> => {
+  const opts = session ? { session } : {};
   try {
     // Skip cascade for SDO - they don't interact with fuel records
     if (deliveryOrder.doType === 'SDO') {
@@ -384,7 +390,7 @@ const cascadeCancelFuelRecord = async (
         goingDo: deliveryOrder.doNumber,
         isDeleted: false,
         isCancelled: { $ne: true },
-      });
+      }).session(session || null);
       
       if (!fuelRecord) {
         logger.info(`No fuel record found for cancelled IMPORT DO ${deliveryOrder.doNumber}`);
@@ -398,7 +404,7 @@ const cascadeCancelFuelRecord = async (
         cancelledAt: new Date(),
         cancellationReason: `Going DO ${deliveryOrder.doNumber} cancelled: ${cancellationReason}`,
         cancelledBy: username,
-      });
+      }, opts);
       
       logger.info(`Fuel record ${fuelRecord._id} fully cancelled due to going DO ${deliveryOrder.doNumber} cancellation. Reason: ${cancellationReason}`);
       
@@ -410,7 +416,7 @@ const cascadeCancelFuelRecord = async (
         returnDo: deliveryOrder.doNumber,
         isDeleted: false,
         isCancelled: { $ne: true },
-      });
+      }).session(session || null);
       
       if (!fuelRecord) {
         logger.info(`No fuel record found for cancelled EXPORT DO ${deliveryOrder.doNumber}`);
@@ -431,7 +437,7 @@ const cascadeCancelFuelRecord = async (
         const goingDO = await DeliveryOrder.findOne({
           doNumber: fuelRecord.goingDo,
           isDeleted: false,
-        });
+        }).session(session || null);
         
         if (goingDO) {
           revertFrom = goingDO.destination; // For IMPORT, from is destination (e.g., Zambia)
@@ -510,7 +516,7 @@ const cascadeCancelFuelRecord = async (
         tangaReturn: 0,
       };
       
-      await FuelRecord.findByIdAndUpdate(fuelRecord._id, updateData);
+      await FuelRecord.findByIdAndUpdate(fuelRecord._id, updateData, opts);
       
       logger.info(`Fuel record ${fuelRecord._id} return DO ${deliveryOrder.doNumber} removed and reverted to going-only journey. From: ${revertFrom}, To: ${revertTo}. TotalLts: ${originalTotalLts}L → ${newTotalLts}L (deducted ${exportRouteLiters}L from export route). Balance recalculated: ${newBalance}L. Reason: ${cancellationReason}`);
       
@@ -531,17 +537,20 @@ const cascadeCancelFuelRecord = async (
 const cascadeToLPOEntries = async (
   doNumber: string,
   action: 'update' | 'cancel',
-  updates?: { truckNo?: string; destination?: string }
+  updates?: { truckNo?: string; destination?: string },
+  session?: ClientSession
 ): Promise<{ count: number }> => {
+  const opts = session ? { session } : {};
   try {
     if (action === 'cancel') {
-      // Mark LPO entries as cancelled
+      // Mark LPO entries as cancelled (NOT isDeleted — cancelled entries should remain queryable)
       const result = await LPOEntry.updateMany(
-        { doSdo: doNumber, isDeleted: false },
+        { doSdo: doNumber, isDeleted: false, isCancelled: { $ne: true } },
         { 
-          isDeleted: true, 
-          deletedAt: new Date() 
-        }
+          isCancelled: true, 
+          cancelledAt: new Date() 
+        },
+        opts
       );
       logger.info(`Cancelled ${result.modifiedCount} LPO entries for DO ${doNumber}`);
       return { count: result.modifiedCount };
@@ -554,7 +563,8 @@ const cascadeToLPOEntries = async (
       if (Object.keys(updateFields).length > 0) {
         const result = await LPOEntry.updateMany(
           { doSdo: doNumber, isDeleted: false },
-          updateFields
+          updateFields,
+          opts
         );
         logger.info(`Updated ${result.modifiedCount} LPO entries for DO ${doNumber}`);
         return { count: result.modifiedCount };
@@ -861,7 +871,7 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       message: 'Delivery order created successfully',
       data: deliveryOrder,
     });
-    emitDataChange('delivery_orders', 'create');
+    emitDataChange('delivery_orders', 'create', deliveryOrder.toObject());
     emitDataChange('fuel_records', 'update');
   } catch (error: any) {
     throw error;
@@ -876,7 +886,17 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     const { id } = req.params;
     const username = req.user?.username || 'system';
     const userRole = req.user?.role || 'user';
-    const payload = matchedData(req, { locations: ['body'] }) as any;
+    const { clientUpdatedAt, reason, ...rawPayload } = matchedData(req, { locations: ['body'] }) as any;
+
+    // Require justification when changing sensitive fields
+    const SENSITIVE_DO_FIELDS = ['tonnages', 'ratePerTon', 'destination', 'totalAmount'];
+    const hasSensitiveChange = SENSITIVE_DO_FIELDS.some(f => rawPayload[f] !== undefined);
+    if (hasSensitiveChange && (!reason || reason.length < 10)) {
+      throw new ApiError(400, 'A reason of at least 10 characters is required when changing tonnage, rate, or destination fields');
+    }
+
+    // Strip fields the caller’s role is not allowed to write
+    const payload = filterDeliveryOrderFields(rawPayload, userRole) as any;
 
     // Get the original DO first to track changes
     const originalDO = await DeliveryOrder.findOne({ _id: id, isDeleted: false }).lean();
@@ -928,18 +948,16 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       };
     }
 
-    // Update the delivery order
-    const deliveryOrder = await DeliveryOrder.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      updateData,
-      { new: true, runValidators: true }
-    );
-
-    if (!deliveryOrder) {
-      throw new ApiError(404, 'Delivery order not found');
+    // Build version-guarded filter
+    const updateFilter: any = { _id: id, isDeleted: false };
+    if (clientUpdatedAt) {
+      updateFilter.updatedAt = new Date(clientUpdatedAt);
     }
 
-    // Cascade updates to related records
+    // Run the DO update + all cascade operations inside a transaction
+    // so partial cascade failures roll back everything
+    const session = await mongoose.startSession();
+    let deliveryOrder: any;
     const cascadeResults: {
       fuelRecordUpdated: boolean;
       fuelRecordChanges: string[];
@@ -952,28 +970,49 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       lpoEntriesUpdated: 0,
     };
 
-    // Cascade to fuel records if relevant fields changed
-    if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
-      // Pass user role and userId in body for notification logic
-      const bodyWithRole = { ...payload, userRole, userId: req.user?.userId };
-      const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username);
-      cascadeResults.fuelRecordUpdated = fuelResult.updated;
-      cascadeResults.fuelRecordChanges = fuelResult.changes || [];
-      cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
-      
-      // Check if fuel record was locked due to missing route
-      if (fuelResult.routeNotificationCreated) {
-        cascadeResults.fuelRecordLocked = true;
-      }
-    }
+    try {
+      await session.withTransaction(async () => {
+        // Update the delivery order
+        deliveryOrder = await DeliveryOrder.findOneAndUpdate(
+          updateFilter,
+          updateData,
+          { new: true, runValidators: true, session }
+        );
 
-    // Cascade to LPO entries if truck or destination changed
-    if (changes.some(c => ['truckNo', 'destination'].includes(c.field))) {
-      const lpoResult = await cascadeToLPOEntries(originalDO.doNumber, 'update', {
-        truckNo: payload.truckNo,
-        destination: payload.destination,
+        if (!deliveryOrder) {
+          // Distinguish: version conflict vs deleted
+          const stillExists = await DeliveryOrder.exists({ _id: id, isDeleted: false });
+          if (stillExists && clientUpdatedAt) {
+            const current = await DeliveryOrder.findOne({ _id: id, isDeleted: false })
+              .select('updatedAt doNumber truckNo');
+            throw new ApiError(409, 'Delivery order was modified by another user since you opened it. Refresh to see the latest version.').withData({ current });
+          }
+          throw new ApiError(404, 'Delivery order not found');
+        }
+
+        // Cascade to fuel records if relevant fields changed
+        if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
+          const bodyWithRole = { ...payload, userRole, userId: req.user?.userId };
+          const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username, session);
+          cascadeResults.fuelRecordUpdated = fuelResult.updated;
+          cascadeResults.fuelRecordChanges = fuelResult.changes || [];
+          cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
+          if (fuelResult.routeNotificationCreated) {
+            cascadeResults.fuelRecordLocked = true;
+          }
+        }
+
+        // Cascade to LPO entries if truck or destination changed
+        if (changes.some(c => ['truckNo', 'destination'].includes(c.field))) {
+          const lpoResult = await cascadeToLPOEntries(originalDO.doNumber, 'update', {
+            truckNo: payload.truckNo,
+            destination: payload.destination,
+          }, session);
+          cascadeResults.lpoEntriesUpdated = lpoResult.count;
+        }
       });
-      cascadeResults.lpoEntriesUpdated = lpoResult.count;
+    } finally {
+      await session.endSession();
     }
 
     logger.info(`Delivery order updated: ${deliveryOrder.doNumber} by ${username}. Changes: ${JSON.stringify(changes)}`);
@@ -1003,7 +1042,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       data: deliveryOrder,
       cascadeResults,
     });
-    emitDataChange('delivery_orders', 'update');
+    emitDataChange('delivery_orders', 'update', deliveryOrder.toObject());
     emitDataChange('fuel_records', 'update');
     emitDataChange('lpo_entries', 'update');
   } catch (error: any) {
@@ -1032,32 +1071,9 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       throw new ApiError(400, 'Delivery order is already cancelled');
     }
 
-    // Update the DO with cancellation status
-    const deliveryOrder = await DeliveryOrder.findByIdAndUpdate(
-      id,
-      {
-        status: 'cancelled',
-        isCancelled: true,
-        cancelledAt: new Date(),
-        cancellationReason: cancellationReason,
-        cancelledBy: username,
-        $push: {
-          editHistory: {
-            editedAt: new Date(),
-            editedBy: username,
-            changes: [{ field: 'status', oldValue: 'active', newValue: 'cancelled' }],
-            reason: cancellationReason,
-          },
-        },
-      },
-      { new: true }
-    );
-
-    if (!deliveryOrder) {
-      throw new ApiError(404, 'Delivery order not found');
-    }
-
-    // Cascade cancellation to related records
+    // Run DO cancellation + all cascade operations inside a transaction
+    const session = await mongoose.startSession();
+    let deliveryOrder: any;
     const cascadeResults: {
       fuelRecordCancelled: boolean;
       fuelRecordId: string;
@@ -1066,29 +1082,62 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     } = {
       fuelRecordCancelled: false,
       fuelRecordId: '',
-      fuelRecordAction: '', // 'fully_cancelled' or 'return_do_removed'
+      fuelRecordAction: '',
       lpoEntriesCancelled: 0,
     };
+    let fuelAction: string | undefined;
 
-    // Cancel related fuel record
-    const fuelResult = await cascadeCancelFuelRecord(deliveryOrder, cancellationReason, username);
-    cascadeResults.fuelRecordCancelled = fuelResult.cancelled;
-    cascadeResults.fuelRecordId = fuelResult.fuelRecordId || '';
-    cascadeResults.fuelRecordAction = fuelResult.action || '';
+    try {
+      await session.withTransaction(async () => {
+        // Update the DO with cancellation status
+        deliveryOrder = await DeliveryOrder.findByIdAndUpdate(
+          id,
+          {
+            status: 'cancelled',
+            isCancelled: true,
+            cancelledAt: new Date(),
+            cancellationReason: cancellationReason,
+            cancelledBy: username,
+            $push: {
+              editHistory: {
+                editedAt: new Date(),
+                editedBy: username,
+                changes: [{ field: 'status', oldValue: 'active', newValue: 'cancelled' }],
+                reason: cancellationReason,
+              },
+            },
+          },
+          { new: true, session }
+        );
 
-    // Cancel related LPO entries
-    const lpoResult = await cascadeToLPOEntries(deliveryOrder.doNumber, 'cancel');
-    cascadeResults.lpoEntriesCancelled = lpoResult.count;
+        if (!deliveryOrder) {
+          throw new ApiError(404, 'Delivery order not found');
+        }
+
+        // Cancel related fuel record
+        const fuelResult = await cascadeCancelFuelRecord(deliveryOrder, cancellationReason, username, session);
+        cascadeResults.fuelRecordCancelled = fuelResult.cancelled;
+        cascadeResults.fuelRecordId = fuelResult.fuelRecordId || '';
+        cascadeResults.fuelRecordAction = fuelResult.action || '';
+        fuelAction = fuelResult.action;
+
+        // Cancel related LPO entries
+        const lpoResult = await cascadeToLPOEntries(deliveryOrder.doNumber, 'cancel', undefined, session);
+        cascadeResults.lpoEntriesCancelled = lpoResult.count;
+      });
+    } finally {
+      await session.endSession();
+    }
 
     // Generate appropriate message based on what happened
     let message = 'Delivery order cancelled successfully';
-    if (fuelResult.action === 'fully_cancelled') {
+    if (fuelAction === 'fully_cancelled') {
       message += '. Associated fuel record was fully cancelled.';
-    } else if (fuelResult.action === 'return_do_removed') {
+    } else if (fuelAction === 'return_do_removed') {
       message += '. Return DO removed from fuel record (going journey preserved).';
     }
 
-    logger.info(`Delivery order cancelled: ${deliveryOrder.doNumber} by ${username}. Reason: ${reason}. Fuel action: ${fuelResult.action}`);
+    logger.info(`Delivery order cancelled: ${deliveryOrder.doNumber} by ${username}. Reason: ${reason}. Fuel action: ${fuelAction}`);
 
     await AuditService.log({
       userId: req.user?.userId,
@@ -1120,23 +1169,64 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 export const deleteDeliveryOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const username = req.user?.username || 'system';
 
-    const deliveryOrder = await DeliveryOrder.findByIdAndUpdate(
-      id,
-      { isDeleted: true, deletedAt: new Date() },
-      { new: true }
-    );
-
-    if (!deliveryOrder) {
+    // Read the DO first so we know which collections to cascade to
+    const originalDO = await DeliveryOrder.findOne({ _id: id, isDeleted: false }).lean();
+    if (!originalDO) {
       throw new ApiError(404, 'Delivery order not found');
     }
 
-    logger.info(`Delivery order deleted: ${deliveryOrder.doNumber} by ${req.user?.username}`);
+    const session = await mongoose.startSession();
+    let deliveryOrder: any;
+
+    try {
+      await session.withTransaction(async () => {
+        // Soft-delete the DO
+        deliveryOrder = await DeliveryOrder.findByIdAndUpdate(
+          id,
+          { isDeleted: true, deletedAt: new Date() },
+          { new: true, session }
+        );
+
+        if (!deliveryOrder) {
+          throw new ApiError(404, 'Delivery order not found');
+        }
+
+        // Cascade: null out the DO reference on the linked FuelRecord
+        if (originalDO.doType !== 'SDO') {
+          if (originalDO.importOrExport === 'IMPORT') {
+            await FuelRecord.updateMany(
+              { goingDo: originalDO.doNumber, isDeleted: false },
+              { $set: { goingDo: null } },
+              { session }
+            );
+          } else if (originalDO.importOrExport === 'EXPORT') {
+            await FuelRecord.updateMany(
+              { returnDo: originalDO.doNumber, isDeleted: false },
+              { $set: { returnDo: null } },
+              { session }
+            );
+          }
+        }
+
+        // Cascade: soft-delete related LPO entries
+        await LPOEntry.updateMany(
+          { doSdo: originalDO.doNumber, isDeleted: false },
+          { $set: { isDeleted: true, deletedAt: new Date() } },
+          { session }
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    logger.info(`Delivery order deleted: ${deliveryOrder.doNumber} by ${username}. Cascaded to fuel records and LPO entries.`);
 
     // Log audit trail
     await AuditService.logDelete(
       req.user?.userId || 'system',
-      req.user?.username || 'system',
+      username,
       'DeliveryOrder',
       deliveryOrder._id.toString(),
       { doNumber: deliveryOrder.doNumber, truckNo: deliveryOrder.truckNo },
@@ -1149,6 +1239,7 @@ export const deleteDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     });
     emitDataChange('delivery_orders', 'delete');
     emitDataChange('fuel_records', 'update');
+    emitDataChange('lpo_entries', 'update');
   } catch (error: any) {
     throw error;
   }

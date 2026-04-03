@@ -1,20 +1,26 @@
 import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { subscribeToDataChanges, unsubscribeFromDataChanges } from '../services/websocket';
 
 /**
  * Subscribe to real-time data change events for one or more collections.
- * When any user creates/updates/deletes data in a watched collection,
- * the provided refresh callback is called silently (no loading spinner).
+ * When the server pushes a record payload, it is injected directly into
+ * the React Query cache via setQueryData (bypasses staleTime). List queries
+ * are invalidated so the next render fetches fresh data.
  *
- * @param collections - Collection name(s) to watch (e.g. 'fuel_records', ['fuel_records', 'lpo_entries'])
- * @param onRefresh - Callback to silently re-fetch data. Should NOT set loading=true.
- * @param id - Unique subscriber ID (defaults to collections joined)
+ * Falls back to calling onRefresh() when no record payload is available
+ * (backward-compatible with controllers that haven't been updated yet).
+ *
+ * @param collections - Collection name(s) to watch
+ * @param onRefresh - Fallback callback to re-fetch data
+ * @param id - Unique subscriber ID
  */
 export function useRealtimeSync(
   collections: string | string[],
   onRefresh: () => void,
   id?: string
 ) {
+  const queryClient = useQueryClient();
   const refreshRef = useRef(onRefresh);
   useEffect(() => {
     refreshRef.current = onRefresh;
@@ -25,9 +31,21 @@ export function useRealtimeSync(
 
   useEffect(() => {
     subscribeToDataChanges((event) => {
-      if (cols.includes(event.collection)) {
-        refreshRef.current();
+      if (!cols.includes(event.collection)) return;
+
+      if (event.record && (event.action === 'update' || event.action === 'create')) {
+        // Inject the record directly into the per-record cache entry
+        const recordId = event.record._id || event.record.id;
+        if (recordId) {
+          queryClient.setQueryData([event.collection, recordId], event.record);
+        }
       }
+
+      // Always invalidate list queries so they refetch in the background
+      cols.forEach(col => queryClient.invalidateQueries({ queryKey: [col] }));
+
+      // Call the legacy refresh callback as fallback
+      refreshRef.current();
     }, subId);
 
     return () => {

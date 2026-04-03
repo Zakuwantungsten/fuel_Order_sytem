@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import { matchedData } from 'express-validator';
 import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
@@ -7,6 +8,7 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, fo
 import { AuditService } from '../utils/auditService';
 import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
 import { emitDataChange } from '../services/websocket';
+import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
 
 /**
  * Check if a journey is complete based on return checkpoints
@@ -66,49 +68,54 @@ async function checkAndActivateNextJourney(fuelRecord: any, username: string): P
  * Activate the next queued journey for a truck
  */
 async function activateNextQueuedJourney(truckNo: string, username: string): Promise<void> {
+  const session = await mongoose.startSession();
   try {
-    const nextJourney = await FuelRecord.findOne({
-      truckNo,
-      journeyStatus: 'queued',
-      isDeleted: false,
-    }).sort({ queueOrder: 1 });
+    await session.withTransaction(async () => {
+      const nextJourney = await FuelRecord.findOne({
+        truckNo,
+        journeyStatus: 'queued',
+        isDeleted: false,
+      }).sort({ queueOrder: 1 }).session(session);
 
-    if (!nextJourney) {
-      logger.info(`No queued journeys found for truck ${truckNo}`);
-      return;
-    }
+      if (!nextJourney) {
+        logger.info(`No queued journeys found for truck ${truckNo}`);
+        return;
+      }
 
-    // Activate the next journey
-    nextJourney.journeyStatus = 'active';
-    nextJourney.activatedAt = new Date();
-    await nextJourney.save();
+      // Activate the next journey
+      await FuelRecord.findByIdAndUpdate(
+        nextJourney._id,
+        { journeyStatus: 'active', activatedAt: new Date() },
+        { session }
+      );
 
-    logger.info(
-      `Activated queued journey ${nextJourney.goingDo} for truck ${truckNo} (was position ${nextJourney.queueOrder})`
-    );
+      logger.info(
+        `Activated queued journey ${nextJourney.goingDo} for truck ${truckNo} (was position ${nextJourney.queueOrder})`
+      );
 
-    // TODO: Create notification for fuel order makers
-    // await createJourneyActivatedNotification(nextJourney._id.toString(), { ... }, username);
+      // Reorder remaining queued journeys with bulk write (atomic)
+      const remainingQueued = await FuelRecord.find({
+        truckNo,
+        journeyStatus: 'queued',
+        isDeleted: false,
+      }).sort({ queueOrder: 1 }).session(session);
 
-    // Reorder remaining queued journeys
-    const remainingQueued = await FuelRecord.find({
-      truckNo,
-      journeyStatus: 'queued',
-      isDeleted: false,
-    }).sort({ queueOrder: 1 });
-
-    // Update queue order for remaining journeys
-    for (let i = 0; i < remainingQueued.length; i++) {
-      remainingQueued[i].queueOrder = i + 1;
-      await remainingQueued[i].save();
-    }
-
-    if (remainingQueued.length > 0) {
-      logger.info(`Reordered ${remainingQueued.length} remaining queued journey(s) for truck ${truckNo}`);
-    }
+      if (remainingQueued.length > 0) {
+        const bulkOps = remainingQueued.map((r, i) => ({
+          updateOne: {
+            filter: { _id: r._id },
+            update: { $set: { queueOrder: i + 1 } },
+          },
+        }));
+        await FuelRecord.bulkWrite(bulkOps, { session });
+        logger.info(`Reordered ${remainingQueued.length} remaining queued journey(s) for truck ${truckNo}`);
+      }
+    });
   } catch (error: any) {
     logger.error(`Error activating next journey for ${truckNo}:`, error);
     throw error;
+  } finally {
+    await session.endSession();
   }
 }
 
@@ -655,7 +662,7 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
         : 'Fuel record created successfully',
       data: fuelRecord,
     });
-    emitDataChange('fuel_records', 'create');
+    emitDataChange('fuel_records', 'create', fuelRecord.toObject());
   } catch (error: any) {
     throw error;
   }
@@ -669,12 +676,25 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     const { id } = req.params;
     const updates = matchedData(req, { locations: ['body'] }) as any;
 
+    // Extract version token and reason — must NOT be written to the DB
+    const { clientUpdatedAt, reason, ...rawUpdates } = updates;
+
+    // Require justification when changing sensitive fields
+    const SENSITIVE_FUEL_FIELDS = ['totalLts', 'extra', 'isLocked'];
+    const hasSensitiveChange = SENSITIVE_FUEL_FIELDS.some(f => rawUpdates[f] !== undefined);
+    if (hasSensitiveChange && (!reason || reason.length < 10)) {
+      throw new ApiError(400, 'A reason of at least 10 characters is required when changing quantity or lock fields');
+    }
+
+    // Strip fields the caller’s role is not allowed to write
+    const safeUpdates = filterFuelRecordFields(rawUpdates, req.user?.role || 'fuel_order_maker') as any;
+
     // Auto-populate month from date if date is provided
-    if (updates.date && !updates.month) {
-      const date = new Date(updates.date);
+    if (safeUpdates.date && !safeUpdates.month) {
+      const date = new Date(safeUpdates.date);
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                           'July', 'August', 'September', 'October', 'November', 'December'];
-      updates.month = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+      safeUpdates.month = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
     }
 
     // Check if we're filling in missing configuration
@@ -684,8 +704,8 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     }
 
     const wasLocked = existingRecord.isLocked;
-    const fillingTotalLiters = existingRecord.totalLts === null && updates.totalLts !== null && updates.totalLts !== undefined;
-    const fillingExtraFuel = existingRecord.extra === null && updates.extra !== null && updates.extra !== undefined;
+    const fillingTotalLiters = existingRecord.totalLts === null && safeUpdates.totalLts !== null && safeUpdates.totalLts !== undefined;
+    const fillingExtraFuel = existingRecord.extra === null && safeUpdates.extra !== null && safeUpdates.extra !== undefined;
 
     // Check if any balance-affecting fields are being updated
     const checkpointFields = [
@@ -695,20 +715,20 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     ];
     
     const balanceFieldsUpdated = (
-      updates.totalLts !== undefined ||
-      updates.extra !== undefined ||
-      checkpointFields.some(field => updates[field] !== undefined)
+      safeUpdates.totalLts !== undefined ||
+      safeUpdates.extra !== undefined ||
+      checkpointFields.some(field => safeUpdates[field] !== undefined)
     );
 
     // Auto-unlock if all required fields are now provided
     if (wasLocked && (fillingTotalLiters || fillingExtraFuel)) {
-      const willHaveTotalLts = fillingTotalLiters ? updates.totalLts : existingRecord.totalLts;
-      const willHaveExtra = fillingExtraFuel ? updates.extra : existingRecord.extra;
+      const willHaveTotalLts = fillingTotalLiters ? safeUpdates.totalLts : existingRecord.totalLts;
+      const willHaveExtra = fillingExtraFuel ? safeUpdates.extra : existingRecord.extra;
 
       // Unlock if both values are now filled (not null)
       if (willHaveTotalLts !== null && willHaveExtra !== null) {
-        updates.isLocked = false;
-        updates.pendingConfigReason = null;
+        safeUpdates.isLocked = false;
+        safeUpdates.pendingConfigReason = null;
         logger.info(`Unlocking fuel record ${id} - all required fields now provided`);
       }
     }
@@ -717,12 +737,12 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     // This ensures balance is correct whether record is locked or unlocked
     if (balanceFieldsUpdated) {
       // Get the final values (use updated values if provided, otherwise existing)
-      const finalTotalLts = updates.totalLts !== undefined ? updates.totalLts : existingRecord.totalLts;
-      const finalExtra = updates.extra !== undefined ? updates.extra : existingRecord.extra;
+      const finalTotalLts = safeUpdates.totalLts !== undefined ? safeUpdates.totalLts : existingRecord.totalLts;
+      const finalExtra = safeUpdates.extra !== undefined ? safeUpdates.extra : existingRecord.extra;
       
       // Get all checkpoint values (updated or existing)
       const getFinalValue = (field: string) => {
-        return updates[field] !== undefined ? updates[field] : (existingRecord as any)[field];
+        return safeUpdates[field] !== undefined ? safeUpdates[field] : (existingRecord as any)[field];
       };
       
       // Calculate total fuel (handle null values for locked records)
@@ -734,18 +754,32 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       }, 0);
       
       // Apply formula: Balance = (Total + Extra) - (All Checkpoints)
-      updates.balance = totalFuel - totalCheckpoints;
+      safeUpdates.balance = totalFuel - totalCheckpoints;
       
-      logger.info(`Recalculating balance for fuel record ${id}: (${finalTotalLts || 0} + ${finalExtra || 0}) - ${totalCheckpoints} = ${updates.balance}L`);
+      logger.info(`Recalculating balance for fuel record ${id}: (${finalTotalLts || 0} + ${finalExtra || 0}) - ${totalCheckpoints} = ${safeUpdates.balance}L`);
+    }
+
+    // Build version-guarded filter — if client sent the version it read, enforce it
+    const updateFilter: any = { _id: id, isDeleted: false };
+    if (clientUpdatedAt) {
+      updateFilter.updatedAt = new Date(clientUpdatedAt);
     }
 
     const fuelRecord = await FuelRecord.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      updates,
+      updateFilter,
+      safeUpdates,
       { new: true, runValidators: true }
     );
 
     if (!fuelRecord) {
+      // Distinguish: version conflict vs record deleted
+      const stillExists = await FuelRecord.exists({ _id: id, isDeleted: false });
+      if (stillExists && clientUpdatedAt) {
+        // Version mismatch — another user saved in between
+        const current = await FuelRecord.findOne({ _id: id, isDeleted: false })
+          .select('updatedAt truckNo goingDo');
+        throw new ApiError(409, 'Record was modified by another user since you opened it. Refresh to see the latest version.').withData({ current });
+      }
       throw new ApiError(404, 'Fuel record not found');
     }
 
@@ -797,7 +831,7 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
         : 'Fuel record updated successfully',
       data: fuelRecord,
     });
-    emitDataChange('fuel_records', 'update');
+    emitDataChange('fuel_records', 'update', fuelRecord.toObject());
   } catch (error: any) {
     throw error;
   }

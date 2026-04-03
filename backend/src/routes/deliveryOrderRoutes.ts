@@ -117,6 +117,10 @@ router.post(
   asyncHandler(deliveryOrderController.createBulkDOFailureNotification)
 );
 
+import { createEditLockHandlers } from '../controllers/editLockController';
+import { getResourceHistory } from '../controllers/historyController';
+import { DeliveryOrder } from '../models';
+
 // Delete route (requires appropriate role)
 router.delete(
   '/:id',
@@ -125,5 +129,13 @@ router.delete(
   validate,
   asyncHandler(deliveryOrderController.deleteDeliveryOrder)
 );
+
+// Edit lock routes
+const doLock = createEditLockHandlers(DeliveryOrder, 'delivery_orders');
+router.post('/:id/lock', commonValidation.mongoId, validate, asyncHandler(doLock.acquireEditLock));
+router.delete('/:id/lock', commonValidation.mongoId, validate, asyncHandler(doLock.releaseEditLock));
+
+// Audit history route
+router.get('/:id/history', commonValidation.mongoId, validate, asyncHandler(getResourceHistory('delivery_order')));
 
 export default router;

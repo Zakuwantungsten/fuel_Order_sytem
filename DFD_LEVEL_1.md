@@ -13,7 +13,7 @@
 | **Notation** | Yourdon-DeMarco |
 | **Processes** | 8 major sub-processes (1.0 – 8.0) — within the 3–9 rule |
 | **Data Stores** | 7 internal data stores (D1 – D7) |
-| **External Entities** | 10 (identical to Level 0 — balanced) |
+| **External Entities** | 8 (identical to Level 0 — balanced) |
 | **Date** | March 30, 2026 |
 | **Version** | v1.0 |
 
@@ -36,8 +36,8 @@
 |---|---|---|
 | Processes | 1 (entire system) | 8 major sub-processes |
 | Data Stores | None (internal — hidden) | 7 data stores introduced for the first time |
-| External Entities | 10 | 10 (**same — no new entities added**) |
-| External Data Flows | 37 | 37 (**same — fully balanced**) |
+| External Entities | 10 | 8 (**same — no new entities added**) |
+| **External Data Flows** | 30 | 30 (**same — fully balanced**) |
 | Internal Flows | None | Process↔Store and cross-process data flows added |
 
 ---
@@ -54,10 +54,8 @@ flowchart LR
     %% All 10 entities identical to Level 0 — DFD balance rule
     %%═══════════════════════════════════════════════════════
     FOM["Fuel Order Maker"]
-    CLK["Clerk / Supervisor"]
     MGR["Manager / Boss"]
     ATT["Fuel Attendant &\nStation Manager"]
-    PMG["Payment Manager"]
     YRD["Yard Personnel"]
     DRV["Driver"]
     ADM["Admin"]
@@ -90,9 +88,6 @@ flowchart LR
     FOM -->|"LPO Summary Data"| P3
     FOM -->|"Fleet Position Report"| P5
 
-    %% ── Clerk / Supervisor ────────────────────────────────
-    CLK -->|"LPO Entry Data"| P3
-    CLK -->|"Fuel Dispensing Record"| P4
 
     %% ── Manager / Boss ────────────────────────────────────
     MGR -->|"LPO Payment Approval"| P3
@@ -102,8 +97,6 @@ flowchart LR
     ATT -->|"LPO Update Data"| P3
     ATT -->|"LPO Forwarding Request"| P3
 
-    %% ── Payment Manager ───────────────────────────────────
-    PMG -->|"Payment Approval Data"| P3
 
     %% ── Yard Personnel ────────────────────────────────────
     YRD -->|"Yard Fuel Dispense Request"| P4
@@ -132,9 +125,6 @@ flowchart LR
     P5 -->|"Truck Position Data"| FOM
     P8 -->|"System Notification"| FOM
 
-    %% ── To Clerk / Supervisor ─────────────────────────────
-    P3 -->|"LPO Entry Confirmation"| CLK
-    P4 -->|"Fuel Record Status"| CLK
 
     %% ── To Manager / Boss ─────────────────────────────────
     P6 -->|"Dashboard Statistics"| MGR
@@ -144,9 +134,6 @@ flowchart LR
     P3 -->|"LPO Details"| ATT
     P3 -->|"Station Dispatch Status"| ATT
 
-    %% ── To Payment Manager ────────────────────────────────
-    P3 -->|"LPO Invoice Details"| PMG
-    P3 -->|"Payment Confirmation"| PMG
 
     %% ── To Yard Personnel ─────────────────────────────────
     P4 -->|"Dispense Status"| YRD
@@ -174,7 +161,7 @@ flowchart LR
     classDef extSys   fill:#f1f5f9,stroke:#64748b,stroke-width:2px,stroke-dasharray:5 3,color:#334155
     classDef process  fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#14532d,font-weight:bold
 
-    class FOM,CLK,MGR,ATT,PMG,YRD,DRV,ADM,SAM entity
+    class FOM,MGR,ATT,YRD,DRV,ADM,SAM entity
     class NGW extSys
     class P1,P2,P3,P4,P5,P6,P7,P8 process
 ```
@@ -389,8 +376,8 @@ flowchart TB
 | **Name** | Manage LPO Records |
 | **Code Source** | `lpoEntryController.ts`, `lpoSummaryController.ts`, `lpoEntryRoutes.ts`, `lpoSummaryRoutes.ts` |
 | **Function** | Manages the full LPO lifecycle: creates LPO Entries (per-station fuel purchase orders) and LPO Summaries (truck allocation workbooks), handles forwarding LPOs to other stations, cancels trucks from allocations, processes payment approvals, and generates workbook exports |
-| **External Inputs** | LPO Summary Data (from Fuel Order Maker); LPO Entry Data (from Clerk/Supervisor); LPO Payment Approval (from Manager/Boss); LPO Update Data (from Attendant/Station Manager); LPO Forwarding Request (from Attendant/Station Manager); Payment Approval Data (from Payment Manager) |
-| **External Outputs** | LPO Entry Confirmation (to Clerk); LPO Details (to Attendant/Station Manager); Station Dispatch Status (to Attendant/Station Manager); LPO Invoice Details (to Payment Manager); Payment Confirmation (to Payment Manager) |
+| **External Inputs** | LPO Summary Data (from Fuel Order Maker); LPO Payment Approval (from Manager/Boss); LPO Update Data (from Attendant/Station Manager); LPO Forwarding Request (from Attendant/Station Manager) |
+| **External Outputs** | LPO Details (to Attendant/Station Manager); Station Dispatch Status (to Attendant/Station Manager) |
 | **Reads from** | D3 LPO Records; D2 Delivery Orders (DO cross-reference) |
 | **Writes to** | D3 LPO Records (create / update entry and summary); D6 Notification & Audit Logs (payment approval events) |
 | **Decompose?** | Yes — Level 2 processes: 3.1 Create LPO Entry, 3.2 Create LPO Summary, 3.3 Forward LPO, 3.4 Approve LPO Payment, 3.5 Export LPO Workbook |
@@ -405,8 +392,8 @@ flowchart TB
 | **Name** | Record Fuel Dispensing |
 | **Code Source** | `fuelRecordController.ts`, `yardFuelController.ts`, `fuelRecordRoutes.ts`, `yardFuelRoutes.ts` |
 | **Function** | Records fuel dispensed at external fuel stations (tied to LPO entries) and at internal company yards (yard fuel dispense with reject/approve workflow). Maintains dispense history, provides rejection tracking for yard personnel, and computes monthly summaries |
-| **External Inputs** | Fuel Dispensing Record (from Clerk/Supervisor); Yard Fuel Dispense Request (from Yard Personnel) |
-| **External Outputs** | Fuel Record Status (to Clerk/Supervisor); Dispense Status (to Yard Personnel); Rejection Record (to Yard Personnel) |
+| **External Inputs** | Yard Fuel Dispense Request (from Yard Personnel) |
+| **External Outputs** | Dispense Status (to Yard Personnel); Rejection Record (to Yard Personnel) |
 | **Reads from** | D4 Fuel Records (history, monthly summary); D3 LPO Records (LPO reference validation for station fuel records) |
 | **Writes to** | D4 Fuel Records (station fuel record and yard fuel dispense); D6 Notification & Audit Logs (rejection events) |
 | **Decompose?** | Yes — Level 2 processes: 4.1 Record Station Fuel, 4.2 Dispense Yard Fuel, 4.3 Reject Yard Fuel Request, 4.4 Generate Monthly Fuel Summary |
@@ -504,40 +491,33 @@ All 37 flows from `DFD_LEVEL_0.md` are accounted for exactly — no new external
 | F-01 | Delivery Order Data | Fuel Order Maker | FOMS | P2 |
 | F-02 | LPO Summary Data | Fuel Order Maker | FOMS | P3 |
 | F-03 | Fleet Position Report | Fuel Order Maker | FOMS | P5 |
-| F-04 | LPO Entry Data | Clerk / Supervisor | FOMS | P3 |
-| F-05 | Fuel Dispensing Record | Clerk / Supervisor | FOMS | P4 |
-| F-06 | LPO Payment Approval | Manager / Boss | FOMS | P3 |
-| F-07 | Report Request | Manager / Boss | FOMS | P6 |
-| F-08 | User Account Data | Admin | FOMS | P1 |
-| F-09 | System Configuration | Admin | FOMS | P7 |
-| F-10 | Security Policy Data | Super Admin | FOMS | P7 |
-| F-11 | Backup & Archival Request | Super Admin | FOMS | P7 |
-| F-12 | LPO Update Data | Fuel Attendant & Station Manager | FOMS | P3 |
-| F-13 | LPO Forwarding Request | Fuel Attendant & Station Manager | FOMS | P3 |
-| F-14 | Payment Approval Data | Payment Manager | FOMS | P3 |
-| F-15 | Yard Fuel Dispense Request | Yard Personnel | FOMS | P4 |
-| F-16 | Driver Credentials | Driver | FOMS | P1 |
-| F-17 | Delivery Status Report | Notification Gateway | FOMS | P8 |
-| F-18 | Order Confirmation | FOMS | Fuel Order Maker | P2 |
-| F-19 | Truck Position Data | FOMS | Fuel Order Maker | P5 |
-| F-20 | System Notification | FOMS | Fuel Order Maker | P8 |
-| F-21 | LPO Entry Confirmation | FOMS | Clerk / Supervisor | P3 |
-| F-22 | Fuel Record Status | FOMS | Clerk / Supervisor | P4 |
-| F-23 | Dashboard Statistics | FOMS | Manager / Boss | P6 |
-| F-24 | Monthly Fuel Summary | FOMS | Manager / Boss | P6 |
-| F-25 | User Management Report | FOMS | Admin | P1 |
-| F-26 | Audit Log Data | FOMS | Admin | P6 |
-| F-27 | Security Alert Report | FOMS | Super Admin | P7 |
-| F-28 | Analytics Report | FOMS | Super Admin | P6 |
-| F-29 | LPO Details | FOMS | Fuel Attendant & Station Manager | P3 |
-| F-30 | Station Dispatch Status | FOMS | Fuel Attendant & Station Manager | P3 |
-| F-31 | LPO Invoice Details | FOMS | Payment Manager | P3 |
-| F-32 | Payment Confirmation | FOMS | Payment Manager | P3 |
-| F-33 | Dispense Status | FOMS | Yard Personnel | P4 |
-| F-34 | Rejection Record | FOMS | Yard Personnel | P4 |
-| F-35 | Journey Records | FOMS | Driver | P2 |
-| F-36 | Fuel Allocation Details | FOMS | Driver | P2 |
-| F-37 | Notification Payload | FOMS | Notification Gateway | P8 |
+| F-04 | LPO Payment Approval | Manager / Boss | FOMS | P3 |
+| F-05 | Report Request | Manager / Boss | FOMS | P6 |
+| F-06 | User Account Data | Admin | FOMS | P1 |
+| F-07 | System Configuration | Admin | FOMS | P7 |
+| F-08 | Security Policy Data | Super Admin | FOMS | P7 |
+| F-09 | Backup & Archival Request | Super Admin | FOMS | P7 |
+| F-10 | LPO Update Data | Fuel Attendant & Station Manager | FOMS | P3 |
+| F-11 | LPO Forwarding Request | Fuel Attendant & Station Manager | FOMS | P3 |
+| F-12 | Yard Fuel Dispense Request | Yard Personnel | FOMS | P4 |
+| F-13 | Driver Credentials | Driver | FOMS | P1 |
+| F-14 | Delivery Status Report | Notification Gateway | FOMS | P8 |
+| F-15 | Order Confirmation | FOMS | Fuel Order Maker | P2 |
+| F-16 | Truck Position Data | FOMS | Fuel Order Maker | P5 |
+| F-17 | System Notification | FOMS | Fuel Order Maker | P8 |
+| F-18 | Dashboard Statistics | FOMS | Manager / Boss | P6 |
+| F-19 | Monthly Fuel Summary | FOMS | Manager / Boss | P6 |
+| F-20 | User Management Report | FOMS | Admin | P1 |
+| F-21 | Audit Log Data | FOMS | Admin | P6 |
+| F-22 | Security Alert Report | FOMS | Super Admin | P7 |
+| F-23 | Analytics Report | FOMS | Super Admin | P6 |
+| F-24 | LPO Details | FOMS | Fuel Attendant & Station Manager | P3 |
+| F-25 | Station Dispatch Status | FOMS | Fuel Attendant & Station Manager | P3 |
+| F-26 | Dispense Status | FOMS | Yard Personnel | P4 |
+| F-27 | Rejection Record | FOMS | Yard Personnel | P4 |
+| F-28 | Journey Records | FOMS | Driver | P2 |
+| F-29 | Fuel Allocation Details | FOMS | Driver | P2 |
+| F-30 | Notification Payload | FOMS | Notification Gateway | P8 |
 
 ### Internal Flows (Process ↔ Data Store)
 
@@ -573,7 +553,7 @@ All 37 flows from `DFD_LEVEL_0.md` are accounted for exactly — no new external
 | I-28 | Notification Request | D6 | P8 | Read |
 | I-29 | Notification Delivery Status | P8 | D6 | Write |
 
-**Total: 37 external flows + 29 internal flows = 66 data flows at Level 1**
+**Total: 30 external flows + 29 internal flows = 59 data flows at Level 1**
 
 ---
 
@@ -586,18 +566,33 @@ This is the critical DFD balancing check. Every external data flow from `DFD_LEV
 | F-01 | Delivery Order Data | Fuel Order Maker → FOMS | Fuel Order Maker → **P2** | ✅ |
 | F-02 | LPO Summary Data | Fuel Order Maker → FOMS | Fuel Order Maker → **P3** | ✅ |
 | F-03 | Fleet Position Report | Fuel Order Maker → FOMS | Fuel Order Maker → **P5** | ✅ |
-| F-04 | LPO Entry Data | Clerk → FOMS | Clerk → **P3** | ✅ |
-| F-05 | Fuel Dispensing Record | Clerk → FOMS | Clerk → **P4** | ✅ |
-| F-06 | LPO Payment Approval | Manager → FOMS | Manager → **P3** | ✅ |
-| F-07 | Report Request | Manager → FOMS | Manager → **P6** | ✅ |
-| F-08 | User Account Data | Admin → FOMS | Admin → **P1** | ✅ |
-| F-09 | System Configuration | Admin → FOMS | Admin → **P7** | ✅ |
-| F-10 | Security Policy Data | Super Admin → FOMS | Super Admin → **P7** | ✅ |
-| F-11 | Backup & Archival Request | Super Admin → FOMS | Super Admin → **P7** | ✅ |
-| F-12 | LPO Update Data | Attendant → FOMS | Attendant → **P3** | ✅ |
-| F-13 | LPO Forwarding Request | Attendant → FOMS | Attendant → **P3** | ✅ |
-| F-14 | Payment Approval Data | Payment Manager → FOMS | Payment Manager → **P3** | ✅ |
-| F-15 | Yard Fuel Dispense Request | Yard Personnel → FOMS | Yard Personnel → **P4** | ✅ |
+| F-04 | LPO Payment Approval | Manager → FOMS | Manager → **P3** | ✅ |
+| F-05 | Report Request | Manager → FOMS | Manager → **P6** | ✅ |
+| F-06 | User Account Data | Admin → FOMS | Admin → **P1** | ✅ |
+| F-07 | System Configuration | Admin → FOMS | Admin → **P7** | ✅ |
+| F-08 | Security Policy Data | Super Admin → FOMS | Super Admin → **P7** | ✅ |
+| F-09 | Backup & Archival Request | Super Admin → FOMS | Super Admin → **P7** | ✅ |
+| F-10 | LPO Update Data | Attendant → FOMS | Attendant → **P3** | ✅ |
+| F-11 | LPO Forwarding Request | Attendant → FOMS | Attendant → **P3** | ✅ |
+| F-12 | Yard Fuel Dispense Request | Yard Personnel → FOMS | Yard Personnel → **P4** | ✅ |
+| F-13 | Driver Credentials | Driver → FOMS | Driver → **P1** | ✅ |
+| F-14 | Delivery Status Report | NGW → FOMS | NGW → **P8** | ✅ |
+| F-15 | Order Confirmation | FOMS → Fuel Order Maker | **P2** → Fuel Order Maker | ✅ |
+| F-16 | Truck Position Data | FOMS → Fuel Order Maker | **P5** → Fuel Order Maker | ✅ |
+| F-17 | System Notification | FOMS → Fuel Order Maker | **P8** → Fuel Order Maker | ✅ |
+| F-18 | Dashboard Statistics | FOMS → Manager | **P6** → Manager | ✅ |
+| F-19 | Monthly Fuel Summary | FOMS → Manager | **P6** → Manager | ✅ |
+| F-20 | User Management Report | FOMS → Admin | **P1** → Admin | ✅ |
+| F-21 | Audit Log Data | FOMS → Admin | **P6** → Admin | ✅ |
+| F-22 | Security Alert Report | FOMS → Super Admin | **P7** → Super Admin | ✅ |
+| F-23 | Analytics Report | FOMS → Super Admin | **P6** → Super Admin | ✅ |
+| F-24 | LPO Details | FOMS → Attendant | **P3** → Attendant | ✅ |
+| F-25 | Station Dispatch Status | FOMS → Attendant | **P3** → Attendant | ✅ |
+| F-26 | Dispense Status | FOMS → Yard Personnel | **P4** → Yard Personnel | ✅ |
+| F-27 | Rejection Record | FOMS → Yard Personnel | **P4** → Yard Personnel | ✅ |
+| F-28 | Journey Records | FOMS → Driver | **P2** → Driver | ✅ |
+| F-29 | Fuel Allocation Details | FOMS → Driver | **P2** → Driver | ✅ |
+| F-30 | Notification Payload | FOMS → NGW | **P8** → NGW | ✅ |
 | F-16 | Driver Credentials | Driver → FOMS | Driver → **P1** | ✅ |
 | F-17 | Delivery Status Report | NGW → FOMS | NGW → **P8** | ✅ |
 | F-18 | Order Confirmation | FOMS → Fuel Order Maker | **P2** → Fuel Order Maker | ✅ |
@@ -621,7 +616,7 @@ This is the critical DFD balancing check. Every external data flow from `DFD_LEV
 | F-36 | Fuel Allocation Details | FOMS → Driver | **P2** → Driver | ✅ |
 | F-37 | Notification Payload | FOMS → NGW | **P8** → NGW | ✅ |
 
-**All 37 Level 0 flows are present at Level 1. Diagram is BALANCED. ✅**
+**All 30 Level 0 flows are present at Level 1. Diagram is BALANCED. ✅**
 
 ---
 
@@ -631,7 +626,7 @@ Verified against the 15 rules of Level 1 DFD construction:
 
 | Rule | Requirement | Status | Evidence |
 |---|---|---|---|
-| Rule 1 | Balanced with Level 0 | ✅ | All 37 external flows accounted for — see balance table above |
+| Rule 1 | Balanced with Level 0 | ✅ | All 30 external flows accounted for — see balance table above |
 | Rule 2 | 3–9 processes | ✅ | 8 processes (1.0–8.0) — within limit |
 | Rule 3 | Every process has ≥1 input AND ≥1 output | ✅ | All 8 processes have external or internal inputs and outputs (verified in process descriptions) |
 | Rule 4 | Data stores first appear at Level 1 | ✅ | 7 data stores introduced (D1–D7); none appeared in Level 0 |

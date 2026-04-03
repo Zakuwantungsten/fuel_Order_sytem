@@ -4,6 +4,9 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { fuelRecordValidation, commonValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
+import { createEditLockHandlers } from '../controllers/editLockController';
+import { getResourceHistory } from '../controllers/historyController';
+import { FuelRecord } from '../models';
 
 const router = Router();
 
@@ -38,5 +41,13 @@ router.put(
   validate,
   asyncHandler(fuelRecordController.updateFuelRecord)
 );
+
+// Edit lock routes
+const fuelLock = createEditLockHandlers(FuelRecord, 'fuel_records');
+router.post('/:id/lock', commonValidation.mongoId, validate, asyncHandler(fuelLock.acquireEditLock));
+router.delete('/:id/lock', commonValidation.mongoId, validate, asyncHandler(fuelLock.releaseEditLock));
+
+// Audit history route
+router.get('/:id/history', commonValidation.mongoId, validate, asyncHandler(getResourceHistory('fuel_record')));
 
 export default router;

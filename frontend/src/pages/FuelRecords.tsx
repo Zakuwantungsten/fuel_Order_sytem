@@ -15,6 +15,8 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import ConflictModal from '../components/ConflictModal';
+import EditLockBadge from '../components/EditLockBadge';
 import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 
@@ -86,6 +88,9 @@ const FuelRecords = () => {
   const [exportYear, setExportYear] = useState<number>(() => new Date().getFullYear());
   const [viewMode, setViewMode] = usePersistedState<'records' | 'analytics'>('fr:viewMode', 'records');
   
+  // Conflict modal state
+  const [conflictData, setConflictData] = useState<{ currentRecord: any; pendingData: Partial<FuelRecord> } | null>(null);
+
   // Details modal state
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | number | null>(null);
@@ -477,10 +482,33 @@ const FuelRecords = () => {
     setIsFormOpen(true);
   };
 
-  const handleEdit = (record: FuelRecord, e: React.MouseEvent) => {
+  const handleEdit = async (record: FuelRecord, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent row click
+    const recordId = record.id || (record as any)._id;
+    if (recordId) {
+      try {
+        await fuelRecordsAPI.acquireLock(recordId);
+      } catch (err: any) {
+        if (err.response?.status === 423) {
+          const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+          toast.error(`This record is being edited by ${lockHolder}.`);
+          return;
+        }
+      }
+    }
     setSelectedRecord(record);
     setIsFormOpen(true);
+  };
+
+  const handleCloseForm = async () => {
+    if (selectedRecord) {
+      const recordId = selectedRecord.id || (selectedRecord as any)._id;
+      if (recordId) {
+        try { await fuelRecordsAPI.releaseLock(recordId); } catch { /* ignore */ }
+      }
+    }
+    setIsFormOpen(false);
+    setSelectedRecord(undefined);
   };
 
   const handleRowClick = (record: FuelRecord) => {
@@ -510,7 +538,12 @@ const FuelRecords = () => {
       if (selectedRecord) {
         const recordId = selectedRecord.id || (selectedRecord as any)._id;
         if (recordId) {
-          await fuelRecordsAPI.update(recordId, data);
+          // Send clientUpdatedAt for optimistic locking
+          const updatePayload = {
+            ...data,
+            clientUpdatedAt: (selectedRecord as any).updatedAt || (selectedRecord as any).createdAt,
+          };
+          await fuelRecordsAPI.update(recordId, updatePayload);
           toast.success('Fuel record updated successfully');
         }
       } else {
@@ -520,9 +553,17 @@ const FuelRecords = () => {
       // Immediate invalidation for the current user (fastest path).
       // WebSocket data_changed event will also fire for all other users.
       queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving fuel record:', error);
-      toast.error('Failed to save fuel record');
+      if (error.response?.status === 409) {
+        setConflictData({ currentRecord: error.response?.data?.data?.current, pendingData: data });
+        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      } else if (error.response?.status === 423) {
+        const lockHolder = error.response?.data?.data?.editLock?.lockedByName || 'another user';
+        toast.error(`This record is being edited by ${lockHolder}. Please try again later.`);
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to save fuel record');
+      }
     }
   };
 
@@ -1068,6 +1109,7 @@ const FuelRecords = () => {
                               size="sm"
                             />
                           )}
+                          <EditLockBadge editLock={(record as any).editLock} />
                         </div>
                         <p className={`text-xs ${isCancelled ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                           {formatDateShort(record.date as string)}
@@ -1380,7 +1422,7 @@ const FuelRecords = () => {
 
       <FuelRecordForm
         isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
+        onClose={handleCloseForm}
         onSubmit={handleSubmit}
         initialData={selectedRecord}
       />
@@ -1392,6 +1434,37 @@ const FuelRecords = () => {
           setSelectedRecordId(null);
         }}
         recordId={selectedRecordId}
+      />
+
+      <ConflictModal
+        isOpen={!!conflictData}
+        onClose={() => setConflictData(null)}
+        onUseLatest={() => {
+          setConflictData(null);
+          handleCloseForm();
+          queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+        }}
+        onRetry={async () => {
+          if (conflictData) {
+            const payload = {
+              ...conflictData.pendingData,
+              clientUpdatedAt: conflictData.currentRecord?.updatedAt,
+            };
+            const recordId = selectedRecord?.id || (selectedRecord as any)?._id;
+            try {
+              await fuelRecordsAPI.update(recordId!, payload);
+              toast.success('Fuel record updated successfully');
+              queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+              handleCloseForm();
+            } catch (err: any) {
+              toast.error(err.response?.data?.message || 'Retry failed');
+            }
+          }
+          setConflictData(null);
+        }}
+        currentRecord={conflictData?.currentRecord}
+        modifiedBy={conflictData?.currentRecord?.lastEditedBy?.name}
+        modifiedAt={conflictData?.currentRecord?.updatedAt}
       />
     </div>
   );

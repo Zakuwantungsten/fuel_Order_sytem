@@ -46,6 +46,19 @@ export interface DeliveryOrder {
   editHistory?: DeliveryOrderEditHistory[];
   lastEditedAt?: string;
   lastEditedBy?: string;
+  // Timestamps
+  createdAt?: string;
+  updatedAt?: string;
+  // Edit lock
+  editLock?: {
+    lockedBy?: string;
+    lockedByName?: string;
+    lockedAt?: string;
+    lockedUntil?: string;
+  };
+  // Transient fields for update requests
+  reason?: string;
+  clientUpdatedAt?: string;
 }
 
 // Local Purchase Order (LPO) Types - Summary LPOS structure
@@ -68,6 +81,14 @@ export interface LPOEntry {
   isCancelled?: boolean;
   cancelledAt?: string | null;
   createdAt?: string;
+  updatedAt?: string;
+  // Edit lock
+  editLock?: {
+    lockedBy?: string;
+    lockedByName?: string;
+    lockedAt?: string;
+    lockedUntil?: string;
+  };
 }
 
 // LPO Detail format (from LPOS 2025.csv)
@@ -280,6 +301,16 @@ export interface FuelRecord {
   cancelledAt?: string;
   cancellationReason?: string;
   cancelledBy?: string;
+  // Timestamps
+  createdAt?: string;
+  updatedAt?: string;
+  // Edit lock
+  editLock?: {
+    lockedBy?: string;
+    lockedByName?: string;
+    lockedAt?: string;
+    lockedUntil?: string;
+  };
 }
 
 // Master DO template (for generating new DOs)
