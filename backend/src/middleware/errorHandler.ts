@@ -83,6 +83,13 @@ export const errorHandler = (
     isOperational = true;
   }
 
+  // Handle body-parser PayloadTooLargeError
+  else if (err.type === 'entity.too.large' || err.status === 413 || err.statusCode === 413) {
+    statusCode = 413;
+    message = 'Request body too large';
+    isOperational = true;
+  }
+
   // Log error
   if (!isOperational) {
     logger.error('Unhandled error:', {
