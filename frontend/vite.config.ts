@@ -16,4 +16,20 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'query-vendor': ['@tanstack/react-query'],
+          'charts-vendor': ['recharts'],
+          'maps-vendor': ['leaflet', 'react-leaflet'],
+          'excel-vendor': ['xlsx', 'xlsx-js-style', 'papaparse'],
+          'pdf-vendor': ['jspdf', 'html2canvas'],
+          'socket-vendor': ['socket.io-client'],
+          'icons-vendor': ['lucide-react'],
+        },
+      },
+    },
+  },
 })

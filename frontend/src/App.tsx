@@ -1,15 +1,16 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AmendedDOsProvider } from './contexts/AmendedDOsContext';
 import Login from './components/Login';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import ForcePasswordChange from './pages/ForcePasswordChange';
 import ProtectedRoute, { UnauthorizedPage } from './components/ProtectedRoute';
 import EnhancedDashboard from './components/EnhancedDashboard';
+
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const ForcePasswordChange = lazy(() => import('./pages/ForcePasswordChange'));
 import { systemAdminAPI } from './services/api';
 import { initializeWebSocket, subscribeToMaintenanceEvents, unsubscribeFromMaintenanceEvents, subscribeToSettingsEvents, unsubscribeFromSettingsEvents } from './services/websocket';
 import { setSystemName, setSystemTimezone, setSystemDateFormat } from './utils/timezone';
@@ -267,11 +268,13 @@ function AppContent() {
   // Login.tsx has its own loading UI (disabled button + spinner).
   if (!isAuthenticated) {
     return (
-      <Routes>
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="*" element={<Login />} />
-      </Routes>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </Suspense>
     );
   }
 
@@ -290,7 +293,11 @@ function AppContent() {
 
   // Force password change for new users before accessing any other page
   if (isAuthenticated && user?.mustChangePassword) {
-    return <ForcePasswordChange onSuccess={clearMustChangePassword} />;
+    return (
+      <Suspense fallback={null}>
+        <ForcePasswordChange onSuccess={clearMustChangePassword} />
+      </Suspense>
+    );
   }
 
   return (

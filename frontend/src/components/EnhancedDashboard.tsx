@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import {
   Fuel, 
   ClipboardList, 
@@ -38,33 +38,43 @@ import {
   ChevronRight,
   Search,
 } from 'lucide-react';
-import YardFuelSimple from './YardFuelSimple';
-import Reports from './Reports';
-import DriverPortal from './DriverPortal';
-import StationView from './StationView';
-import PaymentManager from './PaymentManager';
-import SuperAdminDashboard from './SuperAdminDashboard';
-import StandardAdminDashboard from './StandardAdminDashboard';
-import ManagerView from './ManagerView';
-import DriverCredentialsManager from '../pages/Admin/DriverCredentialsManager';
-import OfficerPortal from './OfficerPortal';
-import PendingYardFuel from './PendingYardFuel';
-import NotificationsPage from './NotificationsPage';
-import ChangePasswordModal from './ChangePasswordModal';
-import { MFASettings } from './MFASettings';
+// Eagerly loaded — needed on first render (header/auth)
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
-import DevicesSessionsPanel from './DevicesSessionsPanel';
 
-// Import your existing components
-import Dashboard from '../pages/Dashboard';
-import DeliveryOrders from '../pages/DeliveryOrders';
-import LPOs from '../pages/LPOs';
-import FuelRecordsPage from '../pages/FuelRecords';
-import ExcelImport from '../pages/ExcelImport';
-import TruckBatchesPage from '../pages/TruckBatches';
-import FleetTracking from '../pages/FleetTracking';
-import CheckpointManagement from '../pages/CheckpointManagement';
+// Lazy-loaded components — only fetched when the user navigates to them
+const YardFuelSimple = lazy(() => import('./YardFuelSimple'));
+const Reports = lazy(() => import('./Reports'));
+const DriverPortal = lazy(() => import('./DriverPortal'));
+const StationView = lazy(() => import('./StationView'));
+const PaymentManager = lazy(() => import('./PaymentManager'));
+const SuperAdminDashboard = lazy(() => import('./SuperAdminDashboard'));
+const StandardAdminDashboard = lazy(() => import('./StandardAdminDashboard'));
+const ManagerView = lazy(() => import('./ManagerView'));
+const DriverCredentialsManager = lazy(() => import('../pages/Admin/DriverCredentialsManager'));
+const OfficerPortal = lazy(() => import('./OfficerPortal'));
+const PendingYardFuel = lazy(() => import('./PendingYardFuel'));
+const NotificationsPage = lazy(() => import('./NotificationsPage'));
+const ChangePasswordModal = lazy(() => import('./ChangePasswordModal'));
+const MFASettings = lazy(() => import('./MFASettings').then(m => ({ default: m.MFASettings })));
+const DevicesSessionsPanel = lazy(() => import('./DevicesSessionsPanel'));
+
+// Lazy-loaded pages
+const Dashboard = lazy(() => import('../pages/Dashboard'));
+const DeliveryOrders = lazy(() => import('../pages/DeliveryOrders'));
+const LPOs = lazy(() => import('../pages/LPOs'));
+const FuelRecordsPage = lazy(() => import('../pages/FuelRecords'));
+const ExcelImport = lazy(() => import('../pages/ExcelImport'));
+const TruckBatchesPage = lazy(() => import('../pages/TruckBatches'));
+const FleetTracking = lazy(() => import('../pages/FleetTracking'));
+const CheckpointManagement = lazy(() => import('../pages/CheckpointManagement'));
+
+// Suspense fallback shown while a lazy chunk is loading
+const TabFallback = () => (
+  <div className="flex items-center justify-center min-h-[200px]">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+  </div>
+);
 
 interface EnhancedDashboardProps {
   user: any;
@@ -450,13 +460,13 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
   // For import/export officers, show simplified officer portal without sidebar
   if (isOfficer) {
-    return <OfficerPortal user={user} />;
+    return <Suspense fallback={<TabFallback />}><OfficerPortal user={user} /></Suspense>;
   }
 
   // For drivers, render DriverPortal directly without wrapper
   // DriverPortal has its own complete header with all controls
   if (isDriver) {
-    return renderActiveComponent();
+    return <Suspense fallback={<TabFallback />}>{renderActiveComponent()}</Suspense>;
   }
 
   // For station managers (station_manager, manager, super_manager), show full-screen layout without sidebar
@@ -465,7 +475,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden transition-colors">
         {/* Main Content - Full screen without sidebar */}
         <main id="main-scroll-container" className="flex-1 overflow-y-auto overflow-x-hidden">
-          {renderActiveComponent()}
+          <Suspense fallback={<TabFallback />}>{renderActiveComponent()}</Suspense>
         </main>
       </div>
     );
@@ -477,7 +487,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden transition-colors">
         {/* Main Content - Full screen without sidebar */}
         <main id="main-scroll-container" className="flex-1 overflow-y-auto overflow-x-hidden">
-          {renderActiveComponent()}
+          <Suspense fallback={<TabFallback />}>{renderActiveComponent()}</Suspense>
         </main>
       </div>
     );
@@ -896,30 +906,34 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             </div>
           )}
           {/* Always-mounted overview dashboards — stay alive when navigating to other tabs */}
-          {hasOverviewTab && (
-            <div className={activeTab === 'overview' ? '' : 'hidden'}>
-              <Dashboard onNavigate={handleNavigate} />
-            </div>
-          )}
-          {hasAdminOverviewTab && (
-            <div className={activeTab === 'admin_overview' ? '' : 'hidden'}>
-              <StandardAdminDashboard user={user} section="overview" />
-            </div>
-          )}
-          {renderActiveComponent()}
+          <Suspense fallback={<TabFallback />}>
+            {hasOverviewTab && (
+              <div className={activeTab === 'overview' ? '' : 'hidden'}>
+                <Dashboard onNavigate={handleNavigate} />
+              </div>
+            )}
+            {hasAdminOverviewTab && (
+              <div className={activeTab === 'admin_overview' ? '' : 'hidden'}>
+                <StandardAdminDashboard user={user} section="overview" />
+              </div>
+            )}
+            {renderActiveComponent()}
+          </Suspense>
         </main>
       </div>
 
       {/* Change Password Modal */}
       {showChangePassword && (
-        <ChangePasswordModal
-          onClose={() => setShowChangePassword(false)}
-          onSuccess={() => {
-            setShowChangePassword(false);
-            setSuccessMessage('Password changed successfully!');
-            setTimeout(() => setSuccessMessage(null), 5000);
-          }}
-        />
+        <Suspense fallback={null}>
+          <ChangePasswordModal
+            onClose={() => setShowChangePassword(false)}
+            onSuccess={() => {
+              setShowChangePassword(false);
+              setSuccessMessage('Password changed successfully!');
+              setTimeout(() => setSuccessMessage(null), 5000);
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Security & Devices Modal */}
@@ -927,7 +941,9 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSecurityPanel(false)} />
           <div className="relative z-[210] w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
-            <DevicesSessionsPanel onClose={() => setShowSecurityPanel(false)} />
+            <Suspense fallback={null}>
+              <DevicesSessionsPanel onClose={() => setShowSecurityPanel(false)} />
+            </Suspense>
           </div>
         </div>
       )}
@@ -946,27 +962,33 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <MFASettings />
+            <Suspense fallback={null}>
+              <MFASettings />
+            </Suspense>
           </div>
         </div>
       )}
 
       {/* Pending Yard Fuel Modal */}
       {showPendingYardFuel && (
-        <PendingYardFuel onClose={() => setShowPendingYardFuel(false)} />
+        <Suspense fallback={null}>
+          <PendingYardFuel onClose={() => setShowPendingYardFuel(false)} />
+        </Suspense>
       )}
 
       {/* All Notifications Page Modal */}
       {showNotificationsPage && (
-        <NotificationsPage 
-          onClose={() => setShowNotificationsPage(false)}
-          onNotificationClick={(notification) => {
-            if (notification.metadata?.fuelRecordId) {
-              setShowNotificationsPage(false);
-              setActiveTab('fuel_records');
-            }
-          }}
-        />
+        <Suspense fallback={null}>
+          <NotificationsPage 
+            onClose={() => setShowNotificationsPage(false)}
+            onNotificationClick={(notification) => {
+              if (notification.metadata?.fuelRecordId) {
+                setShowNotificationsPage(false);
+                setActiveTab('fuel_records');
+              }
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );
