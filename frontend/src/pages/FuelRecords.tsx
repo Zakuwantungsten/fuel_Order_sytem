@@ -20,7 +20,7 @@ import EditLockBadge from '../components/EditLockBadge';
 import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 
-// Map backend standard allocation field names to fuel record column field names
+// Map fuel record field names to their primary standard allocation key
 const ALLOCATION_FIELD_MAP: Record<string, keyof StandardAllocations> = {
   mmsaYard: 'mmsaYard',
   tangaYard: 'tangaYardToDar',
@@ -39,33 +39,85 @@ const ALLOCATION_FIELD_MAP: Record<string, keyof StandardAllocations> = {
   tangaReturn: 'tangaReturnToMombasa',
 };
 
-// Check if a fuel value exceeds the standard allocation (more fuel than expected)
-const isExtraFuel = (field: string, value: number | undefined, allocations: StandardAllocations | null): boolean => {
-  if (!value || value === 0 || !allocations) return false;
-  
-  const allocKey = ALLOCATION_FIELD_MAP[field];
-  if (!allocKey) return false;
-  
-  const standard = allocations[allocKey];
-  if (standard === undefined) return false;
-
-  // All standards from backend are stored as positive values.
-  // For "going" fields (positive in records), compare directly.
-  // For "return/going consumed" fields (negative in records), compare absolute values.
-  return Math.abs(value) > standard;
+// Fields that must be compared against two standards simultaneously (fetched from DB)
+const DUAL_ALLOCATION_MAP: Partial<Record<string, {
+  primaryKey: keyof StandardAllocations;
+  primaryLabel: string;
+  secondaryKey: keyof StandardAllocations;
+  secondaryLabel: string;
+}>> = {
+  darYard: {
+    primaryKey: 'darYardStandard',
+    primaryLabel: 'Standard',
+    secondaryKey: 'darYardKisarawe',
+    secondaryLabel: 'Kisarawe',
+  },
 };
 
-// Get the extra amount above standard allocation
-const getExtraAmount = (field: string, value: number | undefined, allocations: StandardAllocations | null): number => {
-  if (!value || value === 0 || !allocations) return 0;
-  
-  const allocKey = ALLOCATION_FIELD_MAP[field];
-  if (!allocKey) return 0;
-  
-  const standard = allocations[allocKey];
-  if (standard === undefined) return 0;
+interface FuelCellInfo {
+  isAbove: boolean;
+  isBelow: boolean;
+  tooltip: string;
+}
 
-  return Math.abs(value) - standard;
+// Returns comparison info for a fuel cell.
+// Rules (all DB-driven — no hardcoded values):
+//   • standard === 0 → skip entirely (no flag, no color)
+//   • single standard: above = amber warning, below = blue note
+//   • dual standard (darYard): compare against both, show both results in tooltip
+const getFuelCellInfo = (
+  field: string,
+  value: number | undefined,
+  allocations: StandardAllocations | null,
+): FuelCellInfo => {
+  if (!value || value === 0 || !allocations) return { isAbove: false, isBelow: false, tooltip: '' };
+
+  const abs = Math.abs(value);
+  const dual = DUAL_ALLOCATION_MAP[field];
+
+  if (dual) {
+    const s1 = allocations[dual.primaryKey];
+    const s2 = allocations[dual.secondaryKey];
+    const parts: string[] = [];
+    let aboveCount = 0;
+    let belowCount = 0;
+
+    const addPart = (label: string, standard: number | undefined) => {
+      if (standard === undefined || standard === 0) return; // skip zeros — not checked
+      const diff = abs - standard;
+      if (diff > 0) {
+        parts.push(`vs ${label} (${standard}L): +${diff}L above`);
+        aboveCount++;
+      } else if (diff < 0) {
+        parts.push(`vs ${label} (${standard}L): ${Math.abs(diff)}L below`);
+        belowCount++;
+      } else {
+        parts.push(`vs ${label} (${standard}L): at standard`);
+      }
+    };
+
+    addPart(dual.primaryLabel, s1);
+    addPart(dual.secondaryLabel, s2);
+
+    if (parts.length === 0) return { isAbove: false, isBelow: false, tooltip: '' };
+    return {
+      isAbove: aboveCount > 0,
+      isBelow: belowCount > 0,
+      tooltip: parts.join(' · '),
+    };
+  }
+
+  // Single standard
+  const allocKey = ALLOCATION_FIELD_MAP[field];
+  if (!allocKey) return { isAbove: false, isBelow: false, tooltip: '' };
+
+  const standard = allocations[allocKey];
+  if (standard === undefined || standard === 0) return { isAbove: false, isBelow: false, tooltip: '' };
+
+  const diff = abs - standard;
+  if (diff > 0) return { isAbove: true, isBelow: false, tooltip: `+${diff}L above standard (${standard}L)` };
+  if (diff < 0) return { isAbove: false, isBelow: true, tooltip: `${Math.abs(diff)}L below standard (${standard}L)` };
+  return { isAbove: false, isBelow: false, tooltip: '' };
 };
 
 const MONTH_NAMES_FR = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -1301,24 +1353,30 @@ const FuelRecords = () => {
                   const isCancelled = record.isCancelled === true;
                   const actualIndex = startIndex + index; // Calculate actual index across all pages
                   
-                  // Helper to render fuel cell with highlighting for extra fuel
+                  // Helper to render fuel cell with two-color highlighting:
+                  // amber = above standard, blue = below standard, neutral if standard is 0
                   const renderFuelCell = (field: string, value: number | undefined) => {
-                    const hasExtraFuel = isExtraFuel(field, value, standardAllocations);
-                    const extraAmount = hasExtraFuel ? getExtraAmount(field, value, standardAllocations) : 0;
-                    
+                    const { isAbove, isBelow, tooltip } = getFuelCellInfo(field, value, standardAllocations);
+                    const flagged = !isCancelled && (isAbove || isBelow);
+
                     return (
-                      <td 
-                        className={`px-2 py-2 text-[10px] sm:text-xs text-center ${
-                          isCancelled 
+                      <td
+                        className={`px-2 py-2 text-[10px] sm:text-xs text-center relative ${
+                          isCancelled
                             ? 'text-red-500 dark:text-red-400 line-through'
-                            : hasExtraFuel 
-                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 font-semibold relative' 
-                              : 'text-gray-600 dark:text-gray-400'
+                            : isAbove
+                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 font-semibold'
+                              : isBelow
+                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 font-semibold'
+                                : 'text-gray-600 dark:text-gray-400'
                         }`}
-                        title={hasExtraFuel && !isCancelled ? `⚠️ Extra fuel: ${Math.abs(extraAmount)}L above standard allocation` : ''}
+                        title={flagged ? tooltip : ''}
                       >
-                        {hasExtraFuel && !isCancelled && (
+                        {isAbove && !isCancelled && (
                           <span className="absolute top-0 right-0 text-[8px] text-yellow-600 dark:text-yellow-400">⚠</span>
+                        )}
+                        {isBelow && !isCancelled && (
+                          <span className="absolute top-0 right-0 text-[8px] text-blue-500 dark:text-blue-400">↓</span>
                         )}
                         {value || '-'}
                       </td>

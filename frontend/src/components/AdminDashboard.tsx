@@ -1002,14 +1002,22 @@ function AllocationsTab({
   const [formData, setFormData] = useState(allocations);
 
   const fields = [
-    { key: 'tangaYardToDar', label: 'Tanga Yard to DAR', description: 'Fuel allocation from Tanga Yard to Dar es Salaam' },
-    { key: 'darYardStandard', label: 'DAR Yard Standard', description: 'Standard fuel allocation from DAR Yard' },
-    { key: 'darYardKisarawe', label: 'DAR Yard Kisarawe', description: 'Fuel allocation for Kisarawe route' },
-    { key: 'mbeyaGoing', label: 'Mbeya Going', description: 'Fuel allocation going to Mbeya' },
-    { key: 'tundumaReturn', label: 'Tunduma Return', description: 'Fuel allocation for Tunduma return' },
-    { key: 'mbeyaReturn', label: 'Mbeya Return', description: 'Fuel allocation for Mbeya return' },
-    { key: 'moroReturnToMombasa', label: 'Moro Return to Mombasa', description: 'Fuel allocation from Moro to Mombasa' },
-    { key: 'tangaReturnToMombasa', label: 'Tanga Return to Mombasa', description: 'Fuel allocation from Tanga to Mombasa' },
+    { key: 'mmsaYard',            label: 'MMSA Yard',                description: 'Fuel allocation at MMSA Yard' },
+    { key: 'tangaYardToDar',      label: 'Tanga Yard',               description: 'Fuel allocation from Tanga Yard to Dar es Salaam' },
+    { key: 'darYardStandard',     label: 'Dar Yard (Standard)',       description: 'Standard fuel allocation from Dar Yard — checked alongside Kisarawe value' },
+    { key: 'darYardKisarawe',     label: 'Dar Yard (Kisarawe)',       description: 'Secondary standard for Dar Yard — both values are compared against the recorded Dar Yard fuel' },
+    { key: 'darGoing',            label: 'Dar Going',                description: 'Fuel allocation going from Dar es Salaam' },
+    { key: 'moroGoing',           label: 'Moro Going',               description: 'Fuel allocation going through Moro' },
+    { key: 'mbeyaGoing',          label: 'Mbeya Going',              description: 'Fuel allocation going to Mbeya' },
+    { key: 'tdmGoing',            label: 'Tunduma Going',            description: 'Fuel allocation going to Tunduma' },
+    { key: 'zambiaGoing',         label: 'Zambia Going',             description: 'Fuel allocation going to Zambia' },
+    { key: 'congoFuel',           label: 'Congo Fuel',               description: 'Fuel allocation for Congo route' },
+    { key: 'zambiaReturn',        label: 'Zambia Return',            description: 'Fuel allocation on return from Zambia' },
+    { key: 'tundumaReturn',       label: 'Tunduma Return',           description: 'Fuel allocation for Tunduma return' },
+    { key: 'mbeyaReturn',         label: 'Mbeya Return',             description: 'Fuel allocation for Mbeya return' },
+    { key: 'moroReturnToMombasa', label: 'Moro Return',              description: 'Fuel allocation from Moro to Mombasa' },
+    { key: 'darReturn',           label: 'Dar Return',               description: 'Fuel allocation on return from Dar es Salaam' },
+    { key: 'tangaReturnToMombasa',label: 'Tanga Return',             description: 'Fuel allocation from Tanga to Mombasa' },
   ];
 
   return (
@@ -1025,7 +1033,7 @@ function AllocationsTab({
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
           >
             <Edit2 className="w-4 h-4" />
-            Edit
+            Edit Allocations
           </button>
         ) : (
           <div className="flex gap-2">
@@ -1049,25 +1057,47 @@ function AllocationsTab({
         )}
       </div>
 
+      {/* Info banner — explains 0L behaviour and dual-standard */}
+      <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-xs text-blue-800 dark:text-blue-300 space-y-1">
+        <p><strong>These are the standard fuel amounts expected at each checkpoint.</strong> The fuel record table will show a <span className="text-yellow-600 dark:text-yellow-400 font-bold">⚠ amber</span> cell when a record exceeds the standard and a <span className="text-blue-600 dark:text-blue-400 font-bold">↓ blue</span> cell when it falls below.</p>
+        <p><strong>Set to 0L</strong> to disable checking for that checkpoint — no flag will be shown regardless of the recorded value.</p>
+        <p><strong>Dar Yard</strong> is checked against both the Standard and Kisarawe values simultaneously. The tooltip in the fuel record table will show the difference against each.</p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {fields.map(field => (
-          <div key={field.key} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{field.label}</label>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{field.description}</p>
-            {editing ? (
-              <input
-                type="number"
-                value={(formData as any)[field.key]}
-                onChange={e => setFormData({ ...formData, [field.key]: Number(e.target.value) })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-            ) : (
-              <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                {((allocations as any)[field.key] || 0).toLocaleString()}L
-              </p>
-            )}
-          </div>
-        ))}
+        {fields.map(field => {
+          const currentVal = (allocations as any)[field.key] as number;
+          const isZero = currentVal === 0;
+          return (
+            <div key={field.key} className={`bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4 ${isZero ? 'opacity-70' : ''}`}>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{field.label}</label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{field.description}</p>
+              {editing ? (
+                <div className="space-y-1">
+                  <input
+                    type="number"
+                    min={0}
+                    value={(formData as any)[field.key]}
+                    onChange={e => setFormData({ ...formData, [field.key]: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  />
+                  {(formData as any)[field.key] === 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">⚠ Set to 0L — this checkpoint will not be checked</p>
+                  )}
+                </div>
+              ) : isZero ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-lg font-medium text-gray-400 dark:text-gray-500">0L</p>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600">Not checked</span>
+                </div>
+              ) : (
+                <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                  {currentVal.toLocaleString()}L
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
