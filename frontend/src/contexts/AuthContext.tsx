@@ -38,11 +38,13 @@ const getInitialTheme = (userId?: string | number): 'light' | 'dark' => {
   }
 };
 
-// If there is an existing session in storage, start in a loading state so
-// ProtectedRoute shows a spinner instead of flashing the login page while
-// the async session check runs.
+// If there is an existing session OR a remember-me cookie flag, start in a
+// loading state so ProtectedRoute shows a spinner instead of flashing the
+// login page while the async session check (or cookie-based refresh) runs.
 const hasStoredSession =
-  typeof window !== 'undefined' && !!sessionStorage.getItem('fuel_order_auth');
+  typeof window !== 'undefined' &&
+  (!!sessionStorage.getItem('fuel_order_auth') ||
+   localStorage.getItem('fuel_order_remember_me') === '1');
 
 const initialState: AuthState = {
   user: null,
@@ -117,7 +119,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 // Auth context type
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<any>;
-  completeLogin: (authData: AuthResponse) => Promise<void>;
+  completeLogin: (authData: AuthResponse, rememberMe?: boolean) => Promise<void>;
   logout: () => void;
   clearError: () => void;
   clearMustChangePassword: () => void;
@@ -199,7 +201,51 @@ export function AuthProvider({ children }: AuthProviderProps) {
           dispatch({ type: 'SET_THEME', payload: userTheme });
           dispatch({ type: 'SESSION_RESTORE_DONE' });
         } else {
-          // No stored session — nothing to restore, clear the flag immediately.
+          // No in-memory session. Check if the user enabled Remember Me.
+          // If so, attempt a silent token refresh using the HttpOnly cookie
+          // the backend set. The browser sends it automatically (withCredentials).
+          const hasRememberMe = localStorage.getItem('fuel_order_remember_me') === '1';
+          if (hasRememberMe) {
+            try {
+              // POST /auth/refresh — cookie is sent automatically, no body needed
+              const refreshResult = await authAPI.refreshToken();
+              const newAccessToken = (refreshResult as any).accessToken || (refreshResult as any).token;
+              if (!newAccessToken) throw new Error('No access token in refresh response');
+              sessionStorage.setItem('fuel_order_token', newAccessToken);
+
+              // Fetch full user profile with the new access token
+              const user = await authAPI.getCurrentUser();
+              const permissions = getRolePermissions(user.role);
+              const userTheme: 'light' | 'dark' = getInitialTheme(user.id);
+              const authUser: AuthUser = {
+                ...user,
+                token: newAccessToken,
+                permissions,
+                lastLogin: new Date().toISOString(),
+                theme: userTheme,
+              };
+
+              // Persist session data so next in-tab navigation doesn't re-refresh
+              sessionStorage.setItem('fuel_order_auth', JSON.stringify({
+                ...user,
+                token: newAccessToken,
+                permissions,
+                lastLogin: authUser.lastLogin,
+                theme: userTheme,
+                sessionTimeoutMinutes: 30,
+              }));
+
+              dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
+              dispatch({ type: 'SET_THEME', payload: userTheme });
+            } catch {
+              // Cookie is missing, expired, or revoked — clear the flag and show login
+              localStorage.removeItem('fuel_order_remember_me');
+              localStorage.removeItem('fuel_order_last_username');
+              dispatch({ type: 'SESSION_RESTORE_DONE' });
+              return;
+            }
+          }
+          // No stored session and no remember-me flag — nothing to restore
           dispatch({ type: 'SESSION_RESTORE_DONE' });
         }
       } catch (error) {
@@ -245,10 +291,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   // Complete login with already-fetched auth data (used after MFA verification/setup)
-  const completeLogin = async (authData: AuthResponse): Promise<void> => {
+  const completeLogin = async (authData: AuthResponse, rememberMe?: boolean): Promise<void> => {
     const { user, accessToken, sessionTimeoutMinutes } = authData;
 
     sessionStorage.setItem('fuel_order_token', accessToken);
+
+    // Persist the remember-me preference so session restore on next page load
+    // knows whether to attempt cookie-based token refresh
+    if (rememberMe) {
+      localStorage.setItem('fuel_order_remember_me', '1');
+    }
 
     const permissions = getRolePermissions(user.role);
     const serverTheme = user.theme;
@@ -309,6 +361,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Save token to sessionStorage (cleared when tab/browser is closed)
       sessionStorage.setItem('fuel_order_token', accessToken);
+
+      // Persist the remember-me preference. The backend already set the
+      // HttpOnly cookie — this flag just tells the session-restore logic
+      // on the next page load to attempt a silent cookie-based refresh.
+      if (credentials.rememberMe) {
+        localStorage.setItem('fuel_order_remember_me', '1');
+      } else {
+        localStorage.removeItem('fuel_order_remember_me');
+      }
 
       // Get role permissions
       const permissions = getRolePermissions(user.role);
@@ -400,6 +461,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     sessionStorage.removeItem('fuel_order_active_role'); // Clear active role on logout
     sessionStorage.removeItem('dashboard_search_query'); // Clear dashboard search on logout
     sessionStorage.removeItem('dashboard_search_results'); // Clear dashboard search results on logout
+
+    // Clear remember-me flag so the next visit shows the login page
+    // (the backend clears the HttpOnly cookie via the /auth/logout endpoint)
+    localStorage.removeItem('fuel_order_remember_me');
 
     // Clear all persisted filter/UI state so next login starts fresh
     Object.keys(localStorage)

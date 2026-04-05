@@ -9,6 +9,7 @@ import { AuditService } from '../utils/auditService';
 import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
 import { emitDataChange } from '../services/websocket';
+import { enforceEditLock } from './editLockController';
 
 // Dynamic station to fuel field mapping cache
 let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
@@ -1113,6 +1114,11 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     if (!existingLpo) {
       throw new ApiError(404, 'LPO document not found');
     }
+
+    // Enforce edit lock — the caller must hold a valid lock to update
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+    await enforceEditLock(LPOSummary, id, username);
 
     logger.info(`Updating LPO ${existingLpo.lpoNo}, station: ${existingLpo.station}`);
 

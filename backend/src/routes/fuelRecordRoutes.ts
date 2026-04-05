@@ -42,10 +42,10 @@ router.put(
   asyncHandler(fuelRecordController.updateFuelRecord)
 );
 
-// Edit lock routes
+// Edit lock routes (same roles as update)
 const fuelLock = createEditLockHandlers(FuelRecord, 'fuel_records');
-router.post('/:id/lock', commonValidation.mongoId, validate, asyncHandler(fuelLock.acquireEditLock));
-router.delete('/:id/lock', commonValidation.mongoId, validate, asyncHandler(fuelLock.releaseEditLock));
+router.post('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'driver', 'fuel_order_maker', 'boss', 'yard_personnel', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(fuelLock.acquireEditLock));
+router.delete('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'driver', 'fuel_order_maker', 'boss', 'yard_personnel', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(fuelLock.releaseEditLock));
 
 // Audit history route
 router.get('/:id/history', commonValidation.mongoId, validate, asyncHandler(getResourceHistory('fuel_record')));

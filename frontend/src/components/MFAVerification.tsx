@@ -40,6 +40,7 @@ interface MFAVerificationProps {
   tempSessionToken: string;
   preferredMethod: 'totp' | 'sms' | 'email';
   mfaMethods?: { totp: boolean; sms: boolean; email: boolean };
+  rememberMe?: boolean;
   onSuccess: (tokens: { accessToken: string; refreshToken: string; user: any }) => void;
   onCancel: () => void;
 }
@@ -52,6 +53,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
   tempSessionToken,
   preferredMethod,
   mfaMethods,
+  rememberMe,
   onSuccess,
   onCancel,
 }) => {
@@ -179,6 +181,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
           deviceId,
           deviceName: trustDevice ? deviceName : undefined,
           deviceInfo: { userAgent: navigator.userAgent, ipAddress: '' },
+          rememberMe: !!rememberMe,
         }),
       });
       const data = await safeJson(response);

@@ -3,9 +3,59 @@ import mongoose from 'mongoose';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { emitDataChange } from '../services/websocket';
+import { User } from '../models';
 import logger from '../utils/logger';
 
 const LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Look up the display name for a username.
+ * Returns "firstName lastName" when available, otherwise the raw username.
+ */
+async function getDisplayName(username: string): Promise<string> {
+  try {
+    const user = await User.findOne({ username }).select('firstName lastName').lean();
+    if (user && user.firstName) {
+      return `${user.firstName} ${user.lastName || ''}`.trim();
+    }
+  } catch { /* fall through */ }
+  return username;
+}
+
+/**
+ * Verify the current user holds a valid (non-expired) edit lock on the given
+ * record.  Call this at the top of any update handler to enforce the lock.
+ *
+ * Throws 423 if another user holds the lock, 409 if no lock was acquired at all.
+ */
+export async function enforceEditLock(
+  model: mongoose.Model<any>,
+  recordId: string,
+  username: string,
+): Promise<void> {
+  const record = await model.findById(recordId).select('editLock').lean();
+  if (!record) return; // Let the update handler handle 404
+
+  const lock = (record as any).editLock;
+  if (!lock?.lockedBy) {
+    // No lock held — reject; the client must acquire a lock first
+    throw new ApiError(409, 'You must acquire an edit lock before saving changes.');
+  }
+
+  const now = new Date();
+  const lockedUntil = lock.lockedUntil ? new Date(lock.lockedUntil) : null;
+
+  if (lockedUntil && lockedUntil <= now) {
+    // Lock expired — treat as unlocked
+    throw new ApiError(409, 'Your edit lock has expired. Please re-acquire the lock and try again.');
+  }
+
+  if (lock.lockedBy !== username) {
+    const holderName = await getDisplayName(lock.lockedBy);
+    throw new ApiError(423, `Record is being edited by ${holderName}`).withData({ editLock: lock });
+  }
+  // Lock is valid and belongs to the caller — proceed
+}
 
 /**
  * Generic acquire/release edit lock for any Mongoose model that has an `editLock` subdocument.
@@ -43,9 +93,10 @@ export function createEditLockHandlers(
 
     if (!record) {
       const current = await model.findById(id).select('editLock').lean();
-      const holder = (current as any)?.editLock?.lockedBy || 'another user';
-      throw new ApiError(423, `Record is being edited by ${holder}`).withData({
-        editLock: (current as any)?.editLock,
+      const holderUsername = (current as any)?.editLock?.lockedBy || 'another user';
+      const holderName = await getDisplayName(holderUsername);
+      throw new ApiError(423, `Record is being edited by ${holderName}`).withData({
+        editLock: { ...(current as any)?.editLock, lockedByName: holderName },
       });
     }
 

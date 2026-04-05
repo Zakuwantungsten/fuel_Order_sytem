@@ -145,7 +145,7 @@ const FuelRecords = () => {
   const routeFrom = routeFilter ? (routeTypeFilter === 'EXPORT' ? routeFilter.split('-')[0] : undefined) : undefined;
   const routeTo = routeFilter ? (routeTypeFilter === 'IMPORT' ? routeFilter.split('-')[1] : undefined) : undefined;
 
-  const { data: recordsData, isLoading: loading } = useFuelRecordsList({
+  const { data: recordsData, isLoading: loading, isFetching } = useFuelRecordsList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,
@@ -418,6 +418,18 @@ const FuelRecords = () => {
 
   // Fetch records when pagination or filters change — React Query handles this
   // automatically via the useFuelRecordsList hook above. No useEffect needed.
+
+  // Auto-fallback: if the current month has no data, switch to the most recent month that does
+  useEffect(() => {
+    if (!monthInitialized || loading || availableMonths.length === 0) return;
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    // Only auto-fallback when still on the initial default (current month)
+    if (selectedMonth !== currentMonth) return;
+    if (!availableMonths.includes(currentMonth)) {
+      setSelectedMonth(availableMonths[0]); // Most recent month with data
+    }
+  }, [availableMonths, loading, monthInitialized]);
 
   // Reset route filter when import/export type or month changes
   useEffect(() => {
@@ -1056,7 +1068,7 @@ const FuelRecords = () => {
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg transition-colors">
-        {loading ? (
+        {loading || isFetching ? (
           <UnifiedTabLoader label="Loading fuel records..." />
         ) : totalItems === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
@@ -1271,7 +1283,7 @@ const FuelRecords = () => {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {loading ? (
+              {loading || isFetching ? (
                 <tr>
                   <td colSpan={26} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                     Loading data...

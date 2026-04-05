@@ -202,6 +202,12 @@ const lpoSummarySchema = new Schema<ILPOSummaryDocument>(
     deletedAt: {
       type: Date,
     },
+    // Soft edit lock — prevents concurrent edits with 5-min TTL
+    editLock: {
+      lockedBy: { type: String, default: null },
+      lockedAt: { type: Date, default: null },
+      lockedUntil: { type: Date, default: null },
+    },
   },
   {
     timestamps: true,

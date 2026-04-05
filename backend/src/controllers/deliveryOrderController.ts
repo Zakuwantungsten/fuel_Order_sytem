@@ -8,6 +8,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
+import { enforceEditLock } from './editLockController';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { emitDataChange } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
@@ -894,6 +895,9 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     if (hasSensitiveChange && (!reason || reason.length < 10)) {
       throw new ApiError(400, 'A reason of at least 10 characters is required when changing tonnage, rate, or destination fields');
     }
+
+    // Enforce edit lock — the caller must hold a valid lock to update
+    await enforceEditLock(DeliveryOrder, id, username);
 
     // Strip fields the caller’s role is not allowed to write
     const payload = filterDeliveryOrderFields(rawPayload, userRole) as any;

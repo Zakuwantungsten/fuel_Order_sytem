@@ -82,7 +82,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
   // --- React Query: server-side paginated orders ---
   const dateRange = periodsToDateRange(selectedPeriods);
-  const { data: ordersData, isLoading: loading } = useDeliveryOrdersList({
+  const { data: ordersData, isLoading: loading, isFetching } = useDeliveryOrdersList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,
@@ -1775,7 +1775,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   setSearchTerm('');
                   setFilterType('ALL');
                   setFilterStatus('all');
-                  setSelectedPeriods([{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
+                  const now = new Date();
+                  const currentPeriod = { year: now.getFullYear(), month: now.getMonth() + 1 };
+                  const hasCurrentMonth = availablePeriods.some(p => p.year === currentPeriod.year && p.month === currentPeriod.month);
+                  setSelectedPeriods(hasCurrentMonth || availablePeriods.length === 0 ? [currentPeriod] : [availablePeriods[0]]);
                   setCurrentPage(1);
                 }}
                 className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -1787,7 +1790,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
           {/* Table */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg overflow-hidden transition-colors">
-            {loading ? (
+            {loading || isFetching ? (
               <UnifiedTabLoader label="Loading delivery orders..." />
             ) : orders.length === 0 ? (
               <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">

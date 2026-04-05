@@ -67,7 +67,7 @@ async function runDueBackups() {
         await backupService.createBackup('system-scheduler', 'scheduled');
         logger.info(`[BACKUP SCHEDULER] Backup completed for schedule: "${schedule.name}"`);
       } catch (err: any) {
-        logger.error(`[BACKUP SCHEDULER] Backup failed for schedule "${schedule.name}":`, err.message);
+        logger.error(`[BACKUP SCHEDULER] Backup failed for schedule "${schedule.name}": ${String(err?.message ?? err)}`);
       }
 
       // Always advance the schedule even if the backup errored, to prevent a
@@ -88,11 +88,11 @@ async function runDueBackups() {
       try {
         await backupService.cleanupOldBackups(schedule.retentionDays);
       } catch (err: any) {
-        logger.warn(`[BACKUP SCHEDULER] Retention cleanup failed for "${schedule.name}":`, err.message);
+        logger.warn(`[BACKUP SCHEDULER] Retention cleanup failed for "${schedule.name}": ${String(err?.message ?? err)}`);
       }
     }
   } catch (err: any) {
-    logger.error('[BACKUP SCHEDULER] Error in runDueBackups:', err.message);
+    logger.error(`[BACKUP SCHEDULER] Error in runDueBackups: ${String(err?.message ?? err)}`);
   }
 }
 

@@ -7,6 +7,7 @@ import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
+import { enforceEditLock } from './editLockController';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
 
@@ -685,6 +686,11 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     if (hasSensitiveChange && (!reason || reason.length < 10)) {
       throw new ApiError(400, 'A reason of at least 10 characters is required when changing quantity or lock fields');
     }
+
+    // Enforce edit lock — the caller must hold a valid lock to update
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+    await enforceEditLock(FuelRecord, id, username);
 
     // Strip fields the caller’s role is not allowed to write
     const safeUpdates = filterFuelRecordFields(rawUpdates, req.user?.role || 'fuel_order_maker') as any;

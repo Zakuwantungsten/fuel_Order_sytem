@@ -130,10 +130,10 @@ router.delete(
   asyncHandler(deliveryOrderController.deleteDeliveryOrder)
 );
 
-// Edit lock routes
+// Edit lock routes (same roles as update)
 const doLock = createEditLockHandlers(DeliveryOrder, 'delivery_orders');
-router.post('/:id/lock', commonValidation.mongoId, validate, asyncHandler(doLock.acquireEditLock));
-router.delete('/:id/lock', commonValidation.mongoId, validate, asyncHandler(doLock.releaseEditLock));
+router.post('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'), validate, asyncHandler(doLock.acquireEditLock));
+router.delete('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'), validate, asyncHandler(doLock.releaseEditLock));
 
 // Audit history route
 router.get('/:id/history', commonValidation.mongoId, validate, asyncHandler(getResourceHistory('delivery_order')));

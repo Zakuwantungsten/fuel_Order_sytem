@@ -133,8 +133,30 @@ apiClient.interceptors.response.use(
       // Don't redirect if this is a login attempt or first-login-password - let the component handle it
       const isLoginRequest = error.config?.url?.includes('/auth/login');
       const isFirstLoginPassword = error.config?.url?.includes('/auth/first-login-password');
+      const isRefreshRequest = error.config?.url?.includes('/auth/refresh');
       
-      if (!isLoginRequest && !isFirstLoginPassword) {
+      if (!isLoginRequest && !isFirstLoginPassword && !isRefreshRequest) {
+        // Before giving up, attempt a silent token refresh if Remember Me is active.
+        // The HttpOnly cookie is sent automatically; if it's still valid the
+        // backend returns a new access token and rotates the cookie.
+        const hasRememberMe = localStorage.getItem('fuel_order_remember_me') === '1';
+        if (hasRememberMe && !originalRequest._authRetry) {
+          originalRequest._authRetry = true;
+          try {
+            const refreshRes = await apiClient.post('/auth/refresh');
+            const newAccessToken = refreshRes.data?.data?.accessToken || refreshRes.data?.data?.token;
+            if (newAccessToken) {
+              sessionStorage.setItem('fuel_order_token', newAccessToken);
+              // Retry the original request with the new token
+              originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+              return apiClient(originalRequest);
+            }
+          } catch {
+            // Refresh failed — cookie is expired/revoked, fall through to redirect
+            localStorage.removeItem('fuel_order_remember_me');
+          }
+        }
+
         // Clear auth data
         sessionStorage.removeItem('fuel_order_auth');
         sessionStorage.removeItem('fuel_order_token');
@@ -754,12 +776,12 @@ export const lpoDocumentsAPI = {
 
   // Edit lock management
   acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
-    const response = await apiClient.post(`/lpo-entries/${id}/lock`);
+    const response = await apiClient.post(`/lpo-documents/${id}/lock`);
     return response.data;
   },
 
   releaseLock: async (id: string | number): Promise<void> => {
-    await apiClient.delete(`/lpo-entries/${id}/lock`);
+    await apiClient.delete(`/lpo-documents/${id}/lock`);
   },
 
   getHistory: async (id: string | number): Promise<any[]> => {

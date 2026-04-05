@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2 } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
-import { lpoWorkbookAPI, fuelRecordsAPI } from '../services/api';
+import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI } from '../services/api';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
@@ -104,6 +104,31 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setEditedSheet(prev => ({ ...prev, [field]: value }));
   };
 
+  /** Acquire edit lock before entering edit mode */
+  const handleStartEdit = async () => {
+    const sheetId = sheet.id;
+    if (sheetId) {
+      try {
+        await lpoDocumentsAPI.acquireLock(sheetId);
+      } catch (err: any) {
+        if (err.response?.status === 423) {
+          const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+          alert(`This LPO is being edited by ${lockHolder}.`);
+          return;
+        }
+      }
+    }
+    setIsEditing(true);
+  };
+
+  /** Release edit lock helper */
+  const releaseLockIfNeeded = async () => {
+    const sheetId = sheet.id;
+    if (sheetId) {
+      try { await lpoDocumentsAPI.releaseLock(sheetId); } catch { /* ignore */ }
+    }
+  };
+
   const handleSave = async () => {
     if (isSaving) return; // Prevent double submission
     setIsSaving(true);
@@ -111,6 +136,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, editedSheet);
       onUpdate(updatedSheet);
       setIsEditing(false);
+      await releaseLockIfNeeded();
       alert('✓ Changes saved successfully! Fuel records have been updated.');
     } catch (error) {
       console.error('Error saving sheet:', error);
@@ -128,6 +154,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, editedSheet);
       onUpdate(updatedSheet);
       setEditingRow(null);
+      await releaseLockIfNeeded();
       alert('✓ Entry updated! Fuel records have been adjusted.');
     } catch (error) {
       console.error('Error saving entry:', error);
@@ -138,7 +165,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   };
 
   // Cancel row edit - revert to original values
-  const handleRowCancel = (index: number) => {
+  const handleRowCancel = async (index: number) => {
     // Revert the edited entry back to original
     const originalEntry = sheet.entries[index];
     if (originalEntry) {
@@ -150,6 +177,24 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       }));
     }
     setEditingRow(null);
+    await releaseLockIfNeeded();
+  };
+
+  /** Acquire lock before starting row-level edit */
+  const handleStartRowEdit = async (index: number) => {
+    const sheetId = sheet.id;
+    if (sheetId) {
+      try {
+        await lpoDocumentsAPI.acquireLock(sheetId);
+      } catch (err: any) {
+        if (err.response?.status === 423) {
+          const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+          alert(`This LPO is being edited by ${lockHolder}.`);
+          return;
+        }
+      }
+    }
+    setEditingRow(index);
   };
 
   // Open cancel modal for an entry - auto-detect direction and checkpoint
@@ -327,10 +372,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     setEditedSheet(sheet);
     setIsEditing(false);
     setEditingRow(null);
+    await releaseLockIfNeeded();
   };
 
   // Convert LPOSheet to LPOSummary format
@@ -623,7 +669,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 </div>
                 
                 <button
-                  onClick={() => setIsEditing(true)}
+                  onClick={handleStartEdit}
                   className="flex items-center px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
                 >
                   <Edit2 className="w-3.5 h-3.5 mr-1" />
@@ -748,7 +794,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                           </>
                         ) : (
                           <>
-                            <button onClick={() => setEditingRow(index)} className="p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit Entry">
+                            <button onClick={() => handleStartRowEdit(index)} className="p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit Entry">
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button onClick={() => openCancelModal(index)} className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20" title="Cancel Entry">
@@ -966,7 +1012,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                       ) : (
                         <>
                           <button
-                            onClick={() => setEditingRow(index)}
+                            onClick={() => handleStartRowEdit(index)}
                             className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                             title="Edit Entry"
                           >

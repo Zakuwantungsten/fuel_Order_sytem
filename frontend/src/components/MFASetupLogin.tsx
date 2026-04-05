@@ -44,6 +44,7 @@ interface MFASetupLoginProps {
   userId: string;
   tempSessionToken: string;
   allowedMethods?: string[];  // admin-controlled: e.g. ['totp'], ['email'], or ['totp', 'email']
+  rememberMe?: boolean;
   onSuccess: (tokens: { accessToken: string; refreshToken: string; user: any }) => void;
   onCancel: () => void;
 }
@@ -54,6 +55,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
   userId,
   tempSessionToken,
   allowedMethods = ['totp', 'email'],
+  rememberMe,
   onSuccess,
   onCancel,
 }) => {
@@ -143,6 +145,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
           trustDevice,
           deviceId,
           deviceName: trustDevice ? deviceName : undefined,
+          rememberMe: !!rememberMe,
         }),
       });
       const data = await safeJson(response);
@@ -187,7 +190,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
           method: 'POST',
           headers: jsonHeaders(),
           credentials: 'include',
-          body: JSON.stringify({ userId, tempSessionToken, code: '', trustDevice, deviceId, deviceName: trustDevice ? deviceName : undefined }),
+          body: JSON.stringify({ userId, tempSessionToken, code: '', trustDevice, deviceId, deviceName: trustDevice ? deviceName : undefined, rememberMe: !!rememberMe }),
         });
         const verifyData = await safeJson(verifyResponse);
         if (!verifyResponse.ok || !verifyData.success) {
@@ -227,6 +230,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
           trustDevice,
           deviceId,
           deviceName: trustDevice ? deviceName : undefined,
+          rememberMe: !!rememberMe,
         }),
       });
       const data = await safeJson(response);

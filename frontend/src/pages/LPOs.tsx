@@ -180,6 +180,7 @@ const LPOs = () => {
   const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
   const loading = lpoQuery.isLoading;
+  const isFetching = lpoQuery.isFetching;
 
   const { data: workbooks = [] } = useLPOWorkbooks();
   const { data: hookYears = [] } = useLPOAvailableYears();
@@ -671,7 +672,9 @@ const LPOs = () => {
     const defYear = now.getFullYear(), defMonth = now.getMonth() + 1;
     if (selectedPeriods.length !== 1 || selectedPeriods[0].year !== defYear || selectedPeriods[0].month !== defMonth) return;
     if (orders.length === 0 && availablePeriods.length > 0) {
-      setSelectedPeriods([availablePeriods[0]]);
+      // Skip the current month (backend always includes it even if empty)
+      const fallback = availablePeriods.find(p => !(p.year === defYear && p.month === defMonth));
+      if (fallback) setSelectedPeriods([fallback]);
     }
   }, [orders, loading, filtersInitialized, availablePeriods]);
 
@@ -1426,7 +1429,7 @@ const LPOs = () => {
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg transition-colors">
-        {loading ? (
+        {loading || isFetching ? (
           <UnifiedTabLoader label="Loading LPO entries..." />
         ) : orders.length === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">

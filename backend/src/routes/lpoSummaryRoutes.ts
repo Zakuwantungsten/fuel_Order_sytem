@@ -5,6 +5,8 @@ import { authenticate, authorize } from '../middleware/auth';
 import { exportRateLimiter } from '../middleware/rateLimiters';
 import { lpoSummaryValidation, commonValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
+import { createEditLockHandlers } from '../controllers/editLockController';
+import { LPOSummary } from '../models';
 
 const router = Router();
 
@@ -89,5 +91,10 @@ router.delete(
   validate,
   asyncHandler(lpoSummaryController.deleteSheetFromWorkbook)
 );
+
+// Edit lock routes for LPO Summary documents (same roles as update)
+const lpoSummaryLock = createEditLockHandlers(LPOSummary, 'lpo_documents');
+router.post('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(lpoSummaryLock.acquireEditLock));
+router.delete('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(lpoSummaryLock.releaseEditLock));
 
 export default router;

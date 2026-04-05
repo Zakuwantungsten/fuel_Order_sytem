@@ -519,6 +519,7 @@ export interface AuthUser extends User {
 export interface LoginCredentials {
   username: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface AuthResponse {

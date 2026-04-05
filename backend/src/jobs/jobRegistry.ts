@@ -119,7 +119,7 @@ class JobRegistry {
     } catch (err: any) {
       success = false;
       message = err?.message ?? 'Unknown error';
-      logger.error(`[JobRegistry] Job "${job.name}" failed:`, err);
+      logger.error(`[JobRegistry] Job "${job.name}" failed: ${String(err?.message ?? err)}`, { stack: err?.stack });
     }
 
     const finishedAt = new Date().toISOString();

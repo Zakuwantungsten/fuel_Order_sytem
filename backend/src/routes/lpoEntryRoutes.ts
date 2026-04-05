@@ -39,10 +39,10 @@ router.put(
   asyncHandler(lpoEntryController.updateLPOEntry)
 );
 
-// Edit lock routes
+// Edit lock routes (same roles as update)
 const lpoLock = createEditLockHandlers(LPOEntry, 'lpo_entries');
-router.post('/:id/lock', commonValidation.mongoId, validate, asyncHandler(lpoLock.acquireEditLock));
-router.delete('/:id/lock', commonValidation.mongoId, validate, asyncHandler(lpoLock.releaseEditLock));
+router.post('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(lpoLock.acquireEditLock));
+router.delete('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(lpoLock.releaseEditLock));
 
 // Audit history route
 router.get('/:id/history', commonValidation.mongoId, validate, asyncHandler(getResourceHistory('lpo_entry')));

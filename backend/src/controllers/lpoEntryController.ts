@@ -7,6 +7,7 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sa
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
 import { filterLPOEntryFields } from '../utils/roleFieldPolicy';
+import { enforceEditLock } from './editLockController';
 
 /**
  * Get all LPO entries with pagination and filters
@@ -346,6 +347,11 @@ export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<v
     if (hasSensitiveChange && (!reason || reason.length < 10)) {
       throw new ApiError(400, 'A reason of at least 10 characters is required when changing quantity, pricing, or payment fields');
     }
+
+    // Enforce edit lock — the caller must hold a valid lock to update
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+    await enforceEditLock(LPOEntry, id, username);
 
     // Strip fields the caller’s role is not allowed to write
     const safeUpdates = filterLPOEntryFields(rawUpdates, req.user?.role || 'fuel_order_maker') as any;

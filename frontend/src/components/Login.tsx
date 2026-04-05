@@ -23,6 +23,7 @@ const Login: React.FC = () => {
     tempSessionToken: string;
     preferredMethod: 'totp' | 'sms' | 'email';
     mfaMethods?: { totp: boolean; sms: boolean; email: boolean };
+    rememberMe?: boolean;
   } | null>(null);
 
   // MFA Setup State (when admin requires MFA but user hasn't set it up)
@@ -30,17 +31,19 @@ const Login: React.FC = () => {
     userId: string;
     tempSessionToken: string;
     allowedMethods?: string[];
+    rememberMe?: boolean;
   } | null>(null);
 
   const { login, isLoading, error, clearError, completeLogin } = useAuth();
   const location = useLocation();
 
-  // Load saved username but clear password when component mounts
+  // Load saved username and remember-me preference when component mounts
   useEffect(() => {
     const savedUsername = localStorage.getItem('fuel_order_last_username') || '';
+    const wasRemembered = localStorage.getItem('fuel_order_remember_me') === '1';
     setCredentials({ username: savedUsername, password: '' });
     setShowPassword(false);
-    setRememberMe(false);
+    setRememberMe(wasRemembered && !!savedUsername);
   }, []);
 
   // Check for session expiration or inactivity message
@@ -127,9 +130,17 @@ const Login: React.FC = () => {
       
       // Store deviceId in sessionStorage to pass to backend after login response
       sessionStorage.setItem('deviceId', deviceId);
+
+      // Persist username when remember-me is checked so it pre-fills next time.
+      // Clear it when unchecked so there is no stale hint after the user opts out.
+      if (rememberMe) {
+        localStorage.setItem('fuel_order_last_username', credentials.username);
+      } else {
+        localStorage.removeItem('fuel_order_last_username');
+      }
       
-      // Send only username and password to login endpoint
-      const result = await login(credentials);
+      // Include rememberMe so AuthContext → backend can set the HttpOnly cookie
+      const result = await login({ ...credentials, rememberMe });
       
       // Check if MFA is required (result is only returned for MFA cases)
       if (result && result.requiresMFA) {
@@ -138,6 +149,7 @@ const Login: React.FC = () => {
           tempSessionToken: result.data.tempSessionToken,
           preferredMethod: result.data.preferredMethod || 'totp',
           mfaMethods: result.data.mfaMethods,
+          rememberMe,
         });
         return;
       }
@@ -146,6 +158,7 @@ const Login: React.FC = () => {
           userId: result.data.userId,
           tempSessionToken: result.data.tempSessionToken,
           allowedMethods: result.data.allowedMethods,
+          rememberMe,
         });
         return;
       }
@@ -157,7 +170,8 @@ const Login: React.FC = () => {
   };
   
   const handleMFASuccess = async (tokens: { accessToken: string; refreshToken: string; user: any }) => {
-    // Use AuthContext's completeLogin to properly set user state
+    // Propagate rememberMe so AuthContext stores the flag in localStorage
+    const rm = mfaChallenge?.rememberMe ?? mfaSetupChallenge?.rememberMe ?? false;
     await completeLogin({
       user: {
         ...tokens.user,
@@ -165,7 +179,7 @@ const Login: React.FC = () => {
       },
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-    } as any);
+    } as any, rm);
   };
   
   const handleMFACancel = () => {
@@ -186,6 +200,7 @@ const Login: React.FC = () => {
           userId={mfaSetupChallenge.userId}
           tempSessionToken={mfaSetupChallenge.tempSessionToken}
           allowedMethods={mfaSetupChallenge.allowedMethods}
+          rememberMe={mfaSetupChallenge.rememberMe}
           onSuccess={handleMFASuccess}
           onCancel={handleMFASetupCancel}
         />
@@ -202,6 +217,7 @@ const Login: React.FC = () => {
           tempSessionToken={mfaChallenge.tempSessionToken}
           preferredMethod={mfaChallenge.preferredMethod}
           mfaMethods={mfaChallenge.mfaMethods}
+          rememberMe={mfaChallenge.rememberMe}
           onSuccess={handleMFASuccess}
           onCancel={handleMFACancel}
         />

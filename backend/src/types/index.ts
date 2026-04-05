@@ -454,6 +454,11 @@ export interface ILPOSummary {
   approvedBy?: string;  // Name of approver (optional - for any LPO that needs approval signature)
   isDeleted: boolean;
   deletedAt?: Date;
+  editLock?: {
+    lockedBy: string | null;
+    lockedAt: Date | null;
+    lockedUntil: Date | null;
+  };
   createdAt: Date;
   updatedAt: Date;
 }

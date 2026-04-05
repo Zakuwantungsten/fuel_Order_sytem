@@ -143,7 +143,8 @@ describe('Login Component', () => {
       await waitFor(() => {
         expect(mockLogin).toHaveBeenCalledWith({
           username: 'admin',
-          password: 'admin123'
+          password: 'admin123',
+          rememberMe: false
         });
       });
     });
@@ -159,24 +160,74 @@ describe('Login Component', () => {
     });
   });
 
-  describe('Demo Accounts', () => {
-    it('should display demo accounts section', () => {
-      renderLogin();
-      
-      // Demo accounts should be visible
-      expect(screen.getByText(/demo accounts/i)).toBeInTheDocument();
-    });
-
-    it('should fill credentials when demo account is clicked', async () => {
+  describe('Remember Me', () => {
+    it('should pass rememberMe: true when checkbox is checked', async () => {
       renderLogin();
       const user = userEvent.setup();
-      
-      // Find and click a demo account button
-      const adminButton = screen.getByText('admin');
-      await user.click(adminButton);
+
+      const checkbox = screen.getByLabelText(/remember me/i);
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
 
       const usernameInput = screen.getByPlaceholderText('Enter your username');
-      expect(usernameInput).toHaveValue('admin');
+      const passwordInput = screen.getByPlaceholderText('Enter your password');
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
+
+      await user.type(usernameInput, 'testuser');
+      await user.type(passwordInput, 'pass123');
+      await user.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalledWith({
+          username: 'testuser',
+          password: 'pass123',
+          rememberMe: true
+        });
+      });
+    });
+
+    it('should save username to localStorage when rememberMe is checked', async () => {
+      renderLogin();
+      const user = userEvent.setup();
+
+      const checkbox = screen.getByLabelText(/remember me/i);
+      await user.click(checkbox);
+
+      const usernameInput = screen.getByPlaceholderText('Enter your username');
+      const passwordInput = screen.getByPlaceholderText('Enter your password');
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
+
+      await user.type(usernameInput, 'saveduser');
+      await user.type(passwordInput, 'pass123');
+      await user.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalled();
+      });
+
+      // localStorage is mocked via vi.fn() in setup.ts, so check the spy
+      expect(localStorage.setItem).toHaveBeenCalledWith('fuel_order_last_username', 'saveduser');
+    });
+
+    it('should initialize username from localStorage when remember me was previously set', () => {
+      // Configure getItem mock to return values for specific keys
+      const getItemMock = vi.fn((key: string) => {
+        if (key === 'fuel_order_remember_me') return '1';
+        if (key === 'fuel_order_last_username') return 'remembered_user';
+        return null;
+      });
+      (localStorage.getItem as ReturnType<typeof vi.fn>).mockImplementation(getItemMock);
+
+      renderLogin();
+
+      const usernameInput = screen.getByPlaceholderText('Enter your username');
+      const checkbox = screen.getByLabelText(/remember me/i);
+
+      expect(usernameInput).toHaveValue('remembered_user');
+      expect(checkbox).toBeChecked();
+
+      // Restore default mock
+      (localStorage.getItem as ReturnType<typeof vi.fn>).mockImplementation(() => null);
     });
   });
 

@@ -19,6 +19,23 @@ import { getPasswordPolicy, enforcePasswordPolicy } from '../utils/passwordPolic
 import { checkBreachedPassword } from '../utils/breachedPasswordCheck';
 import { assessLoginRisk } from '../utils/riskScoringService';
 
+/** Build secure HttpOnly cookie options for the remember-me refresh token */
+function refreshCookieOptions(maxAgeDays: number): object {
+  const isProd = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProd,
+    // SameSite=None is required for cross-origin requests (Firebase → Railway).
+    // The HttpOnly flag still prevents JS access, so XSS cannot steal the cookie.
+    // CSRF is handled by the separate HMAC-signed X-XSRF-TOKEN header.
+    sameSite: isProd ? 'none' : 'lax',
+    maxAge: maxAgeDays * 24 * 60 * 60 * 1000,
+    // Scope cookie to /api so it covers both /api/auth (legacy) and /api/v1/auth.
+    // It will still NOT be sent to unrelated origins — httpOnly + CSRF provide the real protection.
+    path: '/api',
+  };
+}
+
 /** Helper: parses UA for browser/os/deviceType */
 function parseUA(ua: string) {
   let browser = 'Unknown', os = 'Unknown', deviceType: 'desktop' | 'mobile' | 'tablet' | 'unknown' = 'unknown';
@@ -123,7 +140,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
  */
 export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { username, password } = req.body as LoginRequest;
+    const { username, password, rememberMe } = req.body as LoginRequest & { rememberMe?: boolean };
 
     // Check if this is a driver login attempt (truck number format)
     // Pattern: Starts with T followed by digits and letters (e.g., T123-DNH, T456-ABC)
@@ -607,11 +624,24 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
     }
 
+    // ── Remember Me: set rotating HttpOnly refresh-token cookie ──────────
+    // Only for non-driver, voluntarily persistent sessions. JS cannot read this
+    // cookie (httpOnly) and CSRF cannot forge it (already protected by XSRF token).
+    if (rememberMe && !username.match(/^T\d{3,4}[-\s]?[A-Z]{3}$/i)) {
+      const rmDays = refreshExpiryDays ?? 30;
+      const cookieOpts = refreshCookieOptions(rmDays);
+      logger.info(`[RememberMe] Setting cookie for ${username}, maxAge=${rmDays}d, opts=${JSON.stringify(cookieOpts)}`);
+      res.cookie('fuel_order_refresh', refreshToken, cookieOpts);
+    } else {
+      logger.info(`[RememberMe] Cookie NOT set: rememberMe=${rememberMe}, username=${username}`);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Login successful',
       data: {
         ...response,
+        rememberMe: !!rememberMe,
         sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
         riskScore: riskResult.score,
         riskLevel: riskResult.level,
@@ -627,7 +657,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
  */
 export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId, tempSessionToken, code, method, trustDevice, deviceName } = req.body;
+    const { userId, tempSessionToken, code, method, trustDevice, deviceName, rememberMe } = req.body;
 
     if (!userId || !tempSessionToken || !code) {
       throw new ApiError(400, 'User ID, session token, and MFA code are required');
@@ -774,11 +804,18 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
       }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
     }
 
+    // ── Remember Me cookie after MFA verification ──────────────────────
+    if (rememberMe) {
+      const rmDays = refreshExpiryDays ?? 30;
+      res.cookie('fuel_order_refresh', refreshToken, refreshCookieOptions(rmDays));
+    }
+
     res.status(200).json({
       success: true,
       message: 'MFA verification successful. Login complete.',
       data: {
         ...response,
+        rememberMe: !!rememberMe,
         sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
       },
     });
@@ -848,7 +885,7 @@ export const setupMFAGenerate = async (req: AuthRequest, res: Response): Promise
  */
 export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId, tempSessionToken, secret, code, trustDevice, deviceId, deviceName } = req.body;
+    const { userId, tempSessionToken, secret, code, trustDevice, deviceId, deviceName, rememberMe } = req.body;
 
     if (!userId || !tempSessionToken || !code) {
       throw new ApiError(400, 'User ID, session token, and verification code are required');
@@ -997,11 +1034,18 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
       }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
     }
 
+    // ── Remember Me cookie after forced MFA setup ───────────────────────
+    if (rememberMe) {
+      const rmDaysSetup = refreshExpiryDays ?? 30;
+      res.cookie('fuel_order_refresh', refreshToken, refreshCookieOptions(rmDaysSetup));
+    }
+
     res.status(200).json({
       success: true,
       message: 'MFA setup complete. Login successful.',
       data: {
         ...response,
+        rememberMe: !!rememberMe,
         backupCodes: result.backupCodes,
         sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
       },
@@ -1071,7 +1115,7 @@ export const setupMFAEmailSend = async (req: AuthRequest, res: Response): Promis
  */
 export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId, tempSessionToken, code, trustDevice, deviceId, deviceName } = req.body;
+    const { userId, tempSessionToken, code, trustDevice, deviceId, deviceName, rememberMe } = req.body;
 
     if (!userId || !tempSessionToken) {
       throw new ApiError(400, 'User ID and session token are required');
@@ -1222,11 +1266,18 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
       }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
     }
 
+    // ── Remember Me cookie after email MFA setup ───────────────────────────
+    if (rememberMe) {
+      const rmDaysEmail = refreshExpiryDays ?? 30;
+      res.cookie('fuel_order_refresh', refreshToken, refreshCookieOptions(rmDaysEmail));
+    }
+
     res.status(200).json({
       success: true,
       message: 'Email MFA setup complete. Login successful.',
       data: {
         ...response,
+        rememberMe: !!rememberMe,
         sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
       },
     });
@@ -1240,7 +1291,12 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
  */
 export const refreshToken = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { refreshToken: token } = req.body;
+    // Accept token from HttpOnly cookie (remember-me) OR request body (legacy / MFA flows)
+    const cookieToken: string | undefined = (req.cookies as any)?.fuel_order_refresh;
+    const bodyToken: string | undefined = req.body?.refreshToken;
+    const token = cookieToken || bodyToken;
+    const usedCookie = !!cookieToken;
+    logger.info(`[RememberMe] Refresh attempt: hasCookie=${!!cookieToken}, hasBody=${!!bodyToken}, cookieKeys=${JSON.stringify(Object.keys(req.cookies || {}))}`);
 
     if (!token) {
       throw new ApiError(400, 'Refresh token is required');
@@ -1290,7 +1346,7 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
       res.status(200).json({
         success: true,
         message: 'Token refreshed successfully',
-        data: tokens,
+        data: { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken },
       });
       return;
     }
@@ -1307,14 +1363,18 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
     }
 
     if (user.refreshToken !== hashedToken) {
-      // Token reuse detected — revoke all sessions for this user (Gap 3)
+      // Token reuse detected — revoke all sessions AND clear any remember-me cookie
       user.refreshToken = undefined;
       await user.save();
+      // Clear the compromised cookie so it cannot be retried
+      if (usedCookie) {
+        res.clearCookie('fuel_order_refresh', { path: '/api' });
+      }
       logger.warn(`Refresh token reuse detected for user: ${user.username}`);
       throw new ApiError(401, 'Invalid refresh token');
     }
 
-    // Generate new tokens
+    // Generate new tokens (rotating refresh token)
     const payload: JWTPayload = {
       userId: user._id.toString(),
       username: user.username,
@@ -1327,13 +1387,29 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
     user.refreshToken = crypto.createHash('sha256').update(tokens.refreshToken).digest('hex');
     await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: 'Token refreshed successfully',
-      data: tokens,
-    });
+    // ── Rotate the HttpOnly cookie if this request came from one ─────────
+    // Each use of the cookie issues a brand-new token and resets the TTL
+    // so active users stay logged in without ever touching localStorage.
+    if (usedCookie) {
+      const rmDays = rtRefreshExpiryDays ?? 30;
+      res.cookie('fuel_order_refresh', tokens.refreshToken, refreshCookieOptions(rmDays));
+      // Return only the access token — the new refresh token lives in the cookie
+      res.status(200).json({
+        success: true,
+        message: 'Token refreshed successfully',
+        data: { accessToken: tokens.accessToken },
+      });
+    } else {
+      res.status(200).json({
+        success: true,
+        message: 'Token refreshed successfully',
+        data: tokens,
+      });
+    }
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
+      // Cookie is expired — clear it so browser stops sending it
+      res.clearCookie('fuel_order_refresh', { path: '/api' });
       throw new ApiError(401, 'Refresh token expired. Please login again.');
     }
     throw error;
@@ -1349,8 +1425,18 @@ export const logout = async (req: AuthRequest, res: Response): Promise<void> => 
       throw new ApiError(401, 'Not authenticated');
     }
 
-    // Clear refresh token
+    // Clear refresh token from DB
     await User.findByIdAndUpdate(req.user.userId, { refreshToken: null });
+
+    // Clear the remember-me HttpOnly cookie regardless of whether it was used
+    // This ensures logout is complete across all remember-me sessions on this device
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie('fuel_order_refresh', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/api',
+    });
 
     logger.info(`User logged out: ${req.user.username}`);
 
