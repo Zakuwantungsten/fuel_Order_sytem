@@ -19,6 +19,7 @@ export const lpoKeys = {
   workbooks: () => [...lpoKeys.all, 'workbooks'] as const,
   availableYears: () => [...lpoKeys.all, 'years'] as const,
   availableFilters: () => [...lpoKeys.all, 'filters'] as const,
+  referEntries: () => [...lpoKeys.all, 'referEntries'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -114,6 +115,35 @@ export function useDriverAccountEntries() {
           cancelledAt: entry.cancelledAt || null,
         } as LPOEntry;
       });
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Refer entries (partner/third-party trucks)
+// ---------------------------------------------------------------------------
+export function useReferEntries() {
+  return useQuery({
+    queryKey: lpoKeys.referEntries(),
+    queryFn: async () => {
+      const response = await lposAPI.getAll({ isRefer: 'true', limit: 10000 });
+      const entries = Array.isArray(response.data) ? response.data : [];
+      return entries.map((entry: any, idx: number) => ({
+        id: `ref-${entry.id || entry._id || idx}`,
+        sn: idx + 1,
+        date: entry.date,
+        lpoNo: entry.lpoNo,
+        dieselAt: entry.dieselAt,
+        doSdo: 'REF',
+        truckNo: entry.truckNo,
+        ltrs: entry.ltrs,
+        pricePerLtr: entry.pricePerLtr,
+        destinations: entry.destinations || 'REFER',
+        createdAt: entry.createdAt,
+        isCancelled: entry.isCancelled || false,
+        isRefer: true,
+      } as LPOEntry));
     },
     staleTime: 5 * 60 * 1000,
   });

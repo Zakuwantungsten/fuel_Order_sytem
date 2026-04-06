@@ -15,7 +15,7 @@ import { enforceEditLock } from './editLockController';
 export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, lpoNo, truckNo, station, search, status } = req.query;
+    const { dateFrom, dateTo, lpoNo, truckNo, station, search, status, isRefer, isDriverAccount } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -25,6 +25,14 @@ export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise
       filter.$or = [{ isCancelled: false }, { isCancelled: { $exists: false } }];
     } else if (status === 'cancelled') {
       filter.isCancelled = true;
+    }
+
+    // Filter by entry type (refer or driver account tabs)
+    if (isRefer === 'true') {
+      filter.isRefer = true;
+    }
+    if (isDriverAccount === 'true') {
+      filter.isDriverAccount = true;
     }
 
     // Restrict drivers to their own truck's records (least-privilege)

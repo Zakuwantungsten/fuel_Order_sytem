@@ -756,6 +756,12 @@ export const lpoDocumentsAPI = {
     return response.data.data;
   },
 
+  // Cancel ALL active entries in an LPO at once
+  cancelAll: async (id: string, reason?: string): Promise<{ lpoNo: string; results: any[] }> => {
+    const response = await apiClient.post(`/lpo-documents/${id}/cancel-all`, { reason });
+    return response.data.data;
+  },
+
   // Forward an LPO to another station (e.g., Ndola → Kapiri, Lake Tunduma → Infinity)
   forward: async (data: {
     sourceLpoId: string | number;

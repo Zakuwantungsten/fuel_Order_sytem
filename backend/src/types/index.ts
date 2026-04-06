@@ -322,8 +322,9 @@ export interface ILPOEntry {
   deletedAt?: Date;
   // Driver Account / Cash fields
   isDriverAccount?: boolean;  // True for driver's account (misuse/theft) or cash entries
+  isRefer?: boolean;           // True for refer/partner company truck entries
   referenceDo?: string;       // Reference DO for NIL entries to link to a journey
-  paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';  // Payment method
+  paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' | 'REFER';  // Payment method
   currency?: string;          // Currency for this entry (USD or TZS)
   isCancelled?: boolean;
   cancelledAt?: Date | null;
@@ -356,6 +357,10 @@ export interface ILPODetail {
   cancelledAt?: Date;
   // Reference DO for NIL entries to link to a journey
   referenceDo?: string;
+  // Refer truck fields (partner/third-party company trucks)
+  isRefer?: boolean;
+  // Stores actual journey DO for DA entries created from main form
+  referenceDoNo?: string;
   // Custom station fields (for unlisted stations like small lake stations in Zambia)
   isCustomStation?: boolean;
   customStationName?: string;

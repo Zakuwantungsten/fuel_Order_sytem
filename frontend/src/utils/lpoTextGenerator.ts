@@ -12,7 +12,7 @@ export const generateLPOText = (data: LPOSummary): string => {
   
   // Entries
   data.entries.forEach(entry => {
-    // Handle cancelled and driver account entries
+    // Handle cancelled, refer, and driver account entries
     let doNo = entry.doNo;
     let dest = entry.dest;
     let status = '';
@@ -20,8 +20,12 @@ export const generateLPOText = (data: LPOSummary): string => {
     if (entry.isCancelled) {
       doNo = 'CANCELLED';
       status = 'CANCELLED';
+    } else if (entry.isRefer) {
+      doNo = 'REF';
+      dest = entry.dest || 'REFER';
+      status = 'REFER';
     } else if (entry.isDriverAccount) {
-      doNo = 'NIL';
+      doNo = (entry as any).referenceDoNo ? `DA(NIL)-${(entry as any).referenceDoNo}` : 'DA(NIL)';
       dest = 'NIL';
       status = 'DRIVER_ACCOUNT';
     }
@@ -99,7 +103,7 @@ export const generateLPOForWhatsApp = (data: LPOSummary): string => {
   
   // Entries
   data.entries.forEach(entry => {
-    // Handle cancelled and driver account entries
+    // Handle cancelled, refer, and driver account entries
     let doNo: string;
     let dest: string;
     let prefix = '';
@@ -108,8 +112,12 @@ export const generateLPOForWhatsApp = (data: LPOSummary): string => {
       doNo = 'CANCLD';
       dest = entry.dest || '';
       prefix = '❌ ';
+    } else if (entry.isRefer) {
+      doNo = 'REF';
+      dest = entry.dest || 'REFER';
+      prefix = '🚛 ';
     } else if (entry.isDriverAccount) {
-      doNo = 'NIL';
+      doNo = (entry as any).referenceDoNo ? `DA-${(entry as any).referenceDoNo}` : 'DA(NIL)';
       dest = 'NIL';
       prefix = '👤 ';
     } else {

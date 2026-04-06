@@ -122,6 +122,17 @@ const lpoDetailSchema = new Schema<ILPODetail>(
       type: String,
       trim: true,
     },
+    // Refer truck fields (partner/third-party company trucks)
+    isRefer: {
+      type: Boolean,
+      default: false,
+    },
+    // Stores actual journey DO for DA entries created from main form
+    referenceDoNo: {
+      type: String,
+      trim: true,
+      default: null,
+    },
   },
   { _id: true }
 );

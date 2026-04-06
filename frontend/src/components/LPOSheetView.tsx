@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2 } from 'lucide-react';
+import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI } from '../services/api';
 import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
@@ -18,9 +18,10 @@ interface LPOSheetViewProps {
   sheet: LPOSheet;
   workbookId: string | number;
   onUpdate: (updatedSheet: LPOSheet) => void;
+  lpoNo?: string;
 }
 
-const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate }) => {
+const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate, lpoNo }) => {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editedSheet, setEditedSheet] = useState<LPOSheet>(sheet);
@@ -41,6 +42,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [entryTypeMessage, setEntryTypeMessage] = useState<string | null>(null);
   const [entryType, setEntryType] = useState<'driver-account' | 'nil-do' | 'regular' | null>(null);
+  const [isFetchingSheet, setIsFetchingSheet] = useState(false);
+  const [showCancelAllModal, setShowCancelAllModal] = useState(false);
+  const [isCancellingAll, setIsCancellingAll] = useState(false);
+  const [entrySearch, setEntrySearch] = useState('');
 
   useEffect(() => {
     setEditedSheet(sheet);
@@ -53,6 +58,54 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       setCancellationReport(null);
     }
   }, [sheet]);
+
+  // Server-side fetch: always get fresh data when lpoNo changes
+  useEffect(() => {
+    if (!lpoNo) return;
+
+    const fetchFreshSheet = async () => {
+      setIsFetchingSheet(true);
+      setEntrySearch('');
+      try {
+        const freshLpo = await lpoDocumentsAPI.getByLpoNo(lpoNo);
+        if (freshLpo) {
+          setEditedSheet(freshLpo as unknown as LPOSheet);
+          const hasCancelled = freshLpo.entries?.some((e: any) => e.isCancelled);
+          if (hasCancelled) {
+            setCancellationReport(generateCancellationReport(freshLpo as unknown as LPOSheet));
+          } else {
+            setCancellationReport(null);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to refresh sheet data:', err);
+        // Fall back to prop data — no crash
+      } finally {
+        setIsFetchingSheet(false);
+      }
+    };
+
+    fetchFreshSheet();
+  }, [lpoNo]);
+
+  // Refresh sheet from server (used after save/cancel operations)
+  const refreshSheet = async () => {
+    if (!lpoNo) return;
+    try {
+      const freshLpo = await lpoDocumentsAPI.getByLpoNo(lpoNo);
+      if (freshLpo) {
+        setEditedSheet(freshLpo as unknown as LPOSheet);
+        const hasCancelled = freshLpo.entries?.some((e: any) => e.isCancelled);
+        if (hasCancelled) {
+          setCancellationReport(generateCancellationReport(freshLpo as unknown as LPOSheet));
+        } else {
+          setCancellationReport(null);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh sheet:', err);
+    }
+  };
 
   useEffect(() => {
     // Calculate total when entries change (excluding cancelled entries)
@@ -372,6 +425,22 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }
   };
 
+  // Handle cancelling ALL active entries in the LPO
+  const handleCancelAll = async () => {
+    setIsCancellingAll(true);
+    try {
+      await lpoDocumentsAPI.cancelAll(editedSheet.id as string, 'Bulk LPO cancellation');
+      setShowCancelAllModal(false);
+      // Refresh sheet from server to get updated state
+      await refreshSheet();
+      alert(`✓ LPO ${editedSheet.lpoNo} — all entries cancelled successfully`);
+    } catch (err: any) {
+      alert(`Failed to cancel LPO: ${err?.response?.data?.message || err?.message || 'Unknown error'}`);
+    } finally {
+      setIsCancellingAll(false);
+    }
+  };
+
   const handleCancel = async () => {
     setEditedSheet(sheet);
     setIsEditing(false);
@@ -507,8 +576,27 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }).format(amount);
   };
 
+  // Filtered entries for search
+  const visibleEntries = entrySearch.trim()
+    ? editedSheet.entries.filter(entry => {
+        const term = entrySearch.toLowerCase();
+        return (
+          (entry.truckNo || '').toLowerCase().includes(term) ||
+          (entry.doNo || '').toLowerCase().includes(term) ||
+          (entry.dest || '').toLowerCase().includes(term)
+        );
+      })
+    : editedSheet.entries;
+
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors relative">
+      {/* Loading overlay for server fetch */}
+      {isFetchingSheet && (
+        <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 flex items-center justify-center z-10">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
+      )}
+
       {/* Sheet Header - LPO Header Info */}
       <div className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2">
         {/* Desktop: single row | Mobile: stacked */}
@@ -576,6 +664,18 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
           {/* Action Buttons */}
           <div className="flex items-center space-x-1.5 flex-shrink-0">
+            {/* Search input - visible on all viewports */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={entrySearch}
+                onChange={(e) => setEntrySearch(e.target.value)}
+                placeholder="Search truck, DO..."
+                className="pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 w-32 sm:w-40"
+              />
+            </div>
+
             {isEditing ? (
               <>
                 <button
@@ -675,6 +775,17 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   <Edit2 className="w-3.5 h-3.5 mr-1" />
                   Edit LPO
                 </button>
+
+                {/* Cancel All LPO button - only show if there are active entries */}
+                {editedSheet.entries.some(e => !e.isCancelled) && (
+                  <button
+                    onClick={() => setShowCancelAllModal(true)}
+                    className="flex items-center px-2 py-1 text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/40 text-sm"
+                  >
+                    <XCircle className="w-3.5 h-3.5 mr-1" />
+                    Cancel LPO
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -757,7 +868,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
             {/* ===== MOBILE CARD VIEW (lg:hidden) ===== */}
             <div className="lg:hidden">
-              {editedSheet.entries.map((entry, index) => {
+              {visibleEntries.map((entry, index) => {
                 const displayData = formatEntryForDisplay(entry);
                 const isCancelled = entry.isCancelled;
                 const isDriverAccount = entry.isDriverAccount;
@@ -888,7 +999,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
 
             {/* Table Body - Existing Entries */}
-            {editedSheet.entries.map((entry, index) => {
+            {visibleEntries.map((entry, index) => {
               const displayData = formatEntryForDisplay(entry);
               const isCancelled = entry.isCancelled;
               const isDriverAccount = entry.isDriverAccount;
@@ -1062,6 +1173,17 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
             </div>
             {/* End desktop table wrapper */}
+
+            {/* No search results */}
+            {visibleEntries.length === 0 && entrySearch.trim() && (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <Search className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No entries match &ldquo;{entrySearch}&rdquo;</p>
+                <button onClick={() => setEntrySearch('')} className="text-sm text-blue-600 dark:text-blue-400 mt-2 hover:underline">
+                  Clear search
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Summary Statistics */}
@@ -1238,6 +1360,94 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? 'Processing...' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel All Modal */}
+      {showCancelAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">
+                Cancel Entire LPO — {editedSheet.lpoNo}
+              </h2>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {(() => {
+                const active = editedSheet.entries.filter(e => !e.isCancelled);
+                const regularEntries = active.filter(e => {
+                  const doUp = (e.doNo || '').toUpperCase().trim();
+                  return !e.isDriverAccount && !e.isRefer && doUp !== 'NIL' && doUp !== 'REF' && doUp !== 'DA' && doUp !== '' && doUp !== 'N/A';
+                });
+                const daOrRefEntries = active.filter(e => e.isDriverAccount || e.isRefer);
+                const nilEntries = active.filter(e => {
+                  const doUp = (e.doNo || '').toUpperCase().trim();
+                  return !e.isDriverAccount && !e.isRefer && (doUp === 'NIL' || doUp === '' || doUp === 'N/A');
+                });
+
+                return (
+                  <>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      This will cancel <strong>{active.length}</strong> active truck{active.length !== 1 ? 's' : ''} on this LPO.
+                    </p>
+                    {regularEntries.length > 0 && (
+                      <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm text-red-700 dark:text-red-300">
+                        <p className="font-medium mb-1">
+                          {regularEntries.length} regular truck{regularEntries.length !== 1 ? 's' : ''} — fuel records WILL be reverted:
+                        </p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {regularEntries.map((e, i) => (
+                            <li key={i}>{e.truckNo} — {e.doNo} ({e.liters}L)</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {daOrRefEntries.length > 0 && (
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-400">
+                        <p className="font-medium mb-1">
+                          {daOrRefEntries.length} DA/Refer truck{daOrRefEntries.length !== 1 ? 's' : ''} — marked cancelled only, no fuel change:
+                        </p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {daOrRefEntries.map((e, i) => (
+                            <li key={i}>{e.truckNo} ({e.isDriverAccount ? 'DA' : 'REF'})</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {nilEntries.length > 0 && (
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-400">
+                        <p className="font-medium mb-1">
+                          {nilEntries.length} NIL DO truck{nilEntries.length !== 1 ? 's' : ''} — marked cancelled only:
+                        </p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {nilEntries.map((e, i) => (
+                            <li key={i}>{e.truckNo}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t dark:border-gray-700">
+              <button
+                onClick={() => setShowCancelAllModal(false)}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleCancelAll}
+                disabled={isCancellingAll}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50"
+              >
+                {isCancellingAll ? 'Cancelling...' : 'Cancel Entire LPO'}
               </button>
             </div>
           </div>

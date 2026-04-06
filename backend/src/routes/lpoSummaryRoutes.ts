@@ -45,6 +45,13 @@ router.post(
   asyncHandler(lpoSummaryController.cancelTruckInLPO)
 );
 
+// Cancel ALL entries in an LPO route - same permissions as cancel-truck
+router.post(
+  '/:id/cancel-all',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'),
+  asyncHandler(lpoSummaryController.cancelAllEntriesInLPO)
+);
+
 // Forward LPO to another station route - UPDATE-level action per frontend LPOS permissions
 router.post(
   '/forward',

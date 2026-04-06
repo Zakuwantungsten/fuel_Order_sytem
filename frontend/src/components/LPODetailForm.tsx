@@ -50,6 +50,9 @@ interface EntryAutoFillData {
   fuelRecordId?: string | number;  // Store fuel record ID for inspect modal
   goingDestination?: string;  // Store original going destination for proper fuel allocation
   returnDoMissing?: boolean;  // Track if return DO is not yet inputted
+  // Entry type: regular, DA (driver account), or REF (refer/partner truck)
+  entryType?: 'regular' | 'da' | 'ref';
+  referenceDoNo?: string;  // For DA: the real journey DO number
   // Warning states for trucks without valid fuel records
   warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | null;
   warningMessage?: string;
@@ -310,6 +313,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // Ref to prevent double-paste operations
   const isPastingRef = React.useRef(false);
 
+  // Map of entry index → debounce timer ID (300ms safety timer for truck fetch)
+  const fetchDebounceTimers = React.useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
   // Close dropdowns when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -353,6 +359,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('scroll', handleScroll, true);
       scrollEl?.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // Clean up all pending fetch timers on unmount
+  React.useEffect(() => {
+    return () => {
+      Object.values(fetchDebounceTimers.current).forEach(clearTimeout);
     };
   }, []);
 
@@ -1536,100 +1549,129 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return;
     }
 
-    // If truck number is valid, fetch data
-    if (formattedTruckNo && formattedTruckNo.length >= 5) {
+    // Format-completion detection: only fetch when truck number matches T{digits} {2+ letters}
+    const TRUCK_FORMAT_COMPLETE = /^T\d+ [A-Z]{2,}$/;
+
+    if (TRUCK_FORMAT_COMPLETE.test(formattedTruckNo)) {
+      // Format is complete — clear any previous timer for this row
+      if (fetchDebounceTimers.current[index]) {
+        clearTimeout(fetchDebounceTimers.current[index]);
+      }
+
+      // Show loading indicator immediately
       setEntryAutoFillData(prev => ({
         ...prev,
         [index]: { ...prev[index], loading: true, fetched: false }
       }));
 
-      const result = await fetchTruckData(formattedTruckNo);
-      
-      const direction = entryAutoFillData[index]?.direction || 'going';
-      const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
-      
-      // Check if return DO is missing
-      const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
-      
-      // IMPORTANT: Use goingDestination for going journey fuel allocation
-      // This ensures we use the original destination before EXPORT DO changed it
-      const destinationForAllocation = direction === 'going'
-        ? result.goingDestination 
-        : result.destination;
-      
-      const defaults = formData.station 
-        ? getStationDefaults(
-            formData.station, 
-            direction, 
-            destinationForAllocation,
-            result.fuelRecord?.totalLts ?? undefined,
-            result.fuelRecord?.extra ?? undefined,
-            result.fuelRecord?.balance ?? undefined
-          ) 
-        : { liters: 350, rate: 1.2 };
-
-      // Calculate balance info for Mbeya returning (INFINITY station)
-      let balanceInfo = undefined;
-      if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
-        balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
-      }
-
-      // Auto-fill the entry - USE CALLBACK FORM to avoid race conditions
-      setFormData(prev => {
-        const newEntries = [...(prev.entries || [])];
+      // 300ms safety timer (guards the final character gap, not typing speed)
+      fetchDebounceTimers.current[index] = setTimeout(async () => {
+        const result = await fetchTruckData(formattedTruckNo);
         
-        // Ensure entry exists
-        if (!newEntries[index]) {
+        const direction = entryAutoFillData[index]?.direction || 'going';
+        const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
+        
+        // Check if return DO is missing
+        const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
+        
+        // IMPORTANT: Use goingDestination for going journey fuel allocation
+        // This ensures we use the original destination before EXPORT DO changed it
+        const destinationForAllocation = direction === 'going'
+          ? result.goingDestination 
+          : result.destination;
+        
+        const defaults = formData.station 
+          ? getStationDefaults(
+              formData.station, 
+              direction, 
+              destinationForAllocation,
+              result.fuelRecord?.totalLts ?? undefined,
+              result.fuelRecord?.extra ?? undefined,
+              result.fuelRecord?.balance ?? undefined
+            ) 
+          : { liters: 350, rate: 1.2 };
+
+        // Calculate balance info for Mbeya returning (INFINITY station)
+        let balanceInfo = undefined;
+        if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
+          balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
+        }
+
+        // Auto-fill the entry - USE CALLBACK FORM to avoid race conditions
+        setFormData(prev => {
+          const newEntries = [...(prev.entries || [])];
+          
+          // Ensure entry exists
+          if (!newEntries[index]) {
+            newEntries[index] = {
+              doNo: '',  // Start empty
+              truckNo: '',
+              liters: 0,
+              rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+              amount: 0,
+              dest: 'NIL',
+            };
+          }
+          
+          // For DA entries: keep DO as DA, store real DO in referenceDoNo
+          const isDA = entryAutoFillData[index]?.entryType === 'da';
+          
           newEntries[index] = {
-            doNo: '',  // Start empty
-            truckNo: '',
-            liters: 0,
-            rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
-            amount: 0,
-            dest: 'NIL',
+            ...newEntries[index],
+            truckNo: formattedTruckNo,  // Use formatted truck number to maintain consistent format
+            doNo: isDA ? 'DA' : doNumber,
+            dest: destinationForAllocation,  // Use correct destination based on direction
+            liters: defaults.liters,
+            rate: defaults.rate,
+            amount: defaults.liters * defaults.rate
           };
-        }
-        
-        newEntries[index] = {
-          ...newEntries[index],
-          truckNo: formattedTruckNo,  // Use formatted truck number to maintain consistent format
-          doNo: doNumber,
-          dest: destinationForAllocation,  // Use correct destination based on direction
-          liters: defaults.liters,
-          rate: defaults.rate,
-          amount: defaults.liters * defaults.rate
-        };
-        
-        // If Mbeya balance info suggests different liters, update
-        if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
-          newEntries[index].liters = balanceInfo.suggestedLiters;
-          newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
-        }
+          
+          // If Mbeya balance info suggests different liters, update
+          if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
+            newEntries[index].liters = balanceInfo.suggestedLiters;
+            newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
+          }
 
-        const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
-        
-        return { ...prev, entries: newEntries, total };
-      });
+          const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
+          
+          return { ...prev, entries: newEntries, total };
+        });
+        setEntryAutoFillData(prev => ({
+          ...prev,
+          [index]: { 
+            ...prev[index],
+            direction, 
+            loading: false, 
+            fetched: result.success, 
+            fuelRecord: result.fuelRecord,
+            fuelRecordId: result.fuelRecord?.id,  // Store fuel record ID for inspect modal
+            goingDestination: result.goingDestination,  // Store for later use when toggling direction
+            returnDoMissing,  // Track if return DO is missing
+            // For DA: store the real journey DO as referenceDoNo
+            referenceDoNo: prev[index]?.entryType === 'da' ? doNumber : prev[index]?.referenceDoNo,
+            warningType: result.warningType || null,
+            warningMessage: result.message,
+            balanceInfo,  // Store balance info for display
+            formulaStatus: defaults.formulaStatus || null,
+            formulaMessage: defaults.formulaMessage,
+            // Journey navigation: store all available journeys
+            allJourneys: result.allJourneys,
+            selectedJourneyIndex: result.allJourneys?.active ? -1 : 0, // -1 for active, 0 for first queued
+            selectedJourneyType: result.allJourneys?.active ? 'active' : 'queued',
+          }
+        }));
+
+        delete fetchDebounceTimers.current[index];
+      }, 300);
+    } else if (formattedTruckNo.length >= 5) {
+      // Format incomplete but long enough — clear any pending timer and reset loading
+      if (fetchDebounceTimers.current[index]) {
+        clearTimeout(fetchDebounceTimers.current[index]);
+        delete fetchDebounceTimers.current[index];
+      }
       setEntryAutoFillData(prev => ({
         ...prev,
-        [index]: { 
-          direction, 
-          loading: false, 
-          fetched: result.success, 
-          fuelRecord: result.fuelRecord,
-          fuelRecordId: result.fuelRecord?.id,  // Store fuel record ID for inspect modal
-          goingDestination: result.goingDestination,  // Store for later use when toggling direction
-          returnDoMissing,  // Track if return DO is missing
-          warningType: result.warningType || null,
-          warningMessage: result.message,
-          balanceInfo,  // Store balance info for display
-          formulaStatus: defaults.formulaStatus || null,
-          formulaMessage: defaults.formulaMessage,
-          // Journey navigation: store all available journeys
-          allJourneys: result.allJourneys,
-          selectedJourneyIndex: result.allJourneys?.active ? -1 : 0, // -1 for active, 0 for first queued
-          selectedJourneyType: result.allJourneys?.active ? 'active' : 'queued',
-        }
+        [index]: { ...prev[index], loading: false, fetched: false }
       }));
     }
   };
@@ -1640,6 +1682,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
    */
   const handleDONoChange = async (index: number, doNo: string) => {
     const doNoUpper = doNo.trim().toUpperCase();
+    
+    // Detect entry type from DO input
+    const entryType: 'regular' | 'da' | 'ref' =
+      doNoUpper === 'DA'  ? 'da'  :
+      doNoUpper === 'REF' ? 'ref' :
+      'regular';
     
     // Update DO number immediately (keep empty if user clears it, only default to NIL on blur if still empty)
     setFormData(prev => {
@@ -1657,6 +1705,54 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       updatedEntries[index] = { ...updatedEntries[index], doNo: doNoUpper || '' };
       return { ...prev, entries: updatedEntries };
     });
+
+    // REF entry: no fetch, just mark the entry type
+    if (entryType === 'ref') {
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: {
+          ...prev[index],
+          direction: 'going',
+          loading: false,
+          fetched: false,
+          fuelRecord: null,
+          entryType: 'ref',
+          warningType: null,
+          warningMessage: undefined,
+        }
+      }));
+      return;
+    }
+
+    // DA entry: mark the type, but still proceed with fetch when truck is entered
+    if (entryType === 'da') {
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: {
+          ...prev[index],
+          direction: prev[index]?.direction || 'going',
+          loading: false,
+          fetched: false,
+          fuelRecord: prev[index]?.fuelRecord || null,
+          entryType: 'da',
+          warningType: null,
+          warningMessage: undefined,
+        }
+      }));
+      return;
+    }
+
+    // Clear entry type if user changed from DA/REF back to a regular DO
+    if (entryType === 'regular') {
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: {
+          ...prev[index],
+          entryType: 'regular',
+          referenceDoNo: undefined,
+        }
+      }));
+    }
 
     // If DO number is valid, fetch journey data
     if (doNoUpper && doNoUpper !== 'NIL' && doNoUpper.length >= 3) {
@@ -1975,6 +2071,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   };
 
   const handleRemoveEntry = (index: number) => {
+    // Clear any pending fetch timer for this row
+    if (fetchDebounceTimers.current[index]) {
+      clearTimeout(fetchDebounceTimers.current[index]);
+      delete fetchDebounceTimers.current[index];
+    }
+
     const updatedEntries = formData.entries!.filter((_, i) => i !== index);
     const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
     
@@ -2110,23 +2212,33 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     // Ensure all entries have required fields with proper defaults
     // For CASH mode, include both direction checkpoints (can have one or both)
     // For CUSTOM mode, include the custom station checkpoint mappings
-    const validEntries = formData.entries.filter(e => e != null).map(entry => ({
-      ...entry,
-      doNo: (entry.doNo && entry.doNo.trim()) || 'NIL',
-      truckNo: entry.truckNo.trim(),
-      dest: (entry.dest && entry.dest.trim()) || 'NIL',
-      liters: Number(entry.liters) || 0,
-      rate: Number(entry.rate) || 0,
-      amount: (Number(entry.liters) || 0) * (Number(entry.rate) || 0),
-      // Include checkpoint(s) for CASH entries - can have going, returning, or both
-      goingCheckpoint: formData.station === 'CASH' && goingEnabled && goingCheckpoint ? goingCheckpoint : undefined,
-      returningCheckpoint: formData.station === 'CASH' && returningEnabled && returningCheckpoint ? returningCheckpoint : undefined,
-      // Include custom station data for CUSTOM entries
-      isCustomStation: formData.station === 'CUSTOM',
-      customStationName: formData.station === 'CUSTOM' ? customStationName : undefined,
-      customGoingCheckpoint: formData.station === 'CUSTOM' && customGoingEnabled ? customGoingCheckpoint : undefined,
-      customReturnCheckpoint: formData.station === 'CUSTOM' && customReturnEnabled ? customReturnCheckpoint : undefined,
-    }));
+    const validEntries = formData.entries.filter(e => e != null).map((entry, idx) => {
+      const af = entryAutoFillData[idx];
+      const isDA = af?.entryType === 'da';
+      const isREF = af?.entryType === 'ref';
+      return {
+        ...entry,
+        doNo: isDA ? 'NIL' : isREF ? 'REF' : ((entry.doNo && entry.doNo.trim()) || 'NIL'),
+        truckNo: entry.truckNo.trim(),
+        dest: (entry.dest && entry.dest.trim()) || 'NIL',
+        liters: Number(entry.liters) || 0,
+        rate: Number(entry.rate) || 0,
+        amount: (Number(entry.liters) || 0) * (Number(entry.rate) || 0),
+        // Entry type flags
+        isDriverAccount: isDA,
+        isRefer: isREF,
+        referenceDoNo: isDA ? (af?.referenceDoNo || undefined) : undefined,
+        journeyDirection: af?.direction,
+        // Include checkpoint(s) for CASH entries - can have going, returning, or both
+        goingCheckpoint: formData.station === 'CASH' && goingEnabled && goingCheckpoint ? goingCheckpoint : undefined,
+        returningCheckpoint: formData.station === 'CASH' && returningEnabled && returningCheckpoint ? returningCheckpoint : undefined,
+        // Include custom station data for CUSTOM entries
+        isCustomStation: formData.station === 'CUSTOM',
+        customStationName: formData.station === 'CUSTOM' ? customStationName : undefined,
+        customGoingCheckpoint: formData.station === 'CUSTOM' && customGoingEnabled ? customGoingCheckpoint : undefined,
+        customReturnCheckpoint: formData.station === 'CUSTOM' && customReturnEnabled ? customReturnCheckpoint : undefined,
+      };
+    });
 
     const total = validEntries.reduce((sum, entry) => sum + entry.amount, 0);
 
@@ -2220,15 +2332,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }
 
       // Submit the current LPO using the same format as handleSubmit
-      const validEntries = formData.entries.filter(e => e != null).map(entry => ({
-        ...entry,
-        doNo: (entry.doNo && entry.doNo.trim()) || 'NIL',
-        truckNo: entry.truckNo.trim(),
-        dest: (entry.dest && entry.dest.trim()) || 'NIL',
-        liters: Number(entry.liters) || 0,
-        rate: Number(entry.rate) || 0,
-        amount: (Number(entry.liters) || 0) * (Number(entry.rate) || 0),
-      }));
+      const validEntries = formData.entries.filter(e => e != null).map((entry, idx) => {
+        const af = entryAutoFillData[idx];
+        const isDA = af?.entryType === 'da';
+        const isREF = af?.entryType === 'ref';
+        return {
+          ...entry,
+          doNo: isDA ? 'NIL' : isREF ? 'REF' : ((entry.doNo && entry.doNo.trim()) || 'NIL'),
+          truckNo: entry.truckNo.trim(),
+          dest: (entry.dest && entry.dest.trim()) || 'NIL',
+          liters: Number(entry.liters) || 0,
+          rate: Number(entry.rate) || 0,
+          amount: (Number(entry.liters) || 0) * (Number(entry.rate) || 0),
+          isDriverAccount: isDA,
+          isRefer: isREF,
+          referenceDoNo: isDA ? (af?.referenceDoNo || undefined) : undefined,
+          journeyDirection: af?.direction,
+        };
+      });
 
       const total = validEntries.reduce((sum, entry) => sum + entry.amount, 0);
 
@@ -2359,6 +2480,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const dupInfo = duplicateWarnings.get(entry?.truckNo || '');
     const hasDup = !!dupInfo && formData.station?.toUpperCase() !== 'CASH';
     return !!(
+      (af as EntryAutoFillData).entryType === 'da' ||
+      (af as EntryAutoFillData).entryType === 'ref' ||
       (af.warningType && !af.loading && (entry?.truckNo?.length || 0) >= 5) ||
       hasDup ||
       (af.fetched && af.allJourneys) ||
@@ -3115,7 +3238,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5;
                 return (
                   <div key={index} className={`border rounded-lg p-2 transition-colors ${
-                    autoFill.fetched && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10'
+                    autoFill.entryType === 'ref' ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/10'
+                    : autoFill.entryType === 'da' ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10'
+                    : autoFill.fetched && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10'
                     : hasNoRecordWarning ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10'
                     : isExactDuplicate ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
                     : isDifferentAmount ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10'
@@ -3139,20 +3264,29 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       </div>
                       {/* DO */}
                       <div className="relative flex-1 min-w-0">
-                        <input type="text" value={entry?.doNo || ''} onChange={(e) => handleDONoChange(index, e.target.value)}
+                        <input type="text" value={autoFill.entryType === 'da' ? 'DA' : (entry?.doNo || '')} onChange={(e) => handleDONoChange(index, e.target.value)}
                           onBlur={(e) => { if (!e.target.value.trim()) handleEntryChange(index, 'doNo', 'NIL'); }}
-                          placeholder="DO#" title="Enter DO number to auto-fill"
-                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                          placeholder="DO#" title="Enter DO number, DA, or REF"
+                          className={`w-full px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                            autoFill.entryType === 'da' ? 'border-blue-400 dark:border-blue-500' : autoFill.entryType === 'ref' ? 'border-orange-400 dark:border-orange-500' : 'border-gray-300 dark:border-gray-600'
+                          }`} />
+                        {autoFill.entryType === 'da' && <span className="absolute right-1 top-0.5 text-[8px] font-bold text-blue-600 dark:text-blue-400">DA</span>}
+                        {autoFill.entryType === 'ref' && <span className="absolute right-1 top-0.5 text-[8px] font-bold text-orange-600 dark:text-orange-400">REF</span>}
                       </div>
-                      {/* Direction toggle */}
-                      <button type="button" onClick={() => toggleDirection(index)}
-                        className={`flex-shrink-0 inline-flex items-center px-1.5 py-1 rounded text-[10px] font-medium ${
-                          autoFill.direction === 'going'
-                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                            : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
-                        }`}>
-                        {autoFill.direction === 'going' ? <><ArrowRight className="w-3 h-3" /></> : <><ArrowLeft className="w-3 h-3" /></>}
-                      </button>
+                      {/* Direction toggle — hidden for REF entries */}
+                      {autoFill.entryType !== 'ref' && (
+                        <button type="button" onClick={() => toggleDirection(index)}
+                          className={`flex-shrink-0 inline-flex items-center px-1.5 py-1 rounded text-[10px] font-medium ${
+                            autoFill.direction === 'going'
+                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                              : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
+                          }`}>
+                          {autoFill.direction === 'going' ? <><ArrowRight className="w-3 h-3" /></> : <><ArrowLeft className="w-3 h-3" /></>}
+                        </button>
+                      )}
+                      {autoFill.entryType === 'ref' && (
+                        <span className="flex-shrink-0 inline-flex items-center px-1.5 py-1 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">REF</span>
+                      )}
                       {/* Actions */}
                       {autoFill.fuelRecord && (
                         <button type="button" onClick={() => handleInspectRecord(index)}
@@ -3188,18 +3322,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                         {autoFill.allJourneys.active && (
                           <button type="button" onClick={() => handleJourneyNavigation(index, 'active')}
                             className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${autoFill.selectedJourneyType === 'active' ? 'bg-green-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                            🚛 Active
+                            Active
                           </button>
                         )}
                         {autoFill.allJourneys.queued.map((qJ, qIdx) => (
                           <button key={qIdx} type="button" onClick={() => handleJourneyNavigation(index, 'queued', qIdx)}
                             className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${autoFill.selectedJourneyType === 'queued' && autoFill.selectedJourneyIndex === qIdx ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                            ⏳ Q{qJ.queueOrder || qIdx + 1}
+                            Q{qJ.queueOrder || qIdx + 1}
                           </button>
                         ))}
                         {autoFill.fetched && (
                           <span className={`text-[10px] ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : autoFill.selectedJourneyType === 'queued' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
-                            {(autoFill.fuelRecord as any)?.isLocked ? '🔒 Locked' : autoFill.selectedJourneyType === 'queued' ? '⏳ Queued' : '🚛 Active'}
+                            {(autoFill.fuelRecord as any)?.isLocked ? 'Locked' : autoFill.selectedJourneyType === 'queued' ? 'Queued' : 'Active'}
                           </span>
                         )}
                       </div>
@@ -3294,7 +3428,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
                       const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5;
                       return (
-                        <tr key={index} className={`${autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : ''} ${hasNoRecordWarning ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${!autoFill.fetched && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'dark:bg-gray-800' : ''}`}>
+                        <tr key={index} className={`${(autoFill as EntryAutoFillData).entryType === 'ref' ? 'bg-orange-50 dark:bg-orange-900/10' : (autoFill as EntryAutoFillData).entryType === 'da' ? 'bg-blue-50 dark:bg-blue-900/10' : autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : ''} ${hasNoRecordWarning ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${!autoFill.fetched && !(autoFill as EntryAutoFillData).entryType && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'dark:bg-gray-800' : ''}`}>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1.5">
                               <input
@@ -3329,7 +3463,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             <div className="relative">
                               <input
                                 type="text"
-                                value={entry?.doNo || ''}
+                                value={autoFill.entryType === 'da' ? 'DA' : (entry?.doNo || '')}
                                 onChange={(e) => handleDONoChange(index, e.target.value)}
                                 onBlur={(e) => {
                                   // Set to NIL only on blur if field is still empty
@@ -3338,32 +3472,71 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                   }
                                 }}
                                 placeholder="0001/26"
-                                title="Enter DO number to auto-fill truck and details"
-                                className="w-24 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                                title="Enter DO number, DA, or REF"
+                                className={`w-24 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                                  autoFill.entryType === 'da' ? 'border-blue-400 dark:border-blue-500' : autoFill.entryType === 'ref' ? 'border-orange-400 dark:border-orange-500' : 'border-gray-300 dark:border-gray-600'
+                                }`}
                               />
                               {autoFill.loading && (
                                 <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
+                              )}
+                              {autoFill.entryType === 'da' && !autoFill.loading && (
+                                <span className="absolute -top-2 right-0 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-1 rounded">DA</span>
+                              )}
+                              {autoFill.entryType === 'ref' && !autoFill.loading && (
+                                <span className="absolute -top-2 right-0 text-[9px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/40 px-1 rounded">REF</span>
+                              )}
+                              {autoFill.entryType === 'da' && autoFill.referenceDoNo && (
+                                <span className="absolute -bottom-4 left-0 text-[9px] text-gray-500 dark:text-gray-400 truncate max-w-[90px]" title={`Ref DO: ${autoFill.referenceDoNo}`}>
+                                  →{autoFill.referenceDoNo}
+                                </span>
                               )}
                             </div>
                           </td>
                           
                           <td className="px-3 py-3">
-                            <button
-                              type="button"
-                              onClick={() => toggleDirection(index)}
-                              className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                autoFill.direction === 'going'
-                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
-                                  : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
-                              }`}
-                              title="Click to toggle direction"
-                            >
-                              {autoFill.direction === 'going' ? (
-                                <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
-                              ) : (
-                                <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
-                              )}
-                            </button>
+                            {autoFill.entryType === 'ref' ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+                                REF
+                              </span>
+                            ) : autoFill.entryType === 'da' ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleDirection(index)}
+                                  className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                    autoFill.direction === 'going'
+                                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
+                                      : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
+                                  }`}
+                                  title="Click to toggle direction"
+                                >
+                                  {autoFill.direction === 'going' ? (
+                                    <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
+                                  ) : (
+                                    <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
+                                  )}
+                                </button>
+                                <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400">DA</span>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => toggleDirection(index)}
+                                className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                  autoFill.direction === 'going'
+                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
+                                    : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
+                                }`}
+                                title="Click to toggle direction"
+                              >
+                                {autoFill.direction === 'going' ? (
+                                  <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
+                                ) : (
+                                  <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
+                                )}
+                              </button>
+                            )}
                           </td>
                           <td className="px-3 py-3">
                             <input
@@ -3403,6 +3576,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           {hasAnyIssue && (
                             <td className="px-3 py-3 max-w-[180px]">
                               <div className="flex flex-col gap-1 text-xs">
+                                {/* DA / REF entry type badge */}
+                                {autoFill.entryType === 'da' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 w-fit">
+                                    Driver Account
+                                    {autoFill.referenceDoNo && <span className="ml-1 font-normal text-blue-500 dark:text-blue-400">({autoFill.referenceDoNo})</span>}
+                                  </span>
+                                )}
+                                {autoFill.entryType === 'ref' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 w-fit">
+                                    Refer (Partner)
+                                  </span>
+                                )}
                                 {/* No fuel record / in-form duplicate warning */}
                                 {hasNoRecordWarning && (
                                   <div className="text-amber-600 dark:text-amber-400" title={autoFill.warningMessage}>
@@ -3436,7 +3621,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                   <div className="text-[10px] text-gray-600 dark:text-gray-400">
                                     {autoFill.selectedJourneyType === 'active' && autoFill.allJourneys.active && (
                                       <span className={`font-medium ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
-                                        {(autoFill.fuelRecord as any)?.isLocked ? '🔒 Locked (Manual entry)' : '🚛 Active Journey'}
+                                        {(autoFill.fuelRecord as any)?.isLocked ? 'Locked (Manual entry)' : 'Active Journey'}
                                       </span>
                                     )}
                                     {autoFill.selectedJourneyType === 'queued' && autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0] && (
@@ -3465,7 +3650,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                       }`}
                                       title="Switch to active journey"
                                     >
-                                      🚛 Active
+                                      Active
                                     </button>
                                     {autoFill.allJourneys.queued.map((queuedJourney, qIdx) => (
                                       <button

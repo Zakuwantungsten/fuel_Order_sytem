@@ -77,6 +77,9 @@ export interface LPOEntry {
   // Amendment tracking
   originalLtrs?: number | null;
   amendedAt?: string | null;
+  // Driver Account / Refer tracking
+  isDriverAccount?: boolean;
+  isRefer?: boolean;
   // Cancellation tracking
   isCancelled?: boolean;
   cancelledAt?: string | null;
@@ -244,7 +247,9 @@ export interface LPODetail {
   isCancelled?: boolean;
   cancellationPoint?: CancellationPoint;
   isDriverAccount?: boolean;
-  paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT';
+  isRefer?: boolean;
+  referenceDoNo?: string;
+  paymentMode?: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' | 'REFER';
   // Custom station fields (for unlisted stations like small lake stations in Zambia)
   isCustomStation?: boolean;
   customStationName?: string;

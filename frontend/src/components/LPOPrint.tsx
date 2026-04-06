@@ -16,6 +16,8 @@ interface LPOEntry {
   dest: string;
   isCancelled?: boolean;
   isDriverAccount?: boolean;
+  isRefer?: boolean;
+  referenceDoNo?: string;
 }
 
 const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, approvedBy }, ref) => {
@@ -147,11 +149,17 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
   const renderTableRow = (entry: LPOEntry, index: number) => {
     const isCancelled = entry.isCancelled || false;
     const isDriverAccount = entry.isDriverAccount || false;
-    const displayDoNo = isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo;
-    const displayDest = isDriverAccount ? 'NIL' : entry.dest;
+    const isRefer = entry.isRefer || false;
+    const displayDoNo = isCancelled ? 'CANCELLED'
+      : isRefer ? 'REF'
+      : isDriverAccount ? (entry.referenceDoNo ? `DA(NIL)-${entry.referenceDoNo}` : 'DA(NIL)')
+      : entry.doNo;
+    const displayDest = isDriverAccount ? 'NIL' : isRefer ? (entry.dest || 'REFER') : entry.dest;
     
     const rowBgColor = isCancelled 
       ? '#ffe6e6'
+      : isRefer
+        ? '#fff7ed'
       : isDriverAccount 
         ? '#fff3e6'
         : (index % 2 === 0 ? '#fff' : '#fafafa');
@@ -167,7 +175,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           fontSize,
           textAlign: 'center',
           verticalAlign: 'middle',
-          color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#000',
+          color: isCancelled ? '#cc0000' : isRefer ? '#c2410c' : isDriverAccount ? '#cc6600' : '#000',
           fontWeight: '500',
           textDecoration: isCancelled ? 'line-through' : 'none',
           lineHeight: '1.4'

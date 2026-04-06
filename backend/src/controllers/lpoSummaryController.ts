@@ -267,15 +267,22 @@ async function updateFuelRecordForLPOEntry(
   }
 ): Promise<void> {
   try {
-    // Check for NIL DO or Driver Account entries
+    // Check for NIL DO, Driver Account, or REF entries
     const doNoUpper = (doNumber || '').toString().trim().toUpperCase();
     const isNilDO = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A';
+    const isRefEntry = doNoUpper === 'REF';
     
     logger.info(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}, cancellationPoint=${cancellationPoint || 'N/A'}, customInfo=${JSON.stringify(customCheckpointInfo || {})}`);
     
     // Skip fuel record update for NIL DOs (expected for Driver Account and CASH entries)
     if (isNilDO) {
       logger.info(`Skipping fuel record update for NIL DO - likely Driver Account or CASH entry (truck: ${truckNo})`);
+      return;
+    }
+
+    // Skip fuel record update for REF entries (partner/third-party trucks)
+    if (isRefEntry) {
+      logger.info(`Skipping fuel record update for REF entry - partner truck (truck: ${truckNo})`);
       return;
     }
     
@@ -760,11 +767,23 @@ const syncLPOEntriesToList = async (
     // Create LPOEntry records for each entry in the LPOSummary
     for (const entry of lpoSummary.entries) {
       // Determine payment mode
-      let paymentMode: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' = 'STATION';
-      if (entry.isDriverAccount) {
+      let paymentMode: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' | 'REFER' = 'STATION';
+      if (entry.isRefer) {
+        paymentMode = 'REFER';
+      } else if (entry.isDriverAccount) {
         paymentMode = 'DRIVER_ACCOUNT';
       } else if (lpoSummary.station?.toUpperCase() === 'CASH' || entry.cancellationPoint) {
         paymentMode = 'CASH';
+      }
+
+      // Determine doSdo display value
+      let doSdo = entry.doNo || 'PENDING';
+      if (entry.isCancelled) {
+        doSdo = 'CANCELLED';
+      } else if (entry.isRefer) {
+        doSdo = 'REF';
+      } else if (entry.isDriverAccount) {
+        doSdo = 'DA(NIL)';
       }
 
       // Create the LPOEntry record (including cancelled entries with flag)
@@ -773,16 +792,17 @@ const syncLPOEntriesToList = async (
         date: formattedDate,
         lpoNo: lpoSummary.lpoNo,
         dieselAt: station,
-        doSdo: entry.isCancelled ? 'CANCELLED' : (entry.doNo || 'PENDING'),
+        doSdo,
         truckNo: entry.truckNo,
         ltrs: entry.liters,
         pricePerLtr: entry.rate,
         destinations: entry.isCancelled ? 'CANCELLED' : (entry.dest || 'PENDING'),
         originalLtrs: entry.originalLiters || null,
         amendedAt: entry.amendedAt || null,
-        // New fields for driver account / cash tracking
+        // New fields for driver account / cash / refer tracking
         isDriverAccount: entry.isDriverAccount || false,
-        referenceDo: entry.referenceDo || null,
+        isRefer: entry.isRefer || false,
+        referenceDo: entry.referenceDoNo || entry.referenceDo || null,
         paymentMode,
         currency: (lpoSummary as any).currency || 'TZS',
         isCancelled: entry.isCancelled || false,
@@ -842,18 +862,42 @@ const syncLPOEntriesOnUpdate = async (
         if (upperStation.startsWith('LAKE') && !upperStation.includes('TUNDUMA')) entryCurrency = 'USD';
       }
 
+      // Determine payment mode
+      let paymentMode: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' | 'REFER' = 'STATION';
+      if (entry.isRefer) {
+        paymentMode = 'REFER';
+      } else if (entry.isDriverAccount) {
+        paymentMode = 'DRIVER_ACCOUNT';
+      } else if (station?.toUpperCase() === 'CASH' || entry.cancellationPoint) {
+        paymentMode = 'CASH';
+      }
+
+      // Determine doSdo display value
+      let doSdo = entry.doNo || 'PENDING';
+      if (entry.isCancelled) {
+        doSdo = 'CANCELLED';
+      } else if (entry.isRefer) {
+        doSdo = 'REF';
+      } else if (entry.isDriverAccount) {
+        doSdo = 'DA(NIL)';
+      }
+
       await LPOEntry.create({
         sn: nextSn++,
         date: formattedDate,
         lpoNo: lpoNo,
         dieselAt: station,
-        doSdo: entry.isCancelled ? 'CANCELLED' : (entry.doNo || 'PENDING'),
+        doSdo,
         truckNo: entry.truckNo,
         ltrs: entry.liters,
         pricePerLtr: entry.rate,
         destinations: entry.isCancelled ? 'CANCELLED' : (entry.dest || 'PENDING'),
         originalLtrs: entry.originalLiters || null,
         amendedAt: entry.amendedAt || null,
+        isDriverAccount: entry.isDriverAccount || false,
+        isRefer: entry.isRefer || false,
+        referenceDo: entry.referenceDoNo || entry.referenceDo || null,
+        paymentMode,
         currency: entryCurrency,
         isCancelled: entry.isCancelled || false,
         cancelledAt: entry.cancelledAt || null,
@@ -989,12 +1033,18 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
             amount: entry.amount,
             station: lpoSummary.station,
             cancellationPoint: entry.cancellationPoint || 'DAR_GOING',
-            originalDoNo: entry.originalDoNo || entry.doNo,
+            originalDoNo: entry.referenceDoNo || entry.originalDoNo || entry.doNo,
             status: 'pending',
             createdBy: req.user?.username || 'system',
           });
           
           continue; // Skip fuel record update
+        }
+
+        // For refer entries: skip fuel record update entirely (partner/third-party trucks)
+        if (entry.isRefer) {
+          logger.info(`Skipping fuel record update for REF entry: ${entry.truckNo}`);
+          continue;
         }
 
         // Regular entry - update fuel record
@@ -2244,6 +2294,106 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
       message,
       data: lpo,
       entryType: isDriverAccount ? 'driver-account' : isNilDO ? 'nil-do' : 'regular',
+    });
+    emitDataChange('lpo_summaries', 'update');
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('lpo_entries', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Cancel ALL active entries in an LPO at once
+ * For regular trucks: reverts fuel record deduction
+ * For DA/REF/NIL trucks: marks cancelled only, no fuel record change
+ */
+export const cancelAllEntriesInLPO = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const lpo = await LPOSummary.findOne({ _id: id, isDeleted: false });
+    if (!lpo) {
+      throw new ApiError(404, 'LPO not found');
+    }
+
+    const activeEntries = lpo.entries.filter((e: any) => !e.isCancelled);
+    if (activeEntries.length === 0) {
+      throw new ApiError(400, 'No active entries to cancel');
+    }
+
+    const results: Array<{ truckNo: string; reverted: boolean; reason?: string; error?: string }> = [];
+
+    for (let i = 0; i < lpo.entries.length; i++) {
+      const entry = lpo.entries[i] as any;
+      if (entry.isCancelled) continue;
+
+      const isDriverAccount = entry.isDriverAccount === true;
+      const isRefer = entry.isRefer === true;
+      const doNoUpper = (entry.doNo || '').toString().trim().toUpperCase();
+      const isNilOrSpecial = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A' ||
+                             doNoUpper === 'DA' || doNoUpper === 'REF' || isDriverAccount || isRefer;
+
+      if (!isNilOrSpecial && entry.truckNo && entry.doNo) {
+        // Regular entry — revert fuel record
+        try {
+          await updateFuelRecordForLPOEntry(
+            entry.doNo,
+            -entry.liters,
+            lpo.station,
+            entry.truckNo,
+            entry.cancellationPoint,
+            entry.isCustomStation ? {
+              isCustomStation: entry.isCustomStation,
+              customGoingCheckpoint: entry.customGoingCheckpoint,
+              customReturnCheckpoint: entry.customReturnCheckpoint,
+            } : undefined
+          );
+          results.push({ truckNo: entry.truckNo, reverted: true });
+        } catch (err) {
+          results.push({ truckNo: entry.truckNo, reverted: false, error: String(err) });
+        }
+      } else {
+        const entryKind = isDriverAccount ? 'DA' : isRefer ? 'REF' : 'NIL DO';
+        results.push({ truckNo: entry.truckNo, reverted: false, reason: `${entryKind} - no fuel record affected` });
+      }
+
+      lpo.entries[i].isCancelled = true;
+      lpo.entries[i].cancellationReason = reason || 'Bulk LPO cancellation';
+      lpo.entries[i].cancelledAt = new Date();
+    }
+
+    // Recalculate total (all cancelled now = 0)
+    lpo.total = lpo.entries
+      .filter((e: any) => !e.isCancelled)
+      .reduce((sum: number, e: any) => sum + e.amount, 0);
+
+    await lpo.save();
+
+    // Sync cancelled status to LPOEntry flat collection
+    await LPOEntry.updateMany(
+      { lpoNo: lpo.lpoNo },
+      { $set: { isCancelled: true, cancellationReason: reason || 'Bulk LPO cancellation' } }
+    );
+
+    logger.info(`All entries cancelled in LPO ${lpo.lpoNo} by ${req.user?.username} (${activeEntries.length} entries)`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'LPOSummary',
+      resourceId: lpo.lpoNo,
+      details: `All ${activeEntries.length} entries cancelled in LPO ${lpo.lpoNo}${reason ? ` — reason: ${reason}` : ''} by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'high',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully cancelled all ${activeEntries.length} entries in LPO ${lpo.lpoNo}`,
+      data: { lpoNo: lpo.lpoNo, results },
     });
     emitDataChange('lpo_summaries', 'update');
     emitDataChange('fuel_records', 'update');

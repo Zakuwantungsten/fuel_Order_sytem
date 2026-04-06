@@ -82,9 +82,14 @@ const lpoEntrySchema = new Schema<ILPOEntryDocument>(
       trim: true,
       default: null,
     },
+    // Refer truck fields (partner/third-party company trucks)
+    isRefer: {
+      type: Boolean,
+      default: false,
+    },
     paymentMode: {
       type: String,
-      enum: ['STATION', 'CASH', 'DRIVER_ACCOUNT'],
+      enum: ['STATION', 'CASH', 'DRIVER_ACCOUNT', 'REFER'],
       default: 'STATION',
     },
     currency: {
@@ -121,6 +126,7 @@ lpoEntrySchema.index({ dieselAt: 1 });
 lpoEntrySchema.index({ doSdo: 1 });
 lpoEntrySchema.index({ isDeleted: 1 });
 lpoEntrySchema.index({ isDriverAccount: 1 });
+lpoEntrySchema.index({ isRefer: 1 });
 lpoEntrySchema.index({ referenceDo: 1 });
 lpoEntrySchema.index({ paymentMode: 1 });
 
