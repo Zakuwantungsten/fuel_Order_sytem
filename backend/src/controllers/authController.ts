@@ -403,6 +403,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       if (shouldClear) {
         user.mustChangePassword = false;
         user.passwordResetAt = undefined;
+        // Also clear pendingActivation for legacy accounts that never had it cleared
+        user.pendingActivation = false;
         await user.save();
         logger.info(`[AUTO-CLEAR] Cleared stale mustChangePassword flag for user: ${username} (reason: ${clearReason})`);
       }
@@ -436,28 +438,72 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       throw new ApiError(403, 'Login blocked due to suspicious activity. Please contact your administrator.');
     }
 
-    // Check if MFA is enabled for this user (user has set it up)
-    const mfaEnabled = await mfaService.isMFAEnabled(user._id.toString());
-    // Check if MFA is required by system/admin settings (role-based or per-user mandatory)
+    // Read global MFA policy once — reused across kill-switch check, method filtering,
+    // and the requiresMFASetup branch (avoids three separate DB reads).
+    const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
+    const mfaPolicy = sysConfig?.securitySettings?.mfa;
+    const mfaGlobalEnabled = mfaPolicy?.globalEnabled ?? false;
+
+    // Resolve effective allowed methods for this user: per-user > per-role > global default.
+    // Computed once here and reused in both the requiresMFA and requiresMFASetup responses.
+    let allowedMethods: string[] = mfaPolicy?.allowedMethods ?? ['totp', 'email'];
+    const roleMethodOverrides = (mfaPolicy as any)?.roleMethodOverrides;
+    if (roleMethodOverrides?.[user.role]?.length > 0) {
+      allowedMethods = roleMethodOverrides[user.role];
+    }
+    // Fetch MFA records with backupCodes included so hasBackupCodes is accurate below.
+    const mfaRecord = await MFA.findOne({ userId: user._id }).select('+backupCodes');
+    const userMfaOverride = await UserMFA.findOne({ userId: user._id });
+    if (mfaRecord?.allowedMethods && mfaRecord.allowedMethods.length > 0) {
+      allowedMethods = mfaRecord.allowedMethods;
+    } else if (userMfaOverride?.allowedMethods && userMfaOverride.allowedMethods.length > 0) {
+      allowedMethods = userMfaOverride.allowedMethods;
+    }
+
+    // Check if MFA is enabled for this user (user has set it up).
+    // Apply global kill-switch: if enforcement is globally off, skip MFA challenges even
+    // for users who previously configured MFA — prevents the toggle from having no effect.
+    const mfaEnabled = mfaGlobalEnabled && await mfaService.isMFAEnabled(user._id.toString());
+    // isMFARequired already respects globalEnabled internally.
     const mfaRequired = await mfaService.isMFARequired(user._id.toString());
     const deviceId = req.body.deviceId || req.get('x-device-id');
-    
+
     if (mfaEnabled) {
-      // User has MFA set up — verify it
-      const mfaSettings = await MFA.findOne({ userId: user._id });
+      // User has MFA set up — verify it. Reuse the already-fetched mfaRecord.
+      const mfaSettings = mfaRecord;
       const isDeviceTrusted = deviceId && typeof (mfaSettings as any)?.isDeviceTrusted === 'function' && (mfaSettings as any).isDeviceTrusted(deviceId);
-      
+
       if (!isDeviceTrusted) {
         // MFA required - generate temporary session token
         const tempSessionToken = crypto.randomBytes(32).toString('hex');
         const tempSessionExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-        
+
         // Store temp session token in user (or use Redis for production)
         user.refreshToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
         await user.save();
-        
+
         logger.info(`User ${username} requires MFA verification`);
-        
+
+        // Build effective mfaMethods: only include methods the user has fully configured
+        // AND that the active allowedMethods policy permits.
+        // totpVerified prevents a half-finished TOTP setup from silently failing on the frontend.
+        const totpAvailable = !!(mfaSettings?.totpEnabled && (mfaSettings as any)?.totpVerified && allowedMethods.includes('totp'));
+        const smsAvailable = !!(mfaSettings?.smsEnabled && allowedMethods.includes('sms'));
+        const emailAvailable = !!(mfaSettings?.emailEnabled && allowedMethods.includes('email'));
+        // backupCodes are available when the user has remaining codes, regardless of method.
+        const backupCodesAvailable = Array.isArray((mfaSettings as any)?.backupCodes) && (mfaSettings as any).backupCodes.length > 0;
+
+        // Compute a safe preferred method — fall back if the stored preferred method is not
+        // fully available (e.g. TOTP was disabled or totpVerified is false).
+        let preferredMethod: string = mfaSettings?.preferredMethod || 'totp';
+        if (preferredMethod === 'totp' && !totpAvailable) {
+          preferredMethod = emailAvailable ? 'email' : smsAvailable ? 'sms' : 'totp';
+        } else if (preferredMethod === 'email' && !emailAvailable) {
+          preferredMethod = totpAvailable ? 'totp' : smsAvailable ? 'sms' : 'email';
+        } else if (preferredMethod === 'sms' && !smsAvailable) {
+          preferredMethod = totpAvailable ? 'totp' : emailAvailable ? 'email' : 'sms';
+        }
+
         res.status(200).json({
           success: true,
           requiresMFA: true,
@@ -467,11 +513,12 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
             tempSessionToken,
             tempSessionExpiry,
             mfaMethods: {
-              totp: mfaSettings?.totpEnabled || false,
-              sms: mfaSettings?.smsEnabled || false,
-              email: mfaSettings?.emailEnabled || false,
+              totp: totpAvailable,
+              sms: smsAvailable,
+              email: emailAvailable,
+              backupCodes: backupCodesAvailable,
             },
-            preferredMethod: mfaSettings?.preferredMethod || 'totp',
+            preferredMethod,
           },
         });
         return;
@@ -495,27 +542,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       user.refreshToken = crypto.createHash('sha256').update(tempSessionToken).digest('hex');
       await user.save();
 
-      // Read allowed MFA methods: per-user override > per-role override > global default
-      const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
-      const mfaPolicy = sysConfig?.securitySettings?.mfa;
-      let allowedMethods: string[] = mfaPolicy?.allowedMethods ?? ['totp', 'email'];
-
-      // Per-role method override (e.g. admins → TOTP-only)
-      const roleOverrides = (mfaPolicy as any)?.roleMethodOverrides;
-      if (roleOverrides && roleOverrides[user.role] && Array.isArray(roleOverrides[user.role]) && roleOverrides[user.role].length > 0) {
-        allowedMethods = roleOverrides[user.role];
-      }
-
-      // Per-user allowed methods override (set by admin in MFA Management) — highest priority
-      // Check both MFA model (consolidated) and UserMFA (legacy) — MFA takes precedence
-      const mfaRecord = await MFA.findOne({ userId: user._id });
-      const userMfaOverride = await UserMFA.findOne({ userId: user._id });
-      if (mfaRecord?.allowedMethods && mfaRecord.allowedMethods.length > 0) {
-        allowedMethods = mfaRecord.allowedMethods;
-      } else if (userMfaOverride?.allowedMethods && userMfaOverride.allowedMethods.length > 0) {
-        allowedMethods = userMfaOverride.allowedMethods;
-      }
-
+      // allowedMethods was already resolved above — no need to re-read sysConfig.
       logger.info(`User ${username} must set up MFA (required by system policy)`);
 
       res.status(200).json({
@@ -1580,6 +1607,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     user.password = newPassword;
     user.mustChangePassword = false;
     user.passwordResetAt = undefined;
+    user.pendingActivation = false; // Belt-and-suspenders: ensure pending clears on any password change
     await user.save();
 
     logger.info(`Password changed for user: ${user.username}`);
@@ -1682,6 +1710,8 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
     user.mustChangePassword = false;
     user.passwordResetAt = undefined;
     user.tempPasswordExpiresAt = undefined; // Credentials no longer temporary
+    // User has officially activated their account by setting their own password.
+    user.pendingActivation = false;
 
     logger.info(`First-login password set for user: ${user.username}`);
 

@@ -9,21 +9,21 @@
 |---|---|
 | **Diagram Type** | Data Flow Diagram — Level 0 (Context Diagram) |
 | **System Name** | Fuel Order Management System (FOMS) |
-| **Notation** | Yourdon-DeMarco |
+| **Notation** | Gane-Sarson |
 | **Diagram Level** | Level 0 — Single central process, all external entities, all major data flows. No data stores. No sub-processes. |
 | **Date** | March 30, 2026 |
 | **Version** | v1.0 |
 
 ---
 
-### Notation Key (Yourdon-DeMarco)
+### Notation Key (Gane-Sarson)
 
 | Symbol | Shape | Meaning |
 |---|---|---|
 | Rectangle `[ ]` | sharp corners | **External Entity** — person, role, or external system outside the system boundary |
-| Stadium / Oval `([ ])` | rounded | **Central Process** — the entire FOMS represented as one bubble |
+| Split Rectangle `[[ ]]` | rectangle with horizontal header divider | **Process** — process ID / number in the top section; process name in the body (approximated in Mermaid with subroutine shape) |
+| Open Rectangle `══ name ══` | two parallel horizontal lines, open on the sides | **Data Store** — named repository of data (**not shown at Level 0** — internal, appears at Level 1+) |
 | Labeled arrow `-->` | directed line | **Data Flow** — movement of named data packets between entity and process |
-| *(no data stores)* | — | Data stores are **not shown** at Level 0 — they are internal and appear at Level 1+ |
 
 ---
 
@@ -31,7 +31,7 @@
 
 > **Reading guide:**
 > - Every rectangle is an **External Entity** — a person or system that exists outside FOMS.
-> - The central stadium node is the **single system process** — the whole FOMS treated as one black box.
+> - The central split-rectangle node is the **single system process** — process ID `0` in the header section, the whole FOMS treated as one black box.
 > - Every arrow is a **named data flow** (noun phrase) — describing the data packet being exchanged.
 > - Arrows pointing **→ into** the central node are **inputs** to the system.
 > - Arrows pointing **← out of** the central node are **outputs** from the system.
@@ -41,7 +41,7 @@
 flowchart LR
 
     %%═══════════════════════════════════════════════════════════
-    %% EXTERNAL ENTITIES — LEFT SIDE (Yourdon-DeMarco: Rectangles)
+    %% EXTERNAL ENTITIES — LEFT SIDE (Gane-Sarson: Rectangles)
     %% These are human user roles extracted from backend/src/models/User.ts
     %% and backend/src/routes/* authorize() middleware calls
     %%═══════════════════════════════════════════════════════════
@@ -53,20 +53,31 @@ flowchart LR
 
     %%═══════════════════════════════════════════════════════════
     %% CENTRAL PROCESS — THE ENTIRE SYSTEM
-    %% Yourdon-DeMarco: Circle / Oval  (stadium shape in Mermaid)
+    %% Gane-Sarson: Split rectangle — top section = process ID,
+    %%              body = process name.
+    %% Approximated in Mermaid with the subroutine shape [[ ]]
     %% ONE process only — Level 0 rule
     %%═══════════════════════════════════════════════════════════
 
-    FOMS(["FUEL ORDER\nMANAGEMENT SYSTEM"])
+    FOMS[["0\nFUEL ORDER\nMANAGEMENT SYSTEM"]]
 
     %%═══════════════════════════════════════════════════════════
-    %% EXTERNAL ENTITIES — RIGHT SIDE
+    %% EXTERNAL ENTITIES — RIGHT SIDE (Gane-Sarson: Rectangles)
     %%═══════════════════════════════════════════════════════════
 
     ATT["Fuel Attendant &\nStation Manager"]
     YRD["Yard Personnel"]
     DRV["Driver"]
     NGW["Notification Gateway\n(Email / SMS / Push)"]
+
+    %%═══════════════════════════════════════════════════════════
+    %% INVISIBLE ORDERING LINKS
+    %% Force strict top-to-bottom stacking on each side so that
+    %% data-flow lines cannot cross one another.
+    %%═══════════════════════════════════════════════════════════
+
+    FOM ~~~ MGR ~~~ ADM ~~~ SAM
+    ATT ~~~ YRD ~~~ DRV ~~~ NGW
 
     %%═══════════════════════════════════════════════════════════
     %% DATA FLOWS — FUEL ORDER MAKER
@@ -157,7 +168,9 @@ flowchart LR
     NGW -->|"Delivery Status Report"| FOMS
 
     %%═══════════════════════════════════════════════════════════
-    %% STYLING  (Yourdon-DeMarco convention)
+    %% STYLING — Gane-Sarson conventions
+    %% External entities: filled rectangles (sharp corners)
+    %% Central process: distinct fill to represent split-rectangle
     %%═══════════════════════════════════════════════════════════
 
     classDef entity    fill:#dbeafe,stroke:#1e40af,stroke-width:2px,color:#1e3a5f,font-weight:bold
@@ -192,7 +205,7 @@ across all route files under [backend/src/routes/](backend/src/routes/).
 
 ## Complete Data Flow Catalog
 
-All flow labels are **noun phrases** (Yourdon-DeMarco rule). Each bidirectional
+All flow labels are **noun phrases** (Gane-Sarson rule). Each bidirectional
 relationship is represented as **two separate arrows** — no double-headed arrows used.
 
 ### Flows from External Entities → FOMS  (Inputs)
@@ -253,7 +266,7 @@ Verified against the 12 rules of Level 0 DFD construction:
 | Rule 8 | Balanced data flows | ✅ | All F-01 to F-37 flows are available for carry-down to Level 1 without introducing new external flows |
 | Rule 9 | No duplicate meaning | ✅ | Each flow label is unique and describes a distinct data packet |
 | Rule 10 | Process transforms data | ✅ | FOMS receives raw requests/data and returns processed records, reports, confirmations |
-| Rule 11 | Consistent notation | ✅ | Yourdon-DeMarco throughout: rectangles for entities, oval/stadium for process, labeled directed arrows for flows |
+| Rule 11 | Consistent notation | ✅ | Gane-Sarson throughout: rectangles for external entities, split-rectangle (subroutine shape) for process with ID `0` in the header, labeled directed arrows for flows |
 | Rule 12 | Readable layout | ✅ | Entities distributed on left and right of central process; no entity-to-entity crossing lines |
 
 ---
@@ -353,21 +366,23 @@ FOMS  →  Notification Gateway  :  Notification Payload
 │  │   Entity Name    │   Source and/or Sink of data            │
 │  └──────────────────┘   EXISTS OUTSIDE the system boundary    │
 │                                                                │
-│  ╭──────────────────╮   Central Process (Yourdon-DeMarco)     │
-│  │  System Process  │   The ENTIRE system as ONE bubble       │
-│  ╰──────────────────╯   Only ONE exists at Level 0            │
+│  ╔═══╦══════════════╗   Central Process (Gane-Sarson)         │
+│  ║ 0 ║              ║   Top section = Process ID               │
+│  ╠═══╩══════════════╣   Horizontal divider separates ID/Name   │
+│  ║  System Process  ║   Only ONE exists at Level 0             │
+│  ╚══════════════════╝                                          │
 │                                                                │
 │  ──────── Label ──────>  Data Flow Arrow                      │
 │                          Noun/noun phrase label required       │
 │                          Arrowhead = direction of data flow    │
 │                                                                │
-│  ╔══╦═════════════╗     Data Store  (NOT shown at Level 0)    │
-│  ║D1║  Store Name ║     Internal — appears from Level 1+      │
-│  ╚══╩═════════════╝                                           │
+│  ══════════════════════  Data Store (Gane-Sarson open rect.)  │
+│  D1 │  Store Name      NOT shown at Level 0                   │
+│  ══════════════════════  Internal — appears from Level 1+      │
 │                                                                │
 │  NOTE: Two separate arrows (one each way) represent           │
 │        bidirectional data exchange. Double-headed arrows       │
-│        are NOT used in Yourdon-DeMarco notation.               │
+│        are NOT used in Gane-Sarson notation.                   │
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
 ```

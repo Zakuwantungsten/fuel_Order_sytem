@@ -12,7 +12,7 @@ type View = 'overview' | 'thresholds' | 'email_logs' | 'siem';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
-export default function MonitoringAlertsSubTab() {
+export default function MonitoringAlertsSubTab({ onNavigate }: { onNavigate?: (section: string) => void }) {
   const [view, setView] = useState<View>('overview');
   const [stats, setStats] = useState<{
     thresholdCount: number;
@@ -172,7 +172,14 @@ export default function MonitoringAlertsSubTab() {
               </div>
               <ArrowRight className="w-4 h-4 text-gray-400 shrink-0 mt-1" />
             </button>
-            <div className="flex items-start gap-4 p-5 rounded-xl border bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+            <button
+              onClick={() => {
+                sessionStorage.setItem('sa_system_preferred_tab', 'config');
+                sessionStorage.setItem('sa_system_config_focus_section', 'notifications');
+                onNavigate?.('system');
+              }}
+              className="flex items-start gap-4 p-5 rounded-xl border text-left w-full transition-all hover:shadow-md bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+            >
               <Settings2 className="w-6 h-6 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 dark:text-white">Notification Settings</p>
@@ -181,7 +188,7 @@ export default function MonitoringAlertsSubTab() {
                 </p>
               </div>
               <ArrowRight className="w-4 h-4 text-gray-400 shrink-0 mt-1" />
-            </div>
+            </button>
             <button
               onClick={() => setView('email_logs')}
               className="flex items-start gap-4 p-5 rounded-xl border text-left transition-all hover:shadow-md bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"

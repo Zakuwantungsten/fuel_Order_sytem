@@ -1,16 +1,43 @@
-import { Shield, ArrowRight, Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Shield, ArrowRight, Info, Loader2 } from 'lucide-react';
 import type { User } from '../../../../../types';
 import { getRoleDefinition, USER_ROLES } from '../../constants';
+import { systemAdminAPI } from '../../../../../services/api';
 
 interface RolesTabProps {
   user: User;
 }
 
+interface PermissionMatrix {
+  categories: { id: string; label: string }[];
+  roles: string[];
+  matrix: Record<string, Record<string, string>>;
+}
+
 export default function RolesTab({ user }: RolesTabProps) {
   const currentRole = getRoleDefinition(user.role);
+  const hierarchy = USER_ROLES.slice(0, 12);
 
-  // Build a simple role hierarchy visualization
-  const hierarchy = USER_ROLES.slice(0, 12); // Main roles (not yard-specific)
+  const [permMatrix, setPermMatrix] = useState<PermissionMatrix | null>(null);
+  const [loadingPerm, setLoadingPerm] = useState(true);
+
+  useEffect(() => {
+    systemAdminAPI.getRolePermissions()
+      .then((data) => setPermMatrix(data))
+      .catch(() => {/* fall back to showing nothing */})
+      .finally(() => setLoadingPerm(false));
+  }, []);
+
+  // Derive per-module permissions for this role from live data
+  const livePermissions: { label: string; level: string }[] = [];
+  if (permMatrix) {
+    for (const cat of permMatrix.categories) {
+      const level = permMatrix.matrix[cat.id]?.[user.role];
+      if (level && level !== '—') {
+        livePermissions.push({ label: cat.label, level });
+      }
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -30,9 +57,27 @@ export default function RolesTab({ user }: RolesTabProps) {
             </div>
           </div>
 
-          {currentRole.permissionSummary.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Permissions</div>
+          {/* Live module permissions from backend */}
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+              Module Permissions
+              {loadingPerm && <Loader2 className="inline w-3 h-3 ml-1 animate-spin" />}
+            </div>
+            {!loadingPerm && livePermissions.length > 0 ? (
+              <ul className="space-y-1">
+                {livePermissions.map((p) => (
+                  <li key={p.label} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
+                      <ArrowRight className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                      {p.label}
+                    </span>
+                    <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                      {p.level}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : !loadingPerm && (
               <ul className="space-y-1">
                 {currentRole.permissionSummary.map((perm, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
@@ -41,8 +86,8 @@ export default function RolesTab({ user }: RolesTabProps) {
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </section>
 
@@ -94,3 +139,4 @@ export default function RolesTab({ user }: RolesTabProps) {
     </div>
   );
 }
+

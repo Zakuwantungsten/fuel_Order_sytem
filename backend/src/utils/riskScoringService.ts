@@ -1,5 +1,6 @@
 import { AuditLog, User } from '../models';
 import geolocationService from './geolocationService';
+import ipThreatIntelService from './ipThreatIntelService';
 import logger from './logger';
 
 /**
@@ -156,6 +157,23 @@ export async function assessLoginRisk(
       }
     }
 
+    // 8. Threat intelligence — AbuseIPDB lookup
+    let isKnownBadIP = false;
+    try {
+      const threatIntel = await ipThreatIntelService.check(ipAddress);
+      if (threatIntel.isKnownBad) {
+        isKnownBadIP = true;
+        score += RISK_WEIGHTS.knownBadIP;
+        const detail = threatIntel.isTor
+          ? `Tor exit node (score ${threatIntel.confidenceScore}/100, ${threatIntel.totalReports} reports)`
+          : `Known-malicious IP (score ${threatIntel.confidenceScore}/100, ${threatIntel.totalReports} reports)`;
+        reasons.push(detail);
+      }
+    } catch (threatErr) {
+      // Fail open — threat intel outage must not block legitimate users
+      logger.debug('Threat intel check failed during risk assessment:', threatErr);
+    }
+
     // Clamp score to 0–100
     score = Math.min(Math.max(Math.round(score), 0), 100);
 
@@ -177,7 +195,7 @@ export async function assessLoginRisk(
         offHours,
         recentFailedAttempts,
         daysSinceLastLogin,
-        isKnownBadIP: false, // Can be enhanced with threat intelligence feeds
+        isKnownBadIP,
         userRiskLevel,
       },
       requireMFA: score >= 31,

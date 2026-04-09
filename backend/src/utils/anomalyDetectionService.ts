@@ -11,6 +11,8 @@ import emailService from '../services/emailService';
 import slackNotificationService from '../services/slackNotificationService';
 import smsNotificationService from '../services/smsNotificationService';
 import geolocationService from './geolocationService';
+import BlocklistService from '../services/blocklistService';
+import { config } from '../config';
 
 export interface FailedLoginPattern {
   username: string;
@@ -140,6 +142,18 @@ export class AnomalyDetectionService {
             failedAttempts: pattern.attemptCount,
             recipientPhones: [], // Will be populated from system config
           }).catch(err => logger.error('[AnomalyDetection] Failed to send SMS:', err));
+
+          // Auto-block the offending IP so the attacker is locked out immediately
+          // Uses the same block duration as the rest of the security middleware
+          if (ipAddress && ipAddress !== 'unknown') {
+            await BlocklistService.block(
+              ipAddress,
+              config.securityBlockDurationMs,
+              'brute_force',
+              `Brute-force: ${pattern.attemptCount} failed logins for "${username}" in ${pattern.timeWindowMinutes}m`,
+            ).catch(err => logger.error('[AnomalyDetection] Failed to auto-block IP:', err));
+            logger.warn(`[AnomalyDetection] Auto-blocked IP ${ipAddress} for brute-force against ${username}`);
+          }
 
           return true;
         }

@@ -39,7 +39,7 @@ interface MFAVerificationProps {
   userId: string;
   tempSessionToken: string;
   preferredMethod: 'totp' | 'sms' | 'email';
-  mfaMethods?: { totp: boolean; sms: boolean; email: boolean };
+  mfaMethods?: { totp: boolean; sms: boolean; email: boolean; backupCodes?: boolean };
   rememberMe?: boolean;
   onSuccess: (tokens: { accessToken: string; refreshToken: string; user: any }) => void;
   onCancel: () => void;
@@ -59,13 +59,20 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
 }) => {
   const getInitialMethod = (): 'totp' | 'backup' | 'sms' | 'email' => {
     if (mfaMethods) {
+      // Try the preferred method first, only if it is actually available.
       if (preferredMethod === 'totp' && mfaMethods.totp) return 'totp';
       if (preferredMethod === 'email' && mfaMethods.email) return 'email';
       if (preferredMethod === 'sms' && mfaMethods.sms) return 'sms';
+      // Preferred method is not available — fall back to the first available method.
       if (mfaMethods.totp) return 'totp';
       if (mfaMethods.email) return 'email';
       if (mfaMethods.sms) return 'sms';
+      // No primary method is available — use backup codes if present.
+      if (mfaMethods.backupCodes) return 'backup';
+      // Absolute last resort: return totp so the UI renders something.
+      return 'totp';
     }
+    // mfaMethods not provided — trust preferredMethod as passed from server.
     return preferredMethod;
   };
 
@@ -342,8 +349,10 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
                 </button>
               )}
 
-              {/* Backup codes only exist when TOTP was set up */}
-              {mfaMethods?.totp && (
+              {/* Backup codes: available whenever the server reports backupCodes: true.
+                  Fall back to mfaMethods?.totp for backward-compat with older server responses
+                  that don't include the backupCodes flag. */}
+              {(mfaMethods?.backupCodes ?? mfaMethods?.totp) && (
                 <button
                   onClick={() => handleMethodSelect('backup')}
                   className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all ${
@@ -520,7 +529,9 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
               - TOTP is enabled (which means backup codes were generated) */}
           {(() => {
             const primaryCount = [mfaMethods?.totp, mfaMethods?.email, mfaMethods?.sms].filter(Boolean).length;
-            const hasAlternatives = primaryCount > 1 || mfaMethods?.totp;
+            // Show "Try another way" when there is more than one primary method OR when backup
+            // codes are available (they exist independently of TOTP being set up).
+            const hasAlternatives = primaryCount > 1 || mfaMethods?.totp || mfaMethods?.backupCodes;
             return (
               <div className={`flex items-center text-sm ${ hasAlternatives ? 'justify-between' : 'justify-start'}`}>
                 <button

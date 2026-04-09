@@ -477,17 +477,31 @@ export interface User {
   lockedUntil?: string;
   createdAt: string;
   updatedAt: string;
+  // Lightweight MFA summary injected by the list endpoint so table rows can show
+  // real status without requiring a separate detail request per user.
+  mfaInfo?: {
+    enabled: boolean;
+    totpEnrolled: boolean;
+    emailEnrolled: boolean;
+    smsEnrolled: boolean;
+  };
 }
 
 // Detailed user profile returned by GET /users/:id/detail
 export interface UserDetail {
   user: User;
   mfaStatus: {
+    /** User has MFA configured in the DB (isEnabled: true on MFA record). */
     enabled: boolean;
+    /** MFA is currently active: user has it configured AND global enforcement is on. */
+    active: boolean;
     totpEnrolled: boolean;
     emailEnrolled: boolean;
+    smsEnrolled: boolean;
     isMandatory: boolean;
     isExempt: boolean;
+    /** Whether role-based system policy currently requires MFA for this user. */
+    policyRequired: boolean;
     lastVerified: string | null;
     failedAttempts: number;
     lockedUntil: string | null;

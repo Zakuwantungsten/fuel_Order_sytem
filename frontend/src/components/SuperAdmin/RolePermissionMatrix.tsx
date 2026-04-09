@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { RefreshCw, Search, Shield, Eye, Pencil, Trash2, Plus } from 'lucide-react';
+import { RefreshCw, Search, Shield, Eye, Pencil, Trash2, Plus, Edit2, Save, X, RotateCcw } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
@@ -54,6 +54,11 @@ export default function RolePermissionMatrix() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  /** Pending changes: { [category]: { [role]: newPermission } } */
+  const [pending, setPending] = useState<Record<string, Record<string, string>>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const authHeaders = () => ({
     Authorization: `Bearer ${sessionStorage.getItem('fuel_order_token')}`,
@@ -73,6 +78,53 @@ export default function RolePermissionMatrix() {
   };
 
   useEffect(() => { load(); }, []);
+
+  /** Apply a single pending change */
+  const setCellValue = (category: string, role: string, value: string) => {
+    setPending(prev => ({
+      ...prev,
+      [category]: { ...(prev[category] ?? {}), [role]: value },
+    }));
+  };
+
+  /** Current value for a cell: pending override first, then server data */
+  const cellValue = (category: string, role: string): string => {
+    return pending[category]?.[role] ?? data?.matrix[category]?.[role] ?? '—';
+  };
+
+  /** Save all pending changes sequentially */
+  const saveChanges = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const token = sessionStorage.getItem('fuel_order_token');
+      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+      for (const category of Object.keys(pending)) {
+        for (const role of Object.keys(pending[category])) {
+          const res = await fetch(`${API_BASE}/system-admin/role-permissions`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ category, role, permission: pending[category][role] }),
+          });
+          const json = await res.json();
+          if (json.success) setData(json.data); // keep server state in sync
+          else throw new Error(json.message || 'Save failed');
+        }
+      }
+      setPending({});
+      setEditMode(false);
+    } catch (e: any) {
+      setSaveError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setPending({});
+    setEditMode(false);
+    setSaveError(null);
+  };
 
   if (loading) {
     return <UnifiedTabLoader label="Loading role permissions..." heightClassName="py-16" />;
@@ -109,11 +161,51 @@ export default function RolePermissionMatrix() {
               className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 w-40"
             />
           </div>
-          <button onClick={load} className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          {!editMode ? (
+            <>
+              <button onClick={load} className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => { setEditMode(true); setSaveError(null); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+              >
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={cancelEdit}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" /> Cancel
+              </button>
+              <button
+                onClick={saveChanges}
+                disabled={saving || Object.keys(pending).length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+              >
+                <Save className="w-3.5 h-3.5" /> {saving ? 'Saving…' : `Save (${Object.values(pending).flatMap(Object.keys).length})`}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {saveError && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-400">
+          <X className="w-3.5 h-3.5 shrink-0" /> {saveError}
+          <button onClick={() => setSaveError(null)} className="ml-auto"><RotateCcw className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
+      {editMode && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-400">
+          <Edit2 className="w-3.5 h-3.5 shrink-0" />
+          Edit mode — click any cell to change its permission level. Changes are staged until you click Save.
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3">
@@ -159,19 +251,32 @@ export default function RolePermissionMatrix() {
                   </span>
                 </td>
                 {data.categories.map(cat => {
-                  const perm = data.matrix[role]?.[cat.key] ?? '—';
+                  const perm = cellValue(cat.key, role);
                   const style = PERM_STYLES[perm] ?? PERM_STYLES['—'];
                   const cellKey = `${role}-${cat.key}`;
+                  const isPending = !!pending[cat.key]?.[role];
                   return (
                     <td key={cat.key} className="px-2 py-2 text-center">
-                      <div
-                        onMouseEnter={() => setHoveredCell(cellKey)}
-                        onMouseLeave={() => setHoveredCell(null)}
-                        className={`inline-flex items-center justify-center gap-0.5 px-2 py-1 rounded-md cursor-default transition-all ${style.bg} ${hoveredCell === cellKey ? 'ring-2 ring-indigo-400 scale-110' : ''}`}
-                        title={`${role} → ${cat.label}: ${style.label} (${perm})`}
-                      >
-                        <span className={`font-bold ${style.text}`}>{perm}</span>
-                      </div>
+                      {editMode ? (
+                        <select
+                          value={perm}
+                          onChange={e => setCellValue(cat.key, role, e.target.value)}
+                          className={`text-[10px] font-bold rounded-md border px-1 py-0.5 cursor-pointer outline-none focus:ring-2 focus:ring-indigo-400 ${style.bg} ${style.text} ${isPending ? 'ring-2 ring-amber-400' : 'border-transparent'}`}
+                        >
+                          {['CRUD', 'CRU', 'CR', 'R', '—'].map(p => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div
+                          onMouseEnter={() => setHoveredCell(cellKey)}
+                          onMouseLeave={() => setHoveredCell(null)}
+                          className={`inline-flex items-center justify-center gap-0.5 px-2 py-1 rounded-md cursor-default transition-all ${style.bg} ${hoveredCell === cellKey ? 'ring-2 ring-indigo-400 scale-110' : ''}`}
+                          title={`${role} → ${cat.label}: ${style.label} (${perm})`}
+                        >
+                          <span className={`font-bold ${style.text}`}>{perm}</span>
+                        </div>
+                      )}
                     </td>
                   );
                 })}

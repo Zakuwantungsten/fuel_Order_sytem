@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Monitor, Globe, Clock, LogOut, RefreshCw, Loader2, Wifi,
+  Monitor, Globe, Clock, LogOut, RefreshCw, Loader2, Wifi, Hash,
 } from 'lucide-react';
 import { formatDistanceToNowStrict, parseISO, isValid } from 'date-fns';
 import { systemAdminAPI } from '../../../../../services/api';
@@ -11,29 +11,15 @@ interface SessionsTabProps {
   onForceLogout: () => void;
 }
 
-function parseDevice(ua?: string): string {
-  if (!ua) return 'Unknown';
-  if (ua.includes('Windows')) return 'Windows';
-  if (ua.includes('Mac')) return 'macOS';
-  if (ua.includes('Linux')) return 'Linux';
-  if (ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
-  if (ua.includes('Android')) return 'Android';
-  return 'Unknown';
-}
-
-function parseBrowser(ua?: string): string {
-  if (!ua) return 'Unknown';
-  if (ua.includes('Chrome') && !ua.includes('Edge')) return 'Chrome';
-  if (ua.includes('Firefox')) return 'Firefox';
-  if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
-  if (ua.includes('Edge')) return 'Edge';
-  return 'Unknown';
+function roleLabel(role: string): string {
+  return role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps) {
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -54,6 +40,18 @@ export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps)
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+
+  const handleRevokeSession = async (session: ActiveSession) => {
+    setRevokingId(session.userId);
+    try {
+      await systemAdminAPI.revokeSession(session.userId);
+      setSessions((prev) => prev.filter((s) => s.userId !== session.userId));
+    } catch {
+      // fall through — session may have already expired
+    } finally {
+      setRevokingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -83,6 +81,9 @@ export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps)
       <div className="text-center py-12">
         <Wifi className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
         <p className="text-sm text-gray-500 dark:text-gray-400">No active sessions</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          Sessions appear here while the user is actively making requests
+        </p>
       </div>
     );
   }
@@ -104,14 +105,18 @@ export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps)
 
       <div className="space-y-3">
         {sessions.map((session) => {
-          const lastActivityDate = parseISO(session.lastActivity);
-          const lastActivity = isValid(lastActivityDate)
-            ? formatDistanceToNowStrict(lastActivityDate, { addSuffix: true })
+          const lastSeenDate = parseISO(session.lastSeen);
+          const lastSeenText = isValid(lastSeenDate)
+            ? formatDistanceToNowStrict(lastSeenDate, { addSuffix: true })
+            : 'Unknown';
+          const firstSeenDate = parseISO(session.firstSeen);
+          const firstSeenText = isValid(firstSeenDate)
+            ? formatDistanceToNowStrict(firstSeenDate, { addSuffix: true })
             : 'Unknown';
 
           return (
             <div
-              key={session.sessionId}
+              key={session.userId}
               className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3"
             >
               <div className="flex items-start justify-between gap-2">
@@ -121,22 +126,41 @@ export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps)
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {parseBrowser(session.userAgent)} on {parseDevice(session.userAgent)}
+                      {roleLabel(session.role)}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      {session.ipAddress && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {session.ip && (
                         <span className="inline-flex items-center gap-1">
                           <Globe className="w-3 h-3" />
-                          {session.ipAddress}
+                          {session.ip}
                         </span>
                       )}
                       <span className="inline-flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {lastActivity}
+                        Active {lastSeenText}
                       </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                      <span className="inline-flex items-center gap-1">
+                        <Hash className="w-3 h-3" />
+                        {session.requestCount} request{session.requestCount !== 1 ? 's' : ''}
+                      </span>
+                      <span>Session started {firstSeenText}</span>
                     </div>
                   </div>
                 </div>
+                <button
+                  onClick={() => handleRevokeSession(session)}
+                  disabled={revokingId === session.userId}
+                  className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-700 rounded hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
+                  title="Revoke this session"
+                >
+                  {revokingId === session.userId
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <LogOut className="w-3 h-3" />
+                  }
+                  Revoke
+                </button>
               </div>
             </div>
           );
@@ -154,3 +178,4 @@ export default function SessionsTab({ userId, onForceLogout }: SessionsTabProps)
     </div>
   );
 }
+

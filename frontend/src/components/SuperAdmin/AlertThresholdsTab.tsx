@@ -143,7 +143,7 @@ export const AlertThresholdsTab: React.FC = () => {
 
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 text-sm text-blue-700 dark:text-blue-300">
         <p className="font-medium mb-1">How thresholds work</p>
-        <p>These values are stored in system configuration. The System Health Monitor checks them on each refresh and highlights metrics that exceed their threshold. Future versions will send email alerts when thresholds are breached.</p>
+        <p>These values are stored in system configuration. The System Health Monitor checks them on each refresh and highlights metrics that exceed their threshold. Critical breaches (connection pool &ge;90%, storage &lt;500 MB, memory &ge;85%) automatically trigger email alerts with a 30-minute quiet window between repeat notifications.</p>
       </div>
     </div>
   );

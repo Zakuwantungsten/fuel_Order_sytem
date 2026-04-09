@@ -1642,8 +1642,13 @@ export const systemAdminAPI = {
 
   // Session Management
   getActiveSessions: async () => {
-    const response = await apiClient.get('/admin/sessions/active');
+    const response = await apiClient.get('/system-admin/sessions');
     return response.data.data;
+  },
+
+  revokeSession: async (userId: string) => {
+    const response = await apiClient.delete(`/system-admin/sessions/${userId}`);
+    return response.data;
   },
 
   forceLogout: async (userId: string) => {
@@ -1654,6 +1659,11 @@ export const systemAdminAPI = {
   // Activity Feed
   getActivityFeed: async (limit: number = 20) => {
     const response = await apiClient.get('/admin/activity-feed', { params: { limit } });
+    return response.data.data;
+  },
+
+  getRolePermissions: async () => {
+    const response = await apiClient.get('/system-admin/role-permissions');
     return response.data.data;
   },
 

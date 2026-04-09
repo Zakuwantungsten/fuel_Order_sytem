@@ -5,6 +5,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export type BlockReason =
   | 'path_probe'
   | 'auth_failure'
+  | 'brute_force'
   | 'rate_limit'
   | 'suspicious_404'
   | 'ua_blocked'

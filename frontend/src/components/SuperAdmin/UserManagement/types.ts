@@ -112,16 +112,15 @@ export interface DriverCredentialStats {
 }
 
 // ── Session ──────────────────────────────────────────────────────────────────
+// Shape returned by GET /system-admin/sessions (activeSessionTracker)
 export interface ActiveSession {
-  sessionId: string;
   userId: string;
   username: string;
-  ipAddress?: string;
-  userAgent?: string;
-  device?: string;
-  location?: string;
-  startedAt: string;
-  lastActivity: string;
+  role: string;
+  ip: string;
+  firstSeen: string;
+  lastSeen: string;
+  requestCount: number;
 }
 
 // ── Modal Props ──────────────────────────────────────────────────────────────
@@ -137,23 +136,32 @@ export interface MessageHandler {
   onMessage: (type: 'success' | 'error', message: string) => void;
 }
 
-// ── Login History Entry ──────────────────────────────────────────────────────
+// ── Login History Entry (now covers all audit events) ───────────────────────
 export interface LoginHistoryEntry {
   _id: string;
   timestamp: string;
-  action: 'LOGIN' | 'FAILED_LOGIN';
-  outcome: 'SUCCESS' | 'FAILURE';
+  action: string;
+  outcome?: 'SUCCESS' | 'FAILURE';
   ipAddress?: string;
   userAgent?: string;
+  details?: string;
+  resourceType?: string;
+  username?: string;
 }
 
 // ── MFA Status ───────────────────────────────────────────────────────────────
 export interface MfaStatus {
+  /** User has MFA configured in the DB (isEnabled: true on MFA record). */
   enabled: boolean;
+  /** MFA is currently active: user has it configured AND global enforcement is on. */
+  active: boolean;
   totpEnrolled: boolean;
   emailEnrolled: boolean;
+  smsEnrolled: boolean;
   isMandatory: boolean;
   isExempt: boolean;
+  /** Whether role-based system policy currently requires MFA for this user. */
+  policyRequired: boolean;
   lastVerified: string | null;
   failedAttempts: number;
   lockedUntil: string | null;

@@ -128,11 +128,16 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
     Authorization: `Bearer ${token}`,
     ...(opts?.headers as Record<string, string> || {}),
   };
-  // Attach CSRF token for state-changing requests
+  // Attach CSRF token for state-changing requests.
+  // The XSRF-TOKEN cookie is httpOnly so document.cookie cannot read it.
+  // The correct source is sessionStorage where api.ts stores the token body
+  // returned by GET /csrf-token.
   const method = (opts?.method || 'GET').toUpperCase();
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
-    const match = decodeURIComponent(document.cookie).split(';').map(c => c.trim()).find(c => c.startsWith('XSRF-TOKEN='));
-    if (match) headers['X-XSRF-TOKEN'] = match.substring('XSRF-TOKEN='.length);
+    const csrfToken = sessionStorage.getItem('xsrf_token');
+    if (csrfToken && csrfToken !== '[REDACTED]') {
+      headers['X-XSRF-TOKEN'] = csrfToken;
+    }
   }
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,

@@ -18,7 +18,7 @@ import { emitToUser, emitDataChange } from '../services/websocket';
 export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { role, department, station, isActive, q } = req.query;
+    const { role, department, station, isActive, isBanned, q } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -29,6 +29,10 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
 
     if (isActive !== undefined) {
       filter.isActive = isActive === 'true';
+    }
+
+    if (isBanned !== undefined) {
+      filter.isBanned = isBanned === 'true';
     }
 
     // Global text search across all identity fields
@@ -77,10 +81,32 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
       User.countDocuments(filter),
     ]);
 
-    const transformedUsers = users.map((user: any) => ({
-      ...user,
-      id: user._id.toString(),
-    }));
+    // Batch-fetch MFA records so each row in the table can show real MFA status
+    // without needing to open the detail drawer.
+    const userIds = users.map((u: any) => u._id);
+    const mfaRecords = await MFA.find({ userId: { $in: userIds } })
+      .select('userId isEnabled totpEnabled totpVerified smsEnabled emailEnabled')
+      .lean();
+    const mfaByUser: Record<string, typeof mfaRecords[0]> = {};
+    for (const r of mfaRecords) {
+      mfaByUser[r.userId.toString()] = r;
+    }
+
+    const transformedUsers = users.map((user: any) => {
+      const mfa = mfaByUser[user._id.toString()];
+      return {
+        ...user,
+        id: user._id.toString(),
+        // Lightweight MFA summary for table display. Fields are intentionally minimal
+        // to avoid leaking sensitive config — full details live in GET /users/:id/detail.
+        mfaInfo: {
+          enabled:      mfa?.isEnabled      ?? false,
+          totpEnrolled: (mfa?.totpEnabled && mfa?.totpVerified) ?? false,
+          emailEnrolled: mfa?.emailEnabled   ?? false,
+          smsEnrolled:   mfa?.smsEnabled     ?? false,
+        },
+      };
+    });
 
     const response = createPaginatedResponse(transformedUsers, page, limit, total);
 
@@ -671,34 +697,68 @@ export const getUserDetail = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     // Fetch MFA status from both models (same merge logic as mfaManagementController)
-    const [userMfaRecord, mfaRecord] = await Promise.all([
+    const [userMfaRecord, mfaRecord, sysConfig] = await Promise.all([
       UserMFA.findOne({ userId: id })
         .select('isEnabled totpEnabled smsEnabled emailEnabled isMandatory isExempt lastMFAVerification failedMFAAttempts mfaLockedUntil')
         .lean(),
       MFA.findOne({ userId: id })
-        .select('isEnabled totpEnabled smsEnabled emailEnabled isMandatory isExempt lastVerifiedAt failedAttempts lockedUntil')
+        // totpVerified is required here: totpEnabled can be true mid-setup before the user
+        // confirmed their first code. We only want to show "Enrolled" when both are true.
+        .select('isEnabled totpEnabled totpVerified smsEnabled emailEnabled isMandatory isExempt lastVerifiedAt failedAttempts lockedUntil')
+        .lean(),
+      SystemConfig.findOne({ configType: 'system_settings', isDeleted: false })
+        .select('securitySettings.mfa.globalEnabled securitySettings.mfa.requiredRoles')
         .lean(),
     ]);
 
+    const globalEnabled = (sysConfig as any)?.securitySettings?.mfa?.globalEnabled ?? false;
+    const requiredRoles: string[] = (sysConfig as any)?.securitySettings?.mfa?.requiredRoles ?? [];
+
+    const isConfigured = mfaRecord?.isEnabled || userMfaRecord?.isEnabled || false;
+    // "active" = user has MFA set up AND global enforcement is on
+    const isActive = isConfigured && globalEnabled;
+
     const mfaStatus = {
-      enabled:        mfaRecord?.isEnabled  || userMfaRecord?.isEnabled  || false,
-      totpEnrolled:   mfaRecord?.totpEnabled || userMfaRecord?.totpEnabled || false,
+      enabled:        isConfigured,
+      // "active" distinguishes "user has MFA configured in DB" from "MFA is currently
+      // being enforced by policy". Useful when global toggle is off but DB data persists.
+      active:         isActive,
+      // totpEnrolled requires BOTH totpEnabled AND totpVerified. A user who scanned the
+      // QR code but never confirmed the 6-digit code will have totpEnabled: true but
+      // totpVerified: false — TOTP is not actually usable yet.
+      totpEnrolled:   !!(mfaRecord?.totpEnabled && (mfaRecord as any)?.totpVerified),
+      // Email and SMS do not have a verification step; their enabled flag is authoritative.
       emailEnrolled:  mfaRecord?.emailEnabled || userMfaRecord?.emailEnabled || false,
+      smsEnrolled:    mfaRecord?.smsEnabled   || userMfaRecord?.smsEnabled   || false,
       isMandatory:    (mfaRecord as any)?.isMandatory || userMfaRecord?.isMandatory || false,
       isExempt:       (mfaRecord as any)?.isExempt    || userMfaRecord?.isExempt    || false,
+      // Whether system policy (role-based) requires MFA for this user's role
+      policyRequired: globalEnabled && requiredRoles.includes((user as any).role),
       lastVerified:   mfaRecord?.lastVerifiedAt ?? userMfaRecord?.lastMFAVerification ?? null,
       failedAttempts: mfaRecord?.failedAttempts ?? userMfaRecord?.failedMFAAttempts ?? 0,
       lockedUntil:    mfaRecord?.lockedUntil ?? userMfaRecord?.mfaLockedUntil ?? null,
     };
 
-    // Fetch last 20 sign-in events from audit log
+    // Fetch up to 50 audit events for this user:
+    // – events the user performed themselves (matched by username)
+    // – events an admin performed on this user (matched by resourceId + resourceType)
+    // TOKEN_REFRESH is excluded as it is too noisy.
     const loginHistory = await (AuditLog as any).find({
-      username: (user as any).username,
-      action: { $in: ['LOGIN', 'FAILED_LOGIN'] },
+      $or: [
+        {
+          username: (user as any).username,
+          action: { $nin: ['TOKEN_REFRESH'] },
+        },
+        {
+          resourceId: id,
+          resourceType: 'user',
+          action: { $nin: ['TOKEN_REFRESH'] },
+        },
+      ],
     })
-      .select('timestamp action outcome ipAddress userAgent')
+      .select('timestamp action outcome ipAddress userAgent details resourceType resourceId username')
       .sort({ timestamp: -1 })
-      .limit(20)
+      .limit(50)
       .lean();
 
     const transformedUser = {

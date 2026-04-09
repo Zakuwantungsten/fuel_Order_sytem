@@ -171,7 +171,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
               />
             )}
             {section === 'monitoring' && (
-              <MonitoringUnifiedTab onMessage={showMessage} />
+              <MonitoringUnifiedTab onMessage={showMessage} onNavigate={onNavigate} />
             )}
             {/* database, system_health, performance_metrics, activity_heatmap, alert_thresholds, email_logs, siem_export merged into 'monitoring' tab */}
             {section === 'users' && (

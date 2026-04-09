@@ -4,7 +4,8 @@
  * Blocks requests from known malicious or scanning user-agents.
  * Fires early (before body parsing) to drop bot traffic cheaply.
  *
- * Toggle: SECURITY_UA_BLOCKING (default: enabled)
+ * Configuration: reads bot_protection FirewallConfig from DB (refreshed every 60 s).
+ * Toggle: SECURITY_UA_BLOCKING env var (default: enabled) — overridden if DB config is loaded.
  * Logs: SecurityEvent (ua_blocked), alerts via SecurityAlertService.
  */
 
@@ -14,6 +15,7 @@ import logger from '../utils/logger';
 import BlocklistService from '../services/blocklistService';
 import { securityLogService } from '../services/securityLogService';
 import { securityAlertService } from '../services/securityAlertService';
+import { FirewallConfig } from '../models/FirewallConfig';
 
 // ─── Blocked UA patterns ─────────────────────────────────────────────────────
 // Each regex is tested against the lowercased User-Agent string.
@@ -99,6 +101,48 @@ export const BLOCKED_UA_PATTERNS: RegExp[] = [
 // Tracks how many times a given IP sent a blocked UA so we can escalate alerts.
 const _hitCounts = new Map<string, number>();
 
+// ─── Bot protection config cache ─────────────────────────────────────────────
+// Loaded from FirewallConfig (key: 'bot_protection') and refreshed every 60 s.
+// Falls back to env-var-based defaults until the first successful DB load.
+interface BotConfig {
+  enabled: boolean;
+  /** 'challenge' is treated as 'block' — no CAPTCHA service is currently integrated */
+  action: 'block' | 'challenge' | 'log';
+  blockEmptyUA: boolean;
+  userAgentBlocklist: string[];
+  userAgentAllowlist: string[];
+}
+
+let _botConfig: BotConfig = {
+  enabled: config.securityUaBlocking,
+  action: 'block',
+  blockEmptyUA: false,
+  userAgentBlocklist: [],
+  userAgentAllowlist: [],
+};
+
+const refreshBotConfig = async (): Promise<void> => {
+  try {
+    const doc = await FirewallConfig.findOne({ key: 'bot_protection' }).lean();
+    if (doc?.value && typeof doc.value === 'object') {
+      const v = doc.value as any;
+      _botConfig = {
+        enabled:            typeof v.enabled === 'boolean' ? v.enabled : true,
+        action:             ['block', 'challenge', 'log'].includes(v.action) ? v.action : 'block',
+        blockEmptyUA:       typeof v.blockEmptyUA === 'boolean' ? v.blockEmptyUA : false,
+        userAgentBlocklist: Array.isArray(v.userAgentBlocklist) ? v.userAgentBlocklist.map(String) : [],
+        userAgentAllowlist: Array.isArray(v.userAgentAllowlist) ? v.userAgentAllowlist.map(String) : [],
+      };
+    }
+  } catch {
+    // Non-fatal — keep current cached config
+  }
+};
+
+// Initial load then periodic refresh every 60 seconds
+refreshBotConfig().catch(() => {});
+setInterval(refreshBotConfig, 60_000);
+
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
 function getClientIP(req: Request): string {
@@ -120,18 +164,32 @@ export function isMaliciousUA(ua: string): boolean {
 // ─── Middleware ──────────────────────────────────────────────────────────────
 
 export function uaBlockingMiddleware(req: Request, res: Response, next: NextFunction): void {
-  if (!config.securityUaBlocking) {
+  // Respect stored config; fall back to env-var flag if config not yet loaded
+  if (!_botConfig.enabled) {
     return next();
   }
 
   const ua = req.headers['user-agent'] || '';
 
-  // Allow requests with no UA (some internal health checks)
+  // Empty UA handling
   if (!ua) {
+    if (_botConfig.blockEmptyUA) {
+      const ip = getClientIP(req);
+      logger.warn(`[UA-Block] Blocked empty user-agent from ${ip}`);
+      return res.status(403).json({ success: false, message: 'Forbidden' }) as unknown as void;
+    }
     return next();
   }
 
-  if (!isMaliciousUA(ua)) {
+  // Check allowlist — always pass through allowed UAs
+  const uaLower = ua.toLowerCase();
+  if (_botConfig.userAgentAllowlist.some(a => a && uaLower.includes(a.toLowerCase()))) {
+    return next();
+  }
+
+  // Check combined blocklist: hardcoded patterns + DB custom patterns
+  const isBlockedByDB = _botConfig.userAgentBlocklist.some(p => p && uaLower.includes(p.toLowerCase()));
+  if (!isMaliciousUA(ua) && !isBlockedByDB) {
     return next();
   }
 
@@ -141,12 +199,14 @@ export function uaBlockingMiddleware(req: Request, res: Response, next: NextFunc
   const hits = (_hitCounts.get(ip) || 0) + 1;
   _hitCounts.set(ip, hits);
 
-  logger.warn(`[UA-Block] Blocked malicious user-agent from ${ip}: ${ua.slice(0, 120)}`);
+  // Resolve effective action: 'challenge' falls back to 'block' (no CAPTCHA service)
+  const effectiveAction = _botConfig.action === 'challenge' ? 'block' : _botConfig.action;
+
+  logger.warn(`[UA-Block] ${effectiveAction === 'log' ? 'Logged' : 'Blocked'} malicious user-agent from ${ip} (action=${_botConfig.action}): ${ua.slice(0, 120)}`);
 
   // Fire-and-forget: log + record suspicious + alert
   (async () => {
     try {
-      // Persist security event
       await securityLogService.logEvent({
         ip,
         method: req.method,
@@ -154,14 +214,12 @@ export function uaBlockingMiddleware(req: Request, res: Response, next: NextFunc
         userAgent: ua.slice(0, 500),
         eventType: 'ua_blocked',
         severity: hits >= 5 ? 'high' : 'medium',
-        metadata: { matchedUA: ua.slice(0, 200), hitCount: hits },
-        blocked: true,
+        metadata: { matchedUA: ua.slice(0, 200), hitCount: hits, action: effectiveAction },
+        blocked: effectiveAction !== 'log',
       });
 
-      // Record as suspicious for potential auto-block
       await BlocklistService.recordSuspiciousEvent(ip, 'ua_blocked', `Malicious UA: ${ua.slice(0, 100)}`);
 
-      // Alert on repeated offenders
       if (hits === 3 || hits === 10 || hits % 25 === 0) {
         await securityAlertService.send({
           eventType: 'ua_blocked',
@@ -178,6 +236,11 @@ export function uaBlockingMiddleware(req: Request, res: Response, next: NextFunc
       logger.error('[UA-Block] Async logging failed:', err);
     }
   })();
+
+  if (effectiveAction === 'log') {
+    // Log-only mode: record but let the request through
+    return next();
+  }
 
   res.status(403).json({ success: false, message: 'Forbidden' });
 }

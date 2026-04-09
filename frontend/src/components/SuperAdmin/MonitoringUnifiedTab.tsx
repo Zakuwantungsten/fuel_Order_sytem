@@ -28,9 +28,10 @@ const NAV_GROUPS: NavGroup[] = [
 
 interface MonitoringUnifiedTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
+  onNavigate?: (section: string) => void;
 }
 
-export default function MonitoringUnifiedTab({ onMessage }: MonitoringUnifiedTabProps) {
+export default function MonitoringUnifiedTab({ onMessage, onNavigate }: MonitoringUnifiedTabProps) {
   const [subTab, setSubTab] = useState<SubTab>('infra');
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export default function MonitoringUnifiedTab({ onMessage }: MonitoringUnifiedTab
         <div className="flex-1 p-5 bg-white dark:bg-gray-900 overflow-y-auto">
           {subTab === 'infra'     && <MonitoringInfraSubTab onMessage={onMessage} />}
           {subTab === 'analytics' && <MonitoringAnalyticsSubTab onMessage={onMessage} />}
-          {subTab === 'alerts'    && <MonitoringAlertsSubTab />}
+          {subTab === 'alerts'    && <MonitoringAlertsSubTab onNavigate={onNavigate} />}
         </div>
       </div>
     </div>

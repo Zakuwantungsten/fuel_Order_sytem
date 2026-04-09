@@ -1,6 +1,6 @@
 import {
   Shield, ShieldCheck, ShieldOff, ShieldAlert,
-  Smartphone, Mail, Key, Lock, AlertTriangle,
+  Smartphone, Mail, MessageSquare, Key, Lock, AlertTriangle, Info,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import type { User } from '../../../../../types';
@@ -54,28 +54,50 @@ export default function SecurityTab({ user, mfaStatus, onAction }: SecurityTabPr
           </h3>
           {mfa && (
             <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-              mfa.enabled
+              mfa.active
                 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                : mfa.enabled
+                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                  : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
             }`}>
-              {mfa.enabled ? <ShieldCheck className="w-3 h-3" /> : <ShieldOff className="w-3 h-3" />}
-              {mfa.enabled ? 'Enabled' : 'Disabled'}
+              {mfa.active
+                ? <><ShieldCheck className="w-3 h-3" /> Active</>
+                : mfa.enabled
+                  ? <><Shield className="w-3 h-3" /> Configured (enforcement off)</>
+                  : <><ShieldOff className="w-3 h-3" /> Not configured</>}
             </span>
           )}
         </div>
 
         {mfa ? (
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
+            {/* Global enforcement off warning */}
+            {mfa.enabled && !mfa.active && (
+              <div className="flex items-start gap-2 mb-3 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <Info className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  MFA is configured for this user but global MFA enforcement is currently <strong>disabled</strong>. The user can log in without MFA until enforcement is re-enabled in Security Settings.
+                </p>
+              </div>
+            )}
+
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
               <MfaMethodRow icon={Smartphone} label="TOTP (Authenticator App)" enrolled={mfa.totpEnrolled} />
-              <MfaMethodRow icon={Mail} label="Email Verification" enrolled={mfa.emailEnrolled} />
+              <MfaMethodRow icon={Mail}       label="Email Verification"        enrolled={mfa.emailEnrolled} />
+              <MfaMethodRow icon={MessageSquare} label="SMS Verification"       enrolled={mfa.smsEnrolled} />
             </div>
 
             <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-500 dark:text-gray-400">Mandatory</span>
+                <span className="text-gray-500 dark:text-gray-400">Mandatory (per-user)</span>
                 <span className={`font-medium ${mfa.isMandatory ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
                   {mfa.isMandatory ? 'Yes' : 'No'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Policy required (role)</span>
+                <span className={`font-medium ${mfa.policyRequired ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                  {mfa.policyRequired ? 'Yes' : 'No'}
                 </span>
               </div>
               <div className="flex justify-between">

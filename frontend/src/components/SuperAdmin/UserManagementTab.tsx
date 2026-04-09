@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Users, 
   UserPlus, 
@@ -22,11 +22,18 @@ import {
   Ban,
   ShieldOff,
   ShieldCheck,
-  LogOut
+  LogOut,
+  Download,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+  Info,
 } from 'lucide-react';
 import { usersAPI, systemAdminAPI } from '../../services/api';
 import type { User, UserRole } from '../../types';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import { useUserDetail } from './UserManagement/hooks/useUserDetail';
+import UserDetailDrawer from './UserManagement/components/UserDetailDrawer';
 
 interface UserManagementTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -69,6 +76,40 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const ITEMS_PER_PAGE = 15;
+
+  // Stats (separate full-dataset fetch for accurate counts)
+  const [statsData, setStatsData] = useState({ total: 0, active: 0, inactive: 0, banned: 0 });
+
+  // Bulk select
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showBulkResetModal, setShowBulkResetModal] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+
+  // Import
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  // Detail drawer (full tabbed drawer)
+  const drawer = useUserDetail();
+
+  const handleDrawerAction = useCallback((action: string, userId: string) => {
+    const user = users.find(u => String(u.id || (u as any)._id) === userId);
+    if (!user) return;
+    switch (action) {
+      case 'reset_password': handleResetPassword(user); break;
+      case 'force_logout': handleForceLogout(user); break;
+      case 'ban': handleBanUser(user); break;
+      case 'unban': handleUnbanUser(user); break;
+      case 'toggle_status': handleToggleStatus(user); break;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users]);
+
   // Filter dropdown states
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -106,15 +147,33 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
     };
   }, [filterRole, filterStatus]);
 
-  const loadUsers = async () => {
-    setLoading(true);
+  const loadStats = useCallback(async () => {
     try {
-      const filters: any = {};
-      if (filterRole) filters.role = filterRole;
-      if (filterStatus) filters.isActive = filterStatus === 'active';
-      
-      const data = await usersAPI.getAll(filters);
-      setUsers(data);
+      const all = await usersAPI.getAll();
+      setStatsData({
+        total: all.length,
+        active: all.filter((u: any) => u.isActive && !u.isBanned).length,
+        inactive: all.filter((u: any) => !u.isActive && !u.isBanned).length,
+        banned: all.filter((u: any) => u.isBanned).length,
+      });
+    } catch { /* silent */ }
+  }, []);
+
+  const loadUsers = async (page: number = 1) => {
+    setLoading(true);
+    setSelectedIds(new Set());
+    try {
+      const params: any = { page, limit: ITEMS_PER_PAGE };
+      if (filterRole) params.role = filterRole;
+      if (filterStatus === 'active') params.isActive = 'true';
+      if (filterStatus === 'inactive') params.isActive = 'false';
+      if (filterStatus === 'banned') params.isBanned = 'true';
+      if (searchQuery.trim()) params.q = searchQuery.trim();
+      const result = await usersAPI.getPaginated(params);
+      setUsers(result.data);
+      setTotalPages(result.pagination.totalPages);
+      setTotalCount(result.pagination.total);
+      setCurrentPage(page);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to load users');
     } finally {
@@ -122,12 +181,19 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
     }
   };
 
-  useRealtimeSync('users', loadUsers);
+  useRealtimeSync('users', () => { loadUsers(1); loadStats(); });
 
-  // Load users on mount and whenever filters change
+  // Stats on mount
+  useEffect(() => { loadStats(); }, [loadStats]);
+
+  // Reload table on filter change (reset to page 1)
+  useEffect(() => { loadUsers(1); }, [filterRole, filterStatus]);
+
+  // Debounced search
   useEffect(() => {
-    loadUsers();
-  }, [filterRole, filterStatus]);
+    const t = setTimeout(() => loadUsers(1), 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const handleCreateUser = () => {
     setShowCreateModal(true);
@@ -152,7 +218,8 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
     try {
       await usersAPI.toggleStatus(user.id);
       onMessage('success', `User ${user.isActive ? 'deactivated' : 'activated'} successfully`);
-      loadUsers();
+      loadUsers(currentPage);
+      loadStats();
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to update user status');
     }
@@ -182,16 +249,10 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
         return;
       }
       const response = await systemAdminAPI.forceLogout(String(userId));
-      
-      // Close modal first
       setShowForceLogoutModal(false);
       setSelectedUser(null);
-      
-      // Show success message
       onMessage('success', response.message || `User ${selectedUser.username} has been logged out successfully`);
-      
-      // Reload users list
-      loadUsers();
+      loadUsers(currentPage);
     } catch (error: any) {
       setShowForceLogoutModal(false);
       setSelectedUser(null);
@@ -199,25 +260,84 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
     }
   };
 
+  // Bulk select helpers
+  const allCurrentIds = users.map(u => String(u.id || (u as any)._id));
+  const allSelected = allCurrentIds.length > 0 && allCurrentIds.every(id => selectedIds.has(id));
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allCurrentIds));
+    }
+  };
+
+  const handleSelectOne = (userId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const confirmBulkDelete = async () => {
+    setBulkLoading(true);
+    try {
+      await usersAPI.bulkDelete(Array.from(selectedIds));
+      onMessage('success', `${selectedIds.size} user(s) deleted successfully`);
+      setShowBulkDeleteModal(false);
+      setSelectedIds(new Set());
+      loadUsers(1);
+      loadStats();
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Bulk delete failed');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const confirmBulkReset = async () => {
+    setBulkLoading(true);
+    try {
+      const result = await usersAPI.bulkResetPasswords(Array.from(selectedIds));
+      onMessage('success', `Passwords reset: ${result.success} succeeded, ${result.failed} failed`);
+      setShowBulkResetModal(false);
+      setSelectedIds(new Set());
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Bulk reset failed');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const params: any = {};
+      if (filterRole) params.role = filterRole;
+      if (filterStatus) params.isActive = filterStatus;
+      if (searchQuery.trim()) params.q = searchQuery.trim();
+      const blob = await usersAPI.exportCSV(params);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      onMessage('error', 'Failed to export users');
+    }
+  };
+
+  const handleViewDetail = (user: User) => {
+    drawer.openDrawer(user.id || (user as any)._id);
+  };
+
   const getRoleInfo = (role: string) => {
     return USER_ROLES.find(r => r.value === role) || USER_ROLES[USER_ROLES.length - 1];
   };
 
-  const filteredUsers = users.filter(user => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      user.username?.toLowerCase().includes(searchLower) ||
-      user.email?.toLowerCase().includes(searchLower) ||
-      user.firstName?.toLowerCase().includes(searchLower) ||
-      user.lastName?.toLowerCase().includes(searchLower) ||
-      user.department?.toLowerCase().includes(searchLower) ||
-      user.truckNo?.toLowerCase().includes(searchLower)
-    );
-  });
 
-  const activeUsers = users.filter(u => u.isActive).length;
-  const inactiveUsers = users.filter(u => !u.isActive).length;
-  const bannedUsers = users.filter(u => u.isBanned).length;
 
   return (
     <div className="space-y-6">
@@ -229,56 +349,90 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
             User Management
           </h2>
         </div>
-        <button 
-          onClick={handleCreateUser}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <UserPlus className="w-4 h-4" />
-          Create User
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-3 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300 text-sm"
+            title="Export users to CSV"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 px-3 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300 text-sm"
+            title="Import users from CSV"
+          >
+            <Upload className="w-4 h-4" />
+            Import
+          </button>
+          <button
+            onClick={handleCreateUser}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <UserPlus className="w-4 h-4" />
+            Create User
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-4 text-white shadow-md">
+        <button
+          onClick={() => { setFilterStatus(''); setFilterRole(''); }}
+          className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-4 text-white shadow-md hover:from-blue-600 hover:to-blue-700 transition-all text-left w-full"
+          title="Clear all filters"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100 text-sm">Total Users</p>
-              <p className="text-3xl font-bold mt-1">{users.length}</p>
+              <p className="text-3xl font-bold mt-1">{statsData.total}</p>
             </div>
             <Users className="w-10 h-10 text-blue-100 opacity-80" />
           </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 text-white shadow-md">
+        </button>
+
+        <button
+          onClick={() => setFilterStatus(filterStatus === 'active' ? '' : 'active')}
+          className={`bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 text-white shadow-md hover:from-green-600 hover:to-green-700 transition-all text-left w-full${filterStatus === 'active' ? ' ring-2 ring-white ring-offset-2 ring-offset-green-600' : ''}`}
+          title="Filter active users"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100 text-sm">Active</p>
-              <p className="text-3xl font-bold mt-1">{activeUsers}</p>
+              <p className="text-3xl font-bold mt-1">{statsData.active}</p>
             </div>
             <Check className="w-10 h-10 text-green-100 opacity-80" />
           </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-4 text-white shadow-md">
+        </button>
+
+        <button
+          onClick={() => setFilterStatus(filterStatus === 'inactive' ? '' : 'inactive')}
+          className={`bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-4 text-white shadow-md hover:from-orange-600 hover:to-orange-700 transition-all text-left w-full${filterStatus === 'inactive' ? ' ring-2 ring-white ring-offset-2 ring-offset-orange-600' : ''}`}
+          title="Filter inactive users"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-orange-100 text-sm">Inactive</p>
-              <p className="text-3xl font-bold mt-1">{inactiveUsers}</p>
+              <p className="text-3xl font-bold mt-1">{statsData.inactive}</p>
             </div>
             <EyeOff className="w-10 h-10 text-orange-100 opacity-80" />
           </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg p-4 text-white shadow-md">
+        </button>
+
+        <button
+          onClick={() => setFilterStatus(filterStatus === 'banned' ? '' : 'banned')}
+          className={`bg-gradient-to-br from-red-500 to-red-600 rounded-lg p-4 text-white shadow-md hover:from-red-600 hover:to-red-700 transition-all text-left w-full${filterStatus === 'banned' ? ' ring-2 ring-white ring-offset-2 ring-offset-red-600' : ''}`}
+          title="Filter banned users"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-red-100 text-sm">Banned</p>
-              <p className="text-3xl font-bold mt-1">{bannedUsers}</p>
+              <p className="text-3xl font-bold mt-1">{statsData.banned}</p>
             </div>
             <Ban className="w-10 h-10 text-red-100 opacity-80" />
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Search and Filters */}
@@ -310,7 +464,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
 
           {/* Refresh */}
           <button
-            onClick={loadUsers}
+            onClick={() => loadUsers(currentPage)}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
@@ -408,12 +562,52 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
         )}
       </div>
 
+      {/* Bulk Action Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+          <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+            {selectedIds.size} user{selectedIds.size > 1 ? 's' : ''} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowBulkResetModal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-400 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+            >
+              <Key className="w-3.5 h-3.5" />
+              Reset Passwords
+            </button>
+            <button
+              onClick={() => setShowBulkDeleteModal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete Selected
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              title="Clear selection"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Users Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
               <tr key="header">
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                    checked={allSelected}
+                    onChange={handleSelectAll}
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   User
                 </th>
@@ -439,6 +633,7 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                 <>
                   {[...Array(6)].map((_, i) => (
                     <tr key={i} className="animate-pulse">
+                      <td className="px-4 py-3 w-10"><div className="h-4 w-4 bg-gray-200 dark:bg-gray-700 rounded" /></td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full" />
@@ -452,25 +647,40 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                       <td className="px-4 py-3"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-36" /></td>
                       <td className="px-4 py-3"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-24" /></td>
                       <td className="px-4 py-3"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-24" /></td>
-                      <td className="px-4 py-3 text-right"><div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-16 ml-auto" /></td>
+                      <td className="px-4 py-3 text-right"><div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-24 ml-auto" /></td>
                     </tr>
                   ))}
                 </>
-              ) : filteredUsers.length === 0 ? (
+              ) : users.length === 0 ? (
                 <tr key="no-users">
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     No users found
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map(user => {
+                users.map(user => {
                   const roleInfo = getRoleInfo(user.role);
+                  const userId = String(user.id || (user as any)._id);
                   return (
-                    <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <tr key={userId} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors${selectedIds.has(userId) ? ' bg-blue-50 dark:bg-blue-900/10' : ''}`}>
+                      <td className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                          checked={selectedIds.has(userId)}
+                          onChange={() => handleSelectOne(userId)}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                            <UserIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                            {(user.firstName || user.lastName) ? (
+                              <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 uppercase select-none">
+                                {(user.firstName?.[0] || '')}{(user.lastName?.[0] || '')}
+                              </span>
+                            ) : (
+                              <UserIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            )}
                           </div>
                           <div>
                             <p className="font-medium text-gray-900 dark:text-gray-100">
@@ -482,12 +692,6 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                             <p className="text-xs text-gray-400 dark:text-gray-500">
                               {user.email}
                             </p>
-                            {user.truckNo && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
-                                <Truck className="w-3 h-3" />
-                                {user.truckNo}
-                              </p>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -518,12 +722,13 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
-                          {user.isBanned ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                              <Ban className="w-3 h-3" />
-                              Banned
-                            </span>
-                          ) : (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {user.isBanned && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                                <Ban className="w-3 h-3" />
+                                Banned
+                              </span>
+                            )}
                             <button
                               onClick={() => handleToggleStatus(user)}
                               className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -533,18 +738,12 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                               }`}
                             >
                               {user.isActive ? (
-                                <>
-                                  <Eye className="w-3 h-3" />
-                                  Active
-                                </>
+                                <><Eye className="w-3 h-3" />Active</>
                               ) : (
-                                <>
-                                  <EyeOff className="w-3 h-3" />
-                                  Inactive
-                                </>
+                                <><EyeOff className="w-3 h-3" />Inactive</>
                               )}
                             </button>
-                          )}
+                          </div>
                           {user.isBanned && user.bannedReason && (
                             <span className="text-xs text-gray-500 dark:text-gray-400 italic">
                               {user.bannedReason}
@@ -557,6 +756,13 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleViewDetail(user)}
+                            className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                            title="View details"
+                          >
+                            <Info className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleEditUser(user)}
                             className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
@@ -571,15 +777,13 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
                           >
                             <Key className="w-4 h-4" />
                           </button>
-                          {user.lastLogin && (
-                            <button
-                              onClick={() => handleForceLogout(user)}
-                              className="p-2 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 rounded-lg transition-colors"
-                              title="Force logout"
-                            >
-                              <LogOut className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleForceLogout(user)}
+                            className="p-2 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 rounded-lg transition-colors"
+                            title="Force logout"
+                          >
+                            <LogOut className="w-4 h-4" />
+                          </button>
                           {user.isBanned ? (
                             <button
                               onClick={() => handleUnbanUser(user)}
@@ -615,13 +819,42 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
         </div>
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-sm">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Page {currentPage} of {totalPages} &mdash; {totalCount} total
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => loadUsers(currentPage - 1)}
+              disabled={currentPage <= 1 || loading}
+              className="p-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 min-w-[60px] text-center">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => loadUsers(currentPage + 1)}
+              disabled={currentPage >= totalPages || loading}
+              className="p-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Modals */}
       {showCreateModal && (
         <SuperAdminCreateUserModal
           onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
             setShowCreateModal(false);
-            loadUsers();
+            loadUsers(1);
+            loadStats();
             onMessage('success', 'User created successfully');
           }}
           onError={(msg) => onMessage('error', msg)}
@@ -655,7 +888,8 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
           onSuccess={() => {
             setShowDeleteModal(false);
             setSelectedUser(null);
-            loadUsers();
+            loadUsers(1);
+            loadStats();
             onMessage('success', 'User deleted successfully');
           }}
           onError={(msg) => onMessage('error', msg)}
@@ -688,7 +922,8 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
           onSuccess={() => {
             setShowBanModal(false);
             setSelectedUser(null);
-            loadUsers();
+            loadUsers(1);
+            loadStats();
             onMessage('success', 'User banned successfully');
           }}
           onError={(msg) => onMessage('error', msg)}
@@ -705,12 +940,55 @@ export default function UserManagementTab({ onMessage }: UserManagementTabProps)
           onSuccess={() => {
             setShowUnbanModal(false);
             setSelectedUser(null);
-            loadUsers();
+            loadUsers(1);
+            loadStats();
             onMessage('success', 'User unbanned successfully');
           }}
           onError={(msg) => onMessage('error', msg)}
         />
       )}
+
+      {showBulkDeleteModal && (
+        <BulkDeleteConfirmModal
+          count={selectedIds.size}
+          loading={bulkLoading}
+          onConfirm={confirmBulkDelete}
+          onClose={() => setShowBulkDeleteModal(false)}
+        />
+      )}
+
+      {showBulkResetModal && (
+        <BulkResetConfirmModal
+          count={selectedIds.size}
+          loading={bulkLoading}
+          onConfirm={confirmBulkReset}
+          onClose={() => setShowBulkResetModal(false)}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportCSVModal
+          onClose={() => setShowImportModal(false)}
+          onSuccess={(result) => {
+            onMessage('success', `Import done: ${result.created} created, ${result.skipped} skipped`);
+            loadUsers(1);
+            loadStats();
+          }}
+          onError={(msg) => onMessage('error', msg)}
+        />
+      )}
+
+      <UserDetailDrawer
+        isOpen={drawer.isOpen}
+        userDetail={drawer.userDetail}
+        isLoading={drawer.isLoading}
+        isError={drawer.isError}
+        activeTab={drawer.activeTab}
+        onClose={drawer.closeDrawer}
+        onSwitchTab={drawer.switchTab}
+        onRefresh={drawer.refetch}
+        onAction={handleDrawerAction}
+      />
 
       {showForceLogoutModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -801,6 +1079,7 @@ export function SuperAdminCreateUserModal({
     role: 'viewer' as UserRole,
     station: '',
     yard: '',
+    department: '',
   });
   const [stations, setStations] = useState<any[]>([]);
   const [loadingStations, setLoadingStations] = useState(false);
@@ -843,6 +1122,10 @@ export function SuperAdminCreateUserModal({
         lastName: formData.lastName,
         role: formData.role,
       };
+
+      if (formData.department.trim()) {
+        submitData.department = formData.department.trim();
+      }
 
       // Only include station if role requires it
       if (['fuel_attendant', 'station_manager'].includes(formData.role) && formData.station) {
@@ -975,6 +1258,19 @@ export function SuperAdminCreateUserModal({
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
                     placeholder="Nassor"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
+                    placeholder="e.g. Finance, Operations, Logistics"
                   />
                 </div>
               </div>
@@ -1133,6 +1429,7 @@ function EditUserModal({
     role: user.role || 'viewer' as UserRole,
     station: user.station || '',
     yard: user.yard || '',
+    department: user.department || '',
   });
   const [stations, setStations] = useState<any[]>([]);
   const [loadingStations, setLoadingStations] = useState(false);
@@ -1173,6 +1470,7 @@ function EditUserModal({
         lastName: formData.lastName,
         email: formData.email,
         role: formData.role,
+        department: formData.department.trim() || undefined,
       };
       
       // Only include station if role requires it
@@ -1273,6 +1571,19 @@ function EditUserModal({
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
                     placeholder="user@example.com"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition-all"
+                    placeholder="e.g. Finance, Operations, Logistics"
                   />
                 </div>
               </div>
@@ -1872,3 +2183,213 @@ function UnbanUserModal({
     </div>
   );
 }
+
+// Bulk Delete Confirm Modal
+function BulkDeleteConfirmModal({
+  count,
+  loading,
+  onConfirm,
+  onClose,
+}: {
+  count: number;
+  loading: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full shadow-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bulk Delete Users</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">This cannot be undone</p>
+          </div>
+        </div>
+        <p className="text-gray-700 dark:text-gray-300 mb-6">
+          Are you sure you want to delete <strong>{count} user{count > 1 ? 's' : ''}</strong>? They will be moved to the trash.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} disabled={loading} className="px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={loading} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2">
+            {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
+            Delete {count} User{count > 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Bulk Reset Passwords Confirm Modal
+function BulkResetConfirmModal({
+  count,
+  loading,
+  onConfirm,
+  onClose,
+}: {
+  count: number;
+  loading: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full shadow-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+            <Key className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bulk Reset Passwords</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">New passwords will be emailed to each user</p>
+          </div>
+        </div>
+        <p className="text-gray-700 dark:text-gray-300 mb-6">
+          Reset passwords for <strong>{count} user{count > 1 ? 's' : ''}</strong>? Each user will receive a temporary password via email and must change it on next login.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} disabled={loading} className="px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={loading} className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center gap-2">
+            {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
+            Reset {count} Password{count > 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Import CSV Modal
+function ImportCSVModal({
+  onClose,
+  onSuccess,
+  onError,
+}: {
+  onClose: () => void;
+  onSuccess: (result: { created: number; skipped: number; errors: any[] }) => void;
+  onError: (msg: string) => void;
+}) {
+  const [csvText, setCsvText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ created: number; skipped: number; errors: any[] } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setCsvText((ev.target?.result as string) || '');
+    reader.readAsText(file);
+  };
+
+  const handleImport = async () => {
+    if (!csvText.trim()) { onError('No CSV content to import'); return; }
+    setLoading(true);
+    try {
+      const res = await usersAPI.importCSV(csvText);
+      setResult(res);
+    } catch (error: any) {
+      onError(error.response?.data?.message || 'Import failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full shadow-2xl border border-gray-200 dark:border-gray-700">
+        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4 flex items-center justify-between rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <Upload className="w-6 h-6 text-white" />
+            <h3 className="text-lg font-semibold text-white">Import Users from CSV</h3>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          {!result ? (
+            <>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-200">
+                <p className="font-medium mb-1">Expected CSV format (first row = header):</p>
+                <p className="font-mono text-xs">username,email,firstName,lastName,role,station,yard,department</p>
+              </div>
+              <div>
+                <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" onChange={handleFileChange} className="hidden" />
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                >
+                  <Upload className="w-4 h-4" />
+                  Choose CSV File
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Or paste CSV content</label>
+                <textarea
+                  rows={8}
+                  value={csvText}
+                  onChange={(e) => setCsvText(e.target.value)}
+                  placeholder={'username,email,firstName,lastName,role,station,yard,department\njdoe,jdoe@example.com,John,Doe,viewer,,,Finance'}
+                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm font-mono dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={onClose} className="px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+                <button
+                  onClick={handleImport}
+                  disabled={loading || !csvText.trim()}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  {loading ? 'Importing...' : 'Import Users'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex gap-4">
+                <div className="flex-1 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center">
+                  <p className="text-2xl font-bold text-green-700 dark:text-green-400">{result.created}</p>
+                  <p className="text-sm text-green-600 dark:text-green-500">Created</p>
+                </div>
+                <div className="flex-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-center">
+                  <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{result.skipped}</p>
+                  <p className="text-sm text-yellow-600 dark:text-yellow-500">Skipped</p>
+                </div>
+                <div className="flex-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-center">
+                  <p className="text-2xl font-bold text-red-700 dark:text-red-400">{result.errors.length}</p>
+                  <p className="text-sm text-red-600 dark:text-red-500">Errors</p>
+                </div>
+              </div>
+              {result.errors.length > 0 && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 max-h-48 overflow-y-auto">
+                  <p className="text-sm font-medium text-red-800 dark:text-red-300 mb-2">Row Errors:</p>
+                  {result.errors.map((err: any, i: number) => (
+                    <p key={i} className="text-xs text-red-700 dark:text-red-400">Row {err.row}: {err.reason}</p>
+                  ))}
+                </div>
+              )}
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => { onSuccess(result); onClose(); }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+

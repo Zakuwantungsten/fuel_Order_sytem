@@ -13,6 +13,9 @@ export class DatabaseMonitor extends EventEmitter {
   private metricsInterval: ReturnType<typeof setInterval> | null = null;
   private slowQueryThreshold = 500; // ms
   private isMonitoring = false;
+  /** Cooldown tracker: prevents repeat emails for the same alert type within 30 min */
+  private readonly _alertCooldowns = new Map<string, number>();
+  private readonly ALERT_COOLDOWN_MS = 30 * 60 * 1000;
 
   constructor() {
     super();
@@ -287,9 +290,20 @@ export class DatabaseMonitor extends EventEmitter {
   }
 
   /**
-   * Check metrics against alert thresholds
+   * Check metrics against alert thresholds and send email notifications for critical breaches.
+   * Emails are rate-limited to one per 30 minutes per alert type.
    */
   private checkAlertThresholds(metrics: IDatabaseMetrics): void {
+    const now = Date.now();
+    const canAlert = (key: string): boolean => {
+      const last = this._alertCooldowns.get(key) ?? 0;
+      if (now - last >= this.ALERT_COOLDOWN_MS) {
+        this._alertCooldowns.set(key, now);
+        return true;
+      }
+      return false;
+    };
+
     // Connection pool exhaustion warning (90% used)
     const connectionUsage = metrics.connections.current / (metrics.connections.available || 1);
     if (connectionUsage >= 0.9) {
@@ -298,6 +312,14 @@ export class DatabaseMonitor extends EventEmitter {
         message: `Connection pool nearly exhausted! ${metrics.connections.current}/${metrics.connections.available}`,
         timestamp: new Date(),
       });
+      if (canAlert('connection_critical')) {
+        sendCriticalEmail({
+          subject: 'DB Alert: Connection Pool Nearly Exhausted',
+          message: `Database connection pool usage is <strong>${(connectionUsage * 100).toFixed(1)}%</strong> (${metrics.connections.current} active / ${metrics.connections.available} available).<br/><br/>
+                    <strong>Action Required:</strong> Reduce concurrent operations or increase the connection pool limit.`,
+          priority: 'critical',
+        }).catch(e => logger.error('Failed to send connection alert email:', e));
+      }
     } else if (connectionUsage >= 0.7) {
       this.emit('alert', {
         type: 'warning',
@@ -313,6 +335,14 @@ export class DatabaseMonitor extends EventEmitter {
         message: `Database storage critically low! Only ${(metrics.storage.freeSpace / 1024 / 1024).toFixed(1)}MB free`,
         timestamp: new Date(),
       });
+      if (canAlert('storage_critical')) {
+        sendCriticalEmail({
+          subject: 'DB Alert: Storage Critically Low',
+          message: `Database free storage is critically low: only <strong>${(metrics.storage.freeSpace / 1024 / 1024).toFixed(1)} MB</strong> remaining.<br/><br/>
+                    <strong>Action Required:</strong> Archive old records or expand storage capacity immediately.`,
+          priority: 'critical',
+        }).catch(e => logger.error('Failed to send storage alert email:', e));
+      }
     }
 
     // High response time
@@ -322,6 +352,25 @@ export class DatabaseMonitor extends EventEmitter {
         message: `High database response time: ${metrics.performance.averageResponseTime}ms`,
         timestamp: new Date(),
       });
+    }
+
+    // Memory usage — 85% heap threshold (matches DEFAULT_ALERT_THRESHOLDS.memoryUsagePct)
+    const mem = process.memoryUsage();
+    const heapPct = (mem.heapUsed / mem.heapTotal) * 100;
+    if (heapPct >= 85) {
+      this.emit('alert', {
+        type: 'critical',
+        message: `High memory usage: ${heapPct.toFixed(1)}% heap used`,
+        timestamp: new Date(),
+      });
+      if (canAlert('memory_critical')) {
+        sendCriticalEmail({
+          subject: 'DB Alert: High Memory Usage',
+          message: `Node.js heap usage is at <strong>${heapPct.toFixed(1)}%</strong> (${(mem.heapUsed / 1024 / 1024).toFixed(0)} MB / ${(mem.heapTotal / 1024 / 1024).toFixed(0)} MB).<br/><br/>
+                    <strong>Action Required:</strong> Investigate memory leaks or restart the service.`,
+          priority: 'critical',
+        }).catch(e => logger.error('Failed to send memory alert email:', e));
+      }
     }
   }
 

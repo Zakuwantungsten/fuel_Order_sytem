@@ -384,7 +384,10 @@ class MFAService {
   }
   
   /**
-   * Check if user has MFA enabled
+   * Check if user has MFA enabled (raw DB state — has the user configured MFA?).
+   * NOTE: This does NOT apply the global kill-switch (globalEnabled). Callers that
+   * are used in authentication flows (e.g. authController login) must guard this with
+   * the global kill-switch themselves so that disabling enforcement takes immediate effect.
    */
   async isMFAEnabled(userId: string): Promise<boolean> {
     const mfa = await MFA.findOne({ userId });

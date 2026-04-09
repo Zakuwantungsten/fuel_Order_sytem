@@ -11,7 +11,10 @@ interface StatusBadgeProps {
 export function resolveLifecycleState(user: User): UserLifecycleState {
   if (user.isBanned) return 'banned';
   if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) return 'locked';
-  if (user.pendingActivation) return 'pending_activation';
+  // Only show "pending" when the user hasn't set their own password yet.
+  // pendingActivation stays true on stale legacy records even after login — guard it
+  // with mustChangePassword so a user who has already activated shows as "active".
+  if (user.pendingActivation && user.mustChangePassword) return 'pending_activation';
   if (user.isActive) return 'active';
   return 'inactive';
 }

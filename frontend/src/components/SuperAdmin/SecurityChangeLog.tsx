@@ -94,27 +94,39 @@ export default function SecurityChangeLog() {
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-      {/* Toggle header */}
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-      >
-        <div className="flex items-center gap-2.5">
+      {/* Toggle header — split into two sibling elements to avoid <button> nesting */}
+      <div className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+        {/* Clickable area for collapse/expand */}
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="flex-1 flex items-center gap-2.5 text-left"
+        >
           <History className="w-4.5 h-4.5 text-blue-500" />
           <span className="text-sm font-semibold text-gray-900 dark:text-white">Recent Security Changes</span>
-        </div>
+        </button>
         <div className="flex items-center gap-2">
           {open && (
             <button
+              type="button"
               onClick={e => { e.stopPropagation(); fetchLog(); }}
               className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
+              aria-label="Refresh security changes"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           )}
-          {open ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+          {/* Chevron is part of the toggle button — standalone to avoid nesting */}
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            className="p-0.5 text-gray-400"
+            aria-label={open ? 'Collapse' : 'Expand'}
+          >
+            {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
         </div>
-      </button>
+      </div>
 
       {/* Body */}
       {open && (

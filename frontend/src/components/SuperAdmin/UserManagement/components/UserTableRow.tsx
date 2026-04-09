@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { ShieldOff } from 'lucide-react';
+import { ShieldCheck, ShieldOff, Shield } from 'lucide-react';
 import type { User } from '../../../../types';
 
 import UserAvatar from './UserAvatar';
@@ -130,15 +130,66 @@ export default memo(function UserTableRow({
   );
 });
 
-// Small MFA indicator icon - this is a lightweight display, detail is in the drawer
-function MfaIndicator({ user: _user }: { user: User }) {
-  // We don't have MFA status on the list endpoint; show a neutral indicator
-  // The detail drawer (Phase 2) will show full MFA info via getDetail()
+// MFA indicator for the table row. Reads lightweight mfaInfo returned by the list endpoint.
+// Green ShieldCheck   = MFA configured and isEnabled: true
+// Blue Shield         = MFA configured but only partially (has enrolled methods but isEnabled false)
+// Gray ShieldOff      = No MFA configured at all
+function MfaIndicator({ user }: { user: User }) {
+  const info = (user as any).mfaInfo as User['mfaInfo'] | undefined;
+
+  if (!info) {
+    // mfaInfo not present (old API response) — show neutral unknown indicator
+    return (
+      <span
+        className="inline-flex items-center justify-center"
+        title="MFA status unavailable — open user details"
+        aria-label="MFA status unavailable"
+      >
+        <ShieldOff className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600" />
+      </span>
+    );
+  }
+
+  const methodsEnrolled = [info.totpEnrolled, info.emailEnrolled, info.smsEnrolled].filter(Boolean).length;
+  const methodLabels = [
+    info.totpEnrolled ? 'TOTP' : null,
+    info.emailEnrolled ? 'Email' : null,
+    info.smsEnrolled ? 'SMS' : null,
+  ].filter(Boolean).join(', ');
+
+  if (info.enabled && methodsEnrolled > 0) {
+    return (
+      <span
+        className="inline-flex items-center gap-1"
+        title={`MFA enabled — ${methodLabels}`}
+        aria-label={`MFA enabled: ${methodLabels}`}
+      >
+        <ShieldCheck className="w-3.5 h-3.5 text-green-500 dark:text-green-400" />
+        <span className="text-xs font-medium text-green-600 dark:text-green-400 hidden sm:inline">
+          {methodsEnrolled > 1 ? `${methodsEnrolled}` : methodLabels}
+        </span>
+      </span>
+    );
+  }
+
+  if (methodsEnrolled > 0) {
+    // Enrolled methods exist but isEnabled is false (e.g. admin disabled MFA for this user)
+    return (
+      <span
+        className="inline-flex items-center gap-1"
+        title={`MFA configured but disabled — ${methodLabels}`}
+        aria-label={`MFA configured but disabled: ${methodLabels}`}
+      >
+        <Shield className="w-3.5 h-3.5 text-amber-400 dark:text-amber-500" />
+      </span>
+    );
+  }
+
   return (
     <span
       className="inline-flex items-center justify-center"
-      title="View MFA status in user details"
-      aria-label="MFA status unknown - click user for details"
+      title="MFA not configured"
+      aria-label="MFA not configured"
     >
       <ShieldOff className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600" />
     </span>

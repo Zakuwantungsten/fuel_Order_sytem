@@ -83,6 +83,11 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
   const [sessionSettings, setSessionSettings] = useState(DEFAULT_SESSION);
   const [passwordPolicy, setPasswordPolicy] = useState(DEFAULT_PASSWORD);
   const [mfaSettings, setMfaSettings] = useState(DEFAULT_MFA);
+  /** Last values confirmed saved on the server — used for SecurityTemplates diff so the
+   *  comparison reflects what is actually stored, not unsaved local edits. */
+  const [serverSession, setServerSession] = useState(DEFAULT_SESSION);
+  const [serverPassword, setServerPassword] = useState(DEFAULT_PASSWORD);
+  const [serverMfa, setServerMfa] = useState(DEFAULT_MFA);
 
   /* Email */
   const [emailStatus, setEmailStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
@@ -116,10 +121,20 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
   };
 
   /* ── Load security settings ── */
-  const applySettings = useCallback((data: { session?: any; password?: any; mfa?: any; notifications?: any }) => {
-    if (data.session) setSessionSettings(prev => ({ ...prev, ...data.session }));
-    if (data.password) setPasswordPolicy(prev => ({ ...prev, ...data.password }));
-    if (data.mfa) setMfaSettings(prev => ({ ...prev, ...data.mfa }));
+  /** Same as applySettings but also updates the server-state snapshot used by SecurityTemplates */
+  const applyServerSettings = useCallback((data: { session?: any; password?: any; mfa?: any; notifications?: any }) => {
+    if (data.session) {
+      setSessionSettings(prev => ({ ...prev, ...data.session }));
+      setServerSession(prev => ({ ...prev, ...data.session }));
+    }
+    if (data.password) {
+      setPasswordPolicy(prev => ({ ...prev, ...data.password }));
+      setServerPassword(prev => ({ ...prev, ...data.password }));
+    }
+    if (data.mfa) {
+      setMfaSettings(prev => ({ ...prev, ...data.mfa }));
+      setServerMfa(prev => ({ ...prev, ...data.mfa }));
+    }
   }, []);
 
   // NOTE: onMessage intentionally omitted from deps — it is not memoised in the
@@ -137,18 +152,18 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
     );
 
     if (result.ok) {
-      applySettings(result.data);
+      applyServerSettings(result.data);
       return;
     }
 
     onMessageRef.current('error', result.error);
-  }, [applySettings, runSecurityLoad]);
+  }, [applyServerSettings, runSecurityLoad]);
 
   useEffect(() => {
     loadSecuritySettings();
-    subscribeToSecurityEvents(event => applySettings(event));
+    subscribeToSecurityEvents(event => applyServerSettings(event));
     return () => unsubscribeFromSecurityEvents();
-  }, [applySettings, loadSecuritySettings]);
+  }, [applyServerSettings, loadSecuritySettings]);
 
   /* ── Load DLP ── */
   const loadDLP = async () => {
@@ -182,8 +197,11 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
     }, { errorMessage: 'Failed to save session settings' });
 
     if (result.ok) {
-      // Sync form with what was actually stored in the DB
-      if (result.data?.data?.session) setSessionSettings((prev: any) => ({ ...prev, ...result.data.data.session }));
+      // Sync form and server-state snapshot with what was actually stored in the DB
+      if (result.data?.data?.session) {
+        setSessionSettings((prev: any) => ({ ...prev, ...result.data.data.session }));
+        setServerSession((prev: any) => ({ ...prev, ...result.data.data.session }));
+      }
       onMessage('success', 'Session settings saved. Changes apply to new sessions.');
     } else {
       onMessage('error', result.error);
@@ -196,8 +214,11 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
     }, { errorMessage: 'Failed to save password policy' });
 
     if (result.ok) {
-      // Sync form with what was actually stored in the DB (prevents stale-value on re-mount)
-      if (result.data?.data?.password) setPasswordPolicy((prev: any) => ({ ...prev, ...result.data.data.password }));
+      // Sync form and server-state snapshot
+      if (result.data?.data?.password) {
+        setPasswordPolicy((prev: any) => ({ ...prev, ...result.data.data.password }));
+        setServerPassword((prev: any) => ({ ...prev, ...result.data.data.password }));
+      }
       onMessage('success', 'Password policy saved');
     } else {
       onMessage('error', result.error);
@@ -210,8 +231,11 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
     }, { errorMessage: 'Failed to save MFA settings' });
 
     if (result.ok) {
-      // Sync form with what was actually stored in the DB
-      if (result.data?.data?.mfa) setMfaSettings((prev: any) => ({ ...prev, ...result.data.data.mfa }));
+      // Sync form and server-state snapshot
+      if (result.data?.data?.mfa) {
+        setMfaSettings((prev: any) => ({ ...prev, ...result.data.data.mfa }));
+        setServerMfa((prev: any) => ({ ...prev, ...result.data.data.mfa }));
+      }
       onMessage('success', 'MFA settings saved');
     } else {
       onMessage('error', result.error);
@@ -345,11 +369,11 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
       {/* ── Security Templates ── */}
       <SecurityTemplates
-        currentSession={sessionSettings}
-        currentPassword={passwordPolicy}
-        currentMfa={mfaSettings}
+        currentSession={serverSession}
+        currentPassword={serverPassword}
+        currentMfa={serverMfa}
         onApplied={async () => {
-          try { applySettings(await systemAdminAPI.getSecuritySettings()); } catch {}
+          try { applyServerSettings(await systemAdminAPI.getSecuritySettings()); } catch {}
         }}
         onMessage={onMessage}
       />
