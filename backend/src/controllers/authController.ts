@@ -136,7 +136,6 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
 
 /**
  * Login user or driver
- * Enhanced with secure driver authentication
  */
 export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
