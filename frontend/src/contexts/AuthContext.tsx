@@ -162,6 +162,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Check for existing session on mount
   useEffect(() => {
+    let cancelled = false; // guard against React StrictMode double-invocation
     const checkExistingSession = async () => {
       try {
         const stored = sessionStorage.getItem('fuel_order_auth');
@@ -208,6 +209,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (hasRememberMe) {
             try {
               // POST /auth/refresh — cookie is sent automatically, no body needed
+              if (cancelled) return;
               const refreshResult = await authAPI.refreshToken();
               const newAccessToken = (refreshResult as any).accessToken || (refreshResult as any).token;
               if (!newAccessToken) throw new Error('No access token in refresh response');
@@ -258,6 +260,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     checkExistingSession();
 
+    return () => { cancelled = true; };
     // Load system settings to apply timezone, date format, and system name
     const loadSystemSettings = async () => {
       try {
@@ -300,6 +303,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // knows whether to attempt cookie-based token refresh
     if (rememberMe) {
       localStorage.setItem('fuel_order_remember_me', '1');
+    } else {
+      localStorage.removeItem('fuel_order_remember_me');
     }
 
     const permissions = getRolePermissions(user.role);
