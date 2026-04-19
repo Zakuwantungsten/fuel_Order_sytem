@@ -64,7 +64,9 @@ async function runDueBackups() {
       logger.info(`[BACKUP SCHEDULER] Running scheduled backup: "${schedule.name}" (${schedule.frequency})`);
 
       try {
-        await backupService.createBackup('system-scheduler', 'scheduled');
+        // LE-1: pass the schedule's frequency as the retentionTier so we can
+        // apply tiered cleanup later
+        await backupService.createBackup('system-scheduler', 'scheduled', undefined, schedule.frequency as 'daily' | 'weekly' | 'monthly');
         logger.info(`[BACKUP SCHEDULER] Backup completed for schedule: "${schedule.name}"`);
       } catch (err: any) {
         logger.error(`[BACKUP SCHEDULER] Backup failed for schedule "${schedule.name}": ${String(err?.message ?? err)}`);
@@ -82,9 +84,21 @@ async function runDueBackups() {
       await schedule.save();
     }
 
-    // Apply retention cleanup for any schedule that defines a retentionDays value
-    const activeSchedules = await BackupSchedule.find({ enabled: true, retentionDays: { $gt: 0 } });
-    for (const schedule of activeSchedules) {
+    // LE-1: Apply tiered retention cleanup for schedules with retentionPolicy
+    const tieredSchedules = await BackupSchedule.find({ enabled: true, 'retentionPolicy.daily': { $exists: true } });
+    for (const schedule of tieredSchedules) {
+      try {
+        if (schedule.retentionPolicy) {
+          await backupService.cleanupTieredBackups(schedule.retentionPolicy);
+        }
+      } catch (err: any) {
+        logger.warn(`[BACKUP SCHEDULER] Tiered retention cleanup failed for "${schedule.name}": ${String(err?.message ?? err)}`);
+      }
+    }
+
+    // Fallback: Apply simple retention cleanup for schedules with only retentionDays
+    const simpleSchedules = await BackupSchedule.find({ enabled: true, retentionDays: { $gt: 0 }, 'retentionPolicy.daily': { $exists: false } });
+    for (const schedule of simpleSchedules) {
       try {
         await backupService.cleanupOldBackups(schedule.retentionDays);
       } catch (err: any) {

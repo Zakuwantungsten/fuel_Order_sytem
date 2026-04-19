@@ -1,5 +1,11 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IRetentionPolicy {
+  daily: number;    // how many daily backups to keep
+  weekly: number;   // how many weekly backups to keep
+  monthly: number;  // how many monthly backups to keep
+}
+
 export interface IBackupSchedule extends Document {
   name: string;
   enabled: boolean;
@@ -8,6 +14,7 @@ export interface IBackupSchedule extends Document {
   dayOfWeek?: number; // 0-6 for weekly (0 = Sunday)
   dayOfMonth?: number; // 1-31 for monthly
   retentionDays: number;
+  retentionPolicy?: IRetentionPolicy;
   lastRun?: Date;
   nextRun?: Date;
   createdBy: string;
@@ -55,6 +62,12 @@ const BackupScheduleSchema: Schema = new Schema(
       required: true,
       default: 30,
       min: 1,
+    },
+    // Tiered retention policy (overrides retentionDays when present)
+    retentionPolicy: {
+      daily:   { type: Number, min: 1 },
+      weekly:  { type: Number, min: 1 },
+      monthly: { type: Number, min: 1 },
     },
     lastRun: {
       type: Date,

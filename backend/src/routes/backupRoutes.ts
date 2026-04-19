@@ -10,12 +10,16 @@ router.use(authenticate, authorize('super_admin'));
 
 // Backup routes
 router.post('/backups', backupController.createBackup);
+router.get('/backups/trash', backupController.getDeletedBackups);          // LE-3: trash list (before :id)
 router.get('/backups', backupController.getBackups);
 router.get('/backups/stats', backupController.getBackupStats);
 router.get('/backups/:id', backupController.getBackupById);
 router.get('/backups/:id/download', exportRateLimiter, backupController.downloadBackup);
 router.post('/backups/:id/restore', backupController.restoreBackup);
-router.delete('/backups/:id', backupController.deleteBackup);
+router.post('/backups/:id/verify', backupController.verifyBackup);         // ME-1: integrity verify
+router.post('/backups/:id/undelete', backupController.undeleteBackup);     // LE-3: restore from trash
+router.delete('/backups/:id', backupController.deleteBackup);              // LE-3: soft delete
+router.delete('/backups/:id/permanent', backupController.permanentlyDeleteBackup); // LE-3: hard delete
 router.post('/backups/cleanup', backupController.cleanupBackups);
 
 // Backup schedule routes

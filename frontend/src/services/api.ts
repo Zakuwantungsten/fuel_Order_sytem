@@ -1738,13 +1738,18 @@ export const systemAdminAPI = {
 export const backupAPI = {
   // Get all backups
   getBackups: async (params?: {
-    status?: 'in_progress' | 'completed' | 'failed';
+    status?: 'in_progress' | 'completed' | 'failed' | 'deleted';
     type?: 'manual' | 'scheduled';
     page?: number;
     limit?: number;
   }) => {
     const response = await apiClient.get('/backup/backups', { params });
-    return response.data.data;
+    const data = response.data.data;
+    // lean() strips the virtual `id` getter — normalise _id → id
+    if (data?.backups) {
+      data.backups = data.backups.map((b: any) => ({ ...b, id: b.id ?? b._id?.toString() }));
+    }
+    return data;
   },
 
   // Get backup by ID
@@ -1753,9 +1758,9 @@ export const backupAPI = {
     return response.data.data;
   },
 
-  // Create manual backup
-  createBackup: async () => {
-    const response = await apiClient.post('/backup/backups');
+  // Create manual backup (optionally selective collections)
+  createBackup: async (collections?: string[]) => {
+    const response = await apiClient.post('/backup/backups', collections?.length ? { collections } : {});
     return response.data.data;
   },
 
@@ -1771,9 +1776,37 @@ export const backupAPI = {
     return response.data;
   },
 
-  // Delete backup
+  // ME-1: Verify backup integrity
+  verifyBackup: async (id: string): Promise<{ passed: boolean; details: string }> => {
+    const response = await apiClient.post(`/backup/backups/${id}/verify`);
+    return response.data.data;
+  },
+
+  // LE-3: Soft delete (moves to trash)
   deleteBackup: async (id: string) => {
     const response = await apiClient.delete(`/backup/backups/${id}`);
+    return response.data;
+  },
+
+  // LE-3: Get soft-deleted backups (trash)
+  getDeletedBackups: async (params?: { page?: number; limit?: number }) => {
+    const response = await apiClient.get('/backup/backups/trash', { params });
+    const data = response.data.data;
+    if (data?.backups) {
+      data.backups = data.backups.map((b: any) => ({ ...b, id: b.id ?? b._id?.toString() }));
+    }
+    return data;
+  },
+
+  // LE-3: Restore from trash
+  undeleteBackup: async (id: string) => {
+    const response = await apiClient.post(`/backup/backups/${id}/undelete`);
+    return response.data;
+  },
+
+  // LE-3: Permanently delete from R2 + DB
+  permanentlyDeleteBackup: async (id: string) => {
+    const response = await apiClient.delete(`/backup/backups/${id}/permanent`);
     return response.data;
   },
 
@@ -1792,7 +1825,12 @@ export const backupAPI = {
   // Backup schedules
   getSchedules: async () => {
     const response = await apiClient.get('/backup/backup-schedules');
-    return response.data.data;
+    const schedules = response.data.data;
+    // normalise _id → id for lean() responses
+    if (Array.isArray(schedules)) {
+      return schedules.map((s: any) => ({ ...s, id: s.id ?? s._id?.toString() }));
+    }
+    return schedules;
   },
 
   createSchedule: async (data: {

@@ -572,7 +572,6 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                       { key: 'archivalMonths',    label: 'Archival After (months)', min: 1, disabled: !settings.data.archivalEnabled },
                       { key: 'auditLogRetention', label: 'Audit Log Retention (days)', min: 1 },
                       { key: 'trashRetention',    label: 'Trash Retention (days)',  min: 1 },
-                      { key: 'backupRetention',   label: 'Backup Retention (copies)', min: 1 },
                     ].map(f => (
                       <div key={f.key} className="flex flex-col gap-1.5">
                         <label className={`${labelCls} ${f.disabled ? 'opacity-40' : ''}`}>{f.label}</label>
@@ -583,14 +582,10 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                     ))}
                   </div>
 
-                  <div className="flex flex-col gap-1.5">
-                    <label className={labelCls}>Backup Frequency</label>
-                    <select className={inputCls} value={settings.data.backupFrequency}
-                      onChange={e => upd('data', { backupFrequency: e.target.value as 'daily' | 'weekly' | 'monthly' })}>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+                    <p className="text-[12px] text-blue-800 dark:text-blue-300">
+                      Backup frequency and retention settings have moved to the <strong>Backup &amp; Recovery</strong> tab.
+                    </p>
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">

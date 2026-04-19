@@ -5,6 +5,7 @@ import BackupSchedule from '../models/BackupSchedule';
 import backupService from '../services/backupService';
 import r2Service from '../services/r2Service';
 import { AuditLog } from '../models/AuditLog';
+import { config } from '../config';
 
 /**
  * Create a manual backup
@@ -13,8 +14,9 @@ import { AuditLog } from '../models/AuditLog';
 export const createBackup = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.username || 'system';
+    const { collections } = req.body; // optional string[] for selective backup
 
-    const backup = await backupService.createBackup(userId, 'manual');
+    const backup = await backupService.createBackup(userId, 'manual', collections);
 
     res.status(201).json({
       success: true,
@@ -128,13 +130,11 @@ export const downloadBackup = async (req: AuthRequest, res: Response): Promise<v
 
       // Log download
       await AuditLog.create({
-        user: userId,
-        action: 'backup_downloaded',
-        resource: 'backup',
+        username: userId,
+        action: 'EXPORT',
+        resourceType: 'backup',
         resourceId: backup.id,
-        details: {
-          fileName: backup.fileName,
-        },
+        details: JSON.stringify({ fileName: backup.fileName }),
       });
 
       res.json({
@@ -206,32 +206,24 @@ export const deleteBackup = async (req: AuthRequest, res: Response): Promise<voi
         message: 'Backup not found',
       });
     } else {
-      // Delete from R2
-      if (backup.r2Key) {
-        try {
-          await r2Service.deleteFile(backup.r2Key);
-        } catch (error) {
-          console.error('Failed to delete from R2:', error);
-        }
-      }
-
-      // Delete backup record
-      await Backup.findByIdAndDelete(id);
+      // LE-3: Soft-delete — mark as deleted instead of immediately removing from R2
+      backup.status = 'deleted';
+      backup.deletedAt = new Date();
+      backup.deletedBy = userId;
+      await backup.save();
 
       // Log deletion
       await AuditLog.create({
-        user: userId,
-        action: 'backup_deleted',
-        resource: 'backup',
+        username: userId,
+        action: 'DELETE',
+        resourceType: 'backup',
         resourceId: backup.id,
-        details: {
-          backupId: backup.id,
-        },
+        details: JSON.stringify({ backupId: backup.id, fileName: backup.fileName, softDelete: true }),
       });
 
       res.json({
         success: true,
-        message: 'Backup deleted successfully',
+        message: 'Backup moved to trash. It will be permanently deleted after 7 days.',
       });
     }
   } catch (error: any) {
@@ -239,6 +231,149 @@ export const deleteBackup = async (req: AuthRequest, res: Response): Promise<voi
       success: false,
       message: 'Failed to delete backup',
     });
+  }
+};
+
+/**
+ * ME-1: Verify backup integrity
+ * POST /api/system-admin/backups/:id/verify
+ */
+export const verifyBackup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.username || 'system';
+
+    const result = await backupService.verifyBackup(id, userId);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    const status = error.message === 'Backup not found' ? 404 : 400;
+    res.status(status).json({
+      success: false,
+      message: error.message || 'Failed to verify backup',
+    });
+  }
+};
+
+/**
+ * LE-3: List soft-deleted backups (trash)
+ * GET /api/system-admin/backups/trash
+ */
+export const getDeletedBackups = async (req: AuthRequest, res: Response) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [backups, total] = await Promise.all([
+      Backup.find({ status: 'deleted' })
+        .sort({ deletedAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Backup.countDocuments({ status: 'deleted' }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        backups,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch deleted backups',
+    });
+  }
+};
+
+/**
+ * LE-3: Restore a backup from trash (undelete)
+ * POST /api/system-admin/backups/:id/undelete
+ */
+export const undeleteBackup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.username || 'system';
+
+    const backup = await Backup.findById(id);
+
+    if (!backup) {
+      res.status(404).json({ success: false, message: 'Backup not found' });
+      return;
+    }
+
+    if (backup.status !== 'deleted') {
+      res.status(400).json({ success: false, message: 'Backup is not in trash' });
+      return;
+    }
+
+    backup.status = 'completed';
+    backup.deletedAt = undefined;
+    backup.deletedBy = undefined;
+    await backup.save();
+
+    await AuditLog.create({
+      username: userId,
+      action: 'UPDATE',
+      resourceType: 'backup',
+      resourceId: backup.id,
+      details: JSON.stringify({ action: 'undelete', fileName: backup.fileName }),
+    });
+
+    res.json({ success: true, message: 'Backup restored from trash', data: backup });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to restore backup from trash' });
+  }
+};
+
+/**
+ * LE-3: Permanently delete a backup (removes from R2 + DB)
+ * DELETE /api/system-admin/backups/:id/permanent
+ */
+export const permanentlyDeleteBackup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.username || 'system';
+
+    const backup = await Backup.findById(id);
+
+    if (!backup) {
+      res.status(404).json({ success: false, message: 'Backup not found' });
+      return;
+    }
+
+    // Delete from R2
+    if (backup.r2Key) {
+      try {
+        await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
+      } catch (r2Err) {
+        console.error('[BACKUP] Failed to delete from R2 during permanent delete:', r2Err);
+      }
+    }
+
+    await Backup.findByIdAndDelete(id);
+
+    await AuditLog.create({
+      username: userId,
+      action: 'DELETE',
+      resourceType: 'backup',
+      resourceId: backup.id,
+      details: JSON.stringify({ action: 'permanent_delete', fileName: backup.fileName }),
+    });
+
+    res.json({ success: true, message: 'Backup permanently deleted' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to permanently delete backup' });
   }
 };
 
@@ -288,7 +423,7 @@ export const getBackupSchedules = async (req: AuthRequest, res: Response) => {
  */
 export const createBackupSchedule = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, frequency, time, dayOfWeek, dayOfMonth, retentionDays } = req.body;
+    const { name, frequency, time, dayOfWeek, dayOfMonth, retentionDays, retentionPolicy } = req.body;
     const userId = req.user?.username || 'system';
 
     const schedule = await BackupSchedule.create({
@@ -298,20 +433,17 @@ export const createBackupSchedule = async (req: AuthRequest, res: Response) => {
       dayOfWeek,
       dayOfMonth,
       retentionDays,
+      retentionPolicy,
       createdBy: userId,
     });
 
     // Log creation
     await AuditLog.create({
-      user: userId,
-      action: 'backup_schedule_created',
-      resource: 'backup_schedule',
+      username: userId,
+      action: 'CREATE',
+      resourceType: 'backup_schedule',
       resourceId: schedule.id,
-      details: {
-        name,
-        frequency,
-        time,
-      },
+      details: JSON.stringify({ name, frequency, time }),
     });
 
     res.status(201).json({
@@ -351,11 +483,11 @@ export const updateBackupSchedule = async (req: AuthRequest, res: Response): Pro
     } else {
       // Log update
       await AuditLog.create({
-        user: userId,
-        action: 'backup_schedule_updated',
-        resource: 'backup_schedule',
+        username: userId,
+        action: 'UPDATE',
+        resourceType: 'backup_schedule',
         resourceId: schedule.id,
-        details: updates,
+        details: JSON.stringify(updates),
       });
 
       res.json({
@@ -391,13 +523,11 @@ export const deleteBackupSchedule = async (req: AuthRequest, res: Response): Pro
     } else {
       // Log deletion
       await AuditLog.create({
-        user: userId,
-        action: 'backup_schedule_deleted',
-        resource: 'backup_schedule',
+        username: userId,
+        action: 'DELETE',
+        resourceType: 'backup_schedule',
         resourceId: schedule.id,
-        details: {
-          name: schedule.name,
-        },
+        details: JSON.stringify({ name: schedule.name }),
       });
 
       res.json({
@@ -426,13 +556,10 @@ export const cleanupBackups = async (req: AuthRequest, res: Response) => {
 
     // Log cleanup
     await AuditLog.create({
-      user: userId,
-      action: 'backups_cleaned',
-      resource: 'backup',
-      details: {
-        retentionDays,
-        deletedCount,
-      },
+      username: userId,
+      action: 'BULK_OPERATION',
+      resourceType: 'backup',
+      details: JSON.stringify({ retentionDays, deletedCount }),
     });
 
     res.json({

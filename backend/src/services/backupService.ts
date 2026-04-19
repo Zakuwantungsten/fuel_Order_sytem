@@ -7,6 +7,7 @@ import r2Service from './r2Service';
 import logger from '../utils/logger';
 import { encryptBuffer, decryptBuffer } from '../utils/cryptoUtils';
 import { config } from '../config';
+import emailService from './emailService';
 
 class BackupService {
   /**
@@ -65,7 +66,12 @@ class BackupService {
    * Create a database backup
    * ✅ SECURITY: Backups are encrypted with AES-256 before R2 upload
    */
-  async createBackup(userId: string, type: 'manual' | 'scheduled' = 'manual'): Promise<any> {
+  async createBackup(
+    userId: string,
+    type: 'manual' | 'scheduled' = 'manual',
+    selectedCollections?: string[],
+    retentionTier?: 'daily' | 'weekly' | 'monthly',
+  ): Promise<any> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `backup_${timestamp}.json.gz`;
     const r2Key = `backups/${fileName}`;
@@ -79,6 +85,7 @@ class BackupService {
       collections: [],
       r2Key,
       createdBy: userId,
+      ...(retentionTier ? { retentionTier } : {}),
     });
 
     try {
@@ -90,10 +97,16 @@ class BackupService {
       const collections = await mongoose.connection.db.listCollections().toArray();
       const excludedCollections = await this.getExcludedCollections();
       
-      // Filter out excluded collections
-      const collectionsToBackup = collections
+      // Filter out excluded collections; then optionally restrict to selectedCollections
+      let collectionsToBackup = collections
         .map(c => c.name)
         .filter(name => !excludedCollections.has(name));
+
+      if (selectedCollections && selectedCollections.length > 0) {
+        const allowedSet = new Set(selectedCollections);
+        collectionsToBackup = collectionsToBackup.filter(name => allowedSet.has(name));
+        logger.info(`[BACKUP] Selective backup: restricting to ${collectionsToBackup.length} of ${collections.length} collections`);
+      }
 
       const backupData: any = {
         timestamp: new Date().toISOString(),
@@ -164,16 +177,11 @@ class BackupService {
 
       // Create audit log
       await AuditLog.create({
-        user: userId,
-        action: 'backup_created',
-        resource: 'backup',
+        username: userId,
+        action: 'CREATE',
+        resourceType: 'backup',
         resourceId: backup.id,
-        details: {
-          fileName,
-          fileSize: archiveBuffer.length,
-          collections: collectionsToBackup.length,
-          documents: totalDocuments,
-        },
+        details: JSON.stringify({ fileName, fileSize: archiveBuffer.length, collections: collectionsToBackup.length, documents: totalDocuments }),
       });
 
       logger.info(`Backup created successfully: ${fileName}`);
@@ -186,8 +194,100 @@ class BackupService {
       backup.error = error.message;
       await backup.save();
 
+      // ME-3: Fire-and-forget failure alert email to super admins
+      this.sendBackupFailureAlert(backup.fileName, error.message).catch((emailErr: any) => {
+        logger.warn('[BACKUP] Failed to send backup failure alert email:', emailErr?.message);
+      });
+
       throw error;
     }
+  }
+
+  /**
+   * ME-3: Send a backup failure alert to all super admins
+   */
+  private async sendBackupFailureAlert(fileName: string, errorMessage: string): Promise<void> {
+    try {
+      await emailService.sendBackupFailureAlert(fileName, errorMessage);
+    } catch (err: any) {
+      logger.warn('[BACKUP] sendBackupFailureAlert threw:', err?.message);
+    }
+  }
+
+  /**
+   * ME-1: Verify backup integrity — downloads, decrypts, decompresses and
+   * checks JSON structure without restoring data to the live database.
+   */
+  async verifyBackup(backupId: string, userId: string): Promise<{ passed: boolean; details: string }> {
+    const backup = await Backup.findById(backupId);
+    if (!backup) throw new Error('Backup not found');
+    if (backup.status === 'deleted') throw new Error('Backup has been deleted');
+    if (backup.status !== 'completed') {
+      throw new Error('Only completed backups can be verified');
+    }
+
+    let passed = false;
+    let details = '';
+
+    try {
+      // Download from R2
+      const stream = await r2Service.downloadFile(backup.r2Key, config.r2BackupBucketName);
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(chunk);
+      let buffer: Buffer = Buffer.concat(chunks);
+
+      if (!buffer.length) throw new Error('Downloaded backup file is empty');
+
+      // Decrypt if encrypted
+      if (backup.metadata?.encrypted) {
+        const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY;
+        if (!encryptionKey) throw new Error('BACKUP_ENCRYPTION_KEY not configured — cannot verify encrypted backup');
+        const decryptedBuffer = decryptBuffer(buffer, encryptionKey);
+        // @ts-ignore
+        buffer = decryptedBuffer;
+      }
+
+      // Decompress
+      const gunzip = promisify(zlib.gunzip);
+      const decompressed = await gunzip(buffer);
+
+      // Parse JSON header
+      const parsed = JSON.parse(decompressed.toString());
+      if (!parsed.timestamp || !parsed.collections || typeof parsed.collections !== 'object') {
+        throw new Error('Backup JSON structure is invalid or missing required fields');
+      }
+
+      const collectionCount = Object.keys(parsed.collections).length;
+      const docCount: number = Object.values(parsed.collections).reduce(
+        (sum: number, docs: any) => sum + (Array.isArray(docs) ? docs.length : 0), 0
+      );
+
+      passed = true;
+      details = `Verified: ${collectionCount} collections, ${docCount} documents, timestamp ${parsed.timestamp}`;
+      logger.info(`[BACKUP] Verification passed for ${backup.fileName}: ${details}`);
+    } catch (err: any) {
+      passed = false;
+      details = `Verification failed: ${err.message}`;
+      logger.warn(`[BACKUP] Verification failed for ${backup.fileName}: ${err.message}`);
+    }
+
+    // Persist result onto the backup record
+    backup.metadata = {
+      ...(backup.metadata as any),
+      verifiedAt: new Date(),
+      verificationPassed: passed,
+    };
+    await backup.save();
+
+    await AuditLog.create({
+      username: userId,
+      action: 'VIEW',
+      resourceType: 'backup',
+      resourceId: backup.id,
+      details: JSON.stringify({ action: 'verify', fileName: backup.fileName, passed, details }),
+    });
+
+    return { passed, details };
   }
 
   /**
@@ -264,14 +364,11 @@ class BackupService {
 
         // Create audit log
         await AuditLog.create({
-          user: userId,
-          action: 'backup_restored',
-          resource: 'backup',
+          username: userId,
+          action: 'RESTORE',
+          resourceType: 'backup',
           resourceId: backup.id,
-          details: {
-            fileName: backup.fileName,
-            collections: backup.collections.length,
-          },
+          details: JSON.stringify({ fileName: backup.fileName, collections: backup.collections.length }),
         });
       } catch (error) {
         await session.abortTransaction();
@@ -315,6 +412,63 @@ class BackupService {
     }
 
     return deletedCount;
+  }
+
+  /**
+   * LE-1: Tiered retention cleanup.
+   * Keeps the N most-recent backups of each tier (daily/weekly/monthly),
+   * hard-deleting the excess from R2 and MongoDB.
+   */
+  async cleanupTieredBackups(policy: { daily: number; weekly: number; monthly: number }): Promise<number> {
+    let deletedCount = 0;
+
+    for (const tier of ['daily', 'weekly', 'monthly'] as const) {
+      const keepCount = policy[tier];
+      const backups = await Backup.find({ status: 'completed', retentionTier: tier })
+        .sort({ createdAt: -1 });
+
+      const toDelete = backups.slice(keepCount);
+      for (const backup of toDelete) {
+        try {
+          await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
+          await Backup.findByIdAndDelete(backup.id);
+          deletedCount++;
+          logger.info(`[BACKUP TIERED] Deleted ${tier} backup: ${backup.fileName}`);
+        } catch (err) {
+          logger.error(`[BACKUP TIERED] Failed to delete ${backup.fileName}:`, err);
+        }
+      }
+    }
+
+    return deletedCount;
+  }
+
+  /**
+   * LE-3: Permanently delete soft-deleted backups older than maxAgeDays.
+   * Called by the backupTrashCleanup job.
+   */
+  async purgeDeletedBackups(maxAgeDays = 7): Promise<number> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - maxAgeDays);
+
+    const trashed = await Backup.find({
+      status: 'deleted',
+      deletedAt: { $lt: cutoff },
+    });
+
+    let purgedCount = 0;
+    for (const backup of trashed) {
+      try {
+        await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
+        await Backup.findByIdAndDelete(backup.id);
+        purgedCount++;
+        logger.info(`[BACKUP TRASH] Purged deleted backup: ${backup.fileName}`);
+      } catch (err) {
+        logger.error(`[BACKUP TRASH] Failed to purge ${backup.fileName}:`, err);
+      }
+    }
+
+    return purgedCount;
   }
 
   /**

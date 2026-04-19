@@ -165,6 +165,7 @@ import './jobs/securityEventRetention';
 import './jobs/securityScoreSnapshot';
 import './jobs/fleetDailyCleanup';
 import './jobs/editLockCleanup';
+import './jobs/backupTrashCleanup'; // LE-3: purge soft-deleted backups after retention window
 import { jobRegistry } from './jobs/jobRegistry';
 
 // Enforce HTTPS only in production

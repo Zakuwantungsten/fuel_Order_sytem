@@ -802,9 +802,10 @@ export interface LPOSummaryExtended extends LPOSummary {
 // Backup & Recovery Types
 export interface Backup {
   id: string;
+  _id?: string;
   fileName: string;
   fileSize: number;
-  status: 'in_progress' | 'completed' | 'failed';
+  status: 'in_progress' | 'completed' | 'failed' | 'deleted';
   type: 'manual' | 'scheduled';
   collections: string[];
   r2Key: string;
@@ -813,10 +814,17 @@ export interface Backup {
   createdAt: string;
   completedAt?: string;
   error?: string;
+  deletedAt?: string;
+  deletedBy?: string;
+  retentionTier?: 'daily' | 'weekly' | 'monthly';
   metadata?: {
     totalDocuments: number;
     databaseSize: number;
     compression: string;
+    encrypted?: boolean;
+    encryptionAlgorithm?: string;
+    verifiedAt?: string;
+    verificationPassed?: boolean;
   };
 }
 

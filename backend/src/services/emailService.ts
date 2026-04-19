@@ -771,6 +771,80 @@ class EmailService {
   }
 
   /**
+   * ME-3: Send a backup failure alert to all super admin users
+   */
+  async sendBackupFailureAlert(fileName: string, errorMessage: string): Promise<void> {
+    if (!this.isConfigured) {
+      logger.warn('[EmailService] Email service not configured — skipping backup failure alert');
+      return;
+    }
+
+    let adminEmails: string[] = [];
+    try {
+      const { User } = require('../models');
+      const admins = await User.find({ role: 'super_admin', isActive: true }).select('email name').lean();
+      adminEmails = admins.map((a: any) => a.email).filter(Boolean);
+    } catch (err: any) {
+      logger.warn('[EmailService] Could not fetch super admin emails for backup alert:', err?.message);
+    }
+
+    if (adminEmails.length === 0) {
+      logger.warn('[EmailService] No super admin emails found — skipping backup failure alert');
+      return;
+    }
+
+    const timeStr = new Date().toLocaleString('en-US', {
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+    });
+
+    const html = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto">
+        <div style="background:#dc2626;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="margin:0;font-size:18px">⚠️ Backup Failed</h2>
+        </div>
+        <div style="background:#fff;padding:24px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 8px 8px">
+          <p style="margin:0 0 16px;color:#374151">A scheduled or manual database backup has failed.</p>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+            <tr>
+              <td style="padding:8px 0;color:#6b7280;width:120px">📁 File</td>
+              <td style="padding:8px 0;color:#111827;font-weight:500;word-break:break-all">${fileName}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0;color:#6b7280">🕐 Time</td>
+              <td style="padding:8px 0;color:#111827;font-weight:500">${timeStr}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0;color:#6b7280;vertical-align:top">❌ Error</td>
+              <td style="padding:8px 0;color:#991b1b;font-weight:500;word-break:break-all">${errorMessage}</td>
+            </tr>
+          </table>
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:12px 16px">
+            <p style="margin:0;color:#991b1b;font-size:13px">
+              Please investigate immediately. Check server logs and verify that the R2 storage bucket is accessible
+              and the <code>BACKUP_ENCRYPTION_KEY</code> environment variable is set correctly.
+            </p>
+          </div>
+        </div>
+        <div style="text-align:center;padding:16px;color:#9ca3af;font-size:11px">
+          Fuel Order Management System — Backup Alert
+        </div>
+      </div>`;
+
+    try {
+      await this.dispatchMail({
+        from: this.sender,
+        to: adminEmails,
+        subject: `[ALERT] Backup Failed: ${fileName}`,
+        html,
+      });
+      logger.info(`[EmailService] Backup failure alert sent to ${adminEmails.join(', ')}`);
+    } catch (error) {
+      logger.error('[EmailService] Failed to send backup failure alert:', error);
+    }
+  }
+
+  /**
    * Test that the Resend API key is working
    */
   async testConnection(): Promise<boolean> {
