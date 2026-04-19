@@ -542,7 +542,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" style={{ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center' }}>
         <div>
           <h1 className="text-xl font-bold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Fuel Order Dashboard</h1>
           <p className="mt-1 text-sm" style={{ color: '#64748B' }}>
@@ -552,7 +552,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         <button
           onClick={fetchStats}
           className="flex items-center gap-2 px-3 py-1.5 text-sm text-white rounded-lg transition-colors"
-          style={{ background: '#2563EB' }}
+          style={{ background: '#2563EB', width: 'fit-content', alignSelf: 'center', flexShrink: 0 }}
           onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
           onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
         >
@@ -571,7 +571,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
             value={searchQuery}
             onChange={(e) => handleSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && performUnifiedSearch(searchQuery)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:border-transparent" style={{ '--tw-ring-color': '#2563EB' } as React.CSSProperties}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:border-transparent dashboard-search-input" style={{ '--tw-ring-color': '#2563EB', paddingLeft: '2.5rem', height: '34px' } as React.CSSProperties}
           />
           {searching && (
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -582,7 +582,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         {hasResults ? (
           <button
             onClick={handleClearSearch}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors whitespace-nowrap dashboard-search-btn"
+            style={{ height: '34px', width: 'fit-content', flexShrink: 0 }}
           >
             <X className="w-3.5 h-3.5" />
             Clear
@@ -591,7 +592,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           <button
             onClick={() => performUnifiedSearch()}
             disabled={!searchQuery.trim() || searching}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap dashboard-search-btn"
+            style={{ height: '34px', width: 'fit-content', flexShrink: 0 }}
           >
             <Search className="w-3.5 h-3.5" />
             Search

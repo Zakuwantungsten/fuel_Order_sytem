@@ -1067,6 +1067,23 @@ html.dark .bg-info {
     padding: 6px 8px !important;
     min-height: 36px;
   }
+
+  /* Dashboard search input — must come AFTER the general rule to win */
+  input[type="text"].dashboard-search-input {
+    padding-left: 2.5rem !important;
+    padding-right: 1rem !important;
+    height: 34px !important;
+    min-height: 34px !important;
+  }
+
+  /* Dashboard search / clear buttons */
+  button.dashboard-search-btn {
+    height: 34px !important;
+    width: fit-content !important;
+    flex-shrink: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
   
   /* Tabs navigation */
   nav.-mb-px {

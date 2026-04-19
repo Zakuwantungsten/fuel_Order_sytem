@@ -1577,13 +1577,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-3 mb-6 transition-colors">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               <div className="relative col-span-2 md:col-span-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
                 <input
                   type="text"
                   placeholder="Search by DO#, Truck, Client..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-10 w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  className="pl-10 w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 dashboard-search-input"
+                  style={{ paddingLeft: '2.5rem', height: '34px' }}
                 />
               </div>
               
