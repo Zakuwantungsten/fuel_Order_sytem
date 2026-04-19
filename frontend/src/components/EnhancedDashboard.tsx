@@ -644,12 +644,24 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Header */}
-        <header className="lg:hidden p-3 flex items-center gap-2 flex-shrink-0" style={{ background: '#0F172A', borderBottom: '1px solid #1E293B' }}>
-          <div className="flex-1 min-w-0 mr-2">
+        <header className="lg:hidden p-3 flex items-center justify-between flex-shrink-0" style={{ background: '#0F172A', borderBottom: '1px solid #1E293B', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 0 }}>
+          {/* Left: hamburger + page name */}
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-1.5 rounded-lg transition-colors flex-shrink-0"
+              style={{ color: '#94A3B8' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <h2 className="text-base font-bold truncate" style={{ color: '#F1F5F9' }}>
               {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
             </h2>
           </div>
+          {/* Right: theme toggle, notification bell, profile avatar */}
           <div className="flex items-center gap-1 flex-shrink-0">
             <button 
               onClick={toggleTheme}
@@ -762,17 +774,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                 </>
               )}
             </div>
-            
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-1.5 rounded-lg transition-colors flex-shrink-0"
-              style={{ color: '#94A3B8' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              aria-label="Open menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
           </div>
         </header>
         
