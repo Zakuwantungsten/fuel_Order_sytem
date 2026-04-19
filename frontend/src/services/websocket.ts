@@ -28,12 +28,16 @@ const _reconnectCallbacks = new Map<string, () => void>();
  */
 export const initializeWebSocket = (token: string): Socket => {
   // Derive backend origin from the same env var used by the API client.
-  // VITE_API_BASE_URL is e.g. "https://fuelordersytem-production.up.railway.app/api/v1"
-  // so we strip the path to get just the origin.
+  // In production: VITE_API_BASE_URL is an absolute URL like
+  //   "https://fuelordersytem-production.up.railway.app/api/v1"
+  //   so we strip the path to get just the origin.
+  // In development: VITE_API_BASE_URL is a relative path like "/api" (Vite proxy),
+  //   so we fall back to the backend dev server directly.
   const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  const WS_URL = apiBase
-    ? apiBase.replace(/\/api\/v1\/?$/, '')
-    : 'http://localhost:5000';
+  const WS_URL =
+    apiBase && !apiBase.startsWith('/')
+      ? apiBase.replace(/\/api(?:\/v1)?\/?$/, '')
+      : 'http://localhost:5000';
 
   // Guard against creating multiple socket instances.
   // Check for ANY existing socket (connected OR still connecting) so that

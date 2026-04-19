@@ -10,6 +10,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
+        ws: true, // proxy WebSocket upgrades (Socket.io)
         // Ensure Set-Cookie headers from backend are properly passed through
         // and not blocked by domain mismatches during proxying
         cookieDomainRewrite: '',

@@ -431,20 +431,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (cachedName) setSystemName(cachedName);
 
       // Load system settings (super_admin only - endpoint is restricted)
-      try {
-        if (user.role !== 'super_admin') throw new Error('not super_admin');
-        const settings = await systemConfigAPI.getSystemSettings();
-        if (settings?.general) {
-          if (settings.general.timezone)   setSystemTimezone(settings.general.timezone);
-          if (settings.general.dateFormat) setSystemDateFormat(settings.general.dateFormat);
-          if (settings.general.systemName) {
-            localStorage.setItem('fuel_order_system_name', settings.general.systemName);
-            setSystemName(settings.general.systemName);
+      if (user.role === 'super_admin') {
+        try {
+          const settings = await systemConfigAPI.getSystemSettings();
+          if (settings?.general) {
+            if (settings.general.timezone)   setSystemTimezone(settings.general.timezone);
+            if (settings.general.dateFormat) setSystemDateFormat(settings.general.dateFormat);
+            if (settings.general.systemName) {
+              localStorage.setItem('fuel_order_system_name', settings.general.systemName);
+              setSystemName(settings.general.systemName);
+            }
           }
+        } catch (error) {
+          // Silently fail - timezone already set to default
         }
-      } catch (error) {
-        // Silently fail - timezone already set to default
-        console.log('Could not load system settings after login');
       }
       
       return authResponse;
