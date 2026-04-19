@@ -280,7 +280,7 @@ export const getAvailableRoutes = async (req: AuthRequest, res: Response): Promi
 export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit, sort, order } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, truckNo, from, to, month, year, search, excludeCancelled } = req.query;
+    const { dateFrom, dateTo, truckNo, from, to, month, year, search, excludeCancelled, status } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -290,10 +290,11 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       filter.truckNo = req.user.username;
     }
 
-    // Include cancelled records by default (frontend has display logic)
-    // Only exclude if explicitly requested
-    if (excludeCancelled === 'true') {
-      filter.isCancelled = false;
+    // Status filter: 'active' excludes cancelled, 'cancelled' shows only cancelled, default shows all
+    if (excludeCancelled === 'true' || status === 'active') {
+      filter.isCancelled = { $ne: true };
+    } else if (status === 'cancelled') {
+      filter.isCancelled = true;
     }
 
     if (dateFrom || dateTo) {

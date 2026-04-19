@@ -33,6 +33,7 @@ export interface FuelRecordFilters {
   routeTo?: string;
   sort?: string;
   order?: 'asc' | 'desc';
+  status?: 'all' | 'active' | 'cancelled';
 }
 
 export function useFuelRecordsList(filters: FuelRecordFilters, enabled = true) {
@@ -46,6 +47,7 @@ export function useFuelRecordsList(filters: FuelRecordFilters, enabled = true) {
   if (filters.month) queryParams.month = filters.month;
   if (filters.routeFrom) queryParams.from = filters.routeFrom;
   if (filters.routeTo) queryParams.to = filters.routeTo;
+  if (filters.status && filters.status !== 'all') queryParams.status = filters.status;
 
   return useQuery({
     queryKey: fuelRecordKeys.list(queryParams),

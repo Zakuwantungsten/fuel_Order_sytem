@@ -137,6 +137,7 @@ const FuelRecords = () => {
   const [selectedRecord, setSelectedRecord] = useState<FuelRecord | undefined>();
   const [routeFilter, setRouteFilter] = usePersistedState('fr:routeFilter', '');
   const [routeTypeFilter, setRouteTypeFilter] = usePersistedState<'IMPORT' | 'EXPORT'>('fr:routeTypeFilter', 'IMPORT');
+  const [statusFilter, setStatusFilter] = usePersistedState<'all' | 'active' | 'cancelled'>('fr:statusFilter', 'all');
   const [exportYear, setExportYear] = useState<number>(() => new Date().getFullYear());
   const [viewMode, setViewMode] = usePersistedState<'records' | 'analytics'>('fr:viewMode', 'records');
   
@@ -206,6 +207,7 @@ const FuelRecords = () => {
     routeTo,
     sort: 'date',
     order: 'desc',
+    status: statusFilter,
   }, monthInitialized);
 
   const records = recordsData?.records ?? [];
@@ -233,12 +235,14 @@ const FuelRecords = () => {
   const [showRouteTypeDropdown, setShowRouteTypeDropdown] = useState(false);
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   
   // Dropdown refs
   const exportYearDropdownRef = useRef<HTMLDivElement>(null);
   const routeTypeDropdownRef = useRef<HTMLDivElement>(null);
   const routeDropdownRef = useRef<HTMLDivElement>(null);
   const monthDropdownRef = useRef<HTMLDivElement>(null);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
   
   // Ref and state to track highlight
   const highlightProcessedRef = useRef<string | null>(null);
@@ -441,6 +445,9 @@ const FuelRecords = () => {
       if (monthDropdownRef.current && !monthDropdownRef.current.contains(event.target as Node)) {
         setShowMonthDropdown(false);
       }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusDropdown(false);
+      }
     };
 
     const handleScroll = (event: Event) => {
@@ -449,12 +456,14 @@ const FuelRecords = () => {
         exportYearDropdownRef.current?.contains(target) ||
         routeTypeDropdownRef.current?.contains(target) ||
         routeDropdownRef.current?.contains(target) ||
-        monthDropdownRef.current?.contains(target)
+        monthDropdownRef.current?.contains(target) ||
+        statusDropdownRef.current?.contains(target)
       ) return;
       setShowExportYearDropdown(false);
       setShowRouteTypeDropdown(false);
       setShowRouteDropdown(false);
       setShowMonthDropdown(false);
+      setShowStatusDropdown(false);
     };
 
     const scrollEl = document.getElementById('main-scroll-container');
@@ -493,7 +502,7 @@ const FuelRecords = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, routeFilter, selectedMonth, routeTypeFilter]);
+  }, [searchTerm, routeFilter, selectedMonth, routeTypeFilter, statusFilter]);
 
   // Subscribe to real-time yard fuel notifications to auto-refresh the table
   useEffect(() => {
@@ -822,7 +831,8 @@ const FuelRecords = () => {
       searchTerm !== '' ||
       routeFilter !== '' ||
       routeTypeFilter !== 'IMPORT' ||
-      selectedMonth !== defaultMonth
+      selectedMonth !== defaultMonth ||
+      statusFilter !== 'all'
     );
   };
 
@@ -830,6 +840,7 @@ const FuelRecords = () => {
     setSearchTerm('');
     setRouteFilter('');
     setRouteTypeFilter('IMPORT');
+    setStatusFilter('all');
     // Go to current month if it has data, otherwise most recent month with data
     const currentMonth = getCurrentMonthKey();
     if (availableMonths.includes(currentMonth)) {
@@ -945,15 +956,16 @@ const FuelRecords = () => {
         <>
           {/* Filters */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-3 mb-6 transition-colors">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="relative col-span-2 md:col-span-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
             <input
               type="text"
               placeholder="Search by Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm"
+              className="pl-10 w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm dashboard-search-input"
+              style={{ paddingLeft: '2.5rem', height: '34px' }}
             />
           </div>
           <div className="relative" ref={routeTypeDropdownRef}>
@@ -1047,24 +1059,24 @@ const FuelRecords = () => {
               </div>
             )}
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={goToPreviousMonth}
               disabled={!canGoToPreviousMonth()}
-              className={`p-2 rounded-md transition-colors ${
+              className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${
                 canGoToPreviousMonth()
                   ? 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
                   : 'opacity-40 cursor-not-allowed'
               }`}
               title={canGoToPreviousMonth() ? "Previous Month" : "No earlier records"}
             >
-              <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
-            <div className="relative" ref={monthDropdownRef}>
+            <div className="relative flex-1" ref={monthDropdownRef}>
               <button
                 type="button"
                 onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm flex items-center gap-2 min-w-[120px]"
+                className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm flex items-center justify-between gap-2"
               >
                 <span>{getMonthName(selectedMonth)}</span>
                 <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
@@ -1093,28 +1105,54 @@ const FuelRecords = () => {
             <button
               onClick={goToNextMonth}
               disabled={!canGoToNextMonth()}
-              className={`p-2 rounded-md transition-colors ${
+              className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${
                 canGoToNextMonth()
                   ? 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
                   : 'opacity-40 cursor-not-allowed'
               }`}
               title={canGoToNextMonth() ? "Next Month" : "No later records"}
             >
-              <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
+          </div>
+          {/* Status Filter */}
+          <div className="relative" ref={statusDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+            >
+              <span>{statusFilter === 'active' ? 'Active' : statusFilter === 'cancelled' ? 'Cancelled' : 'All Status'}</span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusDropdown && (
+              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
+                {(['all', 'active', 'cancelled'] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => { setStatusFilter(s); setCurrentPage(1); setShowStatusDropdown(false); }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${statusFilter === s ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-900 dark:text-gray-100'}`}
+                  >
+                    <span>{s === 'all' ? 'All Status' : s.charAt(0).toUpperCase() + s.slice(1)}</span>
+                    {statusFilter === s && <Check className="w-4 h-4" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           {isAnyFilterActive() && (
             <button
               onClick={handleClearFilters}
-              className="w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               title="Reset all filters to default"
             >
               Clear Filters
             </button>
           )}
-          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-            Total Records: <span className="ml-2 font-semibold">{totalItems}</span>
-          </div>
+        </div>
+        <div className="mt-2 flex items-center text-sm text-gray-600 dark:text-gray-400">
+          Total Records: <span className="ml-2 font-semibold">{totalItems}</span>
         </div>
       </div>
 
