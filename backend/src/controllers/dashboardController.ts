@@ -165,16 +165,16 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
 
     // Get recent delivery orders
     const recentDOs = await DeliveryOrder.find({ isDeleted: false })
-      .sort({ date: -1 })
+      .sort({ createdAt: -1 })
       .limit(5)
-      .select('doNumber truckNo from to date tonnages importOrExport')
+      .select('doNumber truckNo from to date createdAt tonnages importOrExport haulier')
       .lean();
 
     // Get recent LPOs
     const recentLPOs = await LPOEntry.find({ isDeleted: false })
-      .sort({ date: -1 })
+      .sort({ createdAt: -1 })
       .limit(5)
-      .select('lpoNo truckNo dieselAt ltrs date')
+      .select('lpoNo truckNo dieselAt ltrs date actualDate createdAt doSdo')
       .lean();
 
     // Get fuel summary by yard (all-time)

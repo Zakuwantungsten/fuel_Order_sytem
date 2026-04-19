@@ -53,7 +53,19 @@ const FirewallPathRuleSchema = new Schema<IFirewallPathRule>(
       required: true,
     },
   },
-  { timestamps: true, collection: 'firewall_path_rules' },
+  {
+    timestamps: true,
+    collection: 'firewall_path_rules',
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret) => {
+        ret.id = ret._id?.toString();
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+        delete (ret as Record<string, unknown>)['__v'];
+        return ret;
+      },
+    },
+  },
 );
 
 FirewallPathRuleSchema.index({ isActive: 1 });

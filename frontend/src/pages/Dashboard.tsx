@@ -1006,7 +1006,14 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                 <div
                   key={DO._id || DO.id}
                   className="py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded px-1 -mx-1 transition-colors"
-                  onClick={() => onNavigate ? onNavigate('do', `highlight=${DO.doNumber}`) : navigate(`/do?highlight=${DO.doNumber}`)}
+                  onClick={() => {
+                    const rawDate = DO.createdAt || DO.date;
+                    const doDate = rawDate ? new Date(rawDate) : null;
+                    const year = doDate && !isNaN(doDate.getTime()) ? doDate.getFullYear() : null;
+                    const month = doDate && !isNaN(doDate.getTime()) ? doDate.getMonth() + 1 : null;
+                    const params = year && month ? `highlight=${DO.doNumber}&year=${year}&month=${month}` : `highlight=${DO.doNumber}`;
+                    onNavigate ? onNavigate('do', params) : navigate(`/do?${params}`);
+                  }}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 truncate">{DO.doNumber}</span>
@@ -1052,7 +1059,14 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                 <div
                   key={lpo._id || lpo.id}
                   className="py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded px-1 -mx-1 transition-colors"
-                  onClick={() => onNavigate ? onNavigate('lpo', `highlight=${lpo.lpoNo}`) : navigate(`/lpo?highlight=${lpo.lpoNo}`)}
+                  onClick={() => {
+                    const rawDate = lpo.actualDate || lpo.createdAt;
+                    const lpoDate = rawDate ? new Date(rawDate) : null;
+                    const year = lpoDate && !isNaN(lpoDate.getTime()) ? lpoDate.getFullYear() : null;
+                    const month = lpoDate && !isNaN(lpoDate.getTime()) ? lpoDate.getMonth() + 1 : null;
+                    const params = year && month ? `highlight=${lpo.lpoNo}&year=${year}&month=${month}` : `highlight=${lpo.lpoNo}`;
+                    onNavigate ? onNavigate('lpo', params) : navigate(`/lpo?${params}`);
+                  }}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold truncate" style={{ color: '#0891B2' }}>{lpo.lpoNo}</span>

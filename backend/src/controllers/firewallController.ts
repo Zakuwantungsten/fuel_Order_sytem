@@ -102,6 +102,7 @@ export const createPathRule = async (req: AuthRequest, res: Response): Promise<v
 export const updatePathRule = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!id || !mongoose.isValidObjectId(id)) throw new ApiError(400, 'Invalid rule ID');
     const { pattern, action, methods, description, isActive } = req.body;
 
     if (action && !['block', 'allow', 'log'].includes(action)) throw new ApiError(400, 'Invalid action');
@@ -141,6 +142,7 @@ export const updatePathRule = async (req: AuthRequest, res: Response): Promise<v
 export const deletePathRule = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!id || !mongoose.isValidObjectId(id)) throw new ApiError(400, 'Invalid rule ID');
     const rule = await FirewallPathRule.findByIdAndDelete(id);
     if (!rule) throw new ApiError(404, 'Path rule not found');
 
@@ -166,6 +168,7 @@ export const deletePathRule = async (req: AuthRequest, res: Response): Promise<v
 export const togglePathRule = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!id || !mongoose.isValidObjectId(id)) throw new ApiError(400, 'Invalid rule ID');
     const rule = await FirewallPathRule.findById(id);
     if (!rule) throw new ApiError(404, 'Path rule not found');
     rule.isActive = !rule.isActive;
