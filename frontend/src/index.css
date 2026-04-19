@@ -971,10 +971,17 @@ html.dark .bg-info {
 /* Mobile header and filter sections */
 @media (max-width: 768px) {
   /* Stack header elements vertically */
-  .flex.items-center.justify-between {
+  .flex.items-center.justify-between:not(.login-remember-row) {
     flex-direction: column;
     align-items: stretch !important;
     gap: 12px;
+  }
+
+  /* Keep remember-me and forgot-password on the same row */
+  .login-remember-row {
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
   }
   
   /* Make filter grids single column on mobile */

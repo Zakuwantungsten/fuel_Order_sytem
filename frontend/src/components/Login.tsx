@@ -322,7 +322,7 @@ const Login: React.FC = () => {
               </div>
 
               {/* Remember Me */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between login-remember-row">
                 <div className="flex items-center">
                   <input
                     id="remember-me"
