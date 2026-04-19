@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MoreHorizontal, Edit2, Key, LogOut, ShieldCheck, Ban,
   Trash2, UserCheck, UserX,
@@ -35,7 +36,9 @@ export default function UserActionsMenu({ user, onAction }: UserActionsMenuProps
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
+  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -43,6 +46,18 @@ export default function UserActionsMenu({ user, onAction }: UserActionsMenuProps
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Close on scroll or resize (keeps portal in sync)
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open]);
 
   const handleAction = (action: UserAction) => {
     setOpen(false);
@@ -163,7 +178,23 @@ export default function UserActionsMenu({ user, onAction }: UserActionsMenuProps
     <div className="relative" ref={ref}>
       <button
         ref={buttonRef}
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); if (!open) setFocusIndex(0); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open) {
+            const rect = buttonRef.current?.getBoundingClientRect();
+            if (rect) {
+              const MENU_HEIGHT = 290;
+              const spaceBelow = window.innerHeight - rect.bottom;
+              setMenuStyle(
+                spaceBelow < MENU_HEIGHT
+                  ? { position: 'fixed', bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
+                  : { position: 'fixed', top: rect.bottom + 4, right: window.innerWidth - rect.right },
+              );
+            }
+            setFocusIndex(0);
+          }
+          setOpen(prev => !prev);
+        }}
         className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
         aria-label={`Actions for ${user.firstName} ${user.lastName}`}
         aria-haspopup="menu"
@@ -172,11 +203,12 @@ export default function UserActionsMenu({ user, onAction }: UserActionsMenuProps
         <MoreHorizontal className="w-4 h-4" />
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
           role="menu"
           onKeyDown={handleKeyDown}
-          className="absolute right-0 top-full mt-1 z-40 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 overflow-hidden"
+          style={{ ...menuStyle, zIndex: 9999 }}
+          className="w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 overflow-hidden"
         >
           {/* User info header */}
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
@@ -232,7 +264,8 @@ export default function UserActionsMenu({ user, onAction }: UserActionsMenuProps
               </div>
             </>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
