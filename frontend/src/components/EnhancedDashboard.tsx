@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Fuel, 
   ClipboardList, 
@@ -164,13 +164,69 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [editDoId, setEditDoId] = useState<string | null>(null);
   const [, setHighlightParam] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const { logout, toggleTheme, isDark } = useAuth();
+
+  // The "home" tab for this role — pressing back beyond this triggers exit confirm
+  const getHomeTab = (): string => {
+    if (user.role === 'super_admin') return 'sa_overview';
+    if (user.role === 'driver') return 'driver_portal';
+    if (['manager', 'super_manager', 'station_manager'].includes(user.role)) return 'manager_view';
+    if (['dar_yard', 'tanga_yard', 'mmsa_yard', 'yard_personnel'].includes(user.role)) return 'yard_fuel';
+    return 'overview';
+  };
 
   // Persist active tab to sessionStorage whenever it changes (cleared when tab/browser is closed)
   useEffect(() => {
     sessionStorage.setItem('fuel_order_active_tab', activeTab);
     sessionStorage.setItem('fuel_order_active_role', user.role);
   }, [activeTab, user.role]);
+
+  // Push a history entry whenever the active tab changes so the back button
+  // pops to the previous tab instead of exiting the app.
+  // We store the tab name in history state so popstate can restore it.
+  const isRestoringFromHistory = useRef(false);
+
+  const navigateToTab = (tab: string) => {
+    if (tab === activeTab) return;
+    window.history.pushState({ tab }, '', window.location.pathname + window.location.search);
+    setActiveTab(tab);
+  };
+
+  // Seed the very first history entry with the initial tab so there is always
+  // at least one entry that has our state shape.
+  useEffect(() => {
+    // Only replace if the current entry has no tab state (i.e. first load)
+    if (!window.history.state?.tab) {
+      window.history.replaceState({ tab: activeTab }, '', window.location.pathname + window.location.search);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Back-button handler: restore previous tab from history state.
+  // If we are already on the home tab, show exit confirmation instead.
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const previousTab: string | undefined = event.state?.tab;
+      const homeTab = getHomeTab();
+
+      if (!previousTab || previousTab === homeTab) {
+        // Nothing (or home) to go back to — ask user if they want to exit
+        // Push a dummy entry back so the history stack isn't consumed
+        window.history.pushState({ tab: activeTab }, '', window.location.pathname + window.location.search);
+        setShowExitConfirm(true);
+        return;
+      }
+
+      isRestoringFromHistory.current = true;
+      setActiveTab(previousTab);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  // getHomeTab is stable (no deps that change), activeTab needed for the pushState fallback
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Reset to default tab when user role changes (e.g., after login/logout)
   useEffect(() => {
@@ -180,7 +236,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
   // Handle navigation from Dashboard search results
   const handleNavigate = (tab: string, highlight?: string) => {
-    setActiveTab(tab);
+    navigateToTab(tab);
     if (highlight) {
       setHighlightParam(highlight);
       // Update URL with highlight parameter
@@ -200,7 +256,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         currentUrl.searchParams.set('highlight', highlight);
       }
       
-      window.history.replaceState({}, '', currentUrl.toString());
+      window.history.replaceState({ tab }, '', currentUrl.toString());
       // Dispatch event to notify child components
       window.dispatchEvent(new CustomEvent('urlchange'));
     }
@@ -604,7 +660,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   {!isCollapsed && (
                     <button
                       onClick={() => {
-                        setActiveTab(item.id);
+                        navigateToTab(item.id);
                         setSidebarOpen(false);
                         if (isSearching) setSaNavSearch('');
                       }}
@@ -678,11 +734,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               <NotificationBell 
               onNotificationClick={(notification) => {
                 if (notification.metadata?.fuelRecordId) {
-                  setActiveTab('fuel_records');
+                  navigateToTab('fuel_records');
                 }
               }}
               onEditDO={(doId) => {
-                setActiveTab('do');
+                navigateToTab('do');
                 setEditDoId(doId);
               }}
               onViewPendingYardFuel={() => {
@@ -804,12 +860,12 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               <NotificationBell 
                 onNotificationClick={(notification) => {
                   if (notification.metadata?.fuelRecordId) {
-                    setActiveTab('fuel_records');
+                    navigateToTab('fuel_records');
                   }
                 }}
                 onEditDO={(doId) => {
                   // Switch to DO tab first
-                  setActiveTab('do');
+                  navigateToTab('do');
                   // Then set the edit DO ID which will trigger the URL update
                   setEditDoId(doId);
                 }}
@@ -985,11 +1041,48 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             onNotificationClick={(notification) => {
               if (notification.metadata?.fuelRecordId) {
                 setShowNotificationsPage(false);
-                setActiveTab('fuel_records');
+                navigateToTab('fuel_records');
               }
             }}
           />
         </Suspense>
+      )}
+
+      {/* Exit Confirmation Modal — shown when user presses back on the home tab */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-[300] flex items-end justify-center sm:items-center" style={{ background: 'rgba(15,23,42,0.7)' }}>
+          <div className="w-full sm:max-w-sm mx-4 mb-6 sm:mb-0 rounded-2xl shadow-2xl overflow-hidden" style={{ background: isDark ? '#1E293B' : '#FFFFFF', border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
+            {/* Top accent */}
+            <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #2563EB, #0891B2)' }} />
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: isDark ? 'rgba(239,68,68,0.15)' : '#FEE2E2' }}>
+                  <LogOut className="w-5 h-5" style={{ color: '#DC2626' }} />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Exit App?</h3>
+                  <p className="text-sm" style={{ color: isDark ? '#94A3B8' : '#64748B' }}>Do you want to close the application?</p>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={() => setShowExitConfirm(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                  style={{ background: isDark ? '#334155' : '#F1F5F9', color: isDark ? '#CBD5E1' : '#334155' }}
+                >
+                  Stay
+                </button>
+                <button
+                  onClick={() => { setShowExitConfirm(false); window.history.go(-window.history.length); window.close(); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors"
+                  style={{ background: '#DC2626' }}
+                >
+                  Exit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
