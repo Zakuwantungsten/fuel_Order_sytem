@@ -492,8 +492,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         selectedPeriods[0].month !== currentMonth) return;
     const hasData = availablePeriods.some(p => p.year === currentYear && p.month === currentMonth);
     if (!hasData && availablePeriods.length > 0) {
-      // Pick the most recent period that exists
-      setSelectedPeriods([availablePeriods[0]]);
+      // Pick the most recent period that exists (highest year, then highest month)
+      const mostRecent = availablePeriods.reduce((best, p) =>
+        p.year > best.year || (p.year === best.year && p.month > best.month) ? p : best
+      );
+      setSelectedPeriods([mostRecent]);
     }
   }, [availablePeriods, loading]);
 
@@ -1779,7 +1782,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   const now = new Date();
                   const currentPeriod = { year: now.getFullYear(), month: now.getMonth() + 1 };
                   const hasCurrentMonth = availablePeriods.some(p => p.year === currentPeriod.year && p.month === currentPeriod.month);
-                  setSelectedPeriods(hasCurrentMonth || availablePeriods.length === 0 ? [currentPeriod] : [availablePeriods[0]]);
+                  const mostRecentPeriod = availablePeriods.length > 0
+                    ? availablePeriods.reduce((best, p) =>
+                        p.year > best.year || (p.year === best.year && p.month > best.month) ? p : best
+                      )
+                    : currentPeriod;
+                  setSelectedPeriods(hasCurrentMonth || availablePeriods.length === 0 ? [currentPeriod] : [mostRecentPeriod]);
                   setCurrentPage(1);
                 }}
                 className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
