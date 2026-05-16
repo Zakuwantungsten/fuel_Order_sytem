@@ -10,7 +10,6 @@ import UserActionsMenu from './UserActionsMenu';
 import type { UserAction } from './UserActionsMenu';
 import UserAvatar from './UserAvatar';
 import StatusBadge from './StatusBadge';
-import RoleBadge from './RoleBadge';
 import RelativeTime from './RelativeTime';
 
 // ── Mobile card component (shown below md breakpoint) ───────────────────────
