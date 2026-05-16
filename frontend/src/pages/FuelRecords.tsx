@@ -610,15 +610,12 @@ const FuelRecords = () => {
     try {
       if (selectedRecord) {
         const recordId = selectedRecord.id || (selectedRecord as any)._id;
-        if (recordId) {
-          // Send clientUpdatedAt for optimistic locking
-          const updatePayload = {
-            ...data,
-            clientUpdatedAt: (selectedRecord as any).updatedAt || (selectedRecord as any).createdAt,
-          };
-          await fuelRecordsAPI.update(recordId, updatePayload);
-          toast.success('Fuel record updated successfully');
+        if (!recordId) {
+          toast.error('Unable to update fuel record (missing record id)');
+          return;
         }
+        await fuelRecordsAPI.update(recordId, { ...data });
+        toast.success('Fuel record updated successfully');
       } else {
         await fuelRecordsAPI.create(data);
         toast.success('Fuel record created successfully');
@@ -1556,11 +1553,19 @@ const FuelRecords = () => {
           if (conflictData) {
             const payload = {
               ...conflictData.pendingData,
-              clientUpdatedAt: conflictData.currentRecord?.updatedAt,
             };
-            const recordId = selectedRecord?.id || (selectedRecord as any)?._id;
+            const recordId =
+              conflictData.currentRecord?.id ||
+              (conflictData.currentRecord as any)?._id ||
+              selectedRecord?.id ||
+              (selectedRecord as any)?._id;
             try {
-              await fuelRecordsAPI.update(recordId!, payload);
+              if (!recordId) {
+                toast.error('Unable to update fuel record (missing record id)');
+                setConflictData(null);
+                return;
+              }
+              await fuelRecordsAPI.update(recordId, payload);
               toast.success('Fuel record updated successfully');
               queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
               handleCloseForm();

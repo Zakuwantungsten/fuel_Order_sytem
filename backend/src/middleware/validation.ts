@@ -187,7 +187,7 @@ export const deliveryOrderValidation = {
     body('totalAmount').optional().isFloat({ min: 0 }).withMessage('Total amount must be a non-negative number'),
     body('editReason').optional().trim(),
     body('clientUpdatedAt').optional().isISO8601().withMessage('clientUpdatedAt must be a valid ISO 8601 date'),
-    body('reason').optional().trim().isLength({ min: 10, max: 500 }).withMessage('Reason must be between 10 and 500 characters'),
+    body('reason').optional().trim().isLength({ max: 500 }).withMessage('Reason must be 500 characters or fewer'),
   ],
 };
 

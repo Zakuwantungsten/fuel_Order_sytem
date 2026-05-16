@@ -679,14 +679,7 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     const updates = matchedData(req, { locations: ['body'] }) as any;
 
     // Extract version token and reason — must NOT be written to the DB
-    const { clientUpdatedAt, reason, ...rawUpdates } = updates;
-
-    // Require justification when changing sensitive fields
-    const SENSITIVE_FUEL_FIELDS = ['totalLts', 'extra', 'isLocked'];
-    const hasSensitiveChange = SENSITIVE_FUEL_FIELDS.some(f => rawUpdates[f] !== undefined);
-    if (hasSensitiveChange && (!reason || reason.length < 10)) {
-      throw new ApiError(400, 'A reason of at least 10 characters is required when changing quantity or lock fields');
-    }
+    const { clientUpdatedAt, reason: _reason, ...rawUpdates } = updates;
 
     // Enforce edit lock — the caller must hold a valid lock to update
     const username = req.user?.username;
@@ -766,27 +759,13 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       logger.info(`Recalculating balance for fuel record ${id}: (${finalTotalLts || 0} + ${finalExtra || 0}) - ${totalCheckpoints} = ${safeUpdates.balance}L`);
     }
 
-    // Build version-guarded filter — if client sent the version it read, enforce it
-    const updateFilter: any = { _id: id, isDeleted: false };
-    if (clientUpdatedAt) {
-      updateFilter.updatedAt = new Date(clientUpdatedAt);
-    }
-
     const fuelRecord = await FuelRecord.findOneAndUpdate(
-      updateFilter,
+      { _id: id, isDeleted: false },
       safeUpdates,
       { new: true, runValidators: true }
     );
 
     if (!fuelRecord) {
-      // Distinguish: version conflict vs record deleted
-      const stillExists = await FuelRecord.exists({ _id: id, isDeleted: false });
-      if (stillExists && clientUpdatedAt) {
-        // Version mismatch — another user saved in between
-        const current = await FuelRecord.findOne({ _id: id, isDeleted: false })
-          .select('updatedAt truckNo goingDo');
-        throw new ApiError(409, 'Record was modified by another user since you opened it. Refresh to see the latest version.').withData({ current });
-      }
       throw new ApiError(404, 'Fuel record not found');
     }
 
