@@ -448,6 +448,13 @@ function mapToLPOEntry(
     doc.date = `${year}-${String(sheetMonth).padStart(2, '0')}-01`;
   }
 
+  // ── Set year explicitly to match unique key (lpoNo + year + truckNo) ─────────
+  if (year) {
+    doc.year = year;
+  } else if (typeof doc.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(doc.date)) {
+    doc.year = parseInt(doc.date.substring(0, 4), 10);
+  }
+
   // ── Infer paymentMode from dieselAt when no explicit Payment Mode column ────
   // Real-world LPO sheets use the station name or the word "CASH" in Diesel @.
   if (!doc.paymentMode) {
@@ -541,6 +548,10 @@ async function importDeliveryOrders(
     if (!doc.destination) doc.destination = 'UNKNOWN';
     if (!doc.date) doc.date = new Date().toISOString().split('T')[0];
 
+    if (doc.year === undefined && typeof doc.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(doc.date)) {
+      doc.year = parseInt(doc.date.substring(0, 4), 10);
+    }
+
     const filter = { doNumber: doc.doNumber };
 
     try {
@@ -593,7 +604,7 @@ async function importLPOEntries(
 
     // Each LPO number can have multiple trucks — use {lpoNo + truckNo} as the
     // unique key so that all rows with the same LPO are stored individually.
-    const filter = { lpoNo: doc.lpoNo, truckNo: doc.truckNo };
+    const filter = { lpoNo: doc.lpoNo, year: doc.year, truckNo: doc.truckNo };
 
     try {
       if (dryRun) {

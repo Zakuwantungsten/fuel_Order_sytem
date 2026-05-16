@@ -131,7 +131,8 @@ lpoEntrySchema.index({ referenceDo: 1 });
 lpoEntrySchema.index({ paymentMode: 1 });
 
 // Compound indexes for common queries (includes lpoNo)
-lpoEntrySchema.index({ lpoNo: 1, year: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
+// Business rule: one LPO can cover multiple trucks, but a truck cannot repeat under the same LPO/year.
+lpoEntrySchema.index({ lpoNo: 1, year: 1, truckNo: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
 lpoEntrySchema.index({ lpoNo: 1, date: -1 });
 lpoEntrySchema.index({ dieselAt: 1, date: -1 });
 lpoEntrySchema.index({ truckNo: 1, referenceDo: 1 }); // For fetching NIL entries by journey

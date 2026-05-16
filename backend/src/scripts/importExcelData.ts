@@ -416,6 +416,14 @@ function mapToLPOEntry(row: Record<string, any>): Record<string, any> {
     }
   }
 
+  // Set year explicitly to match unique key (lpoNo + year + truckNo)
+  if (doc.date && typeof doc.date === 'string') {
+    const match = doc.date.match(/\b(\d{4})\b/);
+    if (match) {
+      doc.year = parseInt(match[1], 10);
+    }
+  }
+
   // Normalise paymentMode
   if (doc.paymentMode) {
     const pm = doc.paymentMode.toUpperCase().replace(/\s+/g, '_');
@@ -520,6 +528,10 @@ async function importDeliveryOrders(
     if (!doc.loadingPoint) doc.loadingPoint = 'DSM';
     if (!doc.destination) doc.destination = 'UNKNOWN';
     if (!doc.date) doc.date = new Date().toISOString().split('T')[0];
+    if (doc.year === undefined && typeof doc.date === 'string') {
+      const match = doc.date.match(/\b(\d{4})\b/);
+      if (match) doc.year = parseInt(match[1], 10);
+    }
 
     const filter = { doNumber: doc.doNumber };
 
@@ -576,7 +588,7 @@ async function importLPOEntries(
     if (doc.pricePerLtr === undefined) doc.pricePerLtr = 0;
     if (!doc.date) doc.date = new Date().toISOString().split('T')[0];
 
-    const filter = { lpoNo: doc.lpoNo };
+    const filter = { lpoNo: doc.lpoNo, year: doc.year, truckNo: doc.truckNo };
 
     try {
       if (dryRun) {
