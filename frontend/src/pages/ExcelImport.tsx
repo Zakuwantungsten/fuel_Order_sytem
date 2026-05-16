@@ -115,10 +115,6 @@ export default function ExcelImport() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  if (loading) {
-    return <UnifiedTabLoader label="Loading Excel import..." />;
-  }
-
   // ── File handling ──────────────────────────────────────────────────────────
 
   const handleFile = useCallback((f: File) => {
@@ -260,6 +256,10 @@ export default function ExcelImport() {
     (status === 'previewed' || status === 'done' || status === 'error');
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return <UnifiedTabLoader label="Loading Excel import..." />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8">
