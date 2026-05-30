@@ -689,39 +689,18 @@ export const getLPOSummaryByLPONo = async (req: AuthRequest, res: Response): Pro
 export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const currentYear = new Date().getFullYear();
-    
-    // Find the last LPO for the current year
-    const lastLpo = await LPOSummary.findOne({ 
-      isDeleted: false,
-      year: currentYear 
-    })
-      .sort({ lpoNo: -1 })
-      .select('lpoNo')
-      .lean();
 
-    let nextNumber = 1; // Start from 1 each year
+    // Use aggregation to find the true numeric max in one query — avoids
+    // lexicographic string sort ("9" > "2444") and the while-loop of exists() calls.
+    const result = await LPOSummary.aggregate([
+      { $match: { isDeleted: false, year: currentYear } },
+      { $project: { lpoNoInt: { $toInt: '$lpoNo' } } },
+      { $group: { _id: null, maxLpoNo: { $max: '$lpoNoInt' } } },
+    ]);
 
-    if (lastLpo && lastLpo.lpoNo) {
-      const lastNumber = parseInt(lastLpo.lpoNo, 10);
-      if (!isNaN(lastNumber)) {
-        nextNumber = lastNumber + 1;
-      }
-    }
-
-    // Safety check - ensure this number doesn't exist for current year
-    let exists = await LPOSummary.exists({ 
-      lpoNo: nextNumber.toString(), 
-      year: currentYear,
-      isDeleted: false 
-    });
-    while (exists) {
-      nextNumber++;
-      exists = await LPOSummary.exists({ 
-        lpoNo: nextNumber.toString(), 
-        year: currentYear,
-        isDeleted: false 
-      });
-    }
+    const maxNumber =
+      result.length > 0 && result[0].maxLpoNo != null ? result[0].maxLpoNo : 0;
+    const nextNumber = maxNumber + 1;
 
     res.status(200).json({
       success: true,
