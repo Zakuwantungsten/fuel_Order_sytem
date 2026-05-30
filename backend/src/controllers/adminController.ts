@@ -2040,7 +2040,7 @@ export const sendWeeklySummary = async (req: AuthRequest, res: Response): Promis
  */
 export const getRecentActivity = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
 
     const recentLogs = await AuditLog.find({})
       .sort({ timestamp: -1 })

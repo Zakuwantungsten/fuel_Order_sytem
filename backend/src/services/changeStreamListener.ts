@@ -21,6 +21,8 @@ const MODEL_COLLECTION_MAP: Record<string, string> = {
  * Fails silently if change streams are unavailable — the system falls back
  * to controller-level emitDataChange calls.
  */
+const activeStreams: import('mongodb').ChangeStream[] = [];
+
 export function startChangeStreams(): void {
   const db = mongoose.connection;
 
@@ -52,9 +54,16 @@ export function startChangeStreams(): void {
         logger.error(`Change stream error for ${modelName}:`, err.message);
       });
 
+      activeStreams.push(changeStream as any);
       logger.info(`Change stream started for ${modelName} → ${wsCollection}`);
     } catch (err: any) {
       logger.warn(`Failed to start change stream for ${modelName}: ${err.message}`);
     }
   }
+}
+
+export async function stopChangeStreams(): Promise<void> {
+  await Promise.all(activeStreams.map(s => s.close().catch(() => {})));
+  activeStreams.length = 0;
+  logger.info('Change streams closed');
 }

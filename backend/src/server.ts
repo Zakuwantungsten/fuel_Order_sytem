@@ -25,7 +25,7 @@ import { fingerprintObfuscationMiddleware } from './middleware/fingerprintObfusc
 import honeypotRoutes from './routes/honeypotRoutes';
 import logger from './utils/logger';
 import { initializeWebSocket } from './services/websocket';
-import { startChangeStreams } from './services/changeStreamListener';
+import { startChangeStreams, stopChangeStreams } from './services/changeStreamListener';
 import { connectRedis, disconnectRedis } from './config/redis';
 import { initNotificationQueue, closeNotificationQueue } from './services/notificationQueue';
 import BlocklistService from './services/blocklistService';
@@ -349,6 +349,7 @@ const startServer = async () => {
         process.exit(1);
       }, 15_000).unref();
 
+      await stopChangeStreams();
       await closeNotificationQueue();
       await disconnectRedis();
       process.exit(0);

@@ -1127,7 +1127,7 @@ export const updateRateLimitSettings = async (req: AuthRequest, res: Response): 
 // ─── Alert Thresholds ────────────────────────────────────────────────────────
 
 const DEFAULT_ALERT_THRESHOLDS = {
-  memoryUsagePct: 85,       // % heap used above which alert fires
+  memoryUsagePct: 70,       // % heap used above which alert fires
   dbConnectionsMax: 90,     // number of connections that triggers alert
   errorRatePer5min: 20,     // error log entries per 5 minutes
   diskUsagePct: 90,         // not auto-collected, just for reference

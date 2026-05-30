@@ -354,10 +354,10 @@ export class DatabaseMonitor extends EventEmitter {
       });
     }
 
-    // Memory usage — 85% heap threshold (matches DEFAULT_ALERT_THRESHOLDS.memoryUsagePct)
+    // Memory usage — 70% heap threshold (early warning before GC starts struggling)
     const mem = process.memoryUsage();
     const heapPct = (mem.heapUsed / mem.heapTotal) * 100;
-    if (heapPct >= 85) {
+    if (heapPct >= 70) {
       this.emit('alert', {
         type: 'critical',
         message: `High memory usage: ${heapPct.toFixed(1)}% heap used`,

@@ -60,7 +60,7 @@ async function fetchData(resource: ExportResource, from?: Date, to?: Date): Prom
     case 'yard_fuel':
       return getAllYardFuelDispenses(opts);
     case 'users': {
-      const users = await User.find({}, { password: 0, __v: 0 }).lean();
+      const users = await User.find({}, { password: 0, __v: 0 }).limit(10_000).lean();
       return users;
     }
     case 'audit_logs': {
@@ -70,7 +70,7 @@ async function fetchData(resource: ExportResource, from?: Date, to?: Date): Prom
         if (from) filter.timestamp.$gte = from;
         if (to) filter.timestamp.$lte = to;
       }
-      return AuditLog.find(filter).sort({ timestamp: -1 }).limit(50_000).lean();
+      return AuditLog.find(filter).sort({ timestamp: -1 }).limit(5_000).lean();
     }
     default:
       throw new ApiError(400, `Unknown resource: ${resource}`);

@@ -45,7 +45,7 @@ export const initializeWebSocket = (server: HTTPServer): SocketIOServer => {
     pingTimeout: 20000,
     maxHttpBufferSize: 1e6,
     connectionStateRecovery: {
-      maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+      maxDisconnectionDuration: 30 * 1000, // 30 seconds — limits per-socket event buffer in heap
     },
   });
 

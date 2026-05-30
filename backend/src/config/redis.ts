@@ -2,6 +2,8 @@ import Redis from 'ioredis';
 import logger from '../utils/logger';
 
 let redisClient: Redis | null = null;
+// redisPub / redisSub are only needed for multi-instance Socket.io.
+// This app runs as a single process — Socket.io uses in-memory adapter instead.
 let redisPub: Redis | null = null;
 let redisSub: Redis | null = null;
 
@@ -52,23 +54,15 @@ export async function connectRedis(): Promise<void> {
   }
 
   try {
+    // Single main client for caching/sessions + one BullMQ pair below.
+    // No pub/sub clients — single-instance deployment uses Socket.io in-memory adapter.
     redisClient = createClient('main');
-    redisPub = createClient('pub');
-    redisSub = createClient('sub');
+    await redisClient?.connect();
 
-    // Connect all three in parallel
-    await Promise.all([
-      redisClient?.connect(),
-      redisPub?.connect(),
-      redisSub?.connect(),
-    ]);
-
-    logger.info('Redis: all clients connected successfully');
+    logger.info('Redis: client connected successfully');
   } catch (error) {
     logger.error('Redis connection failed — falling back to in-memory mode:', error);
     redisClient = null;
-    redisPub = null;
-    redisSub = null;
   }
 }
 
@@ -113,10 +107,11 @@ export function createBullMQConnection(): Redis | null {
  * Graceful shutdown — close all Redis connections.
  */
 export async function disconnectRedis(): Promise<void> {
-  const clients = [redisClient, redisPub, redisSub].filter(Boolean) as Redis[];
-  await Promise.allSettled(clients.map((c) => c.quit()));
-  redisClient = null;
+  if (redisClient) {
+    await redisClient.quit().catch(() => {});
+    redisClient = null;
+  }
   redisPub = null;
   redisSub = null;
-  logger.info('Redis: all clients disconnected');
+  logger.info('Redis: client disconnected');
 }

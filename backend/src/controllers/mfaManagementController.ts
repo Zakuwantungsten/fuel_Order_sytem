@@ -11,6 +11,7 @@ import { AuditService } from '../utils/auditService';
 export const listMFAStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   const users = await User.find({})
     .select('_id username firstName lastName role isActive')
+    .limit(10_000)
     .lean();
 
   // Read global MFA policy to show which roles have MFA required

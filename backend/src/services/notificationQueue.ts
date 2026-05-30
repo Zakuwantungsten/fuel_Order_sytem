@@ -55,12 +55,14 @@ export function initNotificationQueue(): void {
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
-      removeOnComplete: { count: 500 },  // keep last 500 completed jobs
-      removeOnFail: { count: 200 },      // keep last 200 failed jobs
+      removeOnComplete: { count: 50 },   // keep last 50 completed jobs
+      removeOnFail: { count: 50 },       // keep last 50 failed jobs
     },
   });
 
-  // Create the worker (consumer side — runs in the same process)
+  // Create the worker (consumer side — runs in the same process).
+  // Concurrency is intentionally low: this worker shares the heap with the
+  // web server. 300 concurrent jobs = 300 live async contexts in one process.
   pushWorker = new Worker<PushJobData>(
     QUEUE_NAME,
     async (job: Job<PushJobData>) => {
@@ -70,10 +72,10 @@ export function initNotificationQueue(): void {
     },
     {
       connection: workerConnection,
-      concurrency: 300, // process up to 300 push jobs in parallel
+      concurrency: 5, // 5 is plenty — push APIs are the bottleneck, not this process
       limiter: {
-        max: 50,       // max 50 jobs
-        duration: 10000, // per 10 seconds — prevents flooding push APIs
+        max: 20,
+        duration: 10000,
       },
     },
   );

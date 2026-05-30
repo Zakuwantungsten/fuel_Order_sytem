@@ -55,7 +55,7 @@ export async function getAllFuelRecords(options: ExportOptions = {}): Promise<an
         archivedRecords = await archivalService.queryArchivedData(
           'FuelRecord',
           query,
-          { limit: limit || 10000, sort }
+          { limit: Math.min(limit || 5000, 5000), sort }
         );
         logger.info(`Retrieved ${archivedRecords.length} archived fuel records for export`);
       } catch (error: any) {

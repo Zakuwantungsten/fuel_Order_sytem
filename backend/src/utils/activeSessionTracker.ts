@@ -44,8 +44,8 @@ export interface ActiveSession {
 
 class ActiveSessionTracker {
   private sessions = new Map<string, ActiveSession>();
-  /** Set of userIds whose sessions have been forcefully terminated by an admin */
-  private terminated = new Set<string>();
+  /** userId → absolute expiry timestamp (ms). No timers — checked lazily on access. */
+  private terminated = new Map<string, number>();
 
   touch(userId: string, username: string, role: string, ip: string): void {
     const existing = this.sessions.get(userId);
@@ -89,9 +89,8 @@ class ActiveSessionTracker {
   /** Force-terminate a session. The next request from this user will receive 401. */
   terminate(userId: string): void {
     this.sessions.delete(userId);
-    this.terminated.add(userId);
-    // Auto-clear termination flag after TTL so relogins work normally
-    setTimeout(() => this.terminated.delete(userId), sessionTtlMs);
+    // Store expiry as an absolute timestamp — no timer created, checked lazily in isTerminated().
+    this.terminated.set(userId, Date.now() + sessionTtlMs);
   }
 
   /** Terminate ALL active sessions except the specified userId */
@@ -108,7 +107,13 @@ class ActiveSessionTracker {
 
   /** Returns true if this session was explicitly terminated by an admin */
   isTerminated(userId: string): boolean {
-    return this.terminated.has(userId);
+    const expiresAt = this.terminated.get(userId);
+    if (expiresAt === undefined) return false;
+    if (Date.now() > expiresAt) {
+      this.terminated.delete(userId); // lazy cleanup — no accumulation
+      return false;
+    }
+    return true;
   }
 
   get size(): number {
