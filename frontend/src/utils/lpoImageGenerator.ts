@@ -28,6 +28,8 @@ const createLPOElement = (data: LPOSummary, preparedBy?: string, approvedBy?: st
 
     // Create a React root and render the component
     const root = createRoot(container);
+    // Keep a reference to the root so we can unmount it later during cleanup
+    (container as any).__lpoRoot = root;
     
     // Create a ref callback to get the rendered element
     const ref = (element: HTMLDivElement | null) => {
@@ -50,6 +52,16 @@ const createLPOElement = (data: LPOSummary, preparedBy?: string, approvedBy?: st
 const cleanupElement = (element: HTMLElement) => {
   const container = element.parentElement;
   if (container && container.parentElement) {
+    // If a React root was attached, unmount it to free React internals and listeners
+    const maybeRoot = (container as any).__lpoRoot;
+    try {
+      if (maybeRoot && typeof maybeRoot.unmount === 'function') {
+        maybeRoot.unmount();
+      }
+    } catch (e) {
+      // ignore unmount errors
+    }
+
     container.parentElement.removeChild(container);
   }
 };

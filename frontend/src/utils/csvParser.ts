@@ -110,6 +110,12 @@ export const exportToCSV = (data: any[], filename: string) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  // Revoke the object URL to free memory
+  try {
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    // ignore
+  }
 };
 
 // Helper to export data as XLSX with formatting
