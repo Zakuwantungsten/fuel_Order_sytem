@@ -82,7 +82,11 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
 
     setIsLoading(true);
     try {
-      const response = await authAPI.firstLoginPassword({ newPassword });
+      // Carry the Remember Me intent through first-login setup. The backend only
+      // establishes the persistent cookie here (after activation), so this flag is
+      // what makes Remember Me actually stick for newly-created users.
+      const rememberMe = localStorage.getItem('fuel_order_remember_me') === '1';
+      const response = await authAPI.firstLoginPassword({ newPassword, rememberMe });
       
       // Update tokens if returned from backend
       if (response?.accessToken) {

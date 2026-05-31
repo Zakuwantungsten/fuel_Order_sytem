@@ -653,13 +653,20 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     // ── Remember Me: set rotating HttpOnly refresh-token cookie ──────────
     // Only for non-driver, voluntarily persistent sessions. JS cannot read this
     // cookie (httpOnly) and CSRF cannot forge it (already protected by XSRF token).
-    if (rememberMe && !username.match(/^T\d{3,4}[-\s]?[A-Z]{3}$/i)) {
+    //
+    // IMPORTANT: do NOT establish a persistent session for an un-activated user
+    // (one who still mustChangePassword). Otherwise, if they reach the
+    // "Set Your Password" screen and close the browser without finishing, the
+    // cookie silently logs them back in on the next visit and re-shows the
+    // temp-password flow — making them look like a brand-new user. The cookie is
+    // instead set once they complete first-login password setup (firstLoginPassword).
+    if (rememberMe && !user.mustChangePassword && !username.match(/^T\d{3,4}[-\s]?[A-Z]{3}$/i)) {
       const rmDays = refreshExpiryDays ?? 30;
       const cookieOpts = refreshCookieOptions(rmDays);
       logger.info(`[RememberMe] Setting cookie for ${username}, maxAge=${rmDays}d, opts=${JSON.stringify(cookieOpts)}`);
       res.cookie('fuel_order_refresh', refreshToken, cookieOpts);
     } else {
-      logger.info(`[RememberMe] Cookie NOT set: rememberMe=${rememberMe}, username=${username}`);
+      logger.info(`[RememberMe] Cookie NOT set: rememberMe=${rememberMe}, mustChangePassword=${user.mustChangePassword}, username=${username}`);
     }
 
     res.status(200).json({
@@ -1633,7 +1640,7 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
       throw new ApiError(401, 'Not authenticated');
     }
 
-    const { newPassword } = req.body;
+    const { newPassword, rememberMe } = req.body;
 
     if (!newPassword || typeof newPassword !== 'string') {
       throw new ApiError(400, 'New password is required');
@@ -1663,6 +1670,15 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
       const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
       user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
       await user.save();
+
+      // Establish/rotate the Remember Me cookie so the new refresh token is in
+      // sync with the DB. Honour either the user's remembered intent or an
+      // existing cookie (login no longer sets the cookie for un-activated users,
+      // so the intent flag is what carries Remember Me through first-login setup).
+      if (rememberMe || (req.cookies as any)?.fuel_order_refresh) {
+        const rmDays = refreshExpiryDays ?? 30;
+        res.cookie('fuel_order_refresh', refreshToken, refreshCookieOptions(rmDays));
+      }
 
       logger.info(`[FIRST-LOGIN] mustChangePassword already false for ${user.username}, returning fresh tokens`);
       res.status(200).json({
@@ -1736,6 +1752,18 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
     // Store hashed refresh token and save everything in a single DB write
     user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
     await user.save();
+
+    // Establish the Remember Me cookie now that the user has activated their
+    // account by setting their own password. We do this when the user opted into
+    // Remember Me (intent flag) OR already had a cookie. login() deliberately does
+    // NOT set the cookie for un-activated users, so this is the point at which a
+    // persistent session is first created with a refresh token that matches the DB
+    // hash just written above. Without it, the next Remember Me attempt would 401.
+    const hadRememberMeCookie = !!(req.cookies as any)?.fuel_order_refresh;
+    if (rememberMe || hadRememberMeCookie) {
+      const rmDays = refreshExpiryDays ?? 30;
+      res.cookie('fuel_order_refresh', refreshToken, refreshCookieOptions(rmDays));
+    }
 
     res.status(200).json({
       success: true,

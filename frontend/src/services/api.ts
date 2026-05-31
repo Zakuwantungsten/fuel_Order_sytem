@@ -1027,7 +1027,7 @@ export const authAPI = {
     await apiClient.patch('/auth/preferences', preferences);
   },
 
-  firstLoginPassword: async (data: { newPassword: string }): Promise<any> => {
+  firstLoginPassword: async (data: { newPassword: string; rememberMe?: boolean }): Promise<any> => {
     const response = await apiClient.post('/auth/first-login-password', data);
     return response.data.data; // Extract the inner data object with tokens
   },

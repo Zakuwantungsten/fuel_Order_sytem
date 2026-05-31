@@ -104,6 +104,9 @@ interface StoredFormData {
   goingCheckpoint: CancellationPoint | '';
   returningCheckpoint: CancellationPoint | '';
   customStationName: string;
+  customCurrency: 'USD' | 'TZS';
+  customRate: number;
+  customDefaultLiters: number;
   customGoingEnabled: boolean;
   customReturnEnabled: boolean;
   customGoingCheckpoint: string;
@@ -267,6 +270,27 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
     return '';
   });
+  const [customCurrency, setCustomCurrency] = useState<'USD' | 'TZS'>(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customCurrency ?? 'USD';
+    }
+    return 'USD';
+  });
+  const [customRate, setCustomRate] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customRate ?? 0;
+    }
+    return 0;
+  });
+  const [customDefaultLiters, setCustomDefaultLiters] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customDefaultLiters ?? 0;
+    }
+    return 0;
+  });
   const [customGoingEnabled, setCustomGoingEnabled] = useState(() => {
     if (!initialData) {
       const stored = loadFormFromStorage();
@@ -417,6 +441,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setDuplicateWarnings(new Map());
     setLockedEntryRates(new Map());
     setCustomStationName('');
+    setCustomCurrency('USD');
+    setCustomRate(0);
+    setCustomDefaultLiters(0);
     setCustomGoingEnabled(false);
     setCustomReturnEnabled(false);
     setCustomGoingCheckpoint('');
@@ -470,6 +497,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
   }, [availableStations]);
 
+  // When customRate changes for CUSTOM station, push the new rate to all existing rows
+  useEffect(() => {
+    if (formData.station !== 'CUSTOM') return;
+    if (!formData.entries || formData.entries.length === 0) return;
+    if (!customRate) return;
+
+    const needsUpdate = formData.entries.some(entry => entry.rate !== customRate);
+    if (!needsUpdate) return;
+
+    const updatedEntries = formData.entries.map(entry => {
+      const liters = entry.liters || 0;
+      return { ...entry, rate: customRate, amount: liters * customRate };
+    });
+    const total = updatedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customRate]);
+
   // Check for existing draft on mount and when modal opens
   useEffect(() => {
     if (isOpen && !initialData) {
@@ -501,6 +546,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         goingCheckpoint,
         returningCheckpoint,
         customStationName,
+        customCurrency,
+        customRate,
+        customDefaultLiters,
         customGoingEnabled,
         customReturnEnabled,
         customGoingCheckpoint,
@@ -519,6 +567,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     goingCheckpoint, 
     returningCheckpoint,
     customStationName,
+    customCurrency,
+    customRate,
+    customDefaultLiters,
     customGoingEnabled,
     customReturnEnabled,
     customGoingCheckpoint,
@@ -1326,12 +1377,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   };
 
   const handleAddEntry = () => {
+    const isCustom = formData.station === 'CUSTOM';
+    const entryRate = isCustom ? customRate : (formData.station ? getStationDefaults(formData.station, 'going').rate : 1.2);
+    const entryLiters = isCustom ? customDefaultLiters : 0;
     const newEntry: LPODetail = {
       doNo: '',  // Start empty so user can type immediately
       truckNo: '',
-      liters: 0,
-      rate: formData.station ? getStationDefaults(formData.station, 'going').rate : 1.2,
-      amount: 0,
+      liters: entryLiters,
+      rate: entryRate,
+      amount: entryLiters * entryRate,
       dest: 'NIL',
     };
     
@@ -1415,12 +1469,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       
       // Add all pasted trucks starting at the paste index
       formattedTrucks.forEach((truckNo) => {
+        const isPasteCustom = prev.station === 'CUSTOM';
+        const pasteRate = isPasteCustom ? customRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2);
+        const pasteLiters = isPasteCustom ? customDefaultLiters : 0;
         const newEntry: LPODetail = {
           doNo: '',  // Start empty
           truckNo: truckNo,
-          liters: 0,
-          rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
-          amount: 0,
+          liters: pasteLiters,
+          rate: pasteRate,
+          amount: pasteLiters * pasteRate,
           dest: 'NIL',
         };
         newEntriesArray.push(newEntry);
@@ -1580,16 +1637,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           ? result.goingDestination 
           : result.destination;
         
-        const defaults = formData.station 
-          ? getStationDefaults(
-              formData.station, 
-              direction, 
-              destinationForAllocation,
-              result.fuelRecord?.totalLts ?? undefined,
-              result.fuelRecord?.extra ?? undefined,
-              result.fuelRecord?.balance ?? undefined
-            ) 
-          : { liters: 350, rate: 1.2 };
+        const isCustomStation = formData.station === 'CUSTOM';
+        const defaults = isCustomStation
+          ? { liters: customDefaultLiters, rate: customRate }
+          : (formData.station
+              ? getStationDefaults(
+                  formData.station,
+                  direction,
+                  destinationForAllocation,
+                  result.fuelRecord?.totalLts ?? undefined,
+                  result.fuelRecord?.extra ?? undefined,
+                  result.fuelRecord?.balance ?? undefined
+                )
+              : { liters: 350, rate: 1.2 });
 
         // Calculate balance info for Mbeya returning (INFINITY station)
         let balanceInfo = undefined;
@@ -1600,22 +1660,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         // Auto-fill the entry - USE CALLBACK FORM to avoid race conditions
         setFormData(prev => {
           const newEntries = [...(prev.entries || [])];
-          
+
           // Ensure entry exists
           if (!newEntries[index]) {
             newEntries[index] = {
               doNo: '',  // Start empty
               truckNo: '',
               liters: 0,
-              rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+              rate: prev.station === 'CUSTOM' ? customRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2),
               amount: 0,
               dest: 'NIL',
             };
           }
-          
+
           // For DA entries: keep DO as DA, store real DO in referenceDoNo
           const isDA = entryAutoFillData[index]?.entryType === 'da';
-          
+
           newEntries[index] = {
             ...newEntries[index],
             truckNo: formattedTruckNo,  // Use formatted truck number to maintain consistent format
@@ -3021,19 +3081,67 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   Use this for small stations in Zambia or other unlisted locations. Enter the station name and select which fuel record column(s) should be updated based on truck direction.
                 </p>
 
-                {/* Custom Station Name */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-1">
-                    Station Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={customStationName}
-                    onChange={(e) => setCustomStationName(e.target.value)}
-                    placeholder="e.g., Lake Station Near Kapiri"
-                    required
-                    className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
+                {/* Custom Station Name, Rate and Default Liters */}
+                <div className="mb-4 flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-1">
+                      Station Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={customStationName}
+                      onChange={(e) => setCustomStationName(e.target.value)}
+                      placeholder="e.g., Lake Station Near Kapiri"
+                      required
+                      className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="w-full sm:w-40">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-sm font-medium text-purple-800 dark:text-purple-300">
+                        Rate ({customCurrency})
+                      </label>
+                      <div className="flex rounded overflow-hidden border border-purple-300 dark:border-purple-600 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setCustomCurrency('USD')}
+                          className={`px-2 py-0.5 font-medium transition-colors ${customCurrency === 'USD' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20'}`}
+                        >
+                          USD
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCustomCurrency('TZS')}
+                          className={`px-2 py-0.5 font-medium transition-colors ${customCurrency === 'TZS' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20'}`}
+                        >
+                          TZS
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      value={customRate || ''}
+                      onChange={(e) => setCustomRate(parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                      step="0.01"
+                      min="0"
+                      className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="w-full sm:w-32">
+                    <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-1">
+                      Default Liters
+                    </label>
+                    <input
+                      type="number"
+                      value={customDefaultLiters || ''}
+                      onChange={(e) => setCustomDefaultLiters(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      step="1"
+                      min="0"
+                      className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
 
                 {/* Direction Selection */}
@@ -3174,24 +3282,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     )}
                   </div>
                 </div>
-
-                {/* Summary of custom station config */}
-                {(customGoingEnabled || customReturnEnabled) && customStationName && (
-                  <div className="mt-4 p-3 bg-purple-100 dark:bg-purple-900/30 rounded-md">
-                    <p className="text-sm font-medium text-purple-800 dark:text-purple-300 mb-2">
-                      Configuration Summary:
-                    </p>
-                    <ul className="text-xs text-purple-700 dark:text-purple-400 space-y-1">
-                      <li>📍 Station: <strong>{customStationName}</strong></li>
-                      {customGoingEnabled && customGoingCheckpoint && (
-                        <li>➡️ Going trucks → <strong>{FUEL_RECORD_COLUMNS.going.find(c => c.field === customGoingCheckpoint)?.label}</strong></li>
-                      )}
-                      {customReturnEnabled && customReturnCheckpoint && (
-                        <li>⬅️ Return trucks → <strong>{FUEL_RECORD_COLUMNS.return.find(c => c.field === customReturnCheckpoint)?.label}</strong></li>
-                      )}
-                    </ul>
-                  </div>
-                )}
 
                 {/* Validation warning */}
                 {!customStationName && (
@@ -3769,7 +3859,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 {(() => {
                   const stationUpper = (formData.station || '').toUpperCase();
                   const stationConfig = availableStations.find(s => s.stationName.toUpperCase() === stationUpper);
-                  const currency = stationConfig?.currency ?? 'TZS';
+                  const currency = formData.station === 'CUSTOM' ? customCurrency : (stationConfig?.currency ?? 'TZS');
                   const total = formData.total || 0;
                   return currency === 'USD'
                     ? `$ ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
