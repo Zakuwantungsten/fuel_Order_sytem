@@ -14,6 +14,7 @@ import {
 } from '../services/cancellationService';
 import FuelRecordInspectModal, { calculateMbeyaReturnBalance } from './FuelRecordInspectModal';
 import ForwardLPOModal from './ForwardLPOModal';
+import ConfirmModal from './SuperAdmin/ConfirmModal';
 import { downloadLPOPDF } from '../utils/lpoImageGenerator';
 import { toast } from 'react-toastify';
 
@@ -252,6 +253,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     direction: 'going',
     entryIndex: -1,
   });
+
+  // Direction not supported warning modal
+  const [directionWarningModal, setDirectionWarningModal] = useState<{
+    open: boolean;
+    stationName: string;
+    blockedDirection: 'going' | 'returning';
+  }>({ open: false, stationName: '', blockedDirection: 'going' });
 
   // Multi-select state for bulk editing
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
@@ -1975,6 +1983,27 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const toggleDirection = async (index: number) => {
     const currentDirection = entryAutoFillData[index]?.direction || 'going';
     const newDirection = currentDirection === 'going' ? 'returning' : 'going';
+
+    // Guard: block toggle if the selected station doesn't service the new direction
+    if (formData.station && formData.station !== 'CASH' && formData.station !== 'CUSTOM') {
+      const stationConfig = availableStations.find(
+        s => s.stationName.toUpperCase() === formData.station!.toUpperCase()
+      );
+      if (stationConfig) {
+        const litersForNewDirection = newDirection === 'going'
+          ? stationConfig.defaultLitersGoing
+          : stationConfig.defaultLitersReturning;
+        if (!litersForNewDirection || litersForNewDirection === 0) {
+          setDirectionWarningModal({
+            open: true,
+            stationName: stationConfig.stationName,
+            blockedDirection: newDirection,
+          });
+          return;
+        }
+      }
+    }
+
     const fuelRecord = entryAutoFillData[index]?.fuelRecord;
     const storedGoingDestination = entryAutoFillData[index]?.goingDestination;
 
@@ -4174,6 +4203,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Direction not supported warning modal — stopPropagation prevents bubbling to the form's backdrop onClick */}
+      <div onClick={e => e.stopPropagation()}>
+        <ConfirmModal
+          open={directionWarningModal.open}
+          title="Direction Not Available"
+          message={`Station "${directionWarningModal.stationName}" does not fill ${directionWarningModal.blockedDirection === 'going' ? 'Going' : 'Returning'} direction. Please keep the current direction or choose a different station.`}
+          variant="warning"
+          confirmLabel="Got it"
+          cancelLabel="Dismiss"
+          onConfirm={() => setDirectionWarningModal(prev => ({ ...prev, open: false }))}
+          onCancel={() => setDirectionWarningModal(prev => ({ ...prev, open: false }))}
+        />
       </div>
 
       {/* Fuel Record Inspect Modal */}
