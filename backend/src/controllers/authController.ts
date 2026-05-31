@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { User, DriverCredential, SystemConfig } from '../models';
+import { User, DriverCredential, SystemConfig, IDriverCredential } from '../models';
 import { MFA } from '../models/MFA';
 import UserMFA from '../models/UserMFA';
 import LoginActivity from '../models/LoginActivity';
@@ -161,7 +161,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       const inputTruck = username.toUpperCase().trim();
       
       // Try to find with the exact format entered
-      let driverCredential = await DriverCredential.findOne({
+      let driverCredential: IDriverCredential | null = await DriverCredential.findOne({
         truckNo: inputTruck,
         isActive: true,
       }).select('+pin');

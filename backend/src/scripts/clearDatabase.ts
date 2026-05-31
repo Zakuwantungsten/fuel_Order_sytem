@@ -9,7 +9,6 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 import {
   User,
   DeliveryOrder,
-  LPOEntry,
   LPOSummary,
   LPOWorkbook,
   FuelRecord,
@@ -20,7 +19,6 @@ import {
   AuditLog,
   Notification,
   ArchivedFuelRecord,
-  ArchivedLPOEntry,
   ArchivedLPOSummary,
   ArchivedYardFuelDispense,
   ArchivedAuditLog,
@@ -52,7 +50,6 @@ const clearDatabase = async () => {
     const stats = {
       Users: await User.countDocuments(),
       DeliveryOrders: await DeliveryOrder.countDocuments(),
-      LPOEntries: await LPOEntry.countDocuments(),
       LPOSummaries: await LPOSummary.countDocuments(),
       LPOWorkbooks: await LPOWorkbook.countDocuments(),
       FuelRecords: await FuelRecord.countDocuments(),
@@ -63,7 +60,6 @@ const clearDatabase = async () => {
       AuditLogs: await AuditLog.countDocuments(),
       Notifications: await Notification.countDocuments(),
       ArchivedFuelRecords: await ArchivedFuelRecord.countDocuments(),
-      ArchivedLPOEntries: await ArchivedLPOEntry.countDocuments(),
       ArchivedLPOSummaries: await ArchivedLPOSummary.countDocuments(),
       ArchivedYardFuelDispenses: await ArchivedYardFuelDispense.countDocuments(),
       ArchivedAuditLogs: await ArchivedAuditLog.countDocuments(),
@@ -116,7 +112,6 @@ const clearDatabase = async () => {
     const deletionResults = {
       Users: await User.deleteMany({}),
       DeliveryOrders: await DeliveryOrder.deleteMany({}),
-      LPOEntries: await LPOEntry.deleteMany({}),
       LPOSummaries: await LPOSummary.deleteMany({}),
       LPOWorkbooks: await LPOWorkbook.deleteMany({}),
       FuelRecords: await FuelRecord.deleteMany({}),
@@ -127,7 +122,6 @@ const clearDatabase = async () => {
       AuditLogs: await AuditLog.deleteMany({}),
       Notifications: await Notification.deleteMany({}),
       ArchivedFuelRecords: await ArchivedFuelRecord.deleteMany({}),
-      ArchivedLPOEntries: await ArchivedLPOEntry.deleteMany({}),
       ArchivedLPOSummaries: await ArchivedLPOSummary.deleteMany({}),
       ArchivedYardFuelDispenses: await ArchivedYardFuelDispense.deleteMany({}),
       ArchivedAuditLogs: await ArchivedAuditLog.deleteMany({}),
@@ -148,7 +142,6 @@ const clearDatabase = async () => {
     const remainingRecords = await Promise.all([
       User.countDocuments(),
       DeliveryOrder.countDocuments(),
-      LPOEntry.countDocuments(),
       LPOSummary.countDocuments(),
       LPOWorkbook.countDocuments(),
       FuelRecord.countDocuments(),
@@ -159,7 +152,6 @@ const clearDatabase = async () => {
       AuditLog.countDocuments(),
       Notification.countDocuments(),
       ArchivedFuelRecord.countDocuments(),
-      ArchivedLPOEntry.countDocuments(),
       ArchivedLPOSummary.countDocuments(),
       ArchivedYardFuelDispense.countDocuments(),
       ArchivedAuditLog.countDocuments(),

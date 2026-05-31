@@ -233,7 +233,7 @@ export const exportUnifiedData = async (req: AuthRequest, res: Response): Promis
       endDate,
       format = 'excel',
     } = req.body as {
-      collectionName: 'FuelRecord' | 'LPOEntry' | 'LPOSummary' | 'YardFuelDispense' | 'DeliveryOrder';
+      collectionName: 'FuelRecord' | 'LPOSummary' | 'YardFuelDispense' | 'DeliveryOrder';
       startDate?: string;
       endDate?: string;
       format?: 'excel' | 'csv';
@@ -262,9 +262,6 @@ export const exportUnifiedData = async (req: AuthRequest, res: Response): Promis
       switch (collectionName) {
         case 'FuelRecord':
           headers = ['Date', 'Truck No', 'Going DO', 'Return DO', 'From', 'To', 'Total Lts', 'Extra', 'Balance', 'Status'];
-          break;
-        case 'LPOEntry':
-          headers = ['Date', 'LPO No', 'Truck No', 'Diesel At', 'DO/SDO', 'Liters', 'Rate', 'Amount', 'Status'];
           break;
         case 'LPOSummary':
           headers = ['Date', 'LPO No', 'Station', 'Year', 'Total Liters', 'Total Amount', 'Status'];
@@ -302,19 +299,6 @@ export const exportUnifiedData = async (req: AuthRequest, res: Response): Promis
               record.totalLts,
               record.extra,
               record.balance,
-              record.archivedAt ? 'ARCHIVED' : 'ACTIVE',
-            ];
-            break;
-          case 'LPOEntry':
-            row = [
-              record.date,
-              record.lpoNo,
-              record.truckNo,
-              record.dieselAt,
-              record.doSdo,
-              record.liters,
-              record.rate,
-              record.amount,
               record.archivedAt ? 'ARCHIVED' : 'ACTIVE',
             ];
             break;

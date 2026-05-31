@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { DriverAccountEntry, LPOSummary, LPOEntry } from '../models';
+import { DriverAccountEntry, LPOSummary } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
@@ -33,10 +33,10 @@ async function getNextAvailableLPONumber(): Promise<string> {
     .select('lpoNo')
     .lean();
 
-  // Get the highest LPO number from LPOEntry for current year
-  const lastLpoEntry = await LPOEntry.findOne({ 
+  // Get the highest LPO number from LPOSummary for current year
+  const lastLpoEntry = await LPOSummary.findOne({
     isDeleted: false,
-    year: currentYear 
+    year: currentYear,
   })
     .sort({ lpoNo: -1 })
     .select('lpoNo')

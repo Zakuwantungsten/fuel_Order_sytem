@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import {
   FuelRecord,
-  LPOEntry,
   LPOSummary,
   YardFuelDispense,
   AuditLog,
@@ -9,7 +8,6 @@ import {
 } from '../models';
 import {
   ArchivedFuelRecord,
-  ArchivedLPOEntry,
   ArchivedLPOSummary,
   ArchivedYardFuelDispense,
   ArchivedDeliveryOrder,
@@ -101,7 +99,7 @@ class ArchivalService {
       monthsToKeep = 6,
       auditLogMonthsToKeep = 12,
       dryRun = false,
-      collections = ['FuelRecord', 'LPOEntry', 'LPOSummary', 'YardFuelDispense', 'DeliveryOrder', 'AuditLog'],
+      collections = ['FuelRecord', 'LPOSummary', 'YardFuelDispense', 'DeliveryOrder', 'AuditLog'],
       batchSize = 1000,
     } = options;
 
@@ -143,29 +141,6 @@ class ArchivalService {
           result.totalRecordsArchived += fuelRecordResult.recordsArchived;
         } else {
           logger.info('FuelRecord archival is disabled, skipping');
-        }
-      }
-
-      if (collections.includes('LPOEntry')) {
-        const retentionMonths = await this.getCollectionRetention('LPOEntry', monthsToKeep);
-        if (retentionMonths > 0) {
-          const cutoffDate = new Date(now);
-          cutoffDate.setMonth(now.getMonth() - retentionMonths);
-          logger.info(`LPOEntry cutoff date: ${cutoffDate.toISOString()} (${retentionMonths} months)`);
-          
-          const lpoEntryResult = await this.archiveCollection(
-            'LPOEntry',
-            LPOEntry,
-            ArchivedLPOEntry,
-            cutoffDate,
-            initiatedBy,
-            dryRun,
-            batchSize
-          );
-          result.collectionsArchived['LPOEntry'] = lpoEntryResult;
-          result.totalRecordsArchived += lpoEntryResult.recordsArchived;
-        } else {
-          logger.info('LPOEntry archival is disabled, skipping');
         }
       }
 
@@ -421,10 +396,6 @@ class ArchivalService {
         SourceModel = FuelRecord;
         ArchiveModel = ArchivedFuelRecord;
         break;
-      case 'LPOEntry':
-        SourceModel = LPOEntry;
-        ArchiveModel = ArchivedLPOEntry;
-        break;
       case 'LPOSummary':
         SourceModel = LPOSummary;
         ArchiveModel = ArchivedLPOSummary;
@@ -494,9 +465,6 @@ class ArchivalService {
       case 'FuelRecord':
         ArchiveModel = ArchivedFuelRecord;
         break;
-      case 'LPOEntry':
-        ArchiveModel = ArchivedLPOEntry;
-        break;
       case 'LPOSummary':
         ArchiveModel = ArchivedLPOSummary;
         break;
@@ -538,13 +506,11 @@ class ArchivalService {
   }> {
     const [
       fuelRecordCount,
-      lpoEntryCount,
       lpoSummaryCount,
       yardFuelCount,
       deliveryOrderCount,
       auditLogCount,
       archivedFuelRecordCount,
-      archivedLPOEntryCount,
       archivedLPOSummaryCount,
       archivedYardFuelCount,
       archivedDeliveryOrderCount,
@@ -552,13 +518,11 @@ class ArchivalService {
       lastArchival,
     ] = await Promise.all([
       FuelRecord.countDocuments({ isDeleted: { $ne: true } }),
-      LPOEntry.countDocuments({ isDeleted: { $ne: true } }),
       LPOSummary.countDocuments({ isDeleted: { $ne: true } }),
       YardFuelDispense.countDocuments({ isDeleted: { $ne: true } }),
       DeliveryOrder.countDocuments({ isDeleted: { $ne: true } }),
       AuditLog.countDocuments({}),
       ArchivedFuelRecord.countDocuments({}),
-      ArchivedLPOEntry.countDocuments({}),
       ArchivedLPOSummary.countDocuments({}),
       ArchivedYardFuelDispense.countDocuments({}),
       ArchivedDeliveryOrder.countDocuments({}),
@@ -568,19 +532,16 @@ class ArchivalService {
 
     const totalArchivedRecords =
       archivedFuelRecordCount +
-      archivedLPOEntryCount +
       archivedLPOSummaryCount +
       archivedYardFuelCount +
       archivedDeliveryOrderCount +
       archivedAuditLogCount;
 
-    // Estimate space saved (rough estimate: 2KB per record)
     const estimatedSpaceSavedMB = (totalArchivedRecords * 2) / 1024;
 
     return {
       activeRecords: {
         FuelRecord: fuelRecordCount,
-        LPOEntry: lpoEntryCount,
         LPOSummary: lpoSummaryCount,
         YardFuelDispense: yardFuelCount,
         DeliveryOrder: deliveryOrderCount,
@@ -588,7 +549,6 @@ class ArchivalService {
       },
       archivedRecords: {
         FuelRecord: archivedFuelRecordCount,
-        LPOEntry: archivedLPOEntryCount,
         LPOSummary: archivedLPOSummaryCount,
         YardFuelDispense: archivedYardFuelCount,
         DeliveryOrder: archivedDeliveryOrderCount,
@@ -611,7 +571,6 @@ class ArchivalService {
       
       if (db) {
         await db.command({ compact: 'fuelrecords' });
-        await db.command({ compact: 'lpoentries' });
         await db.command({ compact: 'lposummaries' });
         await db.command({ compact: 'yardfueldispenses' });
         await db.command({ compact: 'auditlogs' });

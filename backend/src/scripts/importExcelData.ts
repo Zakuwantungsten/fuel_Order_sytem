@@ -25,7 +25,7 @@ import mongoose from 'mongoose';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
-import { FuelRecord, DeliveryOrder, LPOEntry } from '../models';
+import { FuelRecord, DeliveryOrder, LPOSummary, LPOWorkbook } from '../models';
 import { config } from '../config';
 import logger from '../utils/logger';
 
@@ -574,42 +574,67 @@ async function importLPOEntries(
 
     const doc = mapToLPOEntry(row);
 
-    if (!doc.lpoNo || doc.ltrs === undefined) {
-      logger.warn(`[LPOEntry] Skipping – missing lpoNo or ltrs | row: ${JSON.stringify(row)}`);
+    if (!doc.lpoNo) {
+      logger.warn(`[LPO] Skipping – missing lpoNo | row: ${JSON.stringify(row)}`);
       result.skipped++;
       continue;
     }
 
-    // Fill required fields
-    if (!doc.truckNo) doc.truckNo = 'UNKNOWN';
-    if (!doc.dieselAt) doc.dieselAt = 'UNKNOWN';
-    if (!doc.doSdo) doc.doSdo = 'UNKNOWN';
-    if (!doc.destinations) doc.destinations = 'UNKNOWN';
-    if (doc.pricePerLtr === undefined) doc.pricePerLtr = 0;
-    if (!doc.date) doc.date = new Date().toISOString().split('T')[0];
+    const ltrs = (doc.ltrs as number) ?? 0;
+    const rate = (doc.pricePerLtr as number) ?? 0;
+    const truckNo = ((doc.truckNo as string) || 'UNKNOWN').trim();
+    const station = ((doc.dieselAt as string) || 'UNKNOWN').trim();
+    const doNo = (doc.doSdo as string) || 'PENDING';
+    const dest = (doc.destinations as string) || 'PENDING';
+    const date = (doc.date as string) || new Date().toISOString().split('T')[0];
+    const docYear = (doc.year as number) || parseInt(date.substring(0, 4), 10);
 
-    const filter = { lpoNo: doc.lpoNo, year: doc.year, truckNo: doc.truckNo };
+    const entryDoc: any = {
+      doNo,
+      truckNo,
+      liters: ltrs,
+      rate,
+      amount: ltrs * rate,
+      dest,
+      isCancelled: false,
+      isDriverAccount: false,
+      isRefer: false,
+    };
 
     try {
       if (dryRun) {
-        const exists = await LPOEntry.exists(filter);
+        const hasEntry = await LPOSummary.exists({ lpoNo: doc.lpoNo, isDeleted: false, 'entries.truckNo': truckNo });
         logger.info(
-          `[DRY RUN][LPOEntry] ${exists ? (force ? 'WOULD UPDATE' : 'WOULD SKIP (exists)') : 'WOULD INSERT'} ` +
-          `→ LPO: ${doc.lpoNo}  Truck: ${doc.truckNo}  Ltrs: ${doc.ltrs}`,
+          `[DRY RUN][LPO] ${hasEntry ? (force ? 'WOULD UPDATE' : 'WOULD SKIP') : 'WOULD INSERT'} ` +
+          `→ LPO: ${doc.lpoNo}  Truck: ${truckNo}  Ltrs: ${ltrs}`,
         );
-        exists ? (force ? result.updated++ : result.skipped++) : result.inserted++;
+        hasEntry ? (force ? result.updated++ : result.skipped++) : result.inserted++;
         continue;
       }
 
-      if (force) {
-        await LPOEntry.findOneAndUpdate(filter, { $set: doc }, { upsert: true });
+      const updateRes = await LPOSummary.updateOne(
+        { lpoNo: doc.lpoNo, isDeleted: false, 'entries.truckNo': truckNo },
+        { $set: { 'entries.$.liters': ltrs, 'entries.$.rate': rate, 'entries.$.amount': ltrs * rate, 'entries.$.dest': dest, 'entries.$.doNo': doNo } }
+      );
+
+      if (updateRes.matchedCount > 0) {
         result.updated++;
       } else {
-        const res = await LPOEntry.updateOne(filter, { $setOnInsert: doc }, { upsert: true });
-        res.upsertedCount ? result.inserted++ : result.skipped++;
+        const existing = await LPOSummary.findOne({ lpoNo: doc.lpoNo, isDeleted: false });
+        if (existing) {
+          (existing.entries as any[]).push(entryDoc);
+          existing.total = (existing.entries as any[]).reduce((s, e) => s + (e.amount || 0), 0);
+          await existing.save();
+          result.inserted++;
+        } else {
+          await LPOSummary.create({ lpoNo: doc.lpoNo, date, year: docYear, station, orderOf: 'TAHMEED', entries: [entryDoc], total: entryDoc.amount, isDeleted: false });
+          const wbExists = await LPOWorkbook.exists({ year: docYear, isDeleted: false });
+          if (!wbExists) await LPOWorkbook.create({ year: docYear, name: `LPOS ${docYear}` });
+          result.inserted++;
+        }
       }
     } catch (err: any) {
-      logger.error(`[LPOEntry] Error – LPO: ${doc.lpoNo}: ${err.message}`);
+      logger.error(`[LPO] Error – LPO: ${doc.lpoNo}: ${err.message}`);
       result.errors++;
     }
   }

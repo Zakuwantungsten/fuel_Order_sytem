@@ -11,7 +11,7 @@
 
 import { Response } from 'express';
 import * as XLSX from 'xlsx';
-import { FuelRecord, DeliveryOrder, LPOEntry, LPOSummary, LPOWorkbook } from '../models';
+import { FuelRecord, DeliveryOrder, LPOSummary, LPOWorkbook } from '../models';
 import { AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 import { AuditService } from '../utils/auditService';
@@ -582,41 +582,97 @@ async function importLPOEntries(
   for (const row of rows) {
     if (isEmptyRow(row)) continue;
     const doc = mapToLPOEntry(row, year, sheetMonth);
-    // Skip only if truly no LPO number — missing ltrs is OK (could be a NIL entry)
     if (!doc.lpoNo) { result.skipped++; continue; }
-    if (doc.ltrs === undefined) doc.ltrs = 0;
-    if (!doc.truckNo) doc.truckNo = 'UNKNOWN';
-    if (!doc.dieselAt) doc.dieselAt = 'UNKNOWN';
-    if (!doc.doSdo) doc.doSdo = 'UNKNOWN';
-    if (!doc.destinations) doc.destinations = 'UNKNOWN';
-    if (doc.pricePerLtr === undefined) doc.pricePerLtr = 0;
-    if (!doc.date) doc.date = new Date().toISOString().split('T')[0];
 
-    // Compute actualDate explicitly — updateOne($set) bypasses Mongoose pre-save hooks,
-    // so we must set it here to match what natively-created records produce.
-    // Imported dates are already ISO "YYYY-MM-DD" at this point.
-    if (typeof doc.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(doc.date)) {
-      doc.actualDate = new Date(doc.date + 'T00:00:00.000Z');
-    }
+    // Defaults
+    const ltrs = (doc.ltrs as number) ?? 0;
+    const rate = (doc.pricePerLtr as number) ?? 0;
+    const truckNo = ((doc.truckNo as string) || 'UNKNOWN').trim();
+    const station = ((doc.dieselAt as string) || 'UNKNOWN').trim();
+    const doNo = (doc.doSdo as string) || 'PENDING';
+    const dest = (doc.destinations as string) || 'PENDING';
+    const date = (doc.date as string) || new Date().toISOString().split('T')[0];
+    const docYear = (doc.year as number) || parseInt(date.substring(0, 4), 10);
+    const currency = (doc.currency as string) || 'TZS';
 
-    // Assign an sn if missing (use max existing + position in batch)
-    if (doc.sn === undefined) doc.sn = 0; // will be renumbered below if needed
-
-    // Each LPO number can have multiple trucks — use {lpoNo + truckNo} as the
-    // unique key so that all rows with the same LPO are stored individually.
-    const filter = { lpoNo: doc.lpoNo, year: doc.year, truckNo: doc.truckNo };
+    const entryDoc: any = {
+      doNo: doNo === 'CANCELLED' ? 'IMPORTED' : doNo,
+      truckNo,
+      liters: ltrs,
+      rate,
+      amount: ltrs * rate,
+      dest,
+      isCancelled: doNo === 'CANCELLED',
+      isDriverAccount: (doc.paymentMode as string) === 'DRIVER_ACCOUNT',
+      isRefer: false,
+    };
 
     try {
       if (dryRun) {
-        const exists = await LPOEntry.exists(filter);
-        exists ? result.updated++ : result.inserted++;
+        const hasEntry = await LPOSummary.exists({
+          lpoNo: doc.lpoNo,
+          isDeleted: false,
+          'entries.truckNo': truckNo,
+        });
+        hasEntry ? result.updated++ : result.inserted++;
         continue;
       }
-      // Always upsert — insert new, overwrite existing
-      const res = await LPOEntry.updateOne(filter, { $set: doc }, { upsert: true });
-      res.upsertedCount ? result.inserted++ : result.updated++;
+
+      // Try updating an existing entry for this truck within the LPO
+      const updateRes = await LPOSummary.updateOne(
+        { lpoNo: doc.lpoNo, isDeleted: false, 'entries.truckNo': truckNo },
+        {
+          $set: {
+            'entries.$.liters': ltrs,
+            'entries.$.rate': rate,
+            'entries.$.amount': ltrs * rate,
+            'entries.$.dest': dest,
+            'entries.$.doNo': entryDoc.doNo,
+            'entries.$.isCancelled': entryDoc.isCancelled,
+            'entries.$.isDriverAccount': entryDoc.isDriverAccount,
+          },
+        }
+      );
+
+      if (updateRes.matchedCount > 0) {
+        // Recalculate total on the parent LPO
+        const lpo = await LPOSummary.findOne({ lpoNo: doc.lpoNo, isDeleted: false });
+        if (lpo) {
+          lpo.total = (lpo.entries as any[]).reduce((s, e) => s + (e.amount || 0), 0);
+          await lpo.save();
+        }
+        result.updated++;
+      } else {
+        const existingLpo = await LPOSummary.findOne({ lpoNo: doc.lpoNo, isDeleted: false });
+        if (existingLpo) {
+          // LPO exists but truckNo entry is new — push it
+          (existingLpo.entries as any[]).push(entryDoc);
+          existingLpo.total = (existingLpo.entries as any[]).reduce((s, e) => s + (e.amount || 0), 0);
+          await existingLpo.save();
+          result.inserted++;
+        } else {
+          // Brand new LPO — create the summary document
+          await LPOSummary.create({
+            lpoNo: doc.lpoNo,
+            date,
+            year: docYear,
+            station,
+            orderOf: 'TAHMEED',
+            entries: [entryDoc],
+            total: entryDoc.amount,
+            currency,
+            isDeleted: false,
+          });
+          // Ensure the year workbook exists
+          const wbExists = await LPOWorkbook.exists({ year: docYear, isDeleted: false });
+          if (!wbExists) {
+            await LPOWorkbook.create({ year: docYear, name: `LPOS ${docYear}` });
+          }
+          result.inserted++;
+        }
+      }
     } catch (err: unknown) {
-      logger.error(`[ImportCtrl][LPOEntry] ${(err as Error).message}`);
+      logger.error(`[ImportCtrl][LPOSummary] lpoNo=${doc.lpoNo} truck=${truckNo}: ${(err as Error).message}`);
       result.errors++;
     }
   }
@@ -624,131 +680,12 @@ async function importLPOEntries(
 }
 
 /**
- * After importing LPOEntry rows, reconstruct missing LPOSummary documents so that
- * the workbook view is populated exactly as if the LPOs had been created through the UI.
- *
- * Groups all LPOEntry records that lack a corresponding LPOSummary by lpoNo,
- * creates a synthetic LPOSummary + ensures the year workbook exists.
- */
-async function backfillLPOSummaries(dryRun: boolean): Promise<{ created: number; skipped: number }> {
-  let created = 0, skipped = 0;
-  try {
-    // Find lpoNo values in LPOEntry that have no matching LPOSummary
-    const existingSummaryNos = await LPOSummary.distinct('lpoNo', { isDeleted: false });
-    const orphanedEntries = await LPOEntry.find({
-      isDeleted: false,
-      lpoNo: { $nin: existingSummaryNos },
-    }).lean();
-
-    if (orphanedEntries.length === 0) return { created, skipped };
-
-    // Group by lpoNo
-    const byLpo: Record<string, typeof orphanedEntries> = {};
-    for (const e of orphanedEntries) {
-      if (!byLpo[e.lpoNo]) byLpo[e.lpoNo] = [];
-      byLpo[e.lpoNo].push(e);
-    }
-
-    for (const [lpoNo, entries] of Object.entries(byLpo)) {
-      const first = entries[0];
-      // Derive summary date: prefer actualDate, fall back to the ISO date string
-      const rawDate = (first.actualDate as Date | undefined)
-        ? (first.actualDate as Date).toISOString().split('T')[0]
-        : (typeof first.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(first.date)
-            ? first.date
-            : new Date().toISOString().split('T')[0]);
-
-      const summaryYear = parseInt(rawDate.split('-')[0]);
-      const station = first.dieselAt || 'UNKNOWN';
-
-      const summaryEntries = entries.map(e => ({
-        doNo:          e.doSdo   || 'IMPORTED',
-        truckNo:       e.truckNo,
-        liters:        e.ltrs    ?? 0,
-        rate:          e.pricePerLtr ?? 0,
-        amount:        (e.ltrs ?? 0) * (e.pricePerLtr ?? 0),
-        dest:          e.destinations || 'IMPORTED',
-        isCancelled:   false,
-        isDriverAccount: e.isDriverAccount ?? false,
-      }));
-
-      const total = summaryEntries.reduce((s, e) => s + e.amount, 0);
-
-      if (dryRun) { skipped++; continue; }
-
-      try {
-        // Upsert the LPOSummary (idempotent — safe to re-run)
-        await LPOSummary.updateOne(
-          { lpoNo },
-          {
-            $setOnInsert: {
-              lpoNo,
-              date:     rawDate,
-              year:     summaryYear,
-              station,
-              orderOf:  'TAHMEED',
-              entries:  summaryEntries,
-              total,
-              currency: (first as any).currency || 'TZS',
-              isDeleted: false,
-            },
-          },
-          { upsert: true },
-        );
-
-        // Ensure the workbook for this year exists
-        const wbExists = await LPOWorkbook.exists({ year: summaryYear, isDeleted: false });
-        if (!wbExists) {
-          await LPOWorkbook.create({ year: summaryYear, name: `LPOS ${summaryYear}` });
-          logger.info(`[ImportCtrl] Created workbook for year ${summaryYear}`);
-        }
-
-        created++;
-      } catch (err: unknown) {
-        logger.error(`[ImportCtrl][backfillLPOSummaries] lpoNo=${lpoNo}: ${(err as Error).message}`);
-        skipped++;
-      }
-    }
-  } catch (err: unknown) {
-    logger.error(`[ImportCtrl][backfillLPOSummaries] ${(err as Error).message}`);
-  }
-  return { created, skipped };
-}
-
-/**
  * POST /api/import/migrate-lpo-data
- *
- * One-time migration for imported LPOEntry records that were created before
- * the inline actualDate + backfillLPOSummaries fixes were applied.
- *
- * Steps:
- *  1. Find all LPOEntry records with an ISO date string but no `actualDate`
- *  2. Set `actualDate` = parsed date for each
- *  3. Run `backfillLPOSummaries` to create LPOSummary / LPOWorkbook docs
+ * Repairs LPOSummary docs where the stored `year` doesn't match their ISO `date`,
+ * and ensures LPOWorkbook documents exist for every year present.
  */
 export const migrateLPOData = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // Step 1: Patch missing actualDate on LPOEntry records
-    const entriesWithISODate = await LPOEntry.find({
-      isDeleted: false,
-      date: /^\d{4}-\d{2}-\d{2}/,
-      $or: [{ actualDate: { $exists: false } }, { actualDate: null }],
-    }).lean();
-
-    let patchedDates = 0;
-    for (const entry of entriesWithISODate) {
-      const d = new Date((entry.date as string) + 'T00:00:00.000Z');
-      if (!isNaN(d.getTime())) {
-        await LPOEntry.updateOne({ _id: entry._id }, { $set: { actualDate: d } });
-        patchedDates++;
-      }
-    }
-
-    logger.info(`[migrateLPOData] Patched actualDate on ${patchedDates} LPOEntry records`);
-
-    // Step 2: Repair LPOSummary docs where the stored `year` doesn't match their ISO `date`.
-    // This handles the case where summaries were created with year = createdAt year (e.g. 2026)
-    // even though the actual business date is in a different year (e.g. 2025).
     const wrongYearSummaries = await LPOSummary.find({
       isDeleted: false,
       date: /^\d{4}-\d{2}-\d{2}/,
@@ -765,7 +702,6 @@ export const migrateLPOData = async (req: AuthRequest, res: Response): Promise<v
 
     if (repairedYears > 0) {
       logger.info(`[migrateLPOData] Repaired year on ${repairedYears} LPOSummary docs`);
-      // Ensure workbooks exist for every year that was repaired
       const uniqueYears = [...new Set(
         wrongYearSummaries
           .map(s => parseInt((s.date as string).split('-')[0], 10))
@@ -780,20 +716,10 @@ export const migrateLPOData = async (req: AuthRequest, res: Response): Promise<v
       }
     }
 
-    // Step 3: Backfill LPOSummary / LPOWorkbook for orphaned entries
-    const backfill = await backfillLPOSummaries(false);
-
-    logger.info(
-      `[migrateLPOData] backfill: created=${backfill.created} skipped=${backfill.skipped}`,
-    );
-
     res.json({
       success: true,
       message: 'Migration complete',
-      patchedActualDates: patchedDates,
       repairedLPOSummaryYears: repairedYears,
-      lpoSummariesCreated: backfill.created,
-      lpoSummariesSkipped: backfill.skipped,
     });
   } catch (err: unknown) {
     logger.error('[migrateLPOData] Error:', err);
@@ -967,18 +893,6 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
       );
     }
 
-    // After every real import, backfill any LPOEntry records that have no matching
-    // LPOSummary document. This makes imported data appear in the workbook view
-    // exactly as if the LPOs had been created through the UI.
-    const lpoSheetsImported = sheetResults.some(s => s.type === 'lpoEntry' && !dryRun);
-    const backfill = lpoSheetsImported
-      ? await backfillLPOSummaries(false)
-      : { created: 0, skipped: 0 };
-
-    if (backfill.created > 0) {
-      logger.info(`[ImportCtrl] Backfilled ${backfill.created} LPOSummary documents from imported entries`);
-    }
-
     res.json({
       success: true,
       dryRun,
@@ -989,7 +903,7 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
         totalSkipped,
         totalErrors,
         sheetsProcessed: sheetsToProcess.length,
-        lpoSummariesCreated: backfill.created,
+        lpoSummariesCreated: 0, // LPOs now written directly to LPOSummary during import
       },
       sheets: sheetResults,
     });

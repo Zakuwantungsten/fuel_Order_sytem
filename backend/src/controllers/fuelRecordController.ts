@@ -879,7 +879,6 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
 
     // Import models we need
     const DeliveryOrder = require('../models').DeliveryOrder;
-    const LPOEntry = require('../models').LPOEntry;
     const YardFuelDispense = require('../models').YardFuelDispense;
     const DriverAccountEntry = require('../models').DriverAccountEntry;
     const LPOSummary = require('../models').LPOSummary;
@@ -904,19 +903,33 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     // A journey has a goingDo (IMPORT) and optionally a returnDo (EXPORT)
     // LPOs are linked to the journey via the doSdo field matching either DO number
     
-    const lpoQueryConditions: any[] = [
-      { doSdo: fuelRecord.goingDo, truckNo: fuelRecord.truckNo }
+    const doConditions: any[] = [
+      { 'entries.doNo': fuelRecord.goingDo, 'entries.truckNo': fuelRecord.truckNo },
     ];
-    
-    // Add returnDo condition if it exists - this covers LPOs created during the return journey
     if (fuelRecord.returnDo && fuelRecord.returnDo.trim() !== '') {
-      lpoQueryConditions.push({ doSdo: fuelRecord.returnDo, truckNo: fuelRecord.truckNo });
+      doConditions.push({ 'entries.doNo': fuelRecord.returnDo, 'entries.truckNo': fuelRecord.truckNo });
     }
-    
-    const lpoEntries = await LPOEntry.find({
-      $or: lpoQueryConditions,
-      isDeleted: false,
-    }).sort({ date: 1 }).lean();
+
+    const lpoEntries = await LPOSummary.aggregate([
+      { $match: { isDeleted: false, $or: doConditions } },
+      { $unwind: '$entries' },
+      { $match: { $or: doConditions } },
+      {
+        $project: {
+          _id: '$entries._id',
+          lpoNo: 1,
+          date: 1,
+          dieselAt: '$station',
+          doSdo: { $ifNull: ['$entries.doNo', 'PENDING'] },
+          truckNo: '$entries.truckNo',
+          ltrs: '$entries.liters',
+          pricePerLtr: '$entries.rate',
+          destinations: { $ifNull: ['$entries.dest', 'PENDING'] },
+          isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
+        },
+      },
+      { $sort: { date: 1 } },
+    ]);
 
     // Calculate journey date range for CASH/NIL DO entries
     // Journey starts from fuel record date and ends when balance reaches 0 or the last LPO date
@@ -940,21 +953,47 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     // 1. A station is out of fuel and driver gets fuel from another station via cash
     // 2. Driver gets extra fuel due to circumstances (theft, etc.)
     // These entries have doSdo = 'NIL' and destinations = 'NIL'
-    const cashLpoEntries = await LPOEntry.find({
-      truckNo: fuelRecord.truckNo,
-      $or: [
-        { doSdo: 'NIL' },
-        { doSdo: 'nil' },
-        { doSdo: '' },
-        { destinations: 'NIL' },
-        { destinations: 'nil' }
-      ],
-      date: { 
-        $gte: journeyStartDate.toISOString().split('T')[0],
-        $lte: journeyEndDate.toISOString().split('T')[0]
+    const journeyFromStr = journeyStartDate.toISOString().split('T')[0];
+    const journeyToStr   = journeyEndDate.toISOString().split('T')[0];
+
+    const cashLpoEntries = await LPOSummary.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          date: { $gte: journeyFromStr, $lte: journeyToStr },
+          'entries.truckNo': fuelRecord.truckNo,
+          $or: [
+            { 'entries.doNo': { $in: ['NIL', 'nil', ''] } },
+            { 'entries.dest': { $in: ['NIL', 'nil'] } },
+          ],
+        },
       },
-      isDeleted: false,
-    }).sort({ date: 1 }).lean();
+      { $unwind: '$entries' },
+      {
+        $match: {
+          'entries.truckNo': fuelRecord.truckNo,
+          $or: [
+            { 'entries.doNo': { $in: ['NIL', 'nil', ''] } },
+            { 'entries.dest': { $in: ['NIL', 'nil'] } },
+          ],
+        },
+      },
+      {
+        $project: {
+          _id: '$entries._id',
+          lpoNo: 1,
+          date: 1,
+          dieselAt: '$station',
+          doSdo: { $ifNull: ['$entries.doNo', 'NIL'] },
+          truckNo: '$entries.truckNo',
+          ltrs: '$entries.liters',
+          pricePerLtr: '$entries.rate',
+          destinations: { $ifNull: ['$entries.dest', 'NIL'] },
+          isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
+        },
+      },
+      { $sort: { date: 1 } },
+    ]);
 
     // Also fetch Driver Account LPO entries from LPO Summary
     // These are created when driver account entries are added

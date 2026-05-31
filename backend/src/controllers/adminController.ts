@@ -1,6 +1,6 @@
  import { Response } from 'express';
 import ExcelJS from 'exceljs';
-import { SystemConfig, User, DeliveryOrder, LPOEntry, FuelRecord, YardFuelDispense, AuditLog } from '../models';
+import { SystemConfig, User, DeliveryOrder, LPOSummary, FuelRecord, YardFuelDispense, AuditLog } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils';
@@ -98,7 +98,11 @@ export const getAdminStats = async (req: AuthRequest, res: Response): Promise<vo
       User.countDocuments({ isDeleted: false }),
       User.countDocuments({ isDeleted: false, isActive: true }),
       DeliveryOrder.countDocuments({ isDeleted: false }),
-      LPOEntry.countDocuments({ isDeleted: false }),
+      LPOSummary.aggregate([
+        { $match: { isDeleted: false } },
+        { $project: { c: { $size: '$entries' } } },
+        { $group: { _id: null, total: { $sum: '$c' } } },
+      ]).then((r: any[]) => r[0]?.total ?? 0),
       FuelRecord.countDocuments({ isDeleted: false }),
       YardFuelDispense.countDocuments({ isDeleted: false }),
       User.find({ isDeleted: false })
@@ -1669,19 +1673,15 @@ export const getSystemStats = async (req: AuthRequest, res: Response): Promise<v
           },
         },
       ]),
-      // LPO stats
-      LPOEntry.aggregate([
+      // LPO stats — aggregated from LPOSummary.entries
+      LPOSummary.aggregate([
         {
           $facet: {
-            total: [{ $match: { isDeleted: false } }, { $count: 'count' }],
-            deleted: [{ $match: { isDeleted: true } }, { $count: 'count' }],
-            today: [
-              {
-                $match: {
-                  isDeleted: false,
-                  createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-                },
-              },
+            total:   [{ $match: { isDeleted: false } }, { $unwind: '$entries' }, { $count: 'count' }],
+            deleted: [{ $match: { isDeleted: true } },  { $unwind: '$entries' }, { $count: 'count' }],
+            today:   [
+              { $match: { isDeleted: false, createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } } },
+              { $unwind: '$entries' },
               { $count: 'count' },
             ],
           },
@@ -2737,11 +2737,11 @@ export const getOverviewStats = async (req: AuthRequest, res: Response): Promise
         },
       }]),
 
-      // ── LPO facet
-      LPOEntry.aggregate([{
+      // ── LPO facet — aggregated from LPOSummary.entries
+      LPOSummary.aggregate([{
         $facet: {
-          total: [{ $match: { isDeleted: false } },                                         { $count: 'count' }],
-          today: [{ $match: { isDeleted: false, createdAt: { $gte: today } } },             { $count: 'count' }],
+          total: [{ $match: { isDeleted: false } },                                         { $unwind: '$entries' }, { $count: 'count' }],
+          today: [{ $match: { isDeleted: false, createdAt: { $gte: today } } },             { $unwind: '$entries' }, { $count: 'count' }],
         },
       }]),
 
@@ -2794,9 +2794,10 @@ export const getOverviewStats = async (req: AuthRequest, res: Response): Promise
       YardFuelDispense.countDocuments({ isDeleted: false, status: 'pending' }),
 
       // ── Current 30-day LPO revenue
-      LPOEntry.aggregate([
+      LPOSummary.aggregate([
         { $match: { isDeleted: false, createdAt: { $gte: thirtyDaysAgo } } },
-        { $group: { _id: null, total: { $sum: { $multiply: ['$ltrs', '$pricePerLtr'] } } } },
+        { $unwind: '$entries' },
+        { $group: { _id: null, total: { $sum: { $multiply: ['$entries.liters', '$entries.rate'] } } } },
       ]),
 
       // ── Current 30-day fuel liters dispensed
@@ -2806,9 +2807,10 @@ export const getOverviewStats = async (req: AuthRequest, res: Response): Promise
       ]),
 
       // ── Previous 30-day LPO revenue (for period-over-period trend)
-      LPOEntry.aggregate([
+      LPOSummary.aggregate([
         { $match: { isDeleted: false, createdAt: { $gte: sixtyDaysAgo, $lt: thirtyDaysAgo } } },
-        { $group: { _id: null, total: { $sum: { $multiply: ['$ltrs', '$pricePerLtr'] } } } },
+        { $unwind: '$entries' },
+        { $group: { _id: null, total: { $sum: { $multiply: ['$entries.liters', '$entries.rate'] } } } },
       ]),
 
       // ── Previous 30-day fuel liters

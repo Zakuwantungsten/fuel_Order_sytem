@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import mongoose, { ClientSession } from 'mongoose';
 import { matchedData } from 'express-validator';
-import { DeliveryOrder, FuelRecord, LPOEntry } from '../models';
+import { DeliveryOrder, FuelRecord, LPOSummary } from '../models';
 import { RouteConfig } from '../models/RouteConfig';
 import { ArchivedDeliveryOrder } from '../models/ArchivedData';
 import { ApiError } from '../middleware/errorHandler';
@@ -544,30 +544,31 @@ const cascadeToLPOEntries = async (
   const opts = session ? { session } : {};
   try {
     if (action === 'cancel') {
-      // Mark LPO entries as cancelled (NOT isDeleted — cancelled entries should remain queryable)
-      const result = await LPOEntry.updateMany(
-        { doSdo: doNumber, isDeleted: false, isCancelled: { $ne: true } },
-        { 
-          isCancelled: true, 
-          cancelledAt: new Date() 
+      // Mark matching entries as cancelled inside LPOSummary documents
+      const result = await LPOSummary.updateMany(
+        { isDeleted: false, 'entries.doNo': doNumber, 'entries.isCancelled': { $ne: true } },
+        {
+          $set: {
+            'entries.$[e].isCancelled': true,
+            'entries.$[e].cancelledAt': new Date(),
+          },
         },
-        opts
+        { arrayFilters: [{ 'e.doNo': doNumber, 'e.isCancelled': { $ne: true } }], ...opts }
       );
-      logger.info(`Cancelled ${result.modifiedCount} LPO entries for DO ${doNumber}`);
+      logger.info(`Cancelled LPO entries for DO ${doNumber} in ${result.modifiedCount} LPO document(s)`);
       return { count: result.modifiedCount };
     } else if (action === 'update' && updates) {
-      // Update LPO entries with new values
-      const updateFields: any = {};
-      if (updates.truckNo) updateFields.truckNo = updates.truckNo;
-      if (updates.destination) updateFields.destinations = updates.destination;
-      
-      if (Object.keys(updateFields).length > 0) {
-        const result = await LPOEntry.updateMany(
-          { doSdo: doNumber, isDeleted: false },
-          updateFields,
-          opts
+      const setFields: any = {};
+      if (updates.truckNo) setFields['entries.$[e].truckNo'] = updates.truckNo;
+      if (updates.destination) setFields['entries.$[e].dest'] = updates.destination;
+
+      if (Object.keys(setFields).length > 0) {
+        const result = await LPOSummary.updateMany(
+          { isDeleted: false, 'entries.doNo': doNumber },
+          { $set: setFields },
+          { arrayFilters: [{ 'e.doNo': doNumber }], ...opts }
         );
-        logger.info(`Updated ${result.modifiedCount} LPO entries for DO ${doNumber}`);
+        logger.info(`Updated LPO entries for DO ${doNumber} in ${result.modifiedCount} LPO document(s)`);
         return { count: result.modifiedCount };
       }
     }
@@ -1214,11 +1215,16 @@ export const deleteDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           }
         }
 
-        // Cascade: soft-delete related LPO entries
-        await LPOEntry.updateMany(
-          { doSdo: originalDO.doNumber, isDeleted: false },
-          { $set: { isDeleted: true, deletedAt: new Date() } },
-          { session }
+        // Cascade: mark related LPO entries as cancelled within LPOSummary docs
+        await LPOSummary.updateMany(
+          { isDeleted: false, 'entries.doNo': originalDO.doNumber },
+          {
+            $set: {
+              'entries.$[e].isCancelled': true,
+              'entries.$[e].cancelledAt': new Date(),
+            },
+          },
+          { arrayFilters: [{ 'e.doNo': originalDO.doNumber }], session }
         );
       });
     } finally {

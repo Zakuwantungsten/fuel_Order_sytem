@@ -1,145 +1,210 @@
 import { Response } from 'express';
-import { matchedData } from 'express-validator';
-import { LPOEntry, Counter } from '../models';
+import mongoose from 'mongoose';
+import { LPOSummary, Counter } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
+import { getPaginationParams, calculateSkip, createPaginatedResponse, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
-import { filterLPOEntryFields } from '../utils/roleFieldPolicy';
-import { enforceEditLock } from './editLockController';
+
+const LOCK_TTL_MS = 5 * 60 * 1000;
+
+// ─── Field mapping helpers ────────────────────────────────────────────────────
+
+/** Format YYYY-MM-DD → "D-MMM" (e.g. "1-May") */
+function formatDateShort(dateStr: string): string {
+  try {
+    const d = new Date(dateStr + 'T00:00:00.000Z');
+    const day = d.getUTCDate();
+    const month = d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+    return `${day}-${month}`;
+  } catch {
+    return dateStr;
+  }
+}
 
 /**
- * Get all LPO entries with pagination and filters
+ * Aggregation stages that derive the flat LPOEntry-shaped fields from
+ * LPOSummary embedded entries.  Call after $unwind: '$entries'.
+ */
+const DERIVE_STAGE = {
+  $addFields: {
+    doSdoDisplay: {
+      $cond: {
+        if: { $eq: ['$entries.isCancelled', true] },
+        then: 'CANCELLED',
+        else: {
+          $cond: {
+            if: { $eq: ['$entries.isRefer', true] },
+            then: 'REF',
+            else: {
+              $cond: {
+                if: { $eq: ['$entries.isDriverAccount', true] },
+                then: 'DA(NIL)',
+                else: { $ifNull: ['$entries.doNo', 'PENDING'] },
+              },
+            },
+          },
+        },
+      },
+    },
+    destinationsDisplay: {
+      $cond: {
+        if: { $eq: ['$entries.isCancelled', true] },
+        then: 'CANCELLED',
+        else: { $ifNull: ['$entries.dest', 'PENDING'] },
+      },
+    },
+    paymentModeValue: {
+      $switch: {
+        branches: [
+          { case: { $eq: ['$entries.isRefer', true] }, then: 'REFER' },
+          { case: { $eq: ['$entries.isDriverAccount', true] }, then: 'DRIVER_ACCOUNT' },
+          {
+            case: {
+              $or: [
+                { $eq: ['$station', 'CASH'] },
+                { $gt: [{ $strLenCP: { $ifNull: ['$entries.cancellationPoint', ''] } }, 0] },
+                { $gt: [{ $strLenCP: { $ifNull: ['$entries.goingCheckpoint', ''] } }, 0] },
+              ],
+            },
+            then: 'CASH',
+          },
+        ],
+        default: 'STATION',
+      },
+    },
+  },
+};
+
+/** $project that maps LPOSummary fields to the LPOEntry response shape */
+const ENTRY_PROJECTION = {
+  _id: 0,
+  id: '$entries._id',
+  lpoId: '$_id',
+  lpoNo: 1,
+  date: 1,
+  dieselAt: '$station',
+  doSdo: '$doSdoDisplay',
+  truckNo: '$entries.truckNo',
+  ltrs: '$entries.liters',
+  pricePerLtr: '$entries.rate',
+  destinations: '$destinationsDisplay',
+  currency: 1,
+  isCancelled: { $ifNull: ['$entries.isCancelled', false] },
+  cancelledAt: '$entries.cancelledAt',
+  isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
+  isRefer: { $ifNull: ['$entries.isRefer', false] },
+  paymentMode: '$paymentModeValue',
+  originalLtrs: '$entries.originalLiters',
+  amendedAt: '$entries.amendedAt',
+  referenceDo: { $ifNull: ['$entries.referenceDoNo', '$entries.referenceDo'] },
+  createdAt: 1,
+  updatedAt: 1,
+};
+
+// ─── Controllers ──────────────────────────────────────────────────────────────
+
+/**
+ * GET /lpo-entries
+ * Aggregates LPOSummary.entries into the flat LPOEntry-shaped list.
  */
 export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { page, limit, sort, order } = getPaginationParams(req.query);
+    const { page, limit } = getPaginationParams(req.query);
     const { dateFrom, dateTo, lpoNo, truckNo, station, search, status, isRefer, isDriverAccount } = req.query;
 
-    // Build filter
-    const filter: any = { isDeleted: false };
+    // ── Document-level (pre-unwind) match ─────────────────────────────────
+    const docMatch: any = { isDeleted: false };
 
-    // Status filter: 'active' = non-cancelled, 'cancelled' = cancelled only, default = all
-    if (status === 'active') {
-      filter.$or = [{ isCancelled: false }, { isCancelled: { $exists: false } }];
-    } else if (status === 'cancelled') {
-      filter.isCancelled = true;
+    if (lpoNo && !search) {
+      const s = sanitizeRegexInput(lpoNo as string);
+      if (s) docMatch.lpoNo = { $regex: `^${s}`, $options: 'i' };
     }
-
-    // Filter by entry type (refer or driver account tabs)
-    if (isRefer === 'true') {
-      filter.isRefer = true;
+    if (station && !search) {
+      const s = sanitizeRegexInput(station as string);
+      if (s) docMatch.station = { $regex: `^${s}`, $options: 'i' };
     }
-    if (isDriverAccount === 'true') {
-      filter.isDriverAccount = true;
-    }
-
-    // Restrict drivers to their own truck's records (least-privilege)
-    if (req.user?.role === 'driver') {
-      filter.truckNo = req.user.username;
-    }
-
-    // Use actualDate for date filtering (actual LPO date) instead of createdAt
-    // Falls back to createdAt for legacy records that don't have actualDate
+    // LPOSummary.date is YYYY-MM-DD — string comparison works correctly
     if (dateFrom || dateTo) {
-      // Try to filter by actualDate first, fallback to createdAt for old records
-      const dateFilter: any = {};
+      docMatch.date = {};
       if (dateFrom) {
-        const fromDate = new Date(dateFrom as string);
-        fromDate.setHours(0, 0, 0, 0);
-        dateFilter.$gte = fromDate;
+        // dateFrom comes as full ISO string or date string — take just the date part
+        docMatch.date.$gte = (dateFrom as string).substring(0, 10);
       }
       if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
-        dateFilter.$lte = toDate;
-      }
-      
-      // Filter by actualDate, or fallback to createdAt for legacy records
-      filter.$and = [
-        {
-          $or: [
-            { actualDate: dateFilter },
-            { actualDate: { $exists: false }, createdAt: dateFilter }
-          ]
-        }
-      ];
-    }
-
-    // Unified search parameter - searches across multiple fields
-    // Use ^ anchor to match from beginning of string for more precise results
-    if (search) {
-      const sanitized = sanitizeRegexInput(search as string);
-      logger.info('LPO Search - Original:', { search });
-      logger.info('LPO Search - Sanitized:', { sanitized });
-      logger.info('LPO Search - Final Pattern:', { pattern: `^${sanitized}` });
-      
-      if (sanitized) {
-        // Pattern explanation: ^T158 matches strings starting with exactly "T158"
-        // The pattern must match the complete search term as prefix, not partial matches
-        const searchOr = {
-          $or: [
-            { lpoNo: { $regex: `^${sanitized}`, $options: 'i' } },
-            { truckNo: { $regex: `^${sanitized}`, $options: 'i' } },
-            { dieselAt: { $regex: `^${sanitized}`, $options: 'i' } },
-            { doSdo: { $regex: `^${sanitized}`, $options: 'i' } }
-          ]
-        };
-        
-        // Combine with date filter if it exists
-        if (filter.$and) {
-          filter.$and.push(searchOr);
-        } else {
-          filter.$and = [searchOr];
-        }
-      }
-    } else {
-      // Individual field filters (backward compatibility)
-      if (lpoNo) {
-        const sanitized = sanitizeRegexInput(lpoNo as string);
-        if (sanitized) {
-          filter.lpoNo = { $regex: `^${sanitized}`, $options: 'i' };
-        }
-      }
-
-      if (truckNo) {
-        const sanitized = sanitizeRegexInput(truckNo as string);
-        if (sanitized) {
-          filter.truckNo = { $regex: `^${sanitized}`, $options: 'i' };
-        }
-      }
-
-      if (station) {
-        const sanitized = sanitizeRegexInput(station as string);
-        if (sanitized) {
-          filter.dieselAt = { $regex: `^${sanitized}`, $options: 'i' };
-        }
+        docMatch.date.$lte = (dateTo as string).substring(0, 10);
       }
     }
 
-    // Log filter for debugging
-    logger.info('LPO Entry search filter:', { filter: JSON.stringify(filter), dateFrom, dateTo, search });
+    // ── Entry-level (post-unwind) match ───────────────────────────────────
+    const entryMatch: any = {};
 
-    // Get data with pagination
+    if (status === 'active') {
+      entryMatch.$or = [{ 'entries.isCancelled': false }, { 'entries.isCancelled': { $exists: false } }];
+    } else if (status === 'cancelled') {
+      entryMatch['entries.isCancelled'] = true;
+    }
+    if (isRefer === 'true') entryMatch['entries.isRefer'] = true;
+    if (isDriverAccount === 'true') entryMatch['entries.isDriverAccount'] = true;
+    if (req.user?.role === 'driver') entryMatch['entries.truckNo'] = req.user.username;
+
+    if (truckNo && !search) {
+      const s = sanitizeRegexInput(truckNo as string);
+      if (s) entryMatch['entries.truckNo'] = { $regex: `^${s}`, $options: 'i' };
+    }
+
     const skip = calculateSkip(page, limit);
-    const sortOrder = order === 'asc' ? 1 : -1;
 
-    const [lpoEntries, total] = await Promise.all([
-      LPOEntry.find(filter)
-        .sort({ [sort]: sortOrder })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      LPOEntry.countDocuments(filter),
-    ]);
+    // ── Aggregation pipeline ───────────────────────────────────────────────
+    const pipeline: any[] = [
+      { $match: docMatch },
+      { $unwind: { path: '$entries', includeArrayIndex: 'entryIdx' } },
+    ];
 
-    const response = createPaginatedResponse(lpoEntries, page, limit, total);
+    if (Object.keys(entryMatch).length > 0) {
+      pipeline.push({ $match: entryMatch });
+    }
+
+    pipeline.push(DERIVE_STAGE);
+
+    // Search across multiple fields (post-derive so doSdoDisplay is available)
+    if (search) {
+      const s = sanitizeRegexInput(search as string);
+      if (s) {
+        pipeline.push({
+          $match: {
+            $or: [
+              { lpoNo: { $regex: `^${s}`, $options: 'i' } },
+              { 'entries.truckNo': { $regex: `^${s}`, $options: 'i' } },
+              { station: { $regex: `^${s}`, $options: 'i' } },
+              { doSdoDisplay: { $regex: `^${s}`, $options: 'i' } },
+            ],
+          },
+        });
+      }
+    }
+
+    pipeline.push({ $sort: { date: -1, lpoNo: -1, entryIdx: 1 } });
+
+    pipeline.push({
+      $facet: {
+        data: [{ $skip: skip }, { $limit: limit }, { $project: ENTRY_PROJECTION }],
+        total: [{ $count: 'count' }],
+      },
+    });
+
+    const [result] = await LPOSummary.aggregate(pipeline);
+    const rawData: any[] = result?.data ?? [];
+    const total: number = result?.total?.[0]?.count ?? 0;
+
+    // Inject sn as page-relative row number
+    const data = rawData.map((entry, idx) => ({ sn: skip + idx + 1, ...entry }));
 
     res.status(200).json({
       success: true,
       message: 'LPO entries retrieved successfully',
-      data: response,
+      data: createPaginatedResponse(data, page, limit, total),
     });
   } catch (error: any) {
     throw error;
@@ -147,109 +212,64 @@ export const getAllLPOEntries = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
- * Get distinct year-month periods and stations that have LPO data.
- * Lightweight query used by the frontend period/station pickers.
+ * GET /lpo-entries/available-filters
+ * Returns distinct year-month periods and stations from LPOSummary.
  */
 export const getAvailableFilters = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const filter: any = { isDeleted: false };
+    const baseMatch: any = { isDeleted: false };
     if (req.user?.role === 'driver') {
-      filter.truckNo = req.user.username;
+      // Restrict to LPOs that contain this driver's truck
+      baseMatch['entries.truckNo'] = req.user.username;
     }
 
-    // Fetch periods via aggregation on actualDate (ISO dates)
-    const isoResults = await LPOEntry.aggregate([
-      { $match: { ...filter, actualDate: { $exists: true, $ne: null } } },
+    // Periods: group by year+month from the YYYY-MM-DD date field
+    const periodResults = await LPOSummary.aggregate([
+      { $match: baseMatch },
       {
         $group: {
           _id: {
-            year: { $year: '$actualDate' },
-            month: { $month: '$actualDate' },
+            year: { $toInt: { $substr: ['$date', 0, 4] } },
+            month: { $toInt: { $substr: ['$date', 5, 2] } },
           },
         },
       },
       { $sort: { '_id.year': -1, '_id.month': -1 } },
     ]);
 
-    // For records without actualDate, parse the "date" string field
-    const legacyEntries = await LPOEntry.find({
-      ...filter,
-      $or: [{ actualDate: { $exists: false } }, { actualDate: null }],
-    }).select('date createdAt').lean();
-
     const seen = new Map<string, { year: number; month: number }>();
-    isoResults.forEach(r => {
-      const key = `${r._id.year}-${r._id.month}`;
-      seen.set(key, { year: r._id.year, month: r._id.month });
-    });
-
-    const MON: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
-    for (const entry of legacyEntries) {
-      const dateStr = entry.date;
-      if (!dateStr) continue;
-      let year: number | null = null;
-      let month: number | null = null;
-
-      const iso = (dateStr as string).match(/^(\d{4})-(\d{2})-\d{2}/);
-      if (iso) {
-        year = parseInt(iso[1]);
-        month = parseInt(iso[2]);
-      } else {
-        const dmon = (dateStr as string).match(/^\d{1,2}[\-\/\s]([A-Za-z]{3,})/i);
-        if (dmon) month = MON[dmon[1].toLowerCase().substring(0, 3)] ?? null;
-        const yr = (dateStr as string).match(/(\d{4})$/);
-        if (yr) year = parseInt(yr[1]);
-        if (year === null && entry.createdAt) year = new Date(entry.createdAt).getFullYear();
-      }
-      if (year !== null && month !== null) {
-        const key = `${year}-${month}`;
-        if (!seen.has(key)) seen.set(key, { year, month });
+    for (const r of periodResults) {
+      if (r._id.year && r._id.month) {
+        const key = `${r._id.year}-${r._id.month}`;
+        seen.set(key, { year: r._id.year, month: r._id.month });
       }
     }
 
-    // Always include the current month so users can filter/create entries
+    // Always include current month
     const now = new Date();
     const curKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
-    if (!seen.has(curKey)) {
-      seen.set(curKey, { year: now.getFullYear(), month: now.getMonth() + 1 });
-    }
+    if (!seen.has(curKey)) seen.set(curKey, { year: now.getFullYear(), month: now.getMonth() + 1 });
 
     const periods = Array.from(seen.values()).sort((a, b) =>
       b.year !== a.year ? b.year - a.year : b.month - a.month
     );
 
-    // Stations via distinct — optionally scoped to the requested date range
+    // Stations: apply optional date range
     const { dateFrom, dateTo } = req.query;
-    const stationsFilter: any = { ...filter, dieselAt: { $nin: [null, ''] } };
+    const stationsMatch: any = { ...baseMatch, station: { $nin: [null, ''] } };
     if (dateFrom || dateTo) {
-      const dateFilter: any = {};
-      if (dateFrom) {
-        const fromDate = new Date(dateFrom as string);
-        fromDate.setHours(0, 0, 0, 0);
-        dateFilter.$gte = fromDate;
-      }
-      if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
-        dateFilter.$lte = toDate;
-      }
-      stationsFilter.$and = [
-        {
-          $or: [
-            { actualDate: dateFilter },
-            { actualDate: { $exists: false }, createdAt: dateFilter },
-          ],
-        },
-      ];
+      stationsMatch.date = {};
+      if (dateFrom) stationsMatch.date.$gte = (dateFrom as string).substring(0, 10);
+      if (dateTo) stationsMatch.date.$lte = (dateTo as string).substring(0, 10);
     }
-    const stations = await LPOEntry.distinct('dieselAt', stationsFilter);
-    const sortedStations = (stations as string[])
+    const rawStations = await LPOSummary.distinct('station', stationsMatch) as string[];
+    const stations = rawStations
       .filter(s => s && s.trim())
       .map(s => s.trim().toUpperCase())
       .filter((v, i, arr) => arr.indexOf(v) === i)
       .sort();
 
-    res.json({ periods, stations: sortedStations });
+    res.json({ periods, stations });
   } catch (error) {
     logger.error('Error fetching LPO available filters:', error);
     throw new ApiError(500, 'Failed to fetch available filters');
@@ -257,233 +277,341 @@ export const getAvailableFilters = async (req: AuthRequest, res: Response): Prom
 };
 
 /**
- * Get single LPO entry by ID
+ * GET /lpo-entries/:id
+ * Looks up a single entry by its subdocument _id inside LPOSummary.entries.
  */
 export const getLPOEntryById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const lpoEntry = await LPOEntry.findOne({ _id: id, isDeleted: false });
+    const pipeline: any[] = [
+      { $match: { isDeleted: false, 'entries._id': new mongoose.Types.ObjectId(id) } },
+      { $unwind: { path: '$entries', includeArrayIndex: 'entryIdx' } },
+      { $match: { 'entries._id': new mongoose.Types.ObjectId(id) } },
+      DERIVE_STAGE,
+      { $project: ENTRY_PROJECTION },
+      { $limit: 1 },
+    ];
 
-    if (!lpoEntry) {
-      throw new ApiError(404, 'LPO entry not found');
-    }
+    const [entry] = await LPOSummary.aggregate(pipeline);
+    if (!entry) throw new ApiError(404, 'LPO entry not found');
 
-    res.status(200).json({
-      success: true,
-      message: 'LPO entry retrieved successfully',
-      data: lpoEntry,
-    });
+    res.status(200).json({ success: true, message: 'LPO entry retrieved successfully', data: entry });
   } catch (error: any) {
     throw error;
   }
 };
 
 /**
- * Create new LPO entry
- */
-export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const payload = matchedData(req, { locations: ['body'] }) as any;
-
-    // Generate LPO number server-side using atomic counter (prevents duplicates)
-    const currentYear = new Date().getFullYear();
-    const counterId = `lpoNo_${currentYear}`;
-    const counter = await Counter.findOneAndUpdate(
-      { _id: counterId },
-      { $inc: { seq: 1 } },
-      { new: true, upsert: true }
-    );
-    payload.lpoNo = counter.seq.toString();
-    payload.year = currentYear;
-
-    const lpoEntry = await LPOEntry.create(payload);
-
-    logger.info(`LPO entry created: ${lpoEntry.lpoNo} by ${req.user?.username}`);
-
-    // Log audit trail
-    await AuditService.logCreate(
-      req.user?.userId || 'system',
-      req.user?.username || 'system',
-      'LPOEntry',
-      lpoEntry._id.toString(),
-      {
-        lpoNo: lpoEntry.lpoNo,
-        truckNo: lpoEntry.truckNo,
-        dieselAt: lpoEntry.dieselAt,
-        ltrs: lpoEntry.ltrs,
-        pricePerLtr: lpoEntry.pricePerLtr,
-        paymentMode: lpoEntry.paymentMode,
-        currency: lpoEntry.currency,
-        doSdo: lpoEntry.doSdo,
-        destinations: lpoEntry.destinations,
-      },
-      req.ip
-    );
-
-    // Create notification for station manager(s)
-    try {
-      const { createLPOCreatedNotification } = await import('./notificationController');
-      await createLPOCreatedNotification(lpoEntry, req.user?.username || 'system');
-    } catch (notifError) {
-      logger.error('Failed to create LPO notification:', notifError);
-      // Don't fail the request if notification creation fails
-    }
-
-    res.status(201).json({
-      success: true,
-      message: 'LPO entry created successfully',
-      data: lpoEntry,
-    });
-    emitDataChange('lpo_entries', 'create', lpoEntry.toObject());
-  } catch (error: any) {
-    throw error;
-  }
-};
-
-/**
- * Update LPO entry
- */
-export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const { clientUpdatedAt, reason, ...rawUpdates } = matchedData(req, { locations: ['body'] }) as any;
-
-    // Require justification when changing sensitive fields
-    const SENSITIVE_LPO_FIELDS = ['ltrs', 'pricePerLtr', 'paymentMode', 'isCancelled'];
-    const hasSensitiveChange = SENSITIVE_LPO_FIELDS.some(f => rawUpdates[f] !== undefined);
-    if (hasSensitiveChange && (!reason || reason.length < 10)) {
-      throw new ApiError(400, 'A reason of at least 10 characters is required when changing quantity, pricing, or payment fields');
-    }
-
-    // Enforce edit lock — the caller must hold a valid lock to update
-    const username = req.user?.username;
-    if (!username) throw new ApiError(401, 'Authentication required');
-    await enforceEditLock(LPOEntry, id, username);
-
-    // Strip fields the caller’s role is not allowed to write
-    const safeUpdates = filterLPOEntryFields(rawUpdates, req.user?.role || 'fuel_order_maker') as any;
-
-    // Read the existing entry BEFORE update so we can build a proper audit diff
-    const existingEntry = await LPOEntry.findOne({ _id: id, isDeleted: false }).lean();
-    if (!existingEntry) {
-      throw new ApiError(404, 'LPO entry not found');
-    }
-
-    // Build version-guarded filter
-    const updateFilter: any = { _id: id, isDeleted: false };
-    if (clientUpdatedAt) {
-      updateFilter.updatedAt = new Date(clientUpdatedAt);
-    }
-
-    // Detect liters amendment — populate originalLtrs / amendedAt
-    if (safeUpdates.ltrs !== undefined && safeUpdates.ltrs !== existingEntry.ltrs) {
-      // Only set originalLtrs the FIRST time (preserve the true original)
-      if (existingEntry.originalLtrs === null || existingEntry.originalLtrs === undefined) {
-        safeUpdates.originalLtrs = existingEntry.ltrs;
-      }
-      safeUpdates.amendedAt = new Date();
-    }
-
-    const lpoEntry = await LPOEntry.findOneAndUpdate(
-      updateFilter,
-      safeUpdates,
-      { new: true, runValidators: true }
-    );
-
-    if (!lpoEntry) {
-      // Distinguish: version conflict vs deleted
-      const stillExists = await LPOEntry.exists({ _id: id, isDeleted: false });
-      if (stillExists && clientUpdatedAt) {
-        const current = await LPOEntry.findOne({ _id: id, isDeleted: false })
-          .select('updatedAt lpoNo truckNo');
-        throw new ApiError(409, 'LPO entry was modified by another user since you opened it. Refresh to see the latest version.').withData({ current });
-      }
-      throw new ApiError(404, 'LPO entry not found');
-    }
-
-    logger.info(`LPO entry updated: ${lpoEntry.lpoNo} by ${req.user?.username}`);
-
-    // Log audit trail with actual field-level diff
-    const auditFields = ['lpoNo', 'truckNo', 'doSdo', 'sn', 'dieselAt', 'destinations', 'ltrs', 'pricePerLtr', 'paymentMode', 'currency', 'originalLtrs', 'amendedAt', 'date'];
-    const previousSnapshot: Record<string, any> = {};
-    const newSnapshot: Record<string, any> = {};
-    for (const field of auditFields) {
-      const prev = (existingEntry as any)[field];
-      const next = (lpoEntry as any)[field];
-      if (JSON.stringify(prev) !== JSON.stringify(next)) {
-        previousSnapshot[field] = prev;
-        newSnapshot[field] = next;
-      }
-    }
-
-    await AuditService.logUpdate(
-      req.user?.userId || 'system',
-      req.user?.username || 'system',
-      'LPOEntry',
-      lpoEntry._id.toString(),
-      { lpoNo: existingEntry.lpoNo, truckNo: existingEntry.truckNo, ...previousSnapshot },
-      { lpoNo: lpoEntry.lpoNo, truckNo: lpoEntry.truckNo, ...newSnapshot },
-      req.ip
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'LPO entry updated successfully',
-      data: lpoEntry,
-    });
-    emitDataChange('lpo_entries', 'update', lpoEntry.toObject());
-  } catch (error: any) {
-    throw error;
-  }
-};
-
-/**
- * Get LPO entries by LPO number
+ * GET /lpo-entries/lpo/:lpoNo
+ * Returns all entries for a given LPO number.
  */
 export const getLPOEntriesByLPONo = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { lpoNo } = req.params;
 
-    const lpoEntries = await LPOEntry.find({
-      lpoNo,
-      isDeleted: false,
-    }).sort({ sn: 1 });
+    const pipeline: any[] = [
+      { $match: { lpoNo, isDeleted: false } },
+      { $unwind: { path: '$entries', includeArrayIndex: 'entryIdx' } },
+      DERIVE_STAGE,
+      { $sort: { entryIdx: 1 } },
+      { $project: ENTRY_PROJECTION },
+    ];
 
-    res.status(200).json({
-      success: true,
-      message: 'LPO entries retrieved successfully',
-      data: lpoEntries,
-    });
+    const entries = await LPOSummary.aggregate(pipeline);
+    const data = entries.map((e, idx) => ({ sn: idx + 1, ...e }));
+
+    res.status(200).json({ success: true, message: 'LPO entries retrieved successfully', data });
   } catch (error: any) {
     throw error;
   }
 };
 
 /**
- * Get next LPO number
- * Uses atomic Counter to prevent duplicate numbers under concurrency.
- * Resets to 1 every new year.
+ * POST /lpo-entries
+ * Creates a new single-entry LPOSummary (used by legacy/standalone creation path).
  */
-export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
+export const createLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const payload = req.body as any;
+
     const currentYear = new Date().getFullYear();
     const counterId = `lpoNo_${currentYear}`;
-
-    // Atomic increment — findOneAndUpdate with upsert guarantees uniqueness
     const counter = await Counter.findOneAndUpdate(
       { _id: counterId },
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
 
-    const nextLPONo = counter.seq.toString();
+    const lpoNo = counter.seq.toString();
+    const date = payload.date || new Date().toISOString().split('T')[0];
 
-    res.status(200).json({
-      success: true,
-      message: 'Next LPO number retrieved successfully',
-      data: { nextLPONo },
+    const entry: any = {
+      doNo: payload.doSdo || 'PENDING',
+      truckNo: payload.truckNo || 'UNKNOWN',
+      liters: payload.ltrs || 0,
+      rate: payload.pricePerLtr || 0,
+      amount: (payload.ltrs || 0) * (payload.pricePerLtr || 0),
+      dest: payload.destinations || 'PENDING',
+      isDriverAccount: payload.isDriverAccount || false,
+      isRefer: payload.isRefer || false,
+      isCancelled: false,
+    };
+
+    const lpoSummary = await LPOSummary.create({
+      lpoNo,
+      date,
+      year: currentYear,
+      station: payload.dieselAt || 'UNKNOWN',
+      orderOf: payload.orderOf || 'UNKNOWN',
+      currency: payload.currency || 'TZS',
+      entries: [entry],
+      total: entry.amount,
+      createdBy: req.user?.username,
     });
+
+    const createdEntry = lpoSummary.entries[0];
+
+    logger.info(`LPO entry created: ${lpoNo} by ${req.user?.username}`);
+
+    await AuditService.logCreate(
+      req.user?.userId || 'system',
+      req.user?.username || 'system',
+      'LPOEntry',
+      (createdEntry as any)._id.toString(),
+      { lpoNo, truckNo: entry.truckNo, dieselAt: lpoSummary.station, ltrs: entry.liters },
+      req.ip
+    );
+
+    const responseEntry = {
+      id: (createdEntry as any)._id,
+      lpoId: lpoSummary._id,
+      lpoNo,
+      date,
+      dieselAt: lpoSummary.station,
+      doSdo: entry.doNo,
+      truckNo: entry.truckNo,
+      ltrs: entry.liters,
+      pricePerLtr: entry.rate,
+      destinations: entry.dest,
+      currency: lpoSummary.currency,
+      isCancelled: false,
+      paymentMode: 'STATION',
+    };
+
+    res.status(201).json({ success: true, message: 'LPO entry created successfully', data: responseEntry });
+    emitDataChange('lpo_entries', 'create', responseEntry);
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * PUT /lpo-entries/:id
+ * Updates a specific entry (identified by its subdocument _id) inside LPOSummary.
+ */
+export const updateLPOEntry = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { clientUpdatedAt, reason, ...rawUpdates } = req.body as any;
+
+    const SENSITIVE_FIELDS = ['ltrs', 'pricePerLtr', 'paymentMode', 'isCancelled'];
+    if (SENSITIVE_FIELDS.some(f => rawUpdates[f] !== undefined) && (!reason || reason.length < 10)) {
+      throw new ApiError(400, 'A reason of at least 10 characters is required when changing quantity, pricing, or payment fields');
+    }
+
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    // Find the parent LPO document
+    const entryObjId = new mongoose.Types.ObjectId(id);
+    const lpo = await LPOSummary.findOne({ 'entries._id': entryObjId, isDeleted: false });
+    if (!lpo) throw new ApiError(404, 'LPO entry not found');
+
+    // Enforce document-level edit lock
+    const lock = (lpo as any).editLock;
+    if (lock?.lockedBy) {
+      const lockedUntil = lock.lockedUntil ? new Date(lock.lockedUntil) : null;
+      if (lockedUntil && lockedUntil > new Date()) {
+        if (lock.lockedBy !== username) {
+          throw new ApiError(423, `Record is being edited by ${lock.lockedBy}`).withData({ editLock: lock });
+        }
+      }
+    } else {
+      throw new ApiError(409, 'You must acquire an edit lock before saving changes.');
+    }
+
+    // Version guard
+    if (clientUpdatedAt && lpo.updatedAt) {
+      const clientTime = new Date(clientUpdatedAt).getTime();
+      const serverTime = new Date(lpo.updatedAt as any).getTime();
+      if (Math.abs(clientTime - serverTime) > 1000) {
+        throw new ApiError(409, 'LPO was modified by another user since you opened it. Refresh to see the latest version.').withData({
+          current: { updatedAt: lpo.updatedAt, lpoNo: lpo.lpoNo },
+        });
+      }
+    }
+
+    const entryIndex = lpo.entries.findIndex((e: any) => e._id.toString() === id);
+    if (entryIndex === -1) throw new ApiError(404, 'LPO entry not found');
+
+    const existingEntry = lpo.entries[entryIndex] as any;
+    const prevSnapshot: Record<string, any> = {};
+    const nextSnapshot: Record<string, any> = {};
+
+    // Apply updates with field mapping (LPOEntry names → LPOSummary.entries names)
+    const applyField = (from: string, to: string, transform?: (v: any) => any) => {
+      if (rawUpdates[from] !== undefined) {
+        const newVal = transform ? transform(rawUpdates[from]) : rawUpdates[from];
+        if (JSON.stringify(existingEntry[to]) !== JSON.stringify(newVal)) {
+          prevSnapshot[from] = existingEntry[to];
+          nextSnapshot[from] = newVal;
+        }
+        (lpo.entries[entryIndex] as any)[to] = newVal;
+      }
+    };
+
+    applyField('ltrs', 'liters');
+    applyField('pricePerLtr', 'rate');
+    applyField('destinations', 'dest');
+    applyField('truckNo', 'truckNo');
+    applyField('isCancelled', 'isCancelled');
+
+    // Amendment tracking
+    if (rawUpdates.ltrs !== undefined && rawUpdates.ltrs !== existingEntry.liters) {
+      if (existingEntry.originalLiters === null || existingEntry.originalLiters === undefined) {
+        (lpo.entries[entryIndex] as any).originalLiters = existingEntry.liters;
+      }
+      (lpo.entries[entryIndex] as any).amendedAt = new Date();
+    }
+
+    // Recalculate amount for this entry
+    const updatedEntry = lpo.entries[entryIndex] as any;
+    updatedEntry.amount = updatedEntry.liters * updatedEntry.rate;
+
+    // Recalculate LPO total
+    lpo.total = lpo.entries
+      .filter((e: any) => !e.isCancelled)
+      .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+
+    await lpo.save();
+
+    logger.info(`LPO entry updated: ${lpo.lpoNo} / ${updatedEntry.truckNo} by ${username}`);
+
+    await AuditService.logUpdate(
+      req.user?.userId || 'system',
+      username,
+      'LPOEntry',
+      id,
+      { lpoNo: lpo.lpoNo, truckNo: existingEntry.truckNo, ...prevSnapshot },
+      { lpoNo: lpo.lpoNo, truckNo: updatedEntry.truckNo, ...nextSnapshot },
+      req.ip
+    );
+
+    const responseEntry = {
+      id: entryObjId,
+      lpoId: lpo._id,
+      lpoNo: lpo.lpoNo,
+      date: lpo.date,
+      dieselAt: lpo.station,
+      truckNo: updatedEntry.truckNo,
+      ltrs: updatedEntry.liters,
+      pricePerLtr: updatedEntry.rate,
+      destinations: updatedEntry.dest,
+      isCancelled: updatedEntry.isCancelled || false,
+      currency: lpo.currency,
+    };
+
+    res.status(200).json({ success: true, message: 'LPO entry updated successfully', data: responseEntry });
+    emitDataChange('lpo_entries', 'update', responseEntry);
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * GET /lpo-entries/next-lpo-number
+ * Atomic counter — same logic as before, unchanged.
+ */
+export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const currentYear = new Date().getFullYear();
+    const counterId = `lpoNo_${currentYear}`;
+    const counter = await Counter.findOneAndUpdate(
+      { _id: counterId },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    res.status(200).json({ success: true, message: 'Next LPO number retrieved successfully', data: { nextLPONo: counter.seq.toString() } });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+// ─── Edit lock handlers ───────────────────────────────────────────────────────
+// Lock is at the LPOSummary document level (the parent LPO is locked when any
+// of its entries is being edited, preventing concurrent edits to the same sheet).
+
+export const acquireEditLock = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params; // entry subdocument _id
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const now = new Date();
+    const lockUntil = new Date(now.getTime() + LOCK_TTL_MS);
+
+    const lpo = await LPOSummary.findOneAndUpdate(
+      {
+        isDeleted: false,
+        'entries._id': new mongoose.Types.ObjectId(id),
+        $or: [
+          { 'editLock.lockedBy': null },
+          { 'editLock.lockedBy': username },
+          { 'editLock.lockedUntil': { $lt: now } },
+        ],
+      },
+      { 'editLock.lockedBy': username, 'editLock.lockedAt': now, 'editLock.lockedUntil': lockUntil },
+      { new: true }
+    );
+
+    if (!lpo) {
+      const current = await LPOSummary.findOne({ 'entries._id': new mongoose.Types.ObjectId(id) }).select('editLock').lean();
+      const holder = (current as any)?.editLock?.lockedBy || 'another user';
+      throw new ApiError(423, `Record is being edited by ${holder}`).withData({ editLock: (current as any)?.editLock });
+    }
+
+    logger.info(`Edit lock acquired on LPO ${lpo.lpoNo} / entry ${id} by ${username}`);
+    emitDataChange('lpo_entries', 'update', { id, editLock: { lockedBy: username, lockedUntil: lockUntil } });
+
+    res.json({ success: true, message: 'Lock acquired', data: { lockedUntil: lockUntil } });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+export const releaseEditLock = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const lpo = await LPOSummary.findOneAndUpdate(
+      {
+        isDeleted: false,
+        'entries._id': new mongoose.Types.ObjectId(id),
+        $or: [{ 'editLock.lockedBy': username }, { 'editLock.lockedBy': null }],
+      },
+      { 'editLock.lockedBy': null, 'editLock.lockedAt': null, 'editLock.lockedUntil': null },
+      { new: true }
+    );
+
+    if (!lpo) throw new ApiError(403, 'You do not hold the lock on this record');
+
+    logger.info(`Edit lock released on entry ${id} by ${username}`);
+    emitDataChange('lpo_entries', 'update', { id, editLock: null });
+
+    res.json({ success: true, message: 'Lock released' });
   } catch (error: any) {
     throw error;
   }

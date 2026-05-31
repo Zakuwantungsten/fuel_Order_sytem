@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { DeliveryOrder, LPOEntry, FuelRecord, YardFuelDispense } from '../models';
+import { DeliveryOrder, LPOSummary, FuelRecord, YardFuelDispense } from '../models';
 import { AuthRequest } from '../middleware/auth';
 
 /**
@@ -66,43 +66,34 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       if (dateTo)   frCurrFilter.date.$lte = dateTo as string;
     }
 
-    // LPOEntry current-month filter (actualDate field)
-    const lpoCurrFilter: any = {
-      isDeleted: false,
-      $or: [
-        { actualDate: { $gte: currMonthStart, $lte: currMonthEnd } },
-        // Legacy records without actualDate: fall back to createdAt
-        { actualDate: { $exists: false }, createdAt: { $gte: currMonthStart, $lte: currMonthEnd } },
-      ],
-    };
-    // Explicit date range override for LPO (convert to actualDate range)
-    if (dateFrom || dateTo) {
-      const lpoFrom = dateFrom ? new Date(dateFrom as string) : undefined;
-      const lpoTo   = dateTo   ? new Date(new Date(dateTo as string).setHours(23, 59, 59, 999)) : undefined;
-      const rangeFilter: any = {};
-      if (lpoFrom) rangeFilter.$gte = lpoFrom;
-      if (lpoTo)   rangeFilter.$lte = lpoTo;
-      lpoCurrFilter.$or = [
-        { actualDate: rangeFilter },
-        { actualDate: { $exists: false }, createdAt: rangeFilter },
-      ];
-    }
+    // LPO date range filter — LPOSummary.date is YYYY-MM-DD, sortable as string
+    const lpoDateFrom = dateFrom
+      ? (dateFrom as string).substring(0, 10)
+      : toDateStr(currMonthStart);
+    const lpoDateTo = dateTo
+      ? (dateTo as string).substring(0, 10)
+      : toDateStr(currMonthEnd);
+    const lpoCurrMatch: any = { isDeleted: false, date: { $gte: lpoDateFrom, $lte: lpoDateTo } };
+
+    const prevLpoDateFrom = toDateStr(prevMonthStart);
+    const prevLpoDateTo   = toDateStr(prevMonthEnd);
+    const prevLPOMatch: any = { isDeleted: false, date: { $gte: prevLpoDateFrom, $lte: prevLpoDateTo } };
 
     // Trend filters (always previous calendar month, regardless of query params)
     const prevDOFilter:  any = { isDeleted: false, date: { $gte: toDateStr(prevMonthStart), $lte: toDateStr(prevMonthEnd) } };
     const prevFRFilter:  any = { isDeleted: false, isCancelled: { $ne: true }, month: { $regex: `^${prevMonthLabel}`, $options: 'i' } };
-    const prevLPOFilter: any = {
-      isDeleted: false,
-      $or: [
-        { actualDate: { $gte: prevMonthStart, $lte: prevMonthEnd } },
-        { actualDate: { $exists: false }, createdAt: { $gte: prevMonthStart, $lte: prevMonthEnd } },
-      ],
-    };
 
     // ─── Parallel queries ───────────────────────────────────────────────────
+    // LPO entry aggregation helper — unwinds LPOSummary entries into a flat list
+    const lpoEntryPipeline = (matchStage: any) => [
+      { $match: matchStage },
+      { $unwind: '$entries' },
+      { $project: { _id: 0, ltrs: '$entries.liters', pricePerLtr: '$entries.rate', date: 1 } },
+    ];
+
     const [
       totalDOs,
-      totalLPOs,
+      lpoCountResult,
       totalFuelRecords,
       activeTrips,
       deliveryOrders,
@@ -116,14 +107,18 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
     ] = await Promise.all([
       // All-time counts
       DeliveryOrder.countDocuments({ isDeleted: false }),
-      LPOEntry.countDocuments({ isDeleted: false }),
+      LPOSummary.aggregate([
+        { $match: { isDeleted: false } },
+        { $project: { entryCount: { $size: '$entries' } } },
+        { $group: { _id: null, total: { $sum: '$entryCount' } } },
+      ]),
       FuelRecord.countDocuments({ isDeleted: false, isCancelled: { $ne: true } }),
       // Active trips
       FuelRecord.countDocuments({ isDeleted: false, isCancelled: { $ne: true }, journeyStatus: { $in: ['active', 'queued'] } }),
       // Current month / period data
       DeliveryOrder.find(doDateFilter).select('tonnages ratePerTon date').lean(),
       FuelRecord.find(frCurrFilter).select('totalLts mmsaYard tangaYard darYard date month').lean(),
-      LPOEntry.find(lpoCurrFilter).select('ltrs pricePerLtr actualDate createdAt').lean(),
+      LPOSummary.aggregate(lpoEntryPipeline(lpoCurrMatch)),
       // Active fuel records for recent activity
       FuelRecord.find({ isDeleted: false, isCancelled: { $ne: true } })
         .sort({ date: -1 })
@@ -135,8 +130,10 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       // Previous month data for trend calculation
       DeliveryOrder.find(prevDOFilter).select('tonnages date').lean(),
       FuelRecord.find(prevFRFilter).select('totalLts date month').lean(),
-      LPOEntry.find(prevLPOFilter).select('ltrs actualDate createdAt').lean(),
+      LPOSummary.aggregate(lpoEntryPipeline(prevLPOMatch)),
     ]);
+
+    const totalLPOs: number = lpoCountResult[0]?.total ?? 0;
 
     // Calculate totals from current period
     const totalTonnage = deliveryOrders.reduce((sum, DO) => sum + (DO.tonnages || 0), 0);
@@ -170,12 +167,28 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       .select('doNumber truckNo from to date createdAt tonnages importOrExport haulier')
       .lean();
 
-    // Get recent LPOs
-    const recentLPOs = await LPOEntry.find({ isDeleted: false })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select('lpoNo truckNo dieselAt ltrs date actualDate createdAt doSdo')
-      .lean();
+    // Get recent LPOs — newest LPO docs, first entry per doc
+    const recentLPOs = await LPOSummary.aggregate([
+      { $match: { isDeleted: false } },
+      { $sort: { createdAt: -1 } },
+      { $limit: 10 },
+      { $unwind: { path: '$entries', includeArrayIndex: 'ei' } },
+      { $match: { ei: 0 } }, // first entry only
+      {
+        $project: {
+          _id: 0,
+          lpoNo: 1,
+          truckNo: '$entries.truckNo',
+          dieselAt: '$station',
+          ltrs: '$entries.liters',
+          date: 1,
+          createdAt: 1,
+          doSdo: { $ifNull: ['$entries.doNo', 'PENDING'] },
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: 5 },
+    ]);
 
     // Get fuel summary by yard (all-time)
     const allFuelRecords = await FuelRecord.find({ 
@@ -271,7 +284,11 @@ export const getMonthlyStats = async (req: AuthRequest, res: Response): Promise<
     const [fuelRecords, deliveryOrders, lpoEntries] = await Promise.all([
       FuelRecord.find(filter).select('date totalLts balance month journeyStatus').lean(),
       DeliveryOrder.find(filter).select('date doNumber tonnages').lean(),
-      LPOEntry.find(filter).select('date ltrs dieselAt').lean(),
+      LPOSummary.aggregate([
+        { $match: { isDeleted: false, date: filter.date } },
+        { $unwind: '$entries' },
+        { $project: { _id: 0, date: 1, ltrs: '$entries.liters', dieselAt: '$station' } },
+      ]),
     ]);
 
     // Group data by month
@@ -426,15 +443,20 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
       FuelRecord.find({ isDeleted: false, isCancelled: { $ne: true }, date: dateFilterStr })
         .select('date totalLts mmsaYard tangaYard darYard truckNo journeyStatus balance')
         .lean(),
-      LPOEntry.find({
-        isDeleted: false,
-        $or: [
-          { actualDate: dateFilterDate },
-          { actualDate: { $exists: false }, createdAt: dateFilterDate },
-        ],
-      })
-        .select('date actualDate ltrs pricePerLtr dieselAt truckNo')
-        .lean(),
+      LPOSummary.aggregate([
+        { $match: { isDeleted: false, date: dateFilterStr } },
+        { $unwind: '$entries' },
+        {
+          $project: {
+            _id: 0,
+            date: 1,
+            ltrs: '$entries.liters',
+            pricePerLtr: '$entries.rate',
+            dieselAt: '$station',
+            truckNo: '$entries.truckNo',
+          },
+        },
+      ]),
       YardFuelDispense.find({ isDeleted: false, createdAt: dateFilterDate })
         .select('date liters yard status')
         .lean(),
@@ -568,11 +590,9 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
       monthlyData[monthKey].dos += 1;
     });
 
-    // Group LPO data by month — prefer actualDate, fall back to createdAt for legacy records
+    // Group LPO data by month
     lpoEntries.forEach((lpo) => {
-      const date = (lpo as any).actualDate
-        ? new Date((lpo as any).actualDate)
-        : new Date((lpo as any).createdAt);
+      const date = new Date((lpo as any).date || (lpo as any).createdAt);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
       
       if (!monthlyData[monthKey]) {
@@ -674,9 +694,6 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const fuelStartDate = new Date();
     fuelStartDate.setMonth(now.getMonth() - 12);
 
-    // Use actual date fields for correct historical bucketing.
-    // FuelRecord.date and DeliveryOrder.date are String fields — use string comparison.
-    // LPOEntry uses actualDate (Date type) with createdAt fallback for legacy records.
     const [fuelRecords, deliveryOrders, lpoEntries] = await Promise.all([
       FuelRecord.find({
         isDeleted: false,
@@ -691,15 +708,16 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
       })
         .select('date doNumber')
         .lean(),
-      LPOEntry.find({
-        isDeleted: false,
-        $or: [
-          { actualDate: { $gte: lpoStartDate, $lte: now } },
-          { actualDate: { $exists: false }, createdAt: { $gte: lpoStartDate, $lte: now } },
-        ],
-      })
-        .select('date actualDate ltrs dieselAt')
-        .lean(),
+      LPOSummary.aggregate([
+        {
+          $match: {
+            isDeleted: false,
+            date: { $gte: toDateStr(lpoStartDate), $lte: toDateStr(now) },
+          },
+        },
+        { $unwind: '$entries' },
+        { $project: { _id: 0, date: 1, ltrs: '$entries.liters', dieselAt: '$station' } },
+      ]),
     ]);
 
     // Monthly fuel consumption — use actual date field

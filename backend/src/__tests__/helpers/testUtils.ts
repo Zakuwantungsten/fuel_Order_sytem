@@ -1,4 +1,4 @@
-import { User, DeliveryOrder, FuelRecord, LPOEntry } from '../../models';
+import { User, DeliveryOrder, FuelRecord, LPOSummary } from '../../models';
 import jwt from 'jsonwebtoken';
 
 /**
@@ -84,23 +84,27 @@ export const createTestFuelRecord = async (overrides = {}) => {
   return await FuelRecord.create(defaultFuelRecord);
 };
 
-// LPO Entry test data factory
-export const createTestLPOEntry = async (overrides = {}) => {
-  const defaultLPO = {
-    sn: 1,
-    date: '2025-12-05',
-    lpoNo: `LPO-${Date.now()}`,
-    dieselAt: 'LAKE CHILABOMBWE',
-    doSdo: 'DO-001',
-    truckNo: 'T123 ABC',
-    ltrs: 400,
-    pricePerLtr: 1.5,
-    destinations: 'LUBUMBASHI',
+// LPO test data factory (creates an LPOSummary with one entry)
+export const createTestLPOEntry = async (overrides: any = {}) => {
+  const lpoNo = overrides.lpoNo || `LPO-${Date.now()}`;
+  return await LPOSummary.create({
+    lpoNo,
+    date: overrides.date || '2025-12-05',
+    year: 2025,
+    station: overrides.dieselAt || 'LAKE CHILABOMBWE',
+    orderOf: 'TAHMEED',
+    entries: [{
+      doNo: overrides.doSdo || 'DO-001',
+      truckNo: overrides.truckNo || 'T123 ABC',
+      liters: overrides.ltrs || 400,
+      rate: overrides.pricePerLtr || 1.5,
+      amount: (overrides.ltrs || 400) * (overrides.pricePerLtr || 1.5),
+      dest: overrides.destinations || 'LUBUMBASHI',
+      isCancelled: false,
+    }],
+    total: (overrides.ltrs || 400) * (overrides.pricePerLtr || 1.5),
     isDeleted: false,
-    ...overrides
-  };
-  
-  return await LPOEntry.create(defaultLPO);
+  });
 };
 
 // Generate test JWT token
@@ -134,7 +138,7 @@ export const cleanupTestData = async () => {
   await User.deleteMany({});
   await DeliveryOrder.deleteMany({});
   await FuelRecord.deleteMany({});
-  await LPOEntry.deleteMany({});
+  await LPOSummary.deleteMany({});
 };
 
 // Mock Express request object

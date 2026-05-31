@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
-import { AuditLog, User, DeliveryOrder, LPOEntry, FuelRecord } from '../models';
+import { AuditLog, User, DeliveryOrder, LPOSummary, FuelRecord } from '../models';
 import mongoose from 'mongoose';
 
 const MODEL_MAP: Record<string, mongoose.Model<any>> = {
@@ -11,7 +11,7 @@ const MODEL_MAP: Record<string, mongoose.Model<any>> = {
 
 // Try to load optional models without crashing if they don't exist
 try { MODEL_MAP['delivery_orders'] = DeliveryOrder; } catch { /* optional */ }
-try { MODEL_MAP['lpo_entries'] = LPOEntry; } catch { /* optional */ }
+try { MODEL_MAP['lpo_entries'] = LPOSummary; } catch { /* optional */ }
 
 /**
  * GET /api/system-admin/custom-report/models

@@ -2,20 +2,19 @@
  * Edit Lock Cleanup Job
  *
  * Runs every 15 minutes and clears expired edit locks (lockedUntil < now)
- * across FuelRecord, LPOEntry, DeliveryOrder, and LPOSummary collections.
+ * across FuelRecord, DeliveryOrder, and LPOSummary collections.
  *
  * This is a hygiene task — expired locks are already treated as released
  * at read-time, but clearing them keeps the database tidy and avoids
  * stale data showing up in admin tooling.
  */
 
-import { FuelRecord, LPOEntry, DeliveryOrder, LPOSummary } from '../models';
+import { FuelRecord, DeliveryOrder, LPOSummary } from '../models';
 import logger from '../utils/logger';
 import { jobRegistry } from './jobRegistry';
 
 const MODELS = [
   { model: FuelRecord, name: 'FuelRecord' },
-  { model: LPOEntry, name: 'LPOEntry' },
   { model: DeliveryOrder, name: 'DeliveryOrder' },
   { model: LPOSummary, name: 'LPOSummary' },
 ];
@@ -59,7 +58,7 @@ jobRegistry.register({
   id: 'edit-lock-cleanup',
   name: 'Edit Lock Cleanup',
   description:
-    'Clears expired edit locks (older than 5 min) from FuelRecord, LPOEntry, DeliveryOrder, and LPOSummary collections every 15 minutes.',
+    'Clears expired edit locks (older than 5 min) from FuelRecord, DeliveryOrder, and LPOSummary collections every 15 minutes.',
   cronExpression: '*/15 * * * *',
   isEnabled: true,
   handler: runEditLockCleanupHandler,

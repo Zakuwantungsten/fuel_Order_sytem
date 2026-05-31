@@ -1,7 +1,6 @@
 // Export all models
 export { User, IUserDocument } from './User';
 export { DeliveryOrder, IDeliveryOrderDocument } from './DeliveryOrder';
-export { LPOEntry, ILPOEntryDocument } from './LPOEntry';
 export { LPOSummary, ILPOSummaryDocument } from './LPOSummary';
 export { LPOWorkbook, ILPOWorkbookDocument } from './LPOWorkbook';
 export { FuelRecord, IFuelRecordDocument } from './FuelRecord';
@@ -35,13 +34,11 @@ export { TruckPosition, ITruckPosition } from './TruckPosition';
 // Export archived data models
 export {
   ArchivedFuelRecord,
-  ArchivedLPOEntry,
   ArchivedLPOSummary,
   ArchivedYardFuelDispense,
   ArchivedAuditLog,
   ArchivalMetadata,
   IArchivedFuelRecord,
-  IArchivedLPOEntry,
   IArchivedLPOSummary,
   IArchivedYardFuelDispense,
   IArchivedAuditLog,

@@ -1,5 +1,5 @@
 import archivalService from './archivalService';
-import { FuelRecord, LPOEntry, LPOSummary, YardFuelDispense, DeliveryOrder } from '../models';
+import { FuelRecord, LPOSummary, YardFuelDispense, DeliveryOrder } from '../models';
 import logger from '../utils/logger';
 
 /**
@@ -81,52 +81,63 @@ export async function getAllFuelRecords(options: ExportOptions = {}): Promise<an
 }
 
 /**
- * Get all LPO entries (active + archived)
+ * Get all LPO entries as a flat list (aggregated from LPOSummary.entries).
+ * Archived records are sourced from ArchivedLPOSummary the same way.
  */
 export async function getAllLPOEntries(options: ExportOptions = {}): Promise<any[]> {
-  const {
-    startDate,
-    endDate,
-    includeArchived = true,
-    filters = {},
-    sort = { date: -1 },
-    limit,
-  } = options;
+  const { startDate, endDate, limit } = options;
 
   try {
-    const query: any = { isDeleted: { $ne: true }, ...filters };
-
+    const matchStage: any = { isDeleted: false };
     if (startDate || endDate) {
-      query.date = {};
-      if (startDate) query.date.$gte = startDate.toISOString().split('T')[0];
-      if (endDate) query.date.$lte = endDate.toISOString().split('T')[0];
+      matchStage.date = {};
+      if (startDate) matchStage.date.$gte = startDate.toISOString().split('T')[0];
+      if (endDate) matchStage.date.$lte = endDate.toISOString().split('T')[0];
     }
 
-    // Get active records
-    let activeQuery = LPOEntry.find(query).sort(sort);
-    if (limit) activeQuery = activeQuery.limit(limit);
-    const activeRecords = await activeQuery.lean();
+    const pipeline: any[] = [
+      { $match: matchStage },
+      { $unwind: { path: '$entries', includeArrayIndex: 'entryIdx' } },
+      {
+        $project: {
+          _id: '$entries._id',
+          lpoNo: 1,
+          date: 1,
+          dieselAt: '$station',
+          doSdo: {
+            $cond: [
+              { $eq: ['$entries.isCancelled', true] }, 'CANCELLED',
+              { $cond: [{ $eq: ['$entries.isRefer', true] }, 'REF',
+                { $cond: [{ $eq: ['$entries.isDriverAccount', true] }, 'DA(NIL)',
+                  { $ifNull: ['$entries.doNo', 'PENDING'] }]}]}
+            ]
+          },
+          truckNo: '$entries.truckNo',
+          ltrs: '$entries.liters',
+          pricePerLtr: '$entries.rate',
+          destinations: {
+            $cond: [{ $eq: ['$entries.isCancelled', true] }, 'CANCELLED', { $ifNull: ['$entries.dest', 'PENDING'] }]
+          },
+          currency: 1,
+          isCancelled: { $ifNull: ['$entries.isCancelled', false] },
+          cancelledAt: '$entries.cancelledAt',
+          isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
+          isRefer: { $ifNull: ['$entries.isRefer', false] },
+          originalLtrs: '$entries.originalLiters',
+          amendedAt: '$entries.amendedAt',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+      { $sort: { date: -1, lpoNo: -1, entryIdx: 1 } },
+    ];
 
-    // Get archived records
-    let archivedRecords: any[] = [];
-    if (includeArchived) {
-      try {
-        archivedRecords = await archivalService.queryArchivedData(
-          'LPOEntry',
-          query,
-          { limit: limit || 10000, sort }
-        );
-      } catch (error: any) {
-        logger.warn('Failed to fetch archived LPO entries:', error.message);
-      }
-    }
+    if (limit) pipeline.push({ $limit: limit });
 
-    const allRecords = [...activeRecords, ...archivedRecords];
-    allRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const activeRecords = await LPOSummary.aggregate(pipeline);
 
-    logger.info(`Retrieved ${activeRecords.length} active + ${archivedRecords.length} archived LPO entries`);
-
-    return limit ? allRecords.slice(0, limit) : allRecords;
+    logger.info(`Retrieved ${activeRecords.length} LPO entries from LPOSummary`);
+    return activeRecords;
   } catch (error: any) {
     logger.error('Error fetching all LPO entries:', error);
     throw error;
@@ -310,7 +321,7 @@ export async function getUnifiedData(
   switch (collectionName) {
     case 'FuelRecord':
       return getAllFuelRecords(options);
-    case 'LPOEntry':
+    case 'LPOEntry': // LPOEntry is now derived from LPOSummary
       return getAllLPOEntries(options);
     case 'LPOSummary':
       return getAllLPOSummaries(options);
@@ -339,7 +350,6 @@ export async function getUnifiedStatistics(startDate?: Date, endDate?: Date): Pr
       archived: stats.archivedRecords,
       total: {
         FuelRecord: stats.activeRecords.FuelRecord + stats.archivedRecords.FuelRecord,
-        LPOEntry: stats.activeRecords.LPOEntry + stats.archivedRecords.LPOEntry,
         LPOSummary: stats.activeRecords.LPOSummary + stats.archivedRecords.LPOSummary,
         YardFuelDispense: stats.activeRecords.YardFuelDispense + stats.archivedRecords.YardFuelDispense,
         AuditLog: stats.activeRecords.AuditLog + stats.archivedRecords.AuditLog,

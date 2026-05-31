@@ -60,51 +60,6 @@ archivedFuelRecordSchema.index({ date: -1 });
 archivedFuelRecordSchema.index({ truckNo: 1, date: -1 });
 archivedFuelRecordSchema.index({ archivedAt: -1 });
 
-// ============ ARCHIVED LPO ENTRIES ============
-export interface IArchivedLPOEntry {
-  originalId: mongoose.Types.ObjectId;
-  lpoNo: string;
-  date: string;
-  truckNo: string;
-  dieselAt: string;
-  doSdo: string;
-  [key: string]: any;
-  archivedAt: Date;
-  archivedReason: string;
-}
-
-const archivedLPOEntrySchema = new Schema<IArchivedLPOEntry>(
-  {
-    originalId: {
-      type: Schema.Types.ObjectId,
-      required: true,
-      index: true,
-    },
-    lpoNo: { type: String },
-    date: String,
-    truckNo: { type: String, index: true },
-    dieselAt: String,
-    doSdo: String,
-    archivedAt: {
-      type: Date,
-      default: Date.now,
-    },
-    archivedReason: {
-      type: String,
-      default: 'Automated archival - data older than 6 months',
-    },
-  },
-  {
-    strict: false,
-    timestamps: false,
-  }
-);
-
-archivedLPOEntrySchema.index({ date: -1 });
-archivedLPOEntrySchema.index({ lpoNo: 1 });
-archivedLPOEntrySchema.index({ archivedAt: -1 });
-archivedLPOEntrySchema.index({ truckNo: 1, date: -1 });
-
 // ============ ARCHIVED LPO SUMMARIES ============
 export interface IArchivedLPOSummary {
   originalId: mongoose.Types.ObjectId;
@@ -347,7 +302,6 @@ archivalMetadataSchema.index({ collectionName: 1, archivalDate: -1 });
 
 // Export models
 export const ArchivedFuelRecord = mongoose.model('ArchivedFuelRecord', archivedFuelRecordSchema);
-export const ArchivedLPOEntry = mongoose.model('ArchivedLPOEntry', archivedLPOEntrySchema);
 export const ArchivedLPOSummary = mongoose.model('ArchivedLPOSummary', archivedLPOSummarySchema);
 export const ArchivedYardFuelDispense = mongoose.model('ArchivedYardFuelDispense', archivedYardFuelDispenseSchema);
 export const ArchivedDeliveryOrder = mongoose.model('ArchivedDeliveryOrder', archivedDeliveryOrderSchema);

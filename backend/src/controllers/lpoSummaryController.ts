@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry, LPOEntry } from '../models';
+import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry } from '../models';
 import { ArchivedLPOSummary } from '../models/ArchivedData';
 import { FuelStationConfig } from '../models/FuelStationConfig';
 import { ApiError } from '../middleware/errorHandler';
@@ -712,182 +712,6 @@ export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-/**
- * Helper function to sync LPOEntry records with LPOSummary
- * Creates corresponding LPOEntry records for each entry in the LPOSummary
- * This ensures the list view stays in sync with the workbook view
- */
-const syncLPOEntriesToList = async (
-  lpoSummary: any,
-  station: string,
-  date: string
-): Promise<void> => {
-  try {
-    if (!lpoSummary.entries || lpoSummary.entries.length === 0) {
-      return;
-    }
-
-    // Format date to D-MMM format for list view consistency
-    const formatDate = (dateStr: string): string => {
-      const d = new Date(dateStr);
-      const day = d.getDate();
-      const month = d.toLocaleDateString('en-US', { month: 'short' });
-      return `${day}-${month}`;
-    };
-    const formattedDate = formatDate(date);
-
-    // Get the highest SN for LPOEntry to continue numbering
-    const lastEntry = await LPOEntry.findOne({ isDeleted: false })
-      .sort({ sn: -1 })
-      .select('sn')
-      .lean();
-    let nextSn = lastEntry ? lastEntry.sn + 1 : 1;
-
-    // Create LPOEntry records for each entry in the LPOSummary
-    for (const entry of lpoSummary.entries) {
-      // Determine payment mode
-      let paymentMode: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' | 'REFER' = 'STATION';
-      if (entry.isRefer) {
-        paymentMode = 'REFER';
-      } else if (entry.isDriverAccount) {
-        paymentMode = 'DRIVER_ACCOUNT';
-      } else if (lpoSummary.station?.toUpperCase() === 'CASH' || entry.cancellationPoint) {
-        paymentMode = 'CASH';
-      }
-
-      // Determine doSdo display value
-      let doSdo = entry.doNo || 'PENDING';
-      if (entry.isCancelled) {
-        doSdo = 'CANCELLED';
-      } else if (entry.isRefer) {
-        doSdo = 'REF';
-      } else if (entry.isDriverAccount) {
-        doSdo = 'DA(NIL)';
-      }
-
-      // Create the LPOEntry record (including cancelled entries with flag)
-      await LPOEntry.create({
-        sn: nextSn++,
-        date: formattedDate,
-        lpoNo: lpoSummary.lpoNo,
-        dieselAt: station,
-        doSdo,
-        truckNo: entry.truckNo,
-        ltrs: entry.liters,
-        pricePerLtr: entry.rate,
-        destinations: entry.isCancelled ? 'CANCELLED' : (entry.dest || 'PENDING'),
-        originalLtrs: entry.originalLiters || null,
-        amendedAt: entry.amendedAt || null,
-        // New fields for driver account / cash / refer tracking
-        isDriverAccount: entry.isDriverAccount || false,
-        isRefer: entry.isRefer || false,
-        referenceDo: entry.referenceDoNo || entry.referenceDo || null,
-        paymentMode,
-        currency: (lpoSummary as any).currency || 'TZS',
-        isCancelled: entry.isCancelled || false,
-        cancelledAt: entry.cancelledAt || null,
-      });
-    }
-
-    logger.info(`Synced ${lpoSummary.entries.length} LPOEntry records for LPO ${lpoSummary.lpoNo}`);
-  } catch (error: any) {
-    logger.error(`Error syncing LPOEntry records for LPO ${lpoSummary.lpoNo}: ${error.message}`);
-    // Don't throw - this is a sync operation, main LPO creation should succeed
-  }
-};
-
-/**
- * Helper function to update LPOEntry records when LPOSummary is updated
- * Syncs changes from workbook to list view
- */
-const syncLPOEntriesOnUpdate = async (
-  lpoNo: string,
-  entries: any[],
-  station: string,
-  date: string
-): Promise<void> => {
-  try {
-    // Delete existing LPOEntry records for this LPO
-    await LPOEntry.updateMany(
-      { lpoNo, isDeleted: false },
-      { isDeleted: true, deletedAt: new Date() }
-    );
-
-    // Format date to D-MMM format for list view consistency
-    const formatDate = (dateStr: string): string => {
-      const d = new Date(dateStr);
-      const day = d.getDate();
-      const month = d.toLocaleDateString('en-US', { month: 'short' });
-      return `${day}-${month}`;
-    };
-    const formattedDate = formatDate(date);
-
-    // Get the highest SN for LPOEntry to continue numbering
-    const lastEntry = await LPOEntry.findOne({ isDeleted: false })
-      .sort({ sn: -1 })
-      .select('sn')
-      .lean();
-    let nextSn = lastEntry ? lastEntry.sn + 1 : 1;
-
-    // Recreate LPOEntry records from updated entries
-    for (const entry of entries) {
-      // Resolve currency from station name for updated entries
-      let entryCurrency: 'USD' | 'TZS' = 'TZS';
-      const stationCfg = await FuelStationConfig.findOne({ stationName: station, isActive: true }).lean();
-      if (stationCfg?.currency) {
-        entryCurrency = stationCfg.currency as 'USD' | 'TZS';
-      } else {
-        const upperStation = (station || '').toUpperCase();
-        if (upperStation.startsWith('LAKE') && !upperStation.includes('TUNDUMA')) entryCurrency = 'USD';
-      }
-
-      // Determine payment mode
-      let paymentMode: 'STATION' | 'CASH' | 'DRIVER_ACCOUNT' | 'REFER' = 'STATION';
-      if (entry.isRefer) {
-        paymentMode = 'REFER';
-      } else if (entry.isDriverAccount) {
-        paymentMode = 'DRIVER_ACCOUNT';
-      } else if (station?.toUpperCase() === 'CASH' || entry.cancellationPoint) {
-        paymentMode = 'CASH';
-      }
-
-      // Determine doSdo display value
-      let doSdo = entry.doNo || 'PENDING';
-      if (entry.isCancelled) {
-        doSdo = 'CANCELLED';
-      } else if (entry.isRefer) {
-        doSdo = 'REF';
-      } else if (entry.isDriverAccount) {
-        doSdo = 'DA(NIL)';
-      }
-
-      await LPOEntry.create({
-        sn: nextSn++,
-        date: formattedDate,
-        lpoNo: lpoNo,
-        dieselAt: station,
-        doSdo,
-        truckNo: entry.truckNo,
-        ltrs: entry.liters,
-        pricePerLtr: entry.rate,
-        destinations: entry.isCancelled ? 'CANCELLED' : (entry.dest || 'PENDING'),
-        originalLtrs: entry.originalLiters || null,
-        amendedAt: entry.amendedAt || null,
-        isDriverAccount: entry.isDriverAccount || false,
-        isRefer: entry.isRefer || false,
-        referenceDo: entry.referenceDoNo || entry.referenceDo || null,
-        paymentMode,
-        currency: entryCurrency,
-        isCancelled: entry.isCancelled || false,
-        cancelledAt: entry.cancelledAt || null,
-      });
-    }
-
-    logger.info(`Updated LPOEntry records for LPO ${lpoNo}`);
-  } catch (error: any) {
-    logger.error(`Error updating LPOEntry records for LPO ${lpoNo}: ${error.message}`);
-  }
-};
 
 /**
  * Sync DriverAccountEntry records when an LPO summary with driver account entries is updated.
@@ -928,20 +752,6 @@ const syncDriverAccountEntriesOnUpdate = async (lpoSummary: any): Promise<void> 
   }
 };
 
-/**
- * Helper function to delete LPOEntry records when LPOSummary is deleted
- */
-const syncLPOEntriesOnDelete = async (lpoNo: string): Promise<void> => {
-  try {
-    await LPOEntry.updateMany(
-      { lpoNo, isDeleted: false },
-      { isDeleted: true, deletedAt: new Date() }
-    );
-    logger.info(`Deleted LPOEntry records for LPO ${lpoNo}`);
-  } catch (error: any) {
-    logger.error(`Error deleting LPOEntry records for LPO ${lpoNo}: ${error.message}`);
-  }
-};
 
 /**
  * Create new LPO document (sheet in a workbook)
@@ -1096,9 +906,6 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
         }
       }
     }
-
-    // Sync LPOEntry records for the list view
-    await syncLPOEntriesToList(lpoSummary, data.station || lpoSummary.station, data.date);
 
     logger.info(`LPO document created: ${lpoSummary.lpoNo} for year ${year} by ${req.user?.username}`);
 
@@ -1415,14 +1222,6 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       throw new ApiError(404, 'LPO document not found');
     }
 
-    // Sync LPOEntry records for the list view
-    await syncLPOEntriesOnUpdate(
-      lpoSummary.lpoNo,
-      lpoSummary.entries,
-      lpoSummary.station,
-      lpoSummary.date
-    );
-
     // Sync DriverAccountEntry records if this LPO has driver account entries
     const hasDriverAccountEntries = lpoSummary.entries.some((e: any) => e.isDriverAccount);
     if (hasDriverAccountEntries) {
@@ -1493,9 +1292,6 @@ export const deleteLPOSummary = async (req: AuthRequest, res: Response): Promise
       { isDeleted: true, deletedAt: new Date() },
       { new: true }
     );
-
-    // Sync delete to LPOEntry records
-    await syncLPOEntriesOnDelete(lpoSummary.lpoNo);
 
     logger.info(`LPO document deleted: ${lpoSummary.lpoNo} by ${req.user?.username}`);
 
@@ -2350,12 +2146,6 @@ export const cancelAllEntriesInLPO = async (req: AuthRequest, res: Response): Pr
       .reduce((sum: number, e: any) => sum + e.amount, 0);
 
     await lpo.save();
-
-    // Sync cancelled status to LPOEntry flat collection
-    await LPOEntry.updateMany(
-      { lpoNo: lpo.lpoNo },
-      { $set: { isCancelled: true, cancellationReason: reason || 'Bulk LPO cancellation' } }
-    );
 
     logger.info(`All entries cancelled in LPO ${lpo.lpoNo} by ${req.user?.username} (${activeEntries.length} entries)`);
 

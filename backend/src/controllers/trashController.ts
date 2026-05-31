@@ -1,13 +1,12 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { 
-  DeliveryOrder, 
-  LPOEntry, 
+import {
+  DeliveryOrder,
   LPOSummary,
-  FuelRecord, 
-  User, 
+  FuelRecord,
+  User,
   YardFuelDispense,
-  DriverAccountEntry 
+  DriverAccountEntry
 } from '../models';
 import { AuditService } from '../utils/auditService';
 import logger from '../utils/logger';
@@ -16,7 +15,7 @@ import { emitDataChange } from '../services/websocket';
 // Model map for dynamic access
 const MODELS_MAP: Record<string, any> = {
   delivery_orders: DeliveryOrder,
-  lpo_entries: LPOEntry,
+  lpo_entries: LPOSummary,
   lpo_summaries: LPOSummary,
   fuel_records: FuelRecord,
   users: User,

@@ -8,7 +8,9 @@ import logger from '../utils/logger';
 const MODEL_COLLECTION_MAP: Record<string, string> = {
   FuelRecord: 'fuel_records',
   DeliveryOrder: 'delivery_orders',
-  LPOEntry: 'lpo_entries',
+  // LPOSummary is the single source of truth for LPO entries — emit on the
+  // same 'lpo_entries' channel the frontend subscribes to.
+  LPOSummary: 'lpo_entries',
 };
 
 /**

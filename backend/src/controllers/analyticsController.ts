@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import * as XLSX from 'xlsx';
 import { DeliveryOrder } from '../models/DeliveryOrder';
 import { FuelRecord } from '../models/FuelRecord';
-import { LPOEntry } from '../models/LPOEntry';
+import { LPOSummary } from '../models/LPOSummary';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
 import { logger } from '../utils';
