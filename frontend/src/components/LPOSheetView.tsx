@@ -334,6 +334,19 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setIsSaving(true);
 
     try {
+      // Acquire edit lock before saving
+      if (sheet.id) {
+        try {
+          await lpoDocumentsAPI.acquireLock(sheet.id);
+        } catch (err: any) {
+          if (err.response?.status === 423) {
+            const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+            alert(`This LPO is being edited by ${lockHolder}.`);
+            return;
+          }
+        }
+      }
+
       const updatedEntries = [...editedSheet.entries];
       updatedEntries[cancellingEntryIndex] = {
         ...updatedEntries[cancellingEntryIndex],
@@ -373,10 +386,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       setDetectedCancellationPoint(null);
       setEntryType(null);
       setEntryTypeMessage(null);
-      
+
+      await releaseLockIfNeeded();
       alert(successMessage);
     } catch (error) {
       console.error('Error cancelling entry:', error);
+      await releaseLockIfNeeded();
       alert('Error cancelling entry. Please try again.');
     } finally {
       setIsSaving(false);
@@ -389,9 +404,22 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setIsSaving(true);
 
     try {
+      // Acquire edit lock before saving
+      if (sheet.id) {
+        try {
+          await lpoDocumentsAPI.acquireLock(sheet.id);
+        } catch (err: any) {
+          if (err.response?.status === 423) {
+            const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+            alert(`This LPO is being edited by ${lockHolder}.`);
+            return;
+          }
+        }
+      }
+
       const updatedEntries = [...editedSheet.entries];
       const originalEntry = updatedEntries[index];
-      
+
       // Preserve the cancellationPoint - backend needs it to update the correct fuel field
       updatedEntries[index] = {
         ...originalEntry,
@@ -415,10 +443,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const savedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, updatedSheet);
       onUpdate(savedSheet);
       setEditedSheet(savedSheet);
-      
+
+      await releaseLockIfNeeded();
       alert('✓ Entry restored successfully! Fuel record has been updated.');
     } catch (error) {
       console.error('Error restoring entry:', error);
+      await releaseLockIfNeeded();
       alert('Error restoring entry. Please try again.');
     } finally {
       setIsSaving(false);
