@@ -739,7 +739,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         } finally {
           setExistingLPOsForTrucks(newMap);
           setTrucksWithoutLPOs(trucksWithoutLPOsSet);
-          setSelectedLPOsToCancel(newSelectedLPOs);
+          // Preserve existing selections for trucks that are still in the results.
+          // Only initialise an empty set for trucks we haven't seen before.
+          setSelectedLPOsToCancel(prev => {
+            const merged = new Map<string, Set<string>>();
+            for (const truckNo of newMap.keys()) {
+              merged.set(truckNo, prev.get(truckNo) ?? new Set());
+            }
+            return merged;
+          });
           setIsFetchingLPOs(false);
         }
       } else {
@@ -2365,20 +2373,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       
       if (hasAnySelection) {
         try {
-          // Cancel only selected LPOs
           for (const [truckNo, selectedLPOIds] of selectedLPOsToCancel) {
-            if (selectedLPOIds.size === 0) continue; // Skip trucks with no selections
-            
+            if (selectedLPOIds.size === 0) continue;
+
             const truckDirections = existingLPOsForTrucks.get(truckNo);
             if (!truckDirections) continue;
-            
+
             for (const { lpos, direction, doNo } of truckDirections) {
               const checkpoint = direction === 'Going' ? goingCheckpoint : returningCheckpoint;
               for (const lpo of lpos) {
-                // Only cancel if this LPO is selected
-                if (selectedLPOIds.has(lpo.id as string)) {
+                const lpoId = (lpo as any)._id?.toString() || lpo.id?.toString();
+                if (lpoId && selectedLPOIds.has(lpoId)) {
                   await lpoDocumentsAPI.cancelTruck(
-                    lpo.id as string,
+                    lpoId,
                     truckNo,
                     checkpoint as CancellationPoint,
                     `Cash mode payment - station was out of fuel (${direction}, DO: ${doNo})`
@@ -2387,13 +2394,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               }
             }
           }
-          console.log('Cancellation completed for selected LPOs');
-        } catch (error) {
-          console.error('Error during cancellation:', error);
-          // Continue with LPO creation even if cancellation fails
+        } catch (error: any) {
+          const msg = error?.response?.data?.message || error?.message || 'Unknown error';
+          alert(`Failed to cancel existing LPO: ${msg}\n\nFix the issue and try again. The CASH LPO has NOT been saved.`);
+          return; // Abort — do not save the CASH LPO with a partially-cancelled state
         }
-      } else {
-        console.log('No LPOs selected for cancellation - proceeding with CASH LPO creation only');
       }
     }
 
@@ -3067,79 +3072,45 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 )}
 
                 {!isFetchingLPOs && existingLPOsForTrucks.size > 0 && (
-                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                    <div className="flex items-start space-x-2">
-                      <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-red-800 dark:text-red-300">
-                          Existing LPOs Found: {existingLPOsForTrucks.size} truck(s) have LPOs at this checkpoint
-                        </p>
-                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                          Select which LPOs to cancel (if truck actually used that station). Leave unchecked if cash fuel was purchased elsewhere.
-                        </p>
-                        <div className="mt-2 space-y-3">
-                          {Array.from(existingLPOsForTrucks.entries()).map(([truckNo, directionLPOs]) => {
-                            const selectedForTruck = selectedLPOsToCancel.get(truckNo) || new Set();
-                            
-                            return (
-                              <div key={truckNo} className="border-l-2 border-red-300 dark:border-red-700 pl-3">
-                                <div className="font-medium text-red-800 dark:text-red-300 text-sm mb-2">
-                                  {truckNo} (DO: {directionLPOs[0]?.doNo})
-                                  {selectedForTruck.size === 0 && <span className="ml-2 text-xs text-amber-600">(None selected - CASH fuel will be recorded without cancelling)</span>}
-                                  {selectedForTruck.size > 0 && <span className="ml-2 text-xs text-red-600">({selectedForTruck.size} selected for cancellation)</span>}
-                                </div>
-                                
-                                {directionLPOs.map(({ lpos, direction }) => (
-                                  <div key={direction} className="ml-2">
-                                    <div className="text-xs text-red-700 dark:text-red-400 mb-1">
-                                      [{direction}] - {lpos.length} LPO{lpos.length > 1 ? 's' : ''} found at this checkpoint:
-                                    </div>
-                                    
-                                    {/* Always show checkboxes - user chooses what to cancel */}
-                                    <div className="space-y-1 ml-4">
-                                      {lpos.map((lpo) => (
-                                        <label key={lpo.id} className="flex items-center space-x-2 text-xs cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/30 p-1 rounded">
-                                          <input
-                                            type="checkbox"
-                                            checked={selectedForTruck.has(lpo.id as string)}
-                                            onChange={(e) => {
-                                              const newSelected = new Map(selectedLPOsToCancel);
-                                              // CRITICAL: Create a NEW Set instance, don't modify the existing one
-                                              const currentTruckSet = newSelected.get(truckNo) || new Set();
-                                              const newTruckSet = new Set(currentTruckSet); // Clone the Set
-                                              
-                                              if (e.target.checked) {
-                                                newTruckSet.add(lpo.id as string);
-                                              } else {
-                                                newTruckSet.delete(lpo.id as string);
-                                              }
-                                              
-                                              newSelected.set(truckNo, newTruckSet);
-                                              setSelectedLPOsToCancel(newSelected);
-                                            }}
-                                            className="rounded border-red-300 text-red-600 focus:ring-red-500"
-                                          />
-                                          <span className="text-red-700 dark:text-red-300">
-                                            LPO #{lpo.lpoNo} ({lpo.station}, {lpo.date})
-                                            {lpo.entries?.find((e: any) => e.truckNo === truckNo && !e.isCancelled) && 
-                                              ` - ${lpo.entries.find((e: any) => e.truckNo === truckNo)?.liters || 0}L`
-                                            }
-                                          </span>
-                                        </label>
-                                      ))}
-                                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-2 italic bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
-                                        ℹ️ Only select LPOs if the truck actually refueled at that station and it ran out of fuel. 
-                                        If cash fuel was purchased elsewhere (roadside, different station), leave unchecked.
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })}
+                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md space-y-2">
+                    {Array.from(existingLPOsForTrucks.entries()).map(([truckNo, directionLPOs]) => {
+                      const selectedForTruck = selectedLPOsToCancel.get(truckNo) || new Set();
+                      return (
+                        <div key={truckNo}>
+                          <p className="text-xs font-semibold text-red-800 dark:text-red-300 mb-1">
+                            {truckNo}
+                          </p>
+                          <div className="space-y-1 pl-2">
+                            {directionLPOs.flatMap(({ lpos }) =>
+                              lpos.map((lpo) => {
+                                const lpoId = (lpo as any)._id?.toString() || lpo.id?.toString() || '';
+                                const liters = lpo.entries?.find((e: any) => e.truckNo === truckNo && !e.isCancelled)?.liters ?? 0;
+                                return (
+                                  <label key={lpoId} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/30 px-1 py-0.5 rounded">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedForTruck.has(lpoId)}
+                                      onChange={(e) => {
+                                        const newSelected = new Map(selectedLPOsToCancel);
+                                        const newSet = new Set(newSelected.get(truckNo));
+                                        if (e.target.checked) newSet.add(lpoId);
+                                        else newSet.delete(lpoId);
+                                        newSelected.set(truckNo, newSet);
+                                        setSelectedLPOsToCancel(newSelected);
+                                      }}
+                                      className="rounded border-red-300 text-red-600 focus:ring-red-500 shrink-0"
+                                    />
+                                    <span className="text-red-700 dark:text-red-300">
+                                      LPO #{lpo.lpoNo} ({lpo.station}, {lpo.date}) — {liters}L
+                                    </span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })}
                   </div>
                 )}
 

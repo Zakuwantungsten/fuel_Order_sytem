@@ -2152,15 +2152,16 @@ export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Pro
     // Also filter by DO number if provided
     const matchingLpos = lpos.map(lpo => ({
       ...lpo,
+      id: lpo._id?.toString(), // Normalise so frontend can key by `lpo.id`
       entries: lpo.entries.filter((e: any) => {
         const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
         const truckMatches = entryTruckNormalized === truckNoNormalized && !e.isCancelled;
-        
+
         // If DO number is provided, also check if entry matches the DO
         if (doNo && truckMatches) {
           return e.doNo === doNo;
         }
-        
+
         return truckMatches;
       })
     })).filter(lpo => lpo.entries.length > 0);
