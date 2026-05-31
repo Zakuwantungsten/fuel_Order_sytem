@@ -230,36 +230,6 @@ export const getAutoCancellationPoint = (station: string, direction: 'going' | '
   return direction === 'going' ? 'DAR_GOING' : 'DAR_RETURN';
 };
 
-/**
- * Get stations that correspond to a specific cancellation point
- * Used to filter LPOs when showing which ones to cancel
- * @param cancellationPoint - The checkpoint (e.g., 'ZAMBIA_GOING')
- * @returns Array of station names that map to this checkpoint
- */
-export const getStationsForCancellationPoint = (cancellationPoint: CancellationPoint): string[] => {
-  // Reverse mapping: checkpoint -> stations
-  const checkpointToStations: Record<CancellationPoint, string[]> = {
-    'DAR_GOING': ['DAR GOING'],
-    'MORO_GOING': ['MORO GOING', 'GBP MOROGORO'],
-    'MBEYA_GOING': ['MBEYA GOING', 'INFINITY'],
-    'INFINITY_GOING': ['INFINITY'],
-    'TDM_GOING': ['TDM GOING', 'LAKE TUNDUMA'],
-    'ZAMBIA_GOING': ['ZAMBIA GOING', 'LAKE CHILABOMBWE'],
-    'CONGO_GOING': ['CONGO'],
-    'ZAMBIA_RETURNING': ['ZAMBIA RETURN', 'LAKE NDOLA', 'LAKE KAPIRI'],
-    'TDM_RETURN': ['TDM RETURN', 'LAKE TUNDUMA'],
-    'MBEYA_RETURN': ['MBEYA RETURN', 'INFINITY'],
-    'MORO_RETURN': ['MORO RETURN', 'GBP MOROGORO'],
-    'DAR_RETURN': ['DAR RETURN'],
-    'TANGA_RETURN': ['TANGA RETURN', 'GBP KANGE'],
-    'CONGO_RETURNING': ['CONGO'],
-    'CUSTOM_GOING': [],  // Custom stations don't have predefined names
-    'CUSTOM_RETURN': [],
-  };
-  
-  return checkpointToStations[cancellationPoint] || [];
-};
-
 // Get available cancellation points (checkpoints) based on journey direction
 export const getAvailableCancellationPoints = (_paymentMode: 'CASH' | 'DRIVER_ACCOUNT'): {
   going: CancellationPoint[];
@@ -486,7 +456,6 @@ export default {
   getAvailableCancellationPoints,
   getFuelRecordFieldFromCancellationPoint,
   getAutoCancellationPoint,
-  getStationsForCancellationPoint,
   createCancellationInfo,
   generateCancellationReport,
   generateCancellationStatement,

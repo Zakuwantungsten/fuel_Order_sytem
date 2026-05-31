@@ -6,10 +6,10 @@ import { formatTruckNumber } from '../utils/dataCleanup';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
-import { 
-  getAvailableCancellationPoints, 
+import {
+  getAvailableCancellationPoints,
   getCancellationPointDisplayName,
-  getStationsForCancellationPoint,
+  CANCELLATION_POINT_TO_FUEL_FIELD,
   FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
 import FuelRecordInspectModal, { calculateMbeyaReturnBalance } from './FuelRecordInspectModal';
@@ -653,73 +653,66 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         const trucksWithoutLPOsSet = new Set<string>();
         const newSelectedLPOs = new Map<string, Set<string>>();
         
+        // Determine whether an LPO's station fills the same fuel record column as the
+        // selected checkpoint. This uses the station's declared fuelRecordFieldGoing /
+        // fuelRecordFieldReturning from the DB — no hardcoded name lists anywhere.
+        // For stations not found in the DB (custom / ad-hoc names), the LPO is included
+        // so the user can still see and manually decide to cancel it.
+        const doesLpoMatchCheckpoint = (lpoStation: string, cp: CancellationPoint): boolean => {
+          const checkpointFuelField = CANCELLATION_POINT_TO_FUEL_FIELD[cp];
+          if (!checkpointFuelField) return false;
+          const isReturn = cp.includes('RETURN') || cp.includes('RETURNING');
+          const stationConfig = availableStations.find(
+            s => s.stationName.toUpperCase() === lpoStation.toUpperCase().trim()
+          );
+          if (stationConfig) {
+            const stationField = isReturn
+              ? stationConfig.fuelRecordFieldReturning
+              : stationConfig.fuelRecordFieldGoing;
+            return stationField === checkpointFuelField;
+          }
+          // Station not in DB (custom/unlisted) — include it so the user can decide
+          return true;
+        };
+
         try {
           for (const entry of formData.entries) {
             if (entry.truckNo && entry.truckNo.length >= 4 && entry.doNo && entry.doNo !== 'NIL') {
               const truckLPOs: { lpos: LPOSummary[], direction: string, doNo: string }[] = [];
-              
+
               // Check going direction if enabled
               if (hasGoingCheckpoint) {
-                // Get stations that correspond to this checkpoint
-                const goingStations = getStationsForCancellationPoint(goingCheckpoint);
-                
                 const goingLpos = await lpoDocumentsAPI.findAtCheckpoint(
                   entry.truckNo,
-                  entry.doNo, // Filter by DO number - current journey only
+                  entry.doNo,
                   undefined,
                   goingCheckpoint
                 );
-                
-                // Filter LPOs to only include those at stations matching this checkpoint
-                const filteredGoingLpos = goingLpos.filter(lpo => {
-                  const lpoStationUpper = lpo.station.toUpperCase().trim();
-                  return goingStations.some(station => {
-                    const checkpointStation = station.toUpperCase().trim();
-                    // Check exact match or partial match (for variations like GBP/GPB)
-                    return lpoStationUpper === checkpointStation || 
-                           lpoStationUpper.includes(checkpointStation) ||
-                           checkpointStation.includes(lpoStationUpper);
-                  });
-                });
-                
+                const filteredGoingLpos = goingLpos.filter(
+                  lpo => doesLpoMatchCheckpoint(lpo.station, goingCheckpoint)
+                );
                 if (filteredGoingLpos.length > 0) {
                   truckLPOs.push({ lpos: filteredGoingLpos, direction: 'Going', doNo: entry.doNo });
-                  
-                  // Initialize empty selection set - user must manually select
                   if (!newSelectedLPOs.has(entry.truckNo)) {
                     newSelectedLPOs.set(entry.truckNo, new Set());
                   }
                 }
               }
-              
+
               // Check returning direction if enabled
               if (hasReturningCheckpoint) {
-                // Get stations that correspond to this checkpoint
-                const returningStations = getStationsForCancellationPoint(returningCheckpoint);
-                
                 const returningLpos = await lpoDocumentsAPI.findAtCheckpoint(
                   entry.truckNo,
-                  entry.doNo, // Filter by DO number - current journey only
+                  entry.doNo,
                   undefined,
                   returningCheckpoint
                 );
-                
-                // Filter LPOs to only include those at stations matching this checkpoint
-                const filteredReturningLpos = returningLpos.filter(lpo => {
-                  const lpoStationUpper = lpo.station.toUpperCase().trim();
-                  return returningStations.some(station => {
-                    const checkpointStation = station.toUpperCase().trim();
-                    // Check exact match or partial match
-                    return lpoStationUpper === checkpointStation || 
-                           lpoStationUpper.includes(checkpointStation) ||
-                           checkpointStation.includes(lpoStationUpper);
-                  });
-                });
+                const filteredReturningLpos = returningLpos.filter(
+                  lpo => doesLpoMatchCheckpoint(lpo.station, returningCheckpoint)
+                );
                 
                 if (filteredReturningLpos.length > 0) {
                   truckLPOs.push({ lpos: filteredReturningLpos, direction: 'Returning', doNo: entry.doNo });
-                  
-                  // Initialize empty selection set - user must manually select
                   if (!newSelectedLPOs.has(entry.truckNo)) {
                     newSelectedLPOs.set(entry.truckNo, new Set());
                   }
@@ -758,7 +751,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     };
 
     fetchExistingLPOs();
-  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => `${e?.truckNo || ''}-${e?.doNo || ''}`).join(',')]);
+  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => `${e?.truckNo || ''}-${e?.doNo || ''}`).join(','), availableStations]);
 
   // Check for duplicate allocations when station or entries change (for non-CASH stations)
   useEffect(() => {
