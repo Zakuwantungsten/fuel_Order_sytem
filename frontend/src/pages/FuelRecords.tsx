@@ -1336,9 +1336,9 @@ const FuelRecords = () => {
             </div>
 
             {/* Table View - Desktop (lg and up) */}
-            <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-xs divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
-            <thead className="bg-gray-50 dark:bg-gray-800">
+            <div className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)]">
+              <table className="w-full text-xs divide-y divide-gray-200 dark:divide-gray-700 table-fixed overflow-visible">
+            <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
               <tr>
                 <th className="w-8 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">SN</th>
                 <th className="w-12 px-1 py-1 text-left font-medium text-gray-500 dark:text-gray-100 uppercase">Date</th>
