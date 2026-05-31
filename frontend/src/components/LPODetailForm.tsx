@@ -253,6 +253,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     entryIndex: -1,
   });
 
+  // Multi-select state for bulk editing
+  const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
+  const [bulkLiters, setBulkLiters] = useState('');
+  const [bulkRate, setBulkRate] = useState('');
+
   // Forwarding mode state - tracks inline forwarding workflow
   const [isForwardingMode, setIsForwardingMode] = useState(false);
   const [forwardedFromInfo, setForwardedFromInfo] = useState<{
@@ -2187,6 +2192,47 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }));
   };
 
+  const applyBulkField = (field: 'liters' | 'rate', value: number) => {
+    if (selectedEntries.size === 0 || value <= 0) return;
+    setFormData(prev => {
+      const entries = [...(prev.entries || [])];
+      selectedEntries.forEach(idx => {
+        if (!entries[idx]) return;
+        entries[idx] = { ...entries[idx], [field]: value };
+        entries[idx].amount = entries[idx].liters * entries[idx].rate;
+      });
+      const total = entries.reduce((sum, e) => sum + (e?.amount || 0), 0);
+      return { ...prev, entries, total };
+    });
+  };
+
+  const handleBulkToggleDirection = () => {
+    Array.from(selectedEntries).forEach(idx => toggleDirection(idx));
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedEntries.size === 0) return;
+    selectedEntries.forEach(index => {
+      if (fetchDebounceTimers.current[index]) {
+        clearTimeout(fetchDebounceTimers.current[index]);
+        delete fetchDebounceTimers.current[index];
+      }
+    });
+    const updatedEntries = (formData.entries || []).filter((_, i) => !selectedEntries.has(i));
+    const total = updatedEntries.reduce((sum, e) => sum + (e?.amount || 0), 0);
+    const newAutoFillData: Record<number, EntryAutoFillData> = {};
+    let newIdx = 0;
+    (formData.entries || []).forEach((_, oldIdx) => {
+      if (!selectedEntries.has(oldIdx)) {
+        if (entryAutoFillData[oldIdx]) newAutoFillData[newIdx] = entryAutoFillData[oldIdx];
+        newIdx++;
+      }
+    });
+    setEntryAutoFillData(newAutoFillData);
+    setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
+    setSelectedEntries(new Set());
+  };
+
   const handleRemoveEntry = (index: number) => {
     // Clear any pending fetch timer for this row
     if (fetchDebounceTimers.current[index]) {
@@ -2208,6 +2254,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }
     });
     
+    // Remap selected entries (shift indices down past the removed row)
+    const newSelected = new Set<number>();
+    selectedEntries.forEach(idx => {
+      if (idx < index) newSelected.add(idx);
+      else if (idx > index) newSelected.add(idx - 1);
+    });
+    setSelectedEntries(newSelected);
+
     setEntryAutoFillData(newAutoFillData);
     setFormData((prev) => ({
       ...prev,
@@ -3390,6 +3444,75 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               )}
             </div>
 
+            {/* Bulk action bar — visible when 1+ entries are selected */}
+            {selectedEntries.size > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mb-3 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-700 rounded-lg">
+                <span className="text-xs font-semibold text-primary-700 dark:text-primary-300 flex-shrink-0">
+                  {selectedEntries.size} selected
+                </span>
+                <div className="flex items-center gap-1">
+                  <label className="text-xs text-gray-600 dark:text-gray-400">Liters:</label>
+                  <input
+                    type="number"
+                    value={bulkLiters}
+                    onChange={e => setBulkLiters(e.target.value)}
+                    placeholder="0"
+                    className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { applyBulkField('liters', parseFloat(bulkLiters) || 0); setBulkLiters(''); }}
+                    disabled={!bulkLiters || parseFloat(bulkLiters) <= 0}
+                    className="px-2 py-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white rounded text-xs"
+                  >
+                    Apply
+                  </button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <label className="text-xs text-gray-600 dark:text-gray-400">Rate:</label>
+                  <input
+                    type="number"
+                    value={bulkRate}
+                    onChange={e => setBulkRate(e.target.value)}
+                    placeholder="0"
+                    step="0.01"
+                    className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { applyBulkField('rate', parseFloat(bulkRate) || 0); setBulkRate(''); }}
+                    disabled={!bulkRate || parseFloat(bulkRate) <= 0}
+                    className="px-2 py-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white rounded text-xs"
+                  >
+                    Apply
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBulkToggleDirection}
+                  className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40 rounded text-xs font-medium"
+                >
+                  <ArrowLeft className="w-3 h-3" /><ArrowRight className="w-3 h-3" />
+                  Toggle Dir
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800/40 rounded text-xs font-medium"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedEntries(new Set())}
+                  className="ml-auto text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
             {/* Mobile Card View (< md) */}
             <div className="md:hidden space-y-1.5">
               {formData.entries && formData.entries.length > 0 ? formData.entries.filter(entry => entry != null).map((entry, index) => {
@@ -3409,8 +3532,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     : isDifferentAmount ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10'
                     : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
                   }`}>
-                    {/* Header row: # + Truck + DO + Direction + Actions all on one line */}
+                    {/* Header row: checkbox + # + Truck + DO + Direction + Actions all on one line */}
                     <div className="flex items-center gap-1.5 mb-1.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedEntries.has(index)}
+                        onChange={e => {
+                          const next = new Set(selectedEntries);
+                          if (e.target.checked) next.add(index); else next.delete(index);
+                          setSelectedEntries(next);
+                        }}
+                        className="rounded border-gray-300 dark:border-gray-600 text-primary-600 flex-shrink-0"
+                      />
                       <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 w-4 flex-shrink-0">#{index + 1}</span>
                       {/* Truck */}
                       <div className="relative flex-1 min-w-0">
@@ -3550,6 +3683,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border dark:border-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
+                    <th className="px-3 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={(formData.entries?.filter(e => e != null).length || 0) > 0 && selectedEntries.size === (formData.entries?.filter(e => e != null).length || 0)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setSelectedEntries(new Set((formData.entries || []).map((_, i) => i)));
+                          } else {
+                            setSelectedEntries(new Set());
+                          }
+                        }}
+                        className="rounded border-gray-300 dark:border-gray-600 text-primary-600"
+                        title="Select all"
+                      />
+                    </th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
                       Truck No.
                     </th>
@@ -3592,6 +3740,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5;
                       return (
                         <tr key={index} className={`${(autoFill as EntryAutoFillData).entryType === 'ref' ? 'bg-orange-50 dark:bg-orange-900/10' : (autoFill as EntryAutoFillData).entryType === 'da' ? 'bg-blue-50 dark:bg-blue-900/10' : autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : ''} ${hasNoRecordWarning ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${!autoFill.fetched && !(autoFill as EntryAutoFillData).entryType && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'dark:bg-gray-800' : ''}`}>
+                          <td className="px-3 py-3 w-8">
+                            <input
+                              type="checkbox"
+                              checked={selectedEntries.has(index)}
+                              onChange={e => {
+                                const next = new Set(selectedEntries);
+                                if (e.target.checked) next.add(index); else next.delete(index);
+                                setSelectedEntries(next);
+                              }}
+                              className="rounded border-gray-300 dark:border-gray-600 text-primary-600"
+                            />
+                          </td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1.5">
                               <input
@@ -3914,7 +4074,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     })
                   ) : (
                     <tr>
-                      <td colSpan={hasAnyIssue ? 9 : 8} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <td colSpan={hasAnyIssue ? 10 : 9} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                         No entries added. Click "Add Entry" to add fuel supply details.
                       </td>
                     </tr>
