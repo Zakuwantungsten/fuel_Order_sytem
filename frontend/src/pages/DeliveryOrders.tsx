@@ -226,7 +226,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         // Mark as processed to avoid re-processing
         highlightProcessedRef.current = highlightId;
         console.log('Processing highlight for DO:', highlightId, 'Year:', yearParam, 'Month:', monthParam);
-        
+
+        // Reset to list view so the highlighted record is visible
+        setActiveTab('list');
+
         // Set year if provided
         if (yearParam) {
           const year = parseInt(yearParam);

@@ -290,6 +290,10 @@ const FuelRecords = () => {
         setMonthInitialized(true);
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
+
+        // Reset to records view so the highlighted record is visible
+        setViewMode('records');
+
         // If year and month are provided, construct the YYYY-MM format
         if (yearParam && monthParam) {
           const targetMonth = `${yearParam}-${String(monthParam).padStart(2, '0')}`;

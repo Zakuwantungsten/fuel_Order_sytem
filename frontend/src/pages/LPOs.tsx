@@ -309,7 +309,10 @@ const LPOs = () => {
         console.log('Month Param:', monthParam);
         console.log('Current selectedYear:', selectedYear);
         console.log('Current selectedPeriods:', selectedPeriods);
-        
+
+        // Reset to list view so the highlighted record is visible
+        setViewMode('list');
+
         // Set year if provided (used for workbook display)
         let urlFilterYear = new Date().getFullYear();
         if (yearParam) {
