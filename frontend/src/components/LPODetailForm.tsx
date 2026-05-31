@@ -103,6 +103,9 @@ interface StoredFormData {
   returningEnabled: boolean;
   goingCheckpoint: CancellationPoint | '';
   returningCheckpoint: CancellationPoint | '';
+  cashCurrency: 'TZS' | 'USD';
+  cashRate: number;
+  cashDefaultLiters: number;
   customStationName: string;
   customCurrency: 'USD' | 'TZS';
   customRate: number;
@@ -269,6 +272,27 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return stored?.customStationName ?? '';
     }
     return '';
+  });
+  const [cashCurrency, setCashCurrency] = useState<'TZS' | 'USD'>(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.cashCurrency ?? 'TZS';
+    }
+    return 'TZS';
+  });
+  const [cashRate, setCashRate] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.cashRate ?? 0;
+    }
+    return 0;
+  });
+  const [cashDefaultLiters, setCashDefaultLiters] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.cashDefaultLiters ?? 0;
+    }
+    return 0;
   });
   const [customCurrency, setCustomCurrency] = useState<'USD' | 'TZS'>(() => {
     if (!initialData) {
@@ -440,6 +464,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setTrucksWithoutLPOs(new Set());
     setDuplicateWarnings(new Map());
     setLockedEntryRates(new Map());
+    setCashCurrency('TZS');
+    setCashRate(0);
+    setCashDefaultLiters(0);
     setCustomStationName('');
     setCustomCurrency('USD');
     setCustomRate(0);
@@ -515,6 +542,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customRate]);
 
+  // When cashRate changes for CASH station, push the new rate to all existing rows
+  useEffect(() => {
+    if (formData.station !== 'CASH') return;
+    if (!formData.entries || formData.entries.length === 0) return;
+    if (!cashRate) return;
+
+    const needsUpdate = formData.entries.some(entry => entry.rate !== cashRate);
+    if (!needsUpdate) return;
+
+    const updatedEntries = formData.entries.map(entry => {
+      const liters = entry.liters || 0;
+      return { ...entry, rate: cashRate, amount: liters * cashRate };
+    });
+    const total = updatedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cashRate]);
+
   // Check for existing draft on mount and when modal opens
   useEffect(() => {
     if (isOpen && !initialData) {
@@ -545,6 +590,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         returningEnabled,
         goingCheckpoint,
         returningCheckpoint,
+        cashCurrency,
+        cashRate,
+        cashDefaultLiters,
         customStationName,
         customCurrency,
         customRate,
@@ -566,6 +614,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     returningEnabled, 
     goingCheckpoint, 
     returningCheckpoint,
+    cashCurrency,
+    cashRate,
+    cashDefaultLiters,
     customStationName,
     customCurrency,
     customRate,
@@ -1378,8 +1429,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   const handleAddEntry = () => {
     const isCustom = formData.station === 'CUSTOM';
-    const entryRate = isCustom ? customRate : (formData.station ? getStationDefaults(formData.station, 'going').rate : 1.2);
-    const entryLiters = isCustom ? customDefaultLiters : 0;
+    const isCash = formData.station === 'CASH';
+    const entryRate = isCustom ? customRate : isCash ? cashRate : (formData.station ? getStationDefaults(formData.station, 'going').rate : 1.2);
+    const entryLiters = isCustom ? customDefaultLiters : isCash ? cashDefaultLiters : 0;
     const newEntry: LPODetail = {
       doNo: '',  // Start empty so user can type immediately
       truckNo: '',
@@ -1470,8 +1522,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // Add all pasted trucks starting at the paste index
       formattedTrucks.forEach((truckNo) => {
         const isPasteCustom = prev.station === 'CUSTOM';
-        const pasteRate = isPasteCustom ? customRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2);
-        const pasteLiters = isPasteCustom ? customDefaultLiters : 0;
+        const isPasteCash = prev.station === 'CASH';
+        const pasteRate = isPasteCustom ? customRate : isPasteCash ? cashRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2);
+        const pasteLiters = isPasteCustom ? customDefaultLiters : isPasteCash ? cashDefaultLiters : 0;
         const newEntry: LPODetail = {
           doNo: '',  // Start empty
           truckNo: truckNo,
@@ -1638,8 +1691,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           : result.destination;
         
         const isCustomStation = formData.station === 'CUSTOM';
+        const isCashStation = formData.station === 'CASH';
         const defaults = isCustomStation
           ? { liters: customDefaultLiters, rate: customRate }
+          : isCashStation
+          ? { liters: cashDefaultLiters, rate: cashRate }
           : (formData.station
               ? getStationDefaults(
                   formData.station,
@@ -1667,7 +1723,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               doNo: '',  // Start empty
               truckNo: '',
               liters: 0,
-              rate: prev.station === 'CUSTOM' ? customRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2),
+              rate: prev.station === 'CUSTOM' ? customRate : prev.station === 'CASH' ? cashRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2),
               amount: 0,
               dest: 'NIL',
             };
@@ -2823,129 +2879,182 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 <p className="text-xs text-orange-700 dark:text-orange-300 mb-4">
                   <strong>Required:</strong> Select direction(s) and checkpoint(s) where cash fuel was purchased. You can select one or both directions. Any existing LPOs at selected checkpoints will be automatically cancelled.
                 </p>
-                
-                {/* Direction Checkboxes - Can select one or both */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+                {/* All controls on one row: Going | Returning | Rate | Default Liters — all same height */}
+                <div className="flex flex-wrap gap-3 mb-4 items-end">
+
                   {/* Going Direction */}
-                  <div className="border border-orange-200 dark:border-orange-700 rounded-lg p-3 bg-white dark:bg-gray-800">
-                    <label className="flex items-center space-x-2 cursor-pointer mb-3">
-                      <input
-                        type="checkbox"
-                        checked={goingEnabled}
-                        onChange={(e) => {
-                          setGoingEnabled(e.target.checked);
-                          if (!e.target.checked) setGoingCheckpoint('');
+                  <div className="flex-1 min-w-[180px]">
+                    <label className="block text-sm font-medium text-orange-800 dark:text-orange-200 mb-1">Going Direction</label>
+                    <div ref={goingCheckpointRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!goingEnabled) {
+                            setGoingEnabled(true);
+                            setShowGoingCheckpointDropdown(true);
+                          } else {
+                            setShowGoingCheckpointDropdown(!showGoingCheckpointDropdown);
+                          }
                         }}
-                        className="w-4 h-4 text-orange-600"
-                      />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Going Direction</span>
-                    </label>
-                    
-                    {goingEnabled && (
-                      <div className="relative" ref={goingCheckpointRef}>
-                        <label className="block text-xs font-medium text-orange-800 dark:text-orange-300 mb-1">
-                          Going Checkpoint *
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setShowGoingCheckpointDropdown(!showGoingCheckpointDropdown)}
-                          className={`w-full px-2 py-1.5 text-sm border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between ${
-                            !goingCheckpoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
-                          }`}
-                        >
-                          <span className={!goingCheckpoint ? 'text-gray-400' : ''}>
-                            {goingCheckpoint ? getCancellationPointDisplayName(goingCheckpoint) : 'Select checkpoint...'}
+                        className={`w-full px-3 py-2 border rounded-md text-sm text-left flex items-center justify-between transition-colors ${
+                          goingEnabled
+                            ? goingCheckpoint
+                              ? 'border-orange-400 dark:border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-gray-900 dark:text-gray-100'
+                              : 'border-red-400 dark:border-red-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                            : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500 cursor-pointer'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={goingEnabled}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              setGoingEnabled(e.target.checked);
+                              if (!e.target.checked) { setGoingCheckpoint(''); setShowGoingCheckpointDropdown(false); }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 shrink-0 text-orange-600 border-gray-300 rounded"
+                          />
+                          <span className="truncate text-xs">
+                            {goingEnabled
+                              ? (goingCheckpoint ? getCancellationPointDisplayName(goingCheckpoint) : 'Select checkpoint...')
+                              : 'Going (disabled)'}
                           </span>
-                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showGoingCheckpointDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showGoingCheckpointDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                            {getAvailableCancellationPoints('CASH').going.map((point) => (
-                              <button
-                                key={point}
-                                type="button"
-                                onClick={() => {
-                                  setGoingCheckpoint(point as CancellationPoint);
-                                  setShowGoingCheckpointDropdown(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                                  goingCheckpoint === point ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-gray-100'
-                                }`}
-                              >
-                                <span>{getCancellationPointDisplayName(point)}</span>
-                                {goingCheckpoint === point && <Check className="w-4 h-4" />}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {!goingCheckpoint && (
-                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                            ⚠ Select checkpoint
-                          </p>
-                        )}
-                      </div>
+                        </span>
+                        {goingEnabled && <ChevronDown className={`w-4 h-4 shrink-0 ml-1 transition-transform ${showGoingCheckpointDropdown ? 'rotate-180' : ''}`} />}
+                      </button>
+                      {showGoingCheckpointDropdown && (
+                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                          {getAvailableCancellationPoints('CASH').going.map((point) => (
+                            <button
+                              key={point}
+                              type="button"
+                              onClick={() => { setGoingCheckpoint(point as CancellationPoint); setShowGoingCheckpointDropdown(false); }}
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                                goingCheckpoint === point ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-gray-100'
+                              }`}
+                            >
+                              <span>{getCancellationPointDisplayName(point)}</span>
+                              {goingCheckpoint === point && <Check className="w-4 h-4" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {goingEnabled && !goingCheckpoint && (
+                      <p className="mt-1 text-xs text-red-600 dark:text-red-400">⚠ Select checkpoint</p>
                     )}
                   </div>
 
                   {/* Returning Direction */}
-                  <div className="border border-orange-200 dark:border-orange-700 rounded-lg p-3 bg-white dark:bg-gray-800">
-                    <label className="flex items-center space-x-2 cursor-pointer mb-3">
-                      <input
-                        type="checkbox"
-                        checked={returningEnabled}
-                        onChange={(e) => {
-                          setReturningEnabled(e.target.checked);
-                          if (!e.target.checked) setReturningCheckpoint('');
+                  <div className="flex-1 min-w-[180px]">
+                    <label className="block text-sm font-medium text-orange-800 dark:text-orange-200 mb-1">Returning Direction</label>
+                    <div ref={returningCheckpointRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!returningEnabled) {
+                            setReturningEnabled(true);
+                            setShowReturningCheckpointDropdown(true);
+                          } else {
+                            setShowReturningCheckpointDropdown(!showReturningCheckpointDropdown);
+                          }
                         }}
-                        className="w-4 h-4 text-orange-600"
-                      />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Returning Direction</span>
-                    </label>
-                    
-                    {returningEnabled && (
-                      <div className="relative" ref={returningCheckpointRef}>
-                        <label className="block text-xs font-medium text-orange-800 dark:text-orange-300 mb-1">
-                          Returning Checkpoint *
-                        </label>
+                        className={`w-full px-3 py-2 border rounded-md text-sm text-left flex items-center justify-between transition-colors ${
+                          returningEnabled
+                            ? returningCheckpoint
+                              ? 'border-orange-400 dark:border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-gray-900 dark:text-gray-100'
+                              : 'border-red-400 dark:border-red-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                            : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500 cursor-pointer'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={returningEnabled}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              setReturningEnabled(e.target.checked);
+                              if (!e.target.checked) { setReturningCheckpoint(''); setShowReturningCheckpointDropdown(false); }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 shrink-0 text-orange-600 border-gray-300 rounded"
+                          />
+                          <span className="truncate text-xs">
+                            {returningEnabled
+                              ? (returningCheckpoint ? getCancellationPointDisplayName(returningCheckpoint) : 'Select checkpoint...')
+                              : 'Returning (disabled)'}
+                          </span>
+                        </span>
+                        {returningEnabled && <ChevronDown className={`w-4 h-4 shrink-0 ml-1 transition-transform ${showReturningCheckpointDropdown ? 'rotate-180' : ''}`} />}
+                      </button>
+                      {showReturningCheckpointDropdown && (
+                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                          {getAvailableCancellationPoints('CASH').returning.map((point) => (
+                            <button
+                              key={point}
+                              type="button"
+                              onClick={() => { setReturningCheckpoint(point as CancellationPoint); setShowReturningCheckpointDropdown(false); }}
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                                returningCheckpoint === point ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-gray-100'
+                              }`}
+                            >
+                              <span>{getCancellationPointDisplayName(point)}</span>
+                              {returningCheckpoint === point && <Check className="w-4 h-4" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {returningEnabled && !returningCheckpoint && (
+                      <p className="mt-1 text-xs text-red-600 dark:text-red-400">⚠ Select checkpoint</p>
+                    )}
+                  </div>
+
+                  {/* Rate with TZS/USD toggle */}
+                  <div className="w-40 shrink-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                        Rate ({cashCurrency})
+                      </label>
+                      <div className="flex rounded overflow-hidden border border-orange-300 dark:border-orange-600 text-xs">
                         <button
                           type="button"
-                          onClick={() => setShowReturningCheckpointDropdown(!showReturningCheckpointDropdown)}
-                          className={`w-full px-2 py-1.5 text-sm border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between ${
-                            !returningCheckpoint ? 'border-red-400 dark:border-red-600' : 'border-orange-300 dark:border-orange-600'
-                          }`}
-                        >
-                          <span className={!returningCheckpoint ? 'text-gray-400' : ''}>
-                            {returningCheckpoint ? getCancellationPointDisplayName(returningCheckpoint) : 'Select checkpoint...'}
-                          </span>
-                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showReturningCheckpointDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showReturningCheckpointDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                            {getAvailableCancellationPoints('CASH').returning.map((point) => (
-                              <button
-                                key={point}
-                                type="button"
-                                onClick={() => {
-                                  setReturningCheckpoint(point as CancellationPoint);
-                                  setShowReturningCheckpointDropdown(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                                  returningCheckpoint === point ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-gray-100'
-                                }`}
-                              >
-                                <span>{getCancellationPointDisplayName(point)}</span>
-                                {returningCheckpoint === point && <Check className="w-4 h-4" />}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {!returningCheckpoint && (
-                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                            ⚠ Select checkpoint
-                          </p>
-                        )}
+                          onClick={() => setCashCurrency('TZS')}
+                          className={`px-2 py-0.5 font-medium transition-colors ${cashCurrency === 'TZS' ? 'bg-orange-500 text-white' : 'bg-white dark:bg-gray-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20'}`}
+                        >TZS</button>
+                        <button
+                          type="button"
+                          onClick={() => setCashCurrency('USD')}
+                          className={`px-2 py-0.5 font-medium transition-colors ${cashCurrency === 'USD' ? 'bg-orange-500 text-white' : 'bg-white dark:bg-gray-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20'}`}
+                        >USD</button>
                       </div>
-                    )}
+                    </div>
+                    <input
+                      type="number"
+                      value={cashRate || ''}
+                      onChange={(e) => setCashRate(parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                      step="0.01"
+                      min="0"
+                      className="w-full px-3 py-2 border border-orange-300 dark:border-orange-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Default Liters */}
+                  <div className="w-36 shrink-0">
+                    <label className="block text-sm font-medium text-orange-800 dark:text-orange-200 mb-1">Default Liters</label>
+                    <input
+                      type="number"
+                      value={cashDefaultLiters || ''}
+                      onChange={(e) => setCashDefaultLiters(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      step="1"
+                      min="0"
+                      className="w-full px-3 py-2 border border-orange-300 dark:border-orange-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    />
                   </div>
                 </div>
 
