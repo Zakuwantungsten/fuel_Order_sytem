@@ -1,4 +1,8 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { fuelRecordKeys } from '../hooks/useFuelRecords';
+import { deliveryOrderKeys } from '../hooks/useDeliveryOrders';
 import {
   Fuel, 
   ClipboardList, 
@@ -162,10 +166,22 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const [saNavSearch, setSaNavSearch] = useState('');
   const [editDoId, setEditDoId] = useState<string | null>(null);
+  const [pendingTruckSuffix, setPendingTruckSuffix] = useState<string>('');
   const [, setHighlightParam] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const { logout, toggleTheme, isDark } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Global listener: when truck batches change on any client, invalidate fuel records
+  // and delivery orders regardless of which tab is currently active. Without this,
+  // the invalidation only fires if TruckBatchesPage is mounted (i.e. the user is on
+  // that tab), so switching to Fuel Records would show stale extra-liters values.
+  const invalidateTruckBatchDependents = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+  }, [queryClient]);
+  useRealtimeSync('truck_batches', invalidateTruckBatchDependents, 'dashboard-truck-batches');
 
   // The "home" tab for this role — pressing back beyond this triggers exit confirm
   const getHomeTab = (): string => {
@@ -424,7 +440,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       case 'lpo':
         return <LPOs />;
       case 'truck_batches':
-        return <TruckBatchesPage />;
+        return <TruckBatchesPage initialSuffix={pendingTruckSuffix} onSuffixConsumed={() => setPendingTruckSuffix('')} />;
       case 'fleet_tracking':
         return <FleetTracking />;
       case 'checkpoints':
@@ -731,9 +747,15 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             </button>
             
             <div className="flex-shrink-0">
-              <NotificationBell 
+              <NotificationBell
               onNotificationClick={(notification) => {
-                if (notification.metadata?.fuelRecordId) {
+                if (
+                  notification.type === 'missing_extra_fuel' &&
+                  notification.metadata?.truckSuffix
+                ) {
+                  setPendingTruckSuffix(notification.metadata.truckSuffix);
+                  navigateToTab('truck_batches');
+                } else if (notification.metadata?.fuelRecordId) {
                   navigateToTab('fuel_records');
                 }
               }}
@@ -857,16 +879,20 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
               </button>
               
               {/* Notification Bell */}
-              <NotificationBell 
+              <NotificationBell
                 onNotificationClick={(notification) => {
-                  if (notification.metadata?.fuelRecordId) {
+                  if (
+                    notification.type === 'missing_extra_fuel' &&
+                    notification.metadata?.truckSuffix
+                  ) {
+                    setPendingTruckSuffix(notification.metadata.truckSuffix);
+                    navigateToTab('truck_batches');
+                  } else if (notification.metadata?.fuelRecordId) {
                     navigateToTab('fuel_records');
                   }
                 }}
                 onEditDO={(doId) => {
-                  // Switch to DO tab first
                   navigateToTab('do');
-                  // Then set the edit DO ID which will trigger the URL update
                   setEditDoId(doId);
                 }}
                 onViewPendingYardFuel={() => {

@@ -14,6 +14,18 @@ const MODEL_COLLECTION_MAP: Record<string, string> = {
 };
 
 /**
+ * Map SystemConfig.configType → WebSocket collection name.
+ * External writes (scripts, other servers) to SystemConfig won't go through
+ * the controller-level emitDataChange, so this change stream catches them.
+ */
+const SYSTEM_CONFIG_TYPE_MAP: Record<string, string> = {
+  truck_batches: 'truck_batches',
+  fuel_stations: 'fuel_stations',
+  routes: 'routes',
+  standard_allocations: 'standard_allocations',
+};
+
+/**
  * Start MongoDB Change Streams on key collections.
  * When a document is inserted, updated, or deleted externally (e.g. by another
  * replica-set member or a direct DB write), this broadcasts a `data_changed`
@@ -61,6 +73,41 @@ export function startChangeStreams(): void {
     } catch (err: any) {
       logger.warn(`Failed to start change stream for ${modelName}: ${err.message}`);
     }
+  }
+
+  // Watch SystemConfig for external changes and route by configType.
+  // Controller-level emitDataChange already handles API-triggered saves; this
+  // catches writes that bypass the API (scripts, direct DB ops, multi-node setups).
+  try {
+    const SystemConfig = mongoose.model('SystemConfig');
+    const configStream = SystemConfig.watch([], { fullDocument: 'updateLookup' });
+
+    configStream.on('change', (change: any) => {
+      const actionMap: Record<string, 'create' | 'update' | 'delete'> = {
+        insert: 'create',
+        update: 'update',
+        replace: 'update',
+        delete: 'delete',
+      };
+      const action = actionMap[change.operationType];
+      if (!action) return;
+
+      const doc = change.fullDocument ?? null;
+      const configType: string = doc?.configType ?? '';
+      const wsCollection = SYSTEM_CONFIG_TYPE_MAP[configType];
+      if (wsCollection) {
+        emitDataChange(wsCollection, action, doc);
+      }
+    });
+
+    configStream.on('error', (err: any) => {
+      logger.error('Change stream error for SystemConfig:', err.message);
+    });
+
+    activeStreams.push(configStream as any);
+    logger.info('Change stream started for SystemConfig → (routed by configType)');
+  } catch (err: any) {
+    logger.warn(`Failed to start change stream for SystemConfig: ${err.message}`);
   }
 }
 

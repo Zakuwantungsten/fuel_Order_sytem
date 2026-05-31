@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Truck, Trash2, Plus, Fuel, Search, MapPin, X, Edit2 } from 'lucide-react';
 import {
   useTruckBatches,
@@ -20,7 +20,12 @@ interface DestinationRule {
   extraLiters: number;
 }
 
-export default function TruckBatches() {
+interface TruckBatchesProps {
+  initialSuffix?: string;
+  onSuffixConsumed?: () => void;
+}
+
+export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckBatchesProps) {
   // Use React Query hooks
   const { data: batches, isLoading: loading } = useTruckBatches();
   const queryClient = useQueryClient();
@@ -48,6 +53,14 @@ export default function TruckBatches() {
   const [showEditBatchModal, setShowEditBatchModal] = useState(false);
   const [editingBatch, setEditingBatch] = useState<{ extraLiters: number; trucks: any[] } | null>(null);
   
+  // Open Add Truck modal with pre-filled suffix when navigated from a notification
+  useEffect(() => {
+    if (!initialSuffix) return;
+    setNewTruck({ suffix: initialSuffix.toLowerCase(), batch: 0 });
+    setShowAddTruckModal(true);
+    onSuffixConsumed?.();
+  }, [initialSuffix]);
+
   // Destination rules modal state
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [selectedTruck, setSelectedTruck] = useState<{ suffix: string; batch: number; rules: DestinationRule[] } | null>(null);
@@ -623,7 +636,7 @@ export default function TruckBatches() {
                   Add Truck to Batch
                 </h2>
                 <button
-                  onClick={() => setShowAddTruckModal(false)}
+                  onClick={() => { setShowAddTruckModal(false); setNewTruck({ suffix: '', batch: 0 }); }}
                   className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 >
                   <X className="w-5 h-5 text-gray-500" />
@@ -670,7 +683,7 @@ export default function TruckBatches() {
 
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3 justify-end">
               <button
-                onClick={() => setShowAddTruckModal(false)}
+                onClick={() => { setShowAddTruckModal(false); setNewTruck({ suffix: '', batch: 0 }); }}
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
                 Cancel
