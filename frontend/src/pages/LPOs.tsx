@@ -140,6 +140,23 @@ const LPOs = () => {
   });
   const { data: driverEntries = [] } = useDriverAccountEntries();
   const lpoEntries: LPOEntry[] = lpoQuery.data?.lpos ?? [];
+
+  // Separate query to discover all stations for the current search term,
+  // without the station filter so the dropdown stays fully populated even
+  // after the user picks a station.
+  const stationDiscoveryQuery = useLPOList(
+    {
+      page: 1,
+      limit: 1000,
+      search: searchTerm || undefined,
+      dateFrom: dateRange.dateFrom,
+      dateTo: dateRange.dateTo,
+      sort: 'createdAt',
+      order: 'desc',
+    },
+    !!searchTerm
+  );
+  const discoveryEntries: LPOEntry[] = stationDiscoveryQuery.data?.lpos ?? [];
   // Merge server-paginated LPO entries with cached driver account entries
   // Apply client-side search, date range, station and status filters to driver account entries
   const orders = useMemo(() => {
@@ -176,7 +193,15 @@ const LPOs = () => {
     } else if (statusFilter === 'cancelled') {
       filteredDriverEntries = filteredDriverEntries.filter(e => e.isCancelled);
     }
-    return [...lpoEntries, ...filteredDriverEntries];
+
+    // Guard against stale placeholder data: enforce station filter client-side on
+    // lpoEntries too, since placeholderData keeps the previous query's results
+    // visible while a new station-filtered fetch is in flight.
+    const filteredLpoEntries = stationFilter
+      ? lpoEntries.filter(e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase())
+      : lpoEntries;
+
+    return [...filteredLpoEntries, ...filteredDriverEntries];
   }, [lpoEntries, driverEntries, stationFilter, statusFilter, searchTerm, dateRange.dateFrom, dateRange.dateTo]);
   const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
@@ -194,13 +219,32 @@ const LPOs = () => {
   }, [filtersData]);
 
   const availableStations: string[] = useMemo(() => {
+    if (searchTerm) {
+      // Narrow to stations that actually appear in the search results.
+      // Uses the station-less discovery query so the list stays complete
+      // even after the user selects a station.
+      const term = searchTerm.trim().toLowerCase();
+      const lpoStations = discoveryEntries
+        .map(e => (e.dieselAt || '').trim().toUpperCase())
+        .filter(Boolean);
+      const driverStations = driverEntries
+        .filter(e =>
+          (e.truckNo || '').toLowerCase().startsWith(term) ||
+          (e.lpoNo || '').toLowerCase().startsWith(term) ||
+          (e.dieselAt || '').toLowerCase().startsWith(term) ||
+          (e.doSdo || '').toLowerCase().startsWith(term)
+        )
+        .map(e => (e.dieselAt || '').trim().toUpperCase())
+        .filter(Boolean);
+      return [...new Set([...lpoStations, ...driverStations])].sort();
+    }
     const serverStations = filtersData?.stations ?? [];
     // Include stations from driver account entries so they appear in the filter
     const driverStations = driverEntries
       .map(e => (e.dieselAt || '').trim().toUpperCase())
-      .filter(s => s);
+      .filter(Boolean);
     return [...new Set([...serverStations, ...driverStations])].sort();
-  }, [filtersData, driverEntries]);
+  }, [filtersData, driverEntries, discoveryEntries, searchTerm]);
 
   const availableYears = useMemo(() => {
     const yearsFromPeriods = availablePeriods.map((p: {year: number}) => p.year);
