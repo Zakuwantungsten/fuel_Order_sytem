@@ -63,7 +63,7 @@ export function Reports({}: ReportsProps) {
     }
   };
 
-  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_entries'], fetchReportData);
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_summaries'], fetchReportData);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-TZ', {

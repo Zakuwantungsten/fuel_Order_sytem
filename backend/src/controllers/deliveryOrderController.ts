@@ -1049,7 +1049,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     });
     emitDataChange('delivery_orders', 'update', deliveryOrder.toObject());
     emitDataChange('fuel_records', 'update');
-    emitDataChange('lpo_entries', 'update');
+    emitDataChange('lpo_summaries', 'update');
   } catch (error: any) {
     throw error;
   }
@@ -1249,7 +1249,7 @@ export const deleteDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     });
     emitDataChange('delivery_orders', 'delete');
     emitDataChange('fuel_records', 'update');
-    emitDataChange('lpo_entries', 'update');
+    emitDataChange('lpo_summaries', 'update');
   } catch (error: any) {
     throw error;
   }

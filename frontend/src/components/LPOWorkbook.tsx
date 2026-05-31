@@ -66,7 +66,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
     }
   };
 
-  useRealtimeSync(['lpo_entries', 'lpo_summaries'], () => {
+  useRealtimeSync(['lpo_summaries'], () => {
     fetchWorkbook(workbookId || new Date().getFullYear());
   });
 

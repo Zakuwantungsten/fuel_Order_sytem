@@ -4,7 +4,6 @@ import { apiRateLimiter } from '../middleware/rateLimiters';
 import authRoutes from './authRoutes';
 import mfaRoutes from './mfaRoutes';
 import deliveryOrderRoutes from './deliveryOrderRoutes';
-import lpoEntryRoutes from './lpoEntryRoutes';
 import lpoSummaryRoutes from './lpoSummaryRoutes';
 import fuelRecordRoutes from './fuelRecordRoutes';
 import yardFuelRoutes from './yardFuelRoutes';
@@ -79,7 +78,6 @@ router.use('/config', publicConfigRoutes); // Public read-only config for all au
 router.use(checkMaintenanceMode);
 
 router.use('/delivery-orders', deliveryOrderRoutes);
-router.use('/lpo-entries', lpoEntryRoutes);
 router.use('/lpo-documents', lpoSummaryRoutes);
 router.use('/fuel-records', fuelRecordRoutes);
 router.use('/yard-fuel', yardFuelRoutes);

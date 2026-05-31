@@ -85,7 +85,7 @@ export default function DataManagementTab({ showMessage }: DataManagementTabProp
     }
   };
 
-  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_entries'], loadData);
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_summaries'], loadData);
 
   const handleExport = async () => {
     try {

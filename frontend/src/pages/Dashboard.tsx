@@ -129,7 +129,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     }
   };
 
-  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_entries', 'yard_fuel'], () => {
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_summaries', 'yard_fuel'], () => {
     fetchStats();
     fetchChartData();
   });

@@ -114,7 +114,7 @@ export default function AdminDashboard({ user: _user }: AdminDashboardProps) {
   };
 
   useRealtimeSync(
-    ['fuel_records', 'delivery_orders', 'lpo_entries', 'users', 'yard_fuel', 'checkpoints', 'truck_batches', 'fuel_stations', 'routes', 'standard_allocations'],
+    ['fuel_records', 'delivery_orders', 'lpo_summaries', 'users', 'yard_fuel', 'checkpoints', 'truck_batches', 'fuel_stations', 'routes', 'standard_allocations'],
     loadData
   );
 

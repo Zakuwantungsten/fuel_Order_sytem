@@ -338,7 +338,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
     }
   }, [user.truckNo, fetchDriverData, isOnline]);
 
-  useRealtimeSync(['delivery_orders', 'fuel_records', 'lpo_entries'], () => {
+  useRealtimeSync(['delivery_orders', 'fuel_records', 'lpo_summaries'], () => {
     if (user.truckNo) fetchDriverData(user.truckNo, true);
   });
 

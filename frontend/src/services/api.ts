@@ -549,42 +549,25 @@ export const amendedDOsAPI = {
   },
 };
 
-// LPOs API (Summary LPOS entries)
+// LPOs API — reads from /lpo-documents/entries (flat aggregation over LPOSummary)
 export const lposAPI = {
   getAll: async (filters?: any): Promise<{ data: LPOEntry[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
-    const response = await apiClient.get('/lpo-entries', { params: filters });
-    // Check if response has pagination metadata (server-side pagination)
+    const response = await apiClient.get('/lpo-documents/entries', { params: filters });
     if (response.data.data?.pagination) {
       return {
         data: response.data.data.data || [],
-        pagination: response.data.data.pagination
+        pagination: response.data.data.pagination,
       };
     }
-    // Fallback for non-paginated responses (all data)
     return {
       data: response.data.data?.data || response.data.data || [],
-      pagination: undefined
+      pagination: undefined,
     };
   },
 
   getAvailableFilters: async (params?: { dateFrom?: string; dateTo?: string }): Promise<{ periods: Array<{ year: number; month: number }>; stations: string[] }> => {
-    const response = await apiClient.get('/lpo-entries/available-filters', { params });
+    const response = await apiClient.get('/lpo-documents/entries/filters', { params });
     return response.data || { periods: [], stations: [] };
-  },
-  
-  getById: async (id: string | number): Promise<LPOEntry> => {
-    const response = await apiClient.get(`/lpo-entries/${id}`);
-    return response.data.data;
-  },
-  
-  create: async (data: Partial<LPOEntry>): Promise<LPOEntry> => {
-    const response = await apiClient.post('/lpo-entries', data);
-    return response.data.data;
-  },
-  
-  update: async (id: string | number, data: Partial<LPOEntry>): Promise<LPOEntry> => {
-    const response = await apiClient.put(`/lpo-entries/${id}`, data);
-    return response.data.data;
   },
 };
 
@@ -790,10 +773,6 @@ export const lpoDocumentsAPI = {
     await apiClient.delete(`/lpo-documents/${id}/lock`);
   },
 
-  getHistory: async (id: string | number): Promise<any[]> => {
-    const response = await apiClient.get(`/lpo-entries/${id}/history`);
-    return response.data.data || [];
-  },
 };
 
 // Fuel Record Details Interface

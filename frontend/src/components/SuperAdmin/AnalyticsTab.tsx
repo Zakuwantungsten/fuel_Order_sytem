@@ -54,7 +54,7 @@ export default function AnalyticsTab({ onMessage }: AnalyticsTabProps) {
   };
 
   useRealtimeSync(
-    ['fuel_records', 'delivery_orders', 'lpo_entries', 'yard_fuel'],
+    ['fuel_records', 'delivery_orders', 'lpo_summaries', 'yard_fuel'],
     loadAnalytics
   );
 

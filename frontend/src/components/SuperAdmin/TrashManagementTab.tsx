@@ -23,7 +23,7 @@ interface TrashManagementTabProps {
 
 const RESOURCE_TYPES = [
   { value: 'delivery_orders', label: 'Delivery Orders' },
-  { value: 'lpo_entries', label: 'LPO Entries' },
+  { value: 'lpo_summaries', label: 'LPO Entries' },
   { value: 'lpo_summaries', label: 'LPO Documents' },
   { value: 'fuel_records', label: 'Fuel Records' },
   { value: 'users', label: 'Users' },
@@ -122,7 +122,7 @@ export default function TrashManagementTab({ onMessage, onNavigate }: TrashManag
   };
 
   useRealtimeSync(
-    ['fuel_records', 'delivery_orders', 'lpo_entries', 'lpo_summaries', 'users', 'yard_fuel'],
+    ['fuel_records', 'delivery_orders', 'lpo_summaries', 'users', 'yard_fuel'],
     () => { loadTrashStats(); loadDeletedItems(); }
   );
 

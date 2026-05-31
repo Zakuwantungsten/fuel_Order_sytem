@@ -48,7 +48,7 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
   };
 
   useRealtimeSync(
-    ['fuel_records', 'delivery_orders', 'lpo_entries', 'users'],
+    ['fuel_records', 'delivery_orders', 'lpo_summaries', 'users'],
     loadData
   );
 

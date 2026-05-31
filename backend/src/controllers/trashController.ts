@@ -15,7 +15,7 @@ import { emitDataChange } from '../services/websocket';
 // Model map for dynamic access
 const MODELS_MAP: Record<string, any> = {
   delivery_orders: DeliveryOrder,
-  lpo_entries: LPOSummary,
+  lpo_summaries: LPOSummary,
   lpo_summaries: LPOSummary,
   fuel_records: FuelRecord,
   users: User,

@@ -281,7 +281,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
     }
   }, [activeReport, loadReportData]);
 
-  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_entries'], loadReportData);
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_summaries'], loadReportData);
 
   // ── Export helpers ─────────────────────────────────────────────────────────
 

@@ -133,7 +133,7 @@ const LPOSummary = ({
     }
   };
 
-  useRealtimeSync('lpo_entries', fetchDriverAccountEntries);
+  useRealtimeSync('lpo_summaries', fetchDriverAccountEntries);
 
   // Combined entries (regular LPOs + driver account LPOs)
   const combinedEntries: ExtendedLPOEntry[] = [

@@ -910,7 +910,7 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
     if (!dryRun) {
       emitDataChange('fuel_records', 'create');
       emitDataChange('delivery_orders', 'create');
-      emitDataChange('lpo_entries', 'create');
+      emitDataChange('lpo_summaries', 'create');
       emitDataChange('lpo_summaries', 'create');
     }
   } catch (err: unknown) {

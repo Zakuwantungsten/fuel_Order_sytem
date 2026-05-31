@@ -267,7 +267,7 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
               {/* Route Info - Going Journey */}
               <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-4">
                 <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2">
-                  🚛 Going Journey (IMPORT)
+                   Going Journey (IMPORT)
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
@@ -295,7 +295,7 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
               {fuelRecord.returnDo && (
                 <div className="bg-green-50 dark:bg-green-900/30 rounded-xl p-4">
                   <h4 className="text-sm font-semibold text-green-700 dark:text-green-300 mb-3 flex items-center gap-2">
-                    🔄 Return Journey (EXPORT)
+                     Return Journey (EXPORT)
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div>

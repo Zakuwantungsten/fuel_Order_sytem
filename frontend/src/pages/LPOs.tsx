@@ -484,7 +484,7 @@ const LPOs = () => {
   }, []);
 
   // Realtime sync — invalidate React Query cache instead of full refetch
-  useRealtimeSync(['lpo_entries', 'lpo_summaries'], () => {
+  useRealtimeSync(['lpo_summaries'], () => {
     queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
     queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
     queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });

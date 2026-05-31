@@ -174,7 +174,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     }
   };
 
-  useRealtimeSync(['lpo_entries', 'delivery_orders', 'fuel_records', 'driver_accounts'], loadWorkbook);
+  useRealtimeSync(['lpo_summaries', 'delivery_orders', 'fuel_records', 'driver_accounts'], loadWorkbook);
 
   const addEntry = async (entry: Omit<DriverAccountEntry, 'id' | 'createdAt' | 'createdBy'>) => {
     if (!workbook) return;

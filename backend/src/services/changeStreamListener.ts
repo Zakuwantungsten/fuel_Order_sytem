@@ -9,8 +9,8 @@ const MODEL_COLLECTION_MAP: Record<string, string> = {
   FuelRecord: 'fuel_records',
   DeliveryOrder: 'delivery_orders',
   // LPOSummary is the single source of truth for LPO entries — emit on the
-  // same 'lpo_entries' channel the frontend subscribes to.
-  LPOSummary: 'lpo_entries',
+  // same 'lpo_summaries' channel the frontend subscribes to.
+  LPOSummary: 'lpo_summaries',
 };
 
 /**

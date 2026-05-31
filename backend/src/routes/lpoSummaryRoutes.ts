@@ -25,6 +25,9 @@ router.get('/next-number', asyncHandler(lpoSummaryController.getNextLPONumber));
 router.get('/find-at-checkpoint', asyncHandler(lpoSummaryController.findLPOsAtCheckpoint));
 router.get('/check-duplicate', asyncHandler(lpoSummaryController.checkDuplicateAllocation));
 router.get('/driver-entries/:truckNo', asyncHandler(lpoSummaryController.getDriverLPOEntries));
+// Flat entry list — replaces the removed /lpo-entries endpoint
+router.get('/entries/filters', asyncHandler(lpoSummaryController.getLPOEntriesFilters));
+router.get('/entries', commonValidation.pagination, validate, asyncHandler(lpoSummaryController.getAllLPOEntriesFlat));
 router.get('/', commonValidation.pagination, validate, asyncHandler(lpoSummaryController.getAllLPOSummaries));
 router.get('/lpo/:lpoNo', asyncHandler(lpoSummaryController.getLPOSummaryByLPONo));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(lpoSummaryController.getLPOSummaryById));

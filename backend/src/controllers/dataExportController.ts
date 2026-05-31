@@ -19,7 +19,7 @@ import { AuditLog } from '../models/AuditLog';
 export type ExportResource =
   | 'fuel_records'
   | 'delivery_orders'
-  | 'lpo_entries'
+  | 'lpo_summaries'
   | 'lpo_summaries'
   | 'yard_fuel'
   | 'users'
@@ -30,7 +30,7 @@ export type ExportFormat = 'json' | 'csv' | 'xlsx';
 const RESOURCES: { id: ExportResource; label: string; description: string }[] = [
   { id: 'fuel_records',     label: 'Fuel Records',         description: 'All active & archived fuel dispensing records' },
   { id: 'delivery_orders',  label: 'Delivery Orders',      description: 'All delivery order records' },
-  { id: 'lpo_entries',      label: 'LPO Entries',          description: 'Local Purchase Order line entries' },
+  { id: 'lpo_summaries',      label: 'LPO Entries',          description: 'Local Purchase Order line entries' },
   { id: 'lpo_summaries',    label: 'LPO Summaries',        description: 'Local Purchase Order summary documents' },
   { id: 'yard_fuel',        label: 'Yard Fuel Dispenses',  description: 'Internal yard fuel dispensing records' },
   { id: 'users',            label: 'Users',                description: 'User accounts (passwords excluded)' },
@@ -53,7 +53,7 @@ async function fetchData(resource: ExportResource, from?: Date, to?: Date): Prom
       return getAllFuelRecords(opts);
     case 'delivery_orders':
       return getAllDeliveryOrders(opts);
-    case 'lpo_entries':
+    case 'lpo_summaries':
       return getAllLPOEntries(opts);
     case 'lpo_summaries':
       return getAllLPOSummaries(opts);

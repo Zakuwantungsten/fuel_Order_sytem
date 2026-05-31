@@ -13,7 +13,7 @@ interface Props {
 const RESOURCE_ICONS: Record<string, React.ElementType> = {
   fuel_records: Fuel,
   delivery_orders: Package,
-  lpo_entries: ClipboardList,
+  lpo_summaries: ClipboardList,
   lpo_summaries: FileText,
   yard_fuel: Database,
   users: Users,

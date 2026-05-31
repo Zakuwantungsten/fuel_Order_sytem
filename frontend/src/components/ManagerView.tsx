@@ -289,7 +289,7 @@ export function ManagerView({ user }: ManagerViewProps) {
     };
   }, [fetchLPOEntries]);
 
-  useRealtimeSync('lpo_entries', () => fetchLPOEntries(true));
+  useRealtimeSync('lpo_summaries', () => fetchLPOEntries(true));
 
   // Close dropdown when clicking outside (scroll handled in the sortDropdown effect above)
 

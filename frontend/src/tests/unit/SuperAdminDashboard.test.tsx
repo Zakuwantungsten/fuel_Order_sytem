@@ -41,7 +41,7 @@ vi.mock('../../services/api', () => ({
       stats: [
         { type: 'delivery_orders', count: 10 },
         { type: 'fuel_records', count: 8 },
-        { type: 'lpo_entries', count: 7 }
+        { type: 'lpo_summaries', count: 7 }
       ]
     }),
   },

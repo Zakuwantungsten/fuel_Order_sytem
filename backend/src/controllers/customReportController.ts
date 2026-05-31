@@ -11,7 +11,7 @@ const MODEL_MAP: Record<string, mongoose.Model<any>> = {
 
 // Try to load optional models without crashing if they don't exist
 try { MODEL_MAP['delivery_orders'] = DeliveryOrder; } catch { /* optional */ }
-try { MODEL_MAP['lpo_entries'] = LPOSummary; } catch { /* optional */ }
+try { MODEL_MAP['lpo_summaries'] = LPOSummary; } catch { /* optional */ }
 
 /**
  * GET /api/system-admin/custom-report/models

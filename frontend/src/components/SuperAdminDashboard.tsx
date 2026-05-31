@@ -78,7 +78,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
   };
 
   useRealtimeSync(
-    ['fuel_records', 'delivery_orders', 'lpo_entries', 'users', 'yard_fuel'],
+    ['fuel_records', 'delivery_orders', 'lpo_summaries', 'users', 'yard_fuel'],
     loadData
   );
 

@@ -522,7 +522,7 @@ const FuelRecords = () => {
   }, []);
 
   // Real-time sync: refresh when any user modifies fuel records or LPO entries
-  useRealtimeSync(['fuel_records', 'lpo_entries'], () => {
+  useRealtimeSync(['fuel_records', 'lpo_summaries'], () => {
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
   });

@@ -67,7 +67,7 @@ const RULE_TYPES: Record<string, string> = {
   time_restriction: 'Time Restriction', role_restriction: 'Role Restriction',
 };
 
-const DATA_TYPES = ['fuel_records', 'delivery_orders', 'lpo_entries', 'users', 'audit_logs', 'yard_fuel'];
+const DATA_TYPES = ['fuel_records', 'delivery_orders', 'lpo_summaries', 'users', 'audit_logs', 'yard_fuel'];
 
 /* ───────── Component ───────── */
 

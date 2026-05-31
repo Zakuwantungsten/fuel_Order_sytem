@@ -4,7 +4,7 @@
  * Tab navigation is now instant (cache hit), and mutations sync via WebSocket.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { lposAPI, lpoWorkbookAPI, driverAccountAPI } from '../services/api';
 import type { LPOEntry } from '../types';
 
@@ -185,27 +185,3 @@ export function useLPOAvailableFilters(dateRange?: { dateFrom?: string; dateTo?:
   });
 }
 
-// ---------------------------------------------------------------------------
-// Mutations
-// ---------------------------------------------------------------------------
-export function useCreateLPO() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Partial<LPOEntry>) => lposAPI.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
-    },
-  });
-}
-
-export function useUpdateLPO() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string | number; data: Partial<LPOEntry> }) =>
-      lposAPI.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
-    },
-  });
-}
