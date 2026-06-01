@@ -54,5 +54,5 @@ temp/
 # Vite
 dist-ssr/
 
-# Claude skill (do not commit)
-.claude/skills/ui-ux-pro-max/
+# Claude skills downloaded locally (do not commit)
+.claude/
