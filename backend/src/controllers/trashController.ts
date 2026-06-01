@@ -16,7 +16,6 @@ import { emitDataChange } from '../services/websocket';
 const MODELS_MAP: Record<string, any> = {
   delivery_orders: DeliveryOrder,
   lpo_summaries: LPOSummary,
-  lpo_summaries: LPOSummary,
   fuel_records: FuelRecord,
   users: User,
   yard_dispenses: YardFuelDispense,

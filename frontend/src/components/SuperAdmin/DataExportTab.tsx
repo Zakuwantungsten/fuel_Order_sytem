@@ -14,7 +14,6 @@ const RESOURCE_ICONS: Record<string, React.ElementType> = {
   fuel_records: Fuel,
   delivery_orders: Package,
   lpo_summaries: ClipboardList,
-  lpo_summaries: FileText,
   yard_fuel: Database,
   users: Users,
   audit_logs: Shield,
