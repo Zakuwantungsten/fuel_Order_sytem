@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Truck, Trash2, Plus, Fuel, Search, MapPin, X, Edit2 } from 'lucide-react';
+import { toast } from 'react-toastify';
+import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
 import {
   useTruckBatches,
   useAddTruckBatch,
@@ -66,16 +68,23 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
   const [selectedTruck, setSelectedTruck] = useState<{ suffix: string; batch: number; rules: DestinationRule[] } | null>(null);
   const [newRule, setNewRule] = useState({ destination: '', extraLiters: 0 });
 
+  // Confirmation modal state
+  const [moveTarget, setMoveTarget] = useState<{ suffix: string; newBatch: number } | null>(null);
+  const [deleteTruckTarget, setDeleteTruckTarget] = useState<string | null>(null);
+  const [deleteBatchTarget, setDeleteBatchTarget] = useState<number | null>(null);
+  const [deleteRuleTarget, setDeleteRuleTarget] = useState<string | null>(null);
+  const [confirmUpdateBatch, setConfirmUpdateBatch] = useState(false);
+
   const handleAddTruck = async () => {
     const suffix = newTruck.suffix.trim().toLowerCase();
-    
+
     if (!suffix) {
-      alert('Please enter a truck suffix (e.g., DNH, EAG)');
+      toast.error('Please enter a truck suffix (e.g., DNH, EAG)');
       return;
     }
 
     if (newTruck.batch <= 0) {
-      alert('Please select a valid batch');
+      toast.error('Please select a valid batch');
       return;
     }
 
@@ -88,9 +97,9 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
         allTrucks.push(...trucks.map(t => t.truckSuffix));
       }
     });
-    
+
     if (allTrucks.includes(suffix)) {
-      alert(`Truck suffix "${suffix.toUpperCase()}" is already configured. Use the move option to change its batch.`);
+      toast.error(`Truck suffix "${suffix.toUpperCase()}" is already configured. Use the move option to change its batch.`);
       return;
     }
 
@@ -99,35 +108,40 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
         truckSuffix: suffix,
         extraLiters: newTruck.batch,
       });
+      const batch = newTruck.batch;
       setNewTruck({ suffix: '', batch: 0 });
-      alert(`✓ Truck ${suffix.toUpperCase()} added to ${newTruck.batch}L batch`);
+      toast.success(`Truck ${suffix.toUpperCase()} added to ${batch}L batch`);
     } catch (error: any) {
-      alert(`Failed to add truck: ${error.message}`);
+      toast.error(`Failed to add truck: ${error.message}`);
     }
   };
 
-  const handleMoveTruck = async (suffix: string, newBatch: number) => {
-    if (!confirm(`Move "${suffix.toUpperCase()}" to ${newBatch}L batch?`)) return;
-
+  const confirmMoveTruck = async () => {
+    if (!moveTarget) return;
+    const { suffix, newBatch } = moveTarget;
     try {
       await addTruckMutation.mutateAsync({
         truckSuffix: suffix,
         extraLiters: newBatch,
       });
-      alert(`✓ Truck ${suffix.toUpperCase()} moved to ${newBatch}L batch`);
+      toast.success(`Truck ${suffix.toUpperCase()} moved to ${newBatch}L batch`);
     } catch (error: any) {
-      alert(`Failed to move truck: ${error.message}`);
+      toast.error(`Failed to move truck: ${error.message}`);
+    } finally {
+      setMoveTarget(null);
     }
   };
 
-  const handleDeleteTruck = async (suffix: string) => {
-    if (!confirm(`Remove "${suffix.toUpperCase()}" from batch configuration?\nIt will revert to default 60L extra fuel.`)) return;
-
+  const confirmDeleteTruck = async () => {
+    if (!deleteTruckTarget) return;
+    const suffix = deleteTruckTarget;
     try {
       await removeTruckMutation.mutateAsync(suffix);
-      alert(`✓ Truck ${suffix.toUpperCase()} removed from batches`);
+      toast.success(`Truck ${suffix.toUpperCase()} removed from batches`);
     } catch (error: any) {
-      alert(`Failed to remove truck: ${error.message}`);
+      toast.error(`Failed to remove truck: ${error.message}`);
+    } finally {
+      setDeleteTruckTarget(null);
     }
   };
 
@@ -141,64 +155,77 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
 
   const handleCreateBatch = async () => {
     if (newBatchLiters <= 0) {
-      alert('Please enter a valid liter amount greater than 0');
+      toast.error('Please enter a valid liter amount greater than 0');
       return;
     }
 
     try {
       await createBatchMutation.mutateAsync({ extraLiters: newBatchLiters });
+      const created = newBatchLiters;
       setNewBatchLiters(0);
       setShowCreateBatchModal(false);
-      alert(`✓ New batch ${newBatchLiters}L created successfully`);
+      toast.success(`New batch ${created}L created successfully`);
     } catch (error: any) {
-      alert(`Failed to create batch: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to create batch: ${error.response?.data?.error || error.message}`);
     }
   };
 
-  const handleUpdateBatch = async () => {
+  const requestUpdateBatch = () => {
     if (!editingBatch || newBatchLiters <= 0) {
-      alert('Please enter a valid liter amount greater than 0');
+      toast.error('Please enter a valid liter amount greater than 0');
       return;
     }
+    setConfirmUpdateBatch(true);
+  };
 
-    if (!confirm(`Update batch from ${editingBatch.extraLiters}L to ${newBatchLiters}L?`)) return;
-
+  const confirmUpdateBatchAction = async () => {
+    if (!editingBatch || newBatchLiters <= 0) return;
+    const from = editingBatch.extraLiters;
+    const to = newBatchLiters;
     try {
-      await updateBatchMutation.mutateAsync({ 
-        oldExtraLiters: editingBatch.extraLiters, 
-        newExtraLiters: newBatchLiters 
+      await updateBatchMutation.mutateAsync({
+        oldExtraLiters: from,
+        newExtraLiters: to,
       });
       setEditingBatch(null);
       setNewBatchLiters(0);
       setShowEditBatchModal(false);
-      alert(`✓ Batch updated: ${editingBatch.extraLiters}L → ${newBatchLiters}L`);
+      setConfirmUpdateBatch(false);
+      toast.success(`Batch updated: ${from}L → ${to}L`);
     } catch (error: any) {
-      alert(`Failed to update batch: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to update batch: ${error.response?.data?.error || error.message}`);
+      setConfirmUpdateBatch(false);
     }
   };
 
-  const handleDeleteBatch = async (extraLiters: number) => {
+  const requestDeleteBatch = (extraLiters: number) => {
     const batchKey = extraLiters.toString();
     const batch = batches?.[batchKey];
-    
+
     if (batch && batch.length > 0) {
-      alert(`Cannot delete batch ${extraLiters}L with ${batch.length} trucks assigned. Move trucks first.`);
+      toast.error(`Cannot delete batch ${extraLiters}L with ${batch.length} trucks assigned. Move trucks first.`);
       return;
     }
 
-    if (!confirm(`Delete batch ${extraLiters}L? This cannot be undone.`)) return;
+    setDeleteBatchTarget(extraLiters);
+  };
 
+  const confirmDeleteBatch = async () => {
+    if (deleteBatchTarget === null) return;
+    const extraLiters = deleteBatchTarget;
     try {
       await deleteBatchMutation.mutateAsync(extraLiters);
-      alert(`✓ Batch ${extraLiters}L deleted successfully`);
+      toast.success(`Batch ${extraLiters}L deleted successfully`);
     } catch (error: any) {
-      alert(`Failed to delete batch: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to delete batch: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setDeleteBatchTarget(null);
     }
   };
 
   const handleAddRule = async () => {
     if (!selectedTruck || !newRule.destination.trim()) {
-      alert('Please enter a destination');
+      toast.error('Please enter a destination');
       return;
     }
 
@@ -210,7 +237,7 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
         destination: newRule.destination.trim(),
         extraLiters: newRule.extraLiters
       });
-      
+
       // Immediately update local modal state — don't wait for stale batches refetch
       setSelectedTruck({
         ...selectedTruck,
@@ -218,29 +245,29 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
       });
       setNewRule({ destination: '', extraLiters: selectedTruck.batch });
     } catch (error: any) {
-      alert(`Failed to add rule: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to add rule: ${error.response?.data?.error || error.message}`);
     }
   };
 
-  const handleDeleteRule = async (destination: string) => {
-    if (!selectedTruck) return;
-    
-    if (!confirm(`Remove destination rule for "${destination}"?`)) return;
-    if (!batches) return;
+  const confirmDeleteRule = async () => {
+    if (!selectedTruck || !deleteRuleTarget) return;
+    const destination = deleteRuleTarget;
 
     try {
       await deleteRuleMutation.mutateAsync({
         truckSuffix: selectedTruck.suffix,
         destination
       });
-      
+
       // Immediately update local modal state — don't wait for stale batches refetch
       setSelectedTruck({
         ...selectedTruck,
         rules: selectedTruck.rules.filter((r) => r.destination !== destination),
       });
     } catch (error: any) {
-      alert(`Failed to delete rule: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to delete rule: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setDeleteRuleTarget(null);
     }
   };
 
@@ -323,7 +350,7 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
               <Edit2 className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => handleDeleteBatch(batchSize)}
+              onClick={() => requestDeleteBatch(batchSize)}
               className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Delete batch"
             >
@@ -376,7 +403,7 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
                         return (
                           <button
                             key={batch.extraLiters}
-                            onClick={() => handleMoveTruck(suffix, batch.extraLiters)}
+                            onClick={() => setMoveTarget({ suffix, newBatch: batch.extraLiters })}
                             className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded transition-colors"
                             title={`Move to ${batch.extraLiters}L batch`}
                           >
@@ -385,7 +412,7 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
                         );
                       })}
                       <button
-                        onClick={() => handleDeleteTruck(suffix)}
+                        onClick={() => setDeleteTruckTarget(suffix)}
                         className="p-0.5 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
                         title="Remove from batches"
                       >
@@ -597,7 +624,7 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
                           </div>
                         </div>
                         <button
-                          onClick={() => handleDeleteRule(rule.destination)}
+                          onClick={() => setDeleteRuleTarget(rule.destination)}
                           disabled={deleteRuleMutation.isPending}
                           className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 rounded-lg transition-colors"
                           title="Delete rule"
@@ -833,7 +860,7 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
                 Cancel
               </button>
               <button
-                onClick={handleUpdateBatch}
+                onClick={requestUpdateBatch}
                 disabled={newBatchLiters <= 0 || newBatchLiters > 10000 || newBatchLiters === editingBatch.extraLiters}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
               >
@@ -844,6 +871,66 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
           </div>
         </div>
       )}
+
+      {/* Confirmation Modals */}
+      <ConfirmModal
+        open={moveTarget !== null}
+        title="Move Truck"
+        message={moveTarget ? `Move "${moveTarget.suffix.toUpperCase()}" to the ${moveTarget.newBatch}L batch?` : ''}
+        confirmLabel="Move"
+        variant="warning"
+        loading={addTruckMutation.isPending}
+        onConfirm={confirmMoveTruck}
+        onCancel={() => setMoveTarget(null)}
+      />
+      <ConfirmModal
+        open={deleteTruckTarget !== null}
+        title="Remove Truck"
+        message={deleteTruckTarget ? `Remove "${deleteTruckTarget.toUpperCase()}" from batch configuration? It will revert to the default 60L extra fuel.` : ''}
+        confirmLabel="Remove"
+        variant="danger"
+        loading={removeTruckMutation.isPending}
+        onConfirm={confirmDeleteTruck}
+        onCancel={() => setDeleteTruckTarget(null)}
+      />
+      <ConfirmModal
+        open={deleteBatchTarget !== null}
+        title="Delete Batch"
+        message={deleteBatchTarget !== null ? `Delete batch ${deleteBatchTarget}L? This cannot be undone.` : ''}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteBatchMutation.isPending}
+        onConfirm={confirmDeleteBatch}
+        onCancel={() => setDeleteBatchTarget(null)}
+      />
+      <ConfirmModal
+        open={deleteRuleTarget !== null}
+        title="Remove Destination Rule"
+        message={deleteRuleTarget ? `Remove the destination rule for "${deleteRuleTarget}"?` : ''}
+        confirmLabel="Remove"
+        variant="danger"
+        loading={deleteRuleMutation.isPending}
+        onConfirm={confirmDeleteRule}
+        onCancel={() => setDeleteRuleTarget(null)}
+      />
+      <ConfirmModal
+        open={confirmUpdateBatch}
+        title="Update Batch"
+        message={
+          editingBatch
+            ? `Update batch from ${editingBatch.extraLiters}L to ${newBatchLiters}L?${
+                editingBatch.trucks.length > 0
+                  ? ` This will update ${editingBatch.trucks.length} truck(s).`
+                  : ''
+              }`
+            : ''
+        }
+        confirmLabel="Update"
+        variant="warning"
+        loading={updateBatchMutation.isPending}
+        onConfirm={confirmUpdateBatchAction}
+        onCancel={() => setConfirmUpdateBatch(false)}
+      />
     </div>
   );
 }

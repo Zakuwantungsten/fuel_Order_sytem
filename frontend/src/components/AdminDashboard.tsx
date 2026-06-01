@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react';
-import {
-  Activity,
-  RefreshCw,
-  X,
-  AlertTriangle,
-  CheckCircle,
-} from 'lucide-react';
+import { Activity, RefreshCw } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { adminAPI } from '../services/api';
 import OperationalOverviewTab from './StandardAdmin/OperationalOverviewTab';
 import DataManagementTab from './StandardAdmin/DataManagementTab';
@@ -17,15 +12,13 @@ import FuelPriceTab from './SuperAdmin/FuelPriceTab';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
-interface StandardAdminDashboardProps {
+interface AdminDashboardProps {
   user: any;
   section?: 'overview' | 'data' | 'users' | 'fuel_stations' | 'fuel_prices' | 'routes' | 'reports';
 }
 
-export default function StandardAdminDashboard({ user, section = 'overview' }: StandardAdminDashboardProps) {
+export default function AdminDashboard({ user, section = 'overview' }: AdminDashboardProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
@@ -36,12 +29,11 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
 
   const loadData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const statsData = await adminAPI.getStats();
       setStats(statsData);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load data');
+      toast.error(err.response?.data?.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -54,11 +46,9 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
 
   const showMessage = (type: 'success' | 'error', message: string) => {
     if (type === 'success') {
-      setSuccess(message);
-      setTimeout(() => setSuccess(null), 3000);
+      toast.success(message);
     } else {
-      setError(message);
-      setTimeout(() => setError(null), 5000);
+      toast.error(message);
     }
   };
 
@@ -103,31 +93,6 @@ export default function StandardAdminDashboard({ user, section = 'overview' }: S
           </div>
         </div>
       </div>
-
-      {/* Messages */}
-      {error && (
-        <div className="mx-6 mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-          </div>
-          <button onClick={() => setError(null)} className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {success && (
-        <div className="mx-6 mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-start gap-3">
-          <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-green-800 dark:text-green-200">{success}</p>
-          </div>
-          <button onClick={() => setSuccess(null)} className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Content */}
       <div className="p-6">

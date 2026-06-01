@@ -54,7 +54,7 @@ const DriverPortal = lazy(() => import('./DriverPortal'));
 const StationView = lazy(() => import('./StationView'));
 const PaymentManager = lazy(() => import('./PaymentManager'));
 const SuperAdminDashboard = lazy(() => import('./SuperAdminDashboard'));
-const StandardAdminDashboard = lazy(() => import('./StandardAdminDashboard'));
+const AdminDashboard = lazy(() => import('./AdminDashboard'));
 const ManagerView = lazy(() => import('./ManagerView'));
 const DriverCredentialsManager = lazy(() => import('../pages/Admin/DriverCredentialsManager'));
 const OfficerPortal = lazy(() => import('./OfficerPortal'));
@@ -503,17 +503,17 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       
       // Admin sections (admin/boss roles)
       case 'admin_data':
-        return <StandardAdminDashboard user={user} section="data" />;
+        return <AdminDashboard user={user} section="data" />;
       case 'admin_users':
-        return <StandardAdminDashboard user={user} section="users" />;
+        return <AdminDashboard user={user} section="users" />;
       case 'admin_fuel_stations':
-        return <StandardAdminDashboard user={user} section="fuel_stations" />;
+        return <AdminDashboard user={user} section="fuel_stations" />;
       case 'admin_fuel_prices':
-        return <StandardAdminDashboard user={user} section="fuel_prices" />;
+        return <AdminDashboard user={user} section="fuel_prices" />;
       case 'admin_routes':
-        return <StandardAdminDashboard user={user} section="routes" />;
+        return <AdminDashboard user={user} section="routes" />;
       case 'admin_reports':
-        return <StandardAdminDashboard user={user} section="reports" />;
+        return <AdminDashboard user={user} section="reports" />;
       
       case 'driver_credentials':
         return <DriverCredentialsManager />;
@@ -1004,7 +1004,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             )}
             {hasAdminOverviewTab && (
               <div className={activeTab === 'admin_overview' ? '' : 'hidden'}>
-                <StandardAdminDashboard user={user} section="overview" />
+                <AdminDashboard user={user} section="overview" />
               </div>
             )}
             {renderActiveComponent()}

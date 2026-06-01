@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
-import StandardAdminDashboard from '../../components/StandardAdminDashboard';
+import AdminDashboard from '../../components/AdminDashboard';
 
 // Mock the API services with correct structure
 vi.mock('../../services/api', () => ({
@@ -71,22 +71,22 @@ const mockStandardAdminUser = {
   isActive: true
 };
 
-const renderStandardAdminDashboard = (section: string = 'overview') => {
+const renderAdminDashboard = (section: string = 'overview') => {
   return render(
     <BrowserRouter>
-      <StandardAdminDashboard user={mockStandardAdminUser} section={section as any} />
+      <AdminDashboard user={mockStandardAdminUser} section={section as any} />
     </BrowserRouter>
   );
 };
 
-describe('StandardAdminDashboard', () => {
+describe('AdminDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe('Rendering', () => {
-    it('should render the standard admin dashboard', async () => {
-      renderStandardAdminDashboard();
+    it('should render the admin dashboard', async () => {
+      renderAdminDashboard();
       
       await waitFor(() => {
         expect(screen.getByText(/Operational Overview/i)).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should display user name and role', async () => {
-      renderStandardAdminDashboard();
+      renderAdminDashboard();
       
       await waitFor(() => {
         expect(screen.getByText(/Standard Admin/i)).toBeInTheDocument();
@@ -102,7 +102,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should show the correct section title', async () => {
-      renderStandardAdminDashboard('overview');
+      renderAdminDashboard('overview');
       
       await waitFor(() => {
         expect(screen.getByText(/Operational Overview/i)).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('StandardAdminDashboard', () => {
 
   describe('Section Navigation', () => {
     it('should render overview section by default', async () => {
-      renderStandardAdminDashboard('overview');
+      renderAdminDashboard('overview');
       
       await waitFor(() => {
         expect(screen.getByTestId('operational-overview-tab')).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should render data management section', async () => {
-      renderStandardAdminDashboard('data');
+      renderAdminDashboard('data');
       
       await waitFor(() => {
         expect(screen.getByTestId('data-management-tab')).toBeInTheDocument();
@@ -128,7 +128,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should render user support section', async () => {
-      renderStandardAdminDashboard('users');
+      renderAdminDashboard('users');
       
       await waitFor(() => {
         expect(screen.getByTestId('user-support-tab')).toBeInTheDocument();
@@ -136,7 +136,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should render reports section', async () => {
-      renderStandardAdminDashboard('reports');
+      renderAdminDashboard('reports');
       
       await waitFor(() => {
         expect(screen.getByTestId('basic-reports-tab')).toBeInTheDocument();
@@ -144,7 +144,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should render quick actions section', async () => {
-      renderStandardAdminDashboard('quick-actions');
+      renderAdminDashboard('quick-actions');
       
       await waitFor(() => {
         expect(screen.getByTestId('quick-actions-panel')).toBeInTheDocument();
@@ -154,7 +154,7 @@ describe('StandardAdminDashboard', () => {
 
   describe('Data Loading', () => {
     it('should load stats on overview section', async () => {
-      renderStandardAdminDashboard('overview');
+      renderAdminDashboard('overview');
       
       await waitFor(() => {
         expect(screen.getByTestId('stats-loaded')).toBeInTheDocument();
@@ -164,7 +164,7 @@ describe('StandardAdminDashboard', () => {
     it('should call API to get stats', async () => {
       const { adminAPI } = await import('../../services/api');
       
-      renderStandardAdminDashboard('overview');
+      renderAdminDashboard('overview');
       
       await waitFor(() => {
         expect(adminAPI.getStats).toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe('StandardAdminDashboard', () => {
       const { adminAPI } = await import('../../services/api');
       (adminAPI.getStats as any).mockRejectedValueOnce(new Error('API Error'));
       
-      renderStandardAdminDashboard('overview');
+      renderAdminDashboard('overview');
       
       await waitFor(() => {
         // Dashboard should still render
@@ -188,7 +188,7 @@ describe('StandardAdminDashboard', () => {
 
   describe('Success Messages', () => {
     it('should display success messages', async () => {
-      renderStandardAdminDashboard('data');
+      renderAdminDashboard('data');
       const user = userEvent.setup();
       
       await waitFor(() => {
@@ -208,7 +208,7 @@ describe('StandardAdminDashboard', () => {
     it('should refresh data when refresh button is clicked', async () => {
       const { adminAPI } = await import('../../services/api');
       
-      renderStandardAdminDashboard('overview');
+      renderAdminDashboard('overview');
       const user = userEvent.setup();
       
       await waitFor(() => {
@@ -229,7 +229,7 @@ describe('StandardAdminDashboard', () => {
 
   describe('Section Titles', () => {
     it('should show correct title for overview', async () => {
-      renderStandardAdminDashboard('overview');
+      renderAdminDashboard('overview');
       
       await waitFor(() => {
         expect(screen.getByText(/Operational Overview/i)).toBeInTheDocument();
@@ -237,7 +237,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should show correct title for data management', async () => {
-      renderStandardAdminDashboard('data');
+      renderAdminDashboard('data');
       
       await waitFor(() => {
         expect(screen.getByTestId('data-management-tab')).toBeInTheDocument();
@@ -245,7 +245,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should show correct title for user support', async () => {
-      renderStandardAdminDashboard('users');
+      renderAdminDashboard('users');
       
       await waitFor(() => {
         expect(screen.getByTestId('user-support-tab')).toBeInTheDocument();
@@ -253,7 +253,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should show correct title for reports', async () => {
-      renderStandardAdminDashboard('reports');
+      renderAdminDashboard('reports');
       
       await waitFor(() => {
         expect(screen.getByTestId('basic-reports-tab')).toBeInTheDocument();
@@ -261,7 +261,7 @@ describe('StandardAdminDashboard', () => {
     });
 
     it('should show correct title for quick actions', async () => {
-      renderStandardAdminDashboard('quick-actions');
+      renderAdminDashboard('quick-actions');
       
       await waitFor(() => {
         expect(screen.getByTestId('quick-actions-panel')).toBeInTheDocument();

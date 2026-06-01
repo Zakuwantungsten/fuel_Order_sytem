@@ -58,8 +58,8 @@ vi.mock('../../components/SuperAdminDashboard', () => ({
   default: ({ section }: any) => <div data-testid={`super-admin-${section}`}>Super Admin: {section}</div>
 }));
 
-vi.mock('../../components/StandardAdminDashboard', () => ({
-  default: ({ section }: any) => <div data-testid={`standard-admin-${section}`}>Standard Admin: {section}</div>
+vi.mock('../../components/AdminDashboard', () => ({
+  default: ({ section }: any) => <div data-testid={`admin-${section}`}>Admin: {section}</div>
 }));
 
 vi.mock('../../components/ManagerView', () => ({
