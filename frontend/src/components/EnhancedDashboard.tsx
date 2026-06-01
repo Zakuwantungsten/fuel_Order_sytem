@@ -251,8 +251,18 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     setActiveTab(defaultTab);
   }, [user.role]);
 
+  // Set when handleNavigate is about to write highlight params, so the
+  // activeTab-change effect below doesn't immediately wipe the params we just set.
+  const skipHighlightClearRef = useRef(false);
+
   // Handle navigation from Dashboard search results
   const handleNavigate = (tab: string, highlight?: string) => {
+    // Only suppress the clear effect when the tab actually changes (that's the
+    // render that triggers the [activeTab] effect). If we're already on the tab,
+    // the effect won't fire, so we must not leave the flag stuck on.
+    if (highlight && tab !== activeTab) {
+      skipHighlightClearRef.current = true;
+    }
     navigateToTab(tab);
     if (highlight) {
       setHighlightParam(highlight);
@@ -279,8 +289,14 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     }
   };
 
-  // Clear highlight when tab changes
+  // Clear highlight when tab changes — but NOT on the tab change that handleNavigate
+  // itself triggered while setting a highlight (otherwise we'd wipe the params before
+  // the destination tab's urlchange handler reads them).
   useEffect(() => {
+    if (skipHighlightClearRef.current) {
+      skipHighlightClearRef.current = false;
+      return;
+    }
     setHighlightParam(null);
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('highlight');

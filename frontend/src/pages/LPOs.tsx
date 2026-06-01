@@ -6,7 +6,7 @@ import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSq
 import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import type { LPOEntry, LPOSummary as LPOSummaryType } from '../types';
-import { lpoDocumentsAPI, lpoWorkbookAPI } from '../services/api';
+import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI } from '../services/api';
 import LPODetailForm from '../components/LPODetailForm';
 import LPOWorkbook from '../components/LPOWorkbook';
 import LPOSummaryComponent from '../components/LPOSummary';
@@ -313,6 +313,16 @@ const LPOs = () => {
         // Reset to list view so the highlighted record is visible
         setViewMode('list');
 
+        // Clear any persisted content filters that could hide the target LPO.
+        // The deep-link only carries year/month, so a leftover search term,
+        // station, status, or date filter would otherwise exclude the LPO from
+        // the query and the highlight would silently fail.
+        setSearchTerm('');
+        setStationFilter('');
+        setStatusFilter('all');
+        setDateFilter('');
+        setCurrentPage(1);
+
         // Set year if provided (used for workbook display)
         let urlFilterYear = new Date().getFullYear();
         if (yearParam) {
@@ -352,33 +362,53 @@ const LPOs = () => {
     return () => window.removeEventListener('urlchange', handleUrlChange);
   }, []); // Remove selectedYear dependency to avoid re-triggering
 
-  // Separate effect to handle highlight after LPOs are loaded and filtered
+  // Separate effect to handle highlight after a highlight is requested.
+  // The list is server-side paginated, so the LPO may live on a page other than
+  // the current one. Fetch ALL LPOs for the selected period, find the record's
+  // position, jump to its page, then scroll/highlight it.
   useEffect(() => {
-    if (pendingHighlight && orders.length > 0) {
-      console.log('Attempting to find and highlight LPO:', pendingHighlight, 'in', orders.length, 'filtered LPOs');
-      
-      // Find in filtered list (after year/month filters applied)
-      const recordIndex = orders.findIndex(l => l.lpoNo === pendingHighlight);
-      
-      if (recordIndex >= 0) {
-        console.log('Found LPO at filtered index:', recordIndex);
+    if (!pendingHighlight) return;
+    let cancelled = false;
+
+    const locateAndHighlight = async () => {
+      try {
+        const response = await lposAPI.getAll({
+          limit: 10000,
+          sort: 'createdAt',
+          order: 'desc',
+          ...(dateRange.dateFrom ? { dateFrom: dateRange.dateFrom } : {}),
+          ...(dateRange.dateTo ? { dateTo: dateRange.dateTo } : {}),
+        });
+        if (cancelled) return;
+
+        const allLpos = response.data || [];
+        const recordIndex = allLpos.findIndex((l: any) => l.lpoNo === pendingHighlight);
+        if (recordIndex < 0) {
+          console.log('LPO not found for highlight:', pendingHighlight);
+          clearLPOHighlight();
+          return;
+        }
+
         const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
-        console.log('Target page:', targetPage, 'Current page:', currentPage);
-        
         if (targetPage !== currentPage) {
           setCurrentPage(targetPage);
-          // Wait for page change
-          setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 800);
+          // Wait for the page change + DOM update before scrolling
+          setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 1000);
         } else {
-          // Already on correct page
-          setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 300);
+          setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 400);
         }
-      } else {
-        console.log('LPO not found in filtered results');
-        clearLPOHighlight();
+      } catch (error) {
+        console.error('❌ Error finding LPO position:', error);
+        if (!cancelled) clearLPOHighlight();
       }
-    }
-  }, [pendingHighlight, orders, itemsPerPage, currentPage]);
+    };
+
+    locateAndHighlight();
+    return () => { cancelled = true; };
+    // Only re-run when a new highlight is requested; currentPage/itemsPerPage are
+    // read as the latest values inside the async closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingHighlight]);
   
   // Helper function to scroll and highlight
   const scrollToAndHighlightLPO = (lpoNo: string) => {
@@ -1402,7 +1432,7 @@ const LPOs = () => {
               placeholder="Search by LPO#, Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
           
@@ -1410,7 +1440,7 @@ const LPOs = () => {
           <div ref={monthDropdownRef} className="month-dropdown-container relative">
             <button
               onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-              className="w-full flex items-center justify-between px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
+              className="w-full flex items-center justify-between px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
             >
               <span className="flex items-center">
                 <Calendar className="w-4 h-4 mr-2 text-gray-400" />
@@ -1488,7 +1518,7 @@ const LPOs = () => {
             <button
               type="button"
               onClick={() => setShowStationDropdown(!showStationDropdown)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+              className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
             >
               <span>{stationFilter || 'All Stations'}</span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -1527,13 +1557,13 @@ const LPOs = () => {
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
           {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
@@ -1551,7 +1581,7 @@ const LPOs = () => {
                   : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]
               );
             }}
-            className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 h-[34px] border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             Clear Filters
           </button>

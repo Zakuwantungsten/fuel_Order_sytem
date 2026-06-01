@@ -230,6 +230,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         // Reset to list view so the highlighted record is visible
         setActiveTab('list');
 
+        // Clear any persisted content filters that could hide the target record.
+        // The deep-link only carries year/month, so a leftover search term, type,
+        // DO/SDO, or status filter would otherwise exclude the DO from the query
+        // and the highlight would silently fail.
+        setSearchTerm('');
+        setFilterType('ALL');
+        setFilterDoType('ALL');
+        setFilterStatus('all');
+        setCurrentPage(1);
+
         // Set year if provided
         if (yearParam) {
           const year = parseInt(yearParam);
@@ -266,19 +276,52 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     };
   }, []);
 
-  // Separate effect to handle highlight after orders are loaded
-  // With server-side pagination, orders already contains only the current page data
-  // filtered by the selected period. Just look for the DO in the current page.
+  // Separate effect to handle highlight after a highlight is requested.
+  // The list is server-side paginated, so the DO may live on a page other than
+  // the current one. Fetch ALL orders for the selected period, find the record's
+  // position, jump to its page, then scroll/highlight it.
   useEffect(() => {
-    if (pendingHighlight && orders.length > 0) {
-      const found = orders.some(o => o.doNumber === pendingHighlight);
-      if (found) {
-        setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 500);
-      } else {
-        clearDOHighlight();
+    if (!pendingHighlight) return;
+    let cancelled = false;
+
+    const locateAndHighlight = async () => {
+      try {
+        const response = await deliveryOrdersAPI.getAll({
+          limit: 10000,
+          sort: 'date',
+          order: 'desc',
+          ...(dateRange.dateFrom ? { dateFrom: dateRange.dateFrom } : {}),
+          ...(dateRange.dateTo ? { dateTo: dateRange.dateTo } : {}),
+        });
+        if (cancelled) return;
+
+        const allOrders = response.data || [];
+        const recordIndex = allOrders.findIndex((o: any) => o.doNumber === pendingHighlight);
+        if (recordIndex < 0) {
+          clearDOHighlight();
+          return;
+        }
+
+        const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
+        if (targetPage !== currentPage) {
+          setCurrentPage(targetPage);
+          // Wait for the page change + DOM update before scrolling
+          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 1000);
+        } else {
+          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 500);
+        }
+      } catch (error) {
+        console.error('❌ Error finding DO position:', error);
+        if (!cancelled) clearDOHighlight();
       }
-    }
-  }, [pendingHighlight, orders]);
+    };
+
+    locateAndHighlight();
+    return () => { cancelled = true; };
+    // Only re-run when a new highlight is requested; currentPage/itemsPerPage are
+    // read as the latest values inside the async closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingHighlight]);
   
   // Helper function to scroll and highlight
   const scrollToAndHighlightDO = (doNumber: string) => {
@@ -1515,8 +1558,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   placeholder="Search by DO#, Truck, Client..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-10 w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 dashboard-search-input"
-                  style={{ paddingLeft: '2.5rem', height: '34px' }}
+                  className="pl-10 w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 dashboard-search-input"
+                  style={{ paddingLeft: '2.5rem' }}
                 />
               </div>
               
@@ -1524,7 +1567,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
               <div className="relative" ref={monthDropdownRef}>
                 <button
                   onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-                  className="w-full flex items-center justify-between px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  className="w-full flex items-center justify-between px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
                 >
                   <span className="flex items-center">
                     <Calendar className="w-4 h-4 mr-2 text-gray-400" />
@@ -1610,7 +1653,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowDoTypeDropdown(!showDoTypeDropdown)}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterDoType === 'DO' ? 'DO - Delivery Orders' : 
@@ -1643,7 +1686,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowFilterTypeDropdown(!showFilterTypeDropdown)}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterType === 'ALL' ? 'All Types' : 
@@ -1675,7 +1718,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 <button
                   type="button"
                   onClick={() => setShowFilterStatusDropdown(!showFilterStatusDropdown)}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
                     {filterStatus === 'all' ? 'All Status' : 
@@ -1719,7 +1762,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   setSelectedPeriods(hasCurrentMonth || availablePeriods.length === 0 ? [currentPeriod] : [mostRecentPeriod]);
                   setCurrentPage(1);
                 }}
-                className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 h-[34px] border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Clear Filters
               </button>
