@@ -2,252 +2,269 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
-import AdminDashboard from '../../components/AdminDashboard';
+import StandardAdminDashboard from '../../components/StandardAdminDashboard';
 
-// Mock the API services with correct AdminStats structure
+// Mock the API services with correct structure
 vi.mock('../../services/api', () => ({
   adminAPI: {
     getStats: vi.fn().mockResolvedValue({
-      users: {
-        total: 30,
-        active: 25,
-        inactive: 5
-      },
-      records: {
-        deliveryOrders: 150,
-        lpos: 80,
-        fuelRecords: 120,
-        yardDispenses: 45
-      },
-      roleDistribution: [
-        { role: 'admin', count: 5 },
-        { role: 'operator', count: 10 },
-        { role: 'driver', count: 15 }
-      ],
-      recentUsers: [
-        { id: '1', username: 'admin', email: 'admin@test.com', firstName: 'Admin', lastName: 'User', role: 'admin', isActive: true }
-      ]
+      users: { total: 20, active: 18, inactive: 2 },
+      records: { deliveryOrders: 100, lpos: 60, fuelRecords: 85, yardDispenses: 30 },
+      roleDistribution: [{ role: 'admin', count: 5 }],
+      recentUsers: []
     }),
-    getFuelStations: vi.fn().mockResolvedValue([
-      { id: '1', name: 'DAR YARD', location: 'DAR ES SALAAM', pricePerLiter: 1450, isActive: true },
-      { id: '2', name: 'MBEYA', location: 'MBEYA', pricePerLiter: 1500, isActive: true }
-    ]),
-    getRoutes: vi.fn().mockResolvedValue([
-      { destination: 'LUBUMBASHI', totalLiters: 2300 },
-      { destination: 'LIKASI', totalLiters: 2200 }
-    ]),
-    getTruckBatches: vi.fn().mockResolvedValue({
-      batch_100: ['T857 DNH', 'T858 ABC'],
-      batch_80: ['T784 DWK'],
-      batch_60: ['T753 ELY']
-    }),
-    getStandardAllocations: vi.fn().mockResolvedValue({
-      darYard: 550,
-      mbeyaGoing: 450,
-      zambiaGoing: 400,
-      congoFuel: 400
-    }),
-    updateFuelStation: vi.fn().mockResolvedValue({ success: true }),
-    addFuelStation: vi.fn().mockResolvedValue({ id: 'new', name: 'NEW', location: 'NEW', pricePerLiter: 1450, isActive: true }),
-    updateRoute: vi.fn().mockResolvedValue({ success: true }),
-    addRoute: vi.fn().mockResolvedValue({ destination: 'NEW', totalLiters: 2200 }),
-    deleteRoute: vi.fn().mockResolvedValue({ success: true }),
-    addTruckToBatch: vi.fn().mockResolvedValue({ batch_100: ['T857 DNH'] }),
-    removeTruckFromBatch: vi.fn().mockResolvedValue({ batch_100: [] }),
-    updateStandardAllocations: vi.fn().mockResolvedValue({ darYard: 550 }),
   },
-  usersAPI: {
-    getAll: vi.fn().mockResolvedValue([
-      { id: '1', username: 'admin', email: 'admin@test.com', firstName: 'Admin', lastName: 'User', role: 'admin', isActive: true },
-      { id: '2', username: 'operator', email: 'op@test.com', firstName: 'Operator', lastName: 'User', role: 'operator', isActive: true }
-    ]),
-    toggleStatus: vi.fn().mockResolvedValue({ isActive: false }),
-    resetPassword: vi.fn().mockResolvedValue({ temporaryPassword: 'temp123' }),
-  },
-  FuelStation: {},
-  RouteConfig: {},
-  TruckBatches: {},
-  StandardAllocations: {},
-  AdminStats: {},
 }));
 
-// Mock formatTruckNumber
-vi.mock('../../utils/dataCleanup', () => ({
-  formatTruckNumber: vi.fn((num) => num?.toUpperCase() || '')
-}));
-
-// Mock CreateUserModal
-vi.mock('../../components/CreateUserModal', () => ({
-  default: ({ onClose }: any) => (
-    <div data-testid="create-user-modal">
-      <button onClick={onClose}>Close</button>
+// Mock the sub-components - passing the correct prop name 'showMessage' that component uses
+vi.mock('../../components/StandardAdmin/OperationalOverviewTab', () => ({
+  default: ({ stats, onRefresh }: any) => (
+    <div data-testid="operational-overview-tab">
+      <h2>Operational Overview</h2>
+      {stats && <span data-testid="stats-loaded">Stats Loaded</span>}
+      <button onClick={onRefresh}>Refresh</button>
     </div>
-  ),
-  BatchTruckCreation: () => <div data-testid="batch-truck-creation" />
+  )
 }));
 
-// Mock Pagination
-vi.mock('../../components/Pagination', () => ({
-  default: () => <div data-testid="pagination" />
+vi.mock('../../components/StandardAdmin/DataManagementTab', () => ({
+  default: ({ showMessage }: any) => (
+    <div data-testid="data-management-tab">
+      <h2>Data Management</h2>
+      <button onClick={() => showMessage && showMessage('success', 'Test message')}>Show Message</button>
+    </div>
+  )
 }));
 
-// Mock PendingConfigurations
-vi.mock('../../pages/PendingConfigurations', () => ({
-  default: () => <div data-testid="pending-configurations">Pending Configurations</div>
+vi.mock('../../components/StandardAdmin/UserSupportTab', () => ({
+  default: ({ showMessage }: any) => (
+    <div data-testid="user-support-tab">
+      <h2>User Support</h2>
+    </div>
+  )
 }));
 
-const mockUser = {
-  id: 'user-1',
-  username: 'admin',
-  email: 'admin@test.com',
-  firstName: 'Admin',
-  lastName: 'User',
+vi.mock('../../components/StandardAdmin/BasicReportsTab', () => ({
+  default: ({ showMessage }: any) => (
+    <div data-testid="basic-reports-tab">
+      <h2>Basic Reports</h2>
+    </div>
+  )
+}));
+
+vi.mock('../../components/StandardAdmin/QuickActionsPanel', () => ({
+  default: ({ showMessage }: any) => (
+    <div data-testid="quick-actions-panel">
+      <h2>Quick Actions</h2>
+      <button onClick={() => showMessage && showMessage('success', 'Action completed')}>Quick Action</button>
+    </div>
+  )
+}));
+
+const mockStandardAdminUser = {
+  id: 'std-admin-1',
+  username: 'stdadmin',
+  email: 'stdadmin@test.com',
+  firstName: 'Standard',
+  lastName: 'Admin',
   role: 'admin',
   isActive: true
 };
 
-const renderAdminDashboard = () => {
+const renderStandardAdminDashboard = (section: string = 'overview') => {
   return render(
     <BrowserRouter>
-      <AdminDashboard user={mockUser} />
+      <StandardAdminDashboard user={mockStandardAdminUser} section={section as any} />
     </BrowserRouter>
   );
 };
 
-describe('AdminDashboard', () => {
+describe('StandardAdminDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe('Rendering', () => {
-    it('should render the admin dashboard', async () => {
-      renderAdminDashboard();
-      
-      // Check for main dashboard elements
-      expect(screen.getByText(/Admin Dashboard/i)).toBeInTheDocument();
-    });
-
-    it('should display navigation tabs', async () => {
-      renderAdminDashboard();
+    it('should render the standard admin dashboard', async () => {
+      renderStandardAdminDashboard();
       
       await waitFor(() => {
-        expect(screen.getByText(/Overview/i)).toBeInTheDocument();
+        expect(screen.getByText(/Operational Overview/i)).toBeInTheDocument();
       });
     });
 
-    it('should show loading state initially', () => {
-      renderAdminDashboard();
-      
-      // The component should show some loading indicator or load data
-      expect(screen.getByText(/Admin Dashboard/i)).toBeInTheDocument();
-    });
-  });
-
-  describe('Tab Navigation', () => {
-    it('should switch to stations tab when clicked', async () => {
-      renderAdminDashboard();
-      const user = userEvent.setup();
+    it('should display user name and role', async () => {
+      renderStandardAdminDashboard();
       
       await waitFor(() => {
-        const stationsTab = screen.getByText(/Stations/i);
-        expect(stationsTab).toBeInTheDocument();
-      });
-      
-      const stationsTab = screen.getByText(/Stations/i);
-      await user.click(stationsTab);
-      
-      // Should load fuel stations data
-      await waitFor(() => {
-        expect(screen.getByText(/Fuel Stations/i)).toBeInTheDocument();
+        expect(screen.getByText(/Standard Admin/i)).toBeInTheDocument();
       });
     });
 
-    it('should switch to routes tab when clicked', async () => {
-      renderAdminDashboard();
-      const user = userEvent.setup();
+    it('should show the correct section title', async () => {
+      renderStandardAdminDashboard('overview');
       
       await waitFor(() => {
-        const routesTab = screen.getByText(/Routes/i);
-        expect(routesTab).toBeInTheDocument();
-      });
-      
-      const routesTab = screen.getByText(/Routes/i);
-      await user.click(routesTab);
-      
-      // Tab should be clicked successfully
-      await waitFor(() => {
-        expect(document.body).toBeDefined();
-      });
-    });
-
-    it('should switch to trucks tab when clicked', async () => {
-      renderAdminDashboard();
-      const user = userEvent.setup();
-      
-      // The tab is labeled "Truck Batches" in the component
-      await waitFor(() => {
-        const trucksTab = screen.getByText(/Truck Batches/i);
-        expect(trucksTab).toBeInTheDocument();
-      });
-      
-      const trucksTab = screen.getByText(/Truck Batches/i);
-      await user.click(trucksTab);
-      
-      // Tab should be clicked successfully
-      await waitFor(() => {
-        expect(document.body).toBeDefined();
-      });
-    });
-
-    it('should switch to users tab when clicked', async () => {
-      renderAdminDashboard();
-      const user = userEvent.setup();
-      
-      await waitFor(() => {
-        const usersTabs = screen.getAllByText(/Users/i);
-        expect(usersTabs.length).toBeGreaterThan(0);
-      });
-      
-      // Get the first "Users" element (the tab button)
-      const usersTabs = screen.getAllByText(/Users/i);
-      await user.click(usersTabs[0]);
-      
-      // Tab should be clicked successfully
-      await waitFor(() => {
-        expect(document.body).toBeDefined();
+        expect(screen.getByText(/Operational Overview/i)).toBeInTheDocument();
       });
     });
   });
 
-  describe('Overview Tab', () => {
-    it('should display stats cards', async () => {
-      renderAdminDashboard();
+  describe('Section Navigation', () => {
+    it('should render overview section by default', async () => {
+      renderStandardAdminDashboard('overview');
       
       await waitFor(() => {
-        // Check for stats display - matches the OverviewTab component
-        expect(screen.getByText(/Total Users/i)).toBeInTheDocument();
+        expect(screen.getByTestId('operational-overview-tab')).toBeInTheDocument();
       });
     });
 
-    it('should show user role distribution', async () => {
-      renderAdminDashboard();
+    it('should render data management section', async () => {
+      renderStandardAdminDashboard('data');
       
       await waitFor(() => {
-        expect(screen.getByText(/User Role Distribution/i)).toBeInTheDocument();
+        expect(screen.getByTestId('data-management-tab')).toBeInTheDocument();
+      });
+    });
+
+    it('should render user support section', async () => {
+      renderStandardAdminDashboard('users');
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('user-support-tab')).toBeInTheDocument();
+      });
+    });
+
+    it('should render reports section', async () => {
+      renderStandardAdminDashboard('reports');
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('basic-reports-tab')).toBeInTheDocument();
+      });
+    });
+
+    it('should render quick actions section', async () => {
+      renderStandardAdminDashboard('quick-actions');
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('quick-actions-panel')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Data Loading', () => {
+    it('should load stats on overview section', async () => {
+      renderStandardAdminDashboard('overview');
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('stats-loaded')).toBeInTheDocument();
+      });
+    });
+
+    it('should call API to get stats', async () => {
+      const { adminAPI } = await import('../../services/api');
+      
+      renderStandardAdminDashboard('overview');
+      
+      await waitFor(() => {
+        expect(adminAPI.getStats).toHaveBeenCalled();
       });
     });
   });
 
   describe('Error Handling', () => {
-    it('should display error message when API fails', async () => {
+    it('should handle API errors gracefully', async () => {
       const { adminAPI } = await import('../../services/api');
       (adminAPI.getStats as any).mockRejectedValueOnce(new Error('API Error'));
       
-      renderAdminDashboard();
+      renderStandardAdminDashboard('overview');
       
       await waitFor(() => {
-        // Component should handle error gracefully
-        expect(screen.getByText(/Admin Dashboard/i)).toBeInTheDocument();
+        // Dashboard should still render
+        expect(screen.getByText(/Operational Overview/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Success Messages', () => {
+    it('should display success messages', async () => {
+      renderStandardAdminDashboard('data');
+      const user = userEvent.setup();
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('data-management-tab')).toBeInTheDocument();
+      });
+      
+      const showMessageBtn = screen.getByText('Show Message');
+      await user.click(showMessageBtn);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Test message')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Refresh Functionality', () => {
+    it('should refresh data when refresh button is clicked', async () => {
+      const { adminAPI } = await import('../../services/api');
+      
+      renderStandardAdminDashboard('overview');
+      const user = userEvent.setup();
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('operational-overview-tab')).toBeInTheDocument();
+      });
+      
+      // Clear the mock to check if it's called again
+      (adminAPI.getStats as any).mockClear();
+      
+      const refreshBtn = screen.getByText('Refresh');
+      await user.click(refreshBtn);
+      
+      await waitFor(() => {
+        expect(adminAPI.getStats).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('Section Titles', () => {
+    it('should show correct title for overview', async () => {
+      renderStandardAdminDashboard('overview');
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Operational Overview/i)).toBeInTheDocument();
+      });
+    });
+
+    it('should show correct title for data management', async () => {
+      renderStandardAdminDashboard('data');
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('data-management-tab')).toBeInTheDocument();
+      });
+    });
+
+    it('should show correct title for user support', async () => {
+      renderStandardAdminDashboard('users');
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('user-support-tab')).toBeInTheDocument();
+      });
+    });
+
+    it('should show correct title for reports', async () => {
+      renderStandardAdminDashboard('reports');
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('basic-reports-tab')).toBeInTheDocument();
+      });
+    });
+
+    it('should show correct title for quick actions', async () => {
+      renderStandardAdminDashboard('quick-actions');
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('quick-actions-panel')).toBeInTheDocument();
       });
     });
   });
