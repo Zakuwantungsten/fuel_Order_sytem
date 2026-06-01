@@ -56,3 +56,6 @@ dist-ssr/
 
 # Claude skills downloaded locally (do not commit)
 .claude/
+
+# Claude local memory store (do not commit)
+memory/
