@@ -521,11 +521,18 @@ const FuelRecords = () => {
     };
   }, []);
 
-  // Real-time sync: refresh when any user modifies fuel records or LPO entries
-  useRealtimeSync(['fuel_records', 'lpo_summaries'], () => {
+  // Real-time sync for fuel records — the hook patches rows in-place for updates,
+  // so the callback only needs to handle extra cross-entity invalidations.
+  useRealtimeSync('fuel_records', () => {
+    queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
+  }, 'rt-fuel-records');
+
+  // Real-time sync for LPO changes — when an LPO is modified the fuel records
+  // list may reflect different linkage so we do a full list refresh here.
+  useRealtimeSync('lpo_summaries', () => {
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
-  });
+  }, 'rt-lpo-summaries');
 
   // Fetch standard allocations from backend
   useEffect(() => {
@@ -588,6 +595,18 @@ const FuelRecords = () => {
     setSelectedRecord(undefined);
   };
 
+  // Renew the edit lock every 3 minutes while the form is open so it doesn't
+  // expire mid-edit (lock TTL is 5 minutes; 3-minute renewal keeps it alive).
+  useEffect(() => {
+    if (!isFormOpen || !selectedRecord) return;
+    const recordId = selectedRecord.id || (selectedRecord as any)._id;
+    if (!recordId) return;
+    const interval = setInterval(async () => {
+      try { await fuelRecordsAPI.acquireLock(recordId); } catch { /* silent — user will be informed on save */ }
+    }, 3 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isFormOpen, selectedRecord]);
+
   const handleRowClick = (record: FuelRecord) => {
     const recordId = record.id || (record as any)._id;
     if (recordId) {
@@ -618,20 +637,42 @@ const FuelRecords = () => {
           toast.error('Unable to update fuel record (missing record id)');
           return;
         }
-        await fuelRecordsAPI.update(recordId, { ...data });
+        const updated = await fuelRecordsAPI.update(recordId, { ...data });
+        // Patch the updated row in-place across all cached list pages — no full refetch.
+        // The WebSocket event will propagate the same patch to all other connected clients.
+        const updatedId = String(updated.id || (updated as any)._id || recordId);
+        queryClient.setQueriesData(
+          { queryKey: fuelRecordKeys.lists() },
+          (old: any) => {
+            if (!old?.records) return old;
+            const idx = old.records.findIndex((r: any) =>
+              String(r._id || r.id) === updatedId
+            );
+            if (idx === -1) return old;
+            const newRecords = [...old.records];
+            newRecords[idx] = { ...newRecords[idx], ...updated };
+            return { ...old, records: newRecords };
+          }
+        );
+        queryClient.setQueryData(fuelRecordKeys.detail(updatedId), updated);
         toast.success('Fuel record updated successfully');
       } else {
         await fuelRecordsAPI.create(data);
+        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
         toast.success('Fuel record created successfully');
       }
-      // Immediate invalidation for the current user (fastest path).
-      // WebSocket data_changed event will also fire for all other users.
-      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
     } catch (error: any) {
       console.error('Error saving fuel record:', error);
       if (error.response?.status === 409) {
-        setConflictData({ currentRecord: error.response?.data?.data?.current, pendingData: data });
-        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+        const currentRecord = error.response?.data?.data?.current;
+        if (currentRecord) {
+          // Genuine version conflict — offer to keep or discard changes
+          setConflictData({ currentRecord, pendingData: data });
+          queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+        } else {
+          // Lock-related 409: expired lock or lock not acquired
+          toast.error(error.response?.data?.message || 'Your edit lock has expired. Close and re-open the form to continue.');
+        }
       } else if (error.response?.status === 423) {
         const lockHolder = error.response?.data?.data?.editLock?.lockedByName || 'another user';
         toast.error(`This record is being edited by ${lockHolder}. Please try again later.`);
