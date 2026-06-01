@@ -371,6 +371,17 @@ const LPOs = () => {
     let cancelled = false;
 
     const locateAndHighlight = async () => {
+      // Driver-account entries are merged into the list client-side and rendered
+      // on EVERY page (they aren't part of server pagination), so the row is
+      // already in the DOM on the current page — just scroll to it. They also
+      // won't appear in the server LPO query below, so checking here avoids a
+      // false "not found" that would clear the highlight.
+      const isDriverEntry = driverEntries.some((e: any) => e.lpoNo === pendingHighlight);
+      if (isDriverEntry) {
+        setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 400);
+        return;
+      }
+
       try {
         const response = await lposAPI.getAll({
           limit: 10000,
