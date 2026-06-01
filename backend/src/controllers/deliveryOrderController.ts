@@ -20,6 +20,15 @@ import fs from 'fs';
 import axios from 'axios';
 import { formatDONumber, parseDONumber, getNextDONumber as getNextFormattedDONumber } from '../utils/doNumberFormatter';
 import type { CompanyBranding } from '../utils/pdfGenerator';
+import {
+  matchRouteLiters,
+  matchExtraFuel,
+  buildImportFuelRecord,
+  matchExportRouteLiters,
+  buildReturnUpdate,
+  type RouteLike,
+  type DeliveryOrderLike,
+} from '../utils/fuelRecordCalculator';
 
 // Month names for sheet naming
 const MONTH_NAMES = [
@@ -878,6 +887,327 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
   } catch (error: any) {
     throw error;
   }
+};
+
+/**
+ * Bulk-create delivery orders (and their fuel records) in a single request.
+ *
+ * Replaces the old client-side loop that issued ~4 round-trips per truck
+ * (create DO → fetch all fuel records → fetch routes+batches → create fuel record).
+ * Everything now happens server-side with shared reads fetched ONCE and writes
+ * batched via insertMany/bulkWrite, so a 10–40 truck batch completes in one call.
+ *
+ * Behaviour parity with the previous flow:
+ *  - DO type SDO: created as orders only, no fuel records.
+ *  - DO type DO + IMPORT: a going-journey fuel record is created. Trucks that
+ *    already have an active journey are queued (mirrors createFuelRecord).
+ *    Locked records (missing route/batch config) trigger admin notifications.
+ *  - DO type DO + EXPORT: the most recent going record without a return DO is
+ *    updated with return-leg fuel; unmatched returns trigger notifications.
+ */
+export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response): Promise<void> => {
+  const username = req.user?.username || 'system';
+  const userId = req.user?.userId || 'system';
+  const userRole = req.user?.role;
+
+  const incoming = Array.isArray(req.body?.orders) ? req.body.orders : null;
+  if (!incoming || incoming.length === 0) {
+    throw new ApiError(400, 'Please provide a non-empty "orders" array');
+  }
+  if (incoming.length > 500) {
+    throw new ApiError(400, 'Bulk creation is limited to 500 orders per request');
+  }
+
+  // ── 1. Normalize payloads (mirror createDeliveryOrder defaults) ────────────
+  const failedReasons: Array<{ truck: string; reason: string }> = [];
+  const normalized: any[] = [];
+  const seenInRequest = new Set<string>();
+
+  for (const raw of incoming) {
+    if (!raw || !raw.doNumber) {
+      failedReasons.push({ truck: raw?.truckNo || 'UNKNOWN', reason: 'Missing DO number' });
+      continue;
+    }
+    const payload: any = { ...raw };
+
+    if (!payload.sn && payload.doNumber) {
+      payload.sn = parseInt(String(payload.doNumber).replace(/^0+/, ''), 10) || 1;
+    }
+    if (!payload.rateType) payload.rateType = 'per_ton';
+    if (!payload.cargoType && payload.containerNo) {
+      payload.cargoType = String(payload.containerNo).toLowerCase().includes('container') ? 'container' : 'loosecargo';
+    } else if (!payload.cargoType) {
+      payload.cargoType = 'loosecargo';
+    }
+    if (payload.totalAmount == null) {
+      payload.totalAmount = payload.rateType === 'per_ton'
+        ? (payload.tonnages || 0) * (payload.ratePerTon || 0)
+        : (payload.ratePerTon || 0);
+    }
+    // insertMany skips the save hook that fills tonnages for fixed_total
+    if (payload.rateType === 'fixed_total' && payload.tonnages == null) payload.tonnages = 0;
+
+    // Drop client-only / non-writable fields
+    delete payload.id;
+    delete payload._id;
+
+    if (seenInRequest.has(payload.doNumber)) {
+      failedReasons.push({ truck: `${payload.doType}-${payload.doNumber} (${payload.truckNo})`, reason: 'Duplicate DO number within request' });
+      continue;
+    }
+    seenInRequest.add(payload.doNumber);
+    normalized.push(payload);
+  }
+
+  // ── 2. Reject DO numbers that already exist in the DB ──────────────────────
+  if (normalized.length > 0) {
+    const existing = await DeliveryOrder.find({ doNumber: { $in: normalized.map(o => o.doNumber) } })
+      .select('doNumber')
+      .lean();
+    const existingSet = new Set(existing.map(e => e.doNumber));
+    if (existingSet.size > 0) {
+      for (let i = normalized.length - 1; i >= 0; i--) {
+        if (existingSet.has(normalized[i].doNumber)) {
+          failedReasons.push({ truck: `${normalized[i].doType}-${normalized[i].doNumber} (${normalized[i].truckNo})`, reason: 'DO number already exists' });
+          normalized.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  if (normalized.length === 0) {
+    res.status(400).json({
+      success: false,
+      message: 'No valid delivery orders to create',
+      data: { createdOrders: [], summary: { totalAttempted: incoming.length, successCount: 0, failedCount: failedReasons.length, queuedCount: 0, failedReasons } },
+    });
+    return;
+  }
+
+  // ── 3. Insert the delivery orders (one batch write) ────────────────────────
+  let createdDOs: any[] = [];
+  try {
+    createdDOs = await DeliveryOrder.insertMany(normalized, { ordered: false });
+  } catch (err: any) {
+    // ordered:false → valid docs still inserted; collect what failed
+    createdDOs = err.insertedDocs || [];
+    const insertedNumbers = new Set(createdDOs.map((d: any) => d.doNumber));
+    const writeErrors = err.writeErrors || err.result?.result?.writeErrors || [];
+    for (const we of writeErrors) {
+      const failedDoc = we?.err?.op || we?.getOperation?.() || {};
+      failedReasons.push({ truck: `${failedDoc.doType || 'DO'}-${failedDoc.doNumber || '?'} (${failedDoc.truckNo || '?'})`, reason: we?.errmsg || 'Insert failed' });
+    }
+    // Any normalized order not inserted and not already accounted for
+    for (const o of normalized) {
+      if (!insertedNumbers.has(o.doNumber) && !failedReasons.some(f => f.truck.includes(o.doNumber))) {
+        failedReasons.push({ truck: `${o.doType}-${o.doNumber} (${o.truckNo})`, reason: 'Insert failed' });
+      }
+    }
+  }
+
+  // ── 4. Load shared config ONCE (routes + truck batches) ────────────────────
+  const importDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'IMPORT');
+  const exportDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'EXPORT');
+
+  let routes: RouteLike[] = [];
+  let truckBatches: Record<string, any> = {};
+  if (importDOs.length > 0 || exportDOs.length > 0) {
+    const { SystemConfig } = await import('../models/SystemConfig');
+    const [routeDocs, batchConfig] = await Promise.all([
+      RouteConfig.find({ isActive: true }).lean(),
+      SystemConfig.findOne({ configType: 'truck_batches', isDeleted: false }).lean(),
+    ]);
+    routes = routeDocs as unknown as RouteLike[];
+    truckBatches = (batchConfig?.truckBatches as Record<string, any>) || {};
+  }
+
+  let queuedCount = 0;
+  const lockedNotifs: Array<{ id: string; missingFields: Array<'totalLiters' | 'extraFuel'>; doNumber: string; truckNo: string; destination: string; truckSuffix: string }> = [];
+
+  // ── 5. IMPORT: build + insert going-journey fuel records ───────────────────
+  if (importDOs.length > 0) {
+    const importTrucks = [...new Set(importDOs.map((o: any) => o.truckNo))];
+    const [activeRecords, queuedRecords] = await Promise.all([
+      FuelRecord.find({ truckNo: { $in: importTrucks }, journeyStatus: 'active', isDeleted: false }).select('_id truckNo').lean(),
+      FuelRecord.find({ truckNo: { $in: importTrucks }, journeyStatus: 'queued', isDeleted: false }).select('truckNo').lean(),
+    ]);
+
+    // Per-truck journey state, seeded from the DB and updated as we build the batch
+    const truckState = new Map<string, { activeId: string | null; queuedCount: number }>();
+    for (const t of importTrucks) truckState.set(t, { activeId: null, queuedCount: 0 });
+    for (const r of activeRecords) {
+      const s = truckState.get(r.truckNo)!;
+      s.activeId = String(r._id);
+    }
+    for (const r of queuedRecords) {
+      const s = truckState.get(r.truckNo)!;
+      s.queuedCount += 1;
+    }
+
+    const fuelRecordsToInsert: any[] = [];
+    const linkTargets: Array<{ id: string; truckNo: string; doNumber: string; date: string }> = [];
+
+    for (const order of importDOs) {
+      const routeMatch = matchRouteLiters(routes, order.destination);
+      const totalLiters = routeMatch.matched ? routeMatch.liters : null;
+
+      const batchMatch = matchExtraFuel(order.truckNo, truckBatches, order.destination);
+      // Mirror the client: unmatched batch → null extra → record is locked
+      const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
+
+      const built = buildImportFuelRecord(order as unknown as DeliveryOrderLike, totalLiters, extraFuel);
+      const rec = built.fuelRecord;
+      const _id = new mongoose.Types.ObjectId();
+      rec._id = _id;
+
+      const state = truckState.get(order.truckNo)!;
+      if (state.activeId) {
+        rec.journeyStatus = 'queued';
+        rec.queueOrder = state.queuedCount + 1;
+        rec.previousJourneyId = state.activeId;
+        state.queuedCount += 1;
+        queuedCount += 1;
+      } else {
+        rec.journeyStatus = 'active';
+        rec.activatedAt = new Date();
+        state.activeId = String(_id);
+      }
+
+      fuelRecordsToInsert.push(rec);
+      linkTargets.push({ id: String(_id), truckNo: order.truckNo, doNumber: order.doNumber, date: order.date });
+
+      if (built.isLocked) {
+        lockedNotifs.push({
+          id: String(_id),
+          missingFields: built.missingFields,
+          doNumber: order.doNumber,
+          truckNo: order.truckNo,
+          destination: order.destination,
+          truckSuffix: (batchMatch.truckSuffix || '').toUpperCase(),
+        });
+      }
+    }
+
+    try {
+      await FuelRecord.insertMany(fuelRecordsToInsert, { ordered: false });
+    } catch (err: any) {
+      logger.error('Bulk fuel record insert had errors:', err?.message || err);
+    }
+
+    // Auto-link any pending yard fuel entries (parity with single create), parallelized
+    try {
+      const { linkPendingYardFuelDirect } = await import('./yardFuelController');
+      await Promise.all(
+        linkTargets.map(t =>
+          linkPendingYardFuelDirect(t.id, t.truckNo, t.doNumber, t.date, username).catch(e => {
+            logger.warn(`Yard-fuel auto-link failed for ${t.truckNo}: ${e?.message || e}`);
+            return { linkedCount: 0 };
+          })
+        )
+      );
+    } catch (e: any) {
+      logger.warn('Yard-fuel auto-link step skipped:', e?.message || e);
+    }
+  }
+
+  // ── 6. EXPORT: update the matching going records with return-leg fuel ───────
+  const unlinkedExports: Array<{ id: string; doNumber: string; truckNo: string; destination: string; loadingPoint: string }> = [];
+  if (exportDOs.length > 0) {
+    const exportTrucks = [...new Set(exportDOs.map((o: any) => o.truckNo))];
+    const goingRecords = await FuelRecord.find({
+      truckNo: { $in: exportTrucks },
+      isDeleted: false,
+      $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
+    })
+      .sort({ date: -1 })
+      .lean();
+
+    // Most recent unmatched going record per truck
+    const recordByTruck = new Map<string, any>();
+    for (const r of goingRecords) {
+      if (!recordByTruck.has(r.truckNo)) recordByTruck.set(r.truckNo, r);
+    }
+
+    const usedRecordIds = new Set<string>();
+    const bulkOps: any[] = [];
+    for (const order of exportDOs) {
+      const match = recordByTruck.get(order.truckNo);
+      if (!match || usedRecordIds.has(String(match._id))) {
+        unlinkedExports.push({ id: String(order._id), doNumber: order.doNumber, truckNo: order.truckNo, destination: order.destination, loadingPoint: order.loadingPoint });
+        continue;
+      }
+      usedRecordIds.add(String(match._id));
+      const routeMatch = matchExportRouteLiters(routes, order.loadingPoint || '', order.destination || '');
+      const { update } = buildReturnUpdate(match, order as unknown as DeliveryOrderLike, routeMatch.liters);
+      bulkOps.push({ updateOne: { filter: { _id: match._id }, update: { $set: update } } });
+    }
+
+    if (bulkOps.length > 0) {
+      try {
+        await FuelRecord.bulkWrite(bulkOps, { ordered: false });
+      } catch (err: any) {
+        logger.error('Bulk fuel record update (export) had errors:', err?.message || err);
+      }
+    }
+  }
+
+  // ── 7. Notifications (parallel; failures are non-fatal) ────────────────────
+  try {
+    const { createMissingConfigNotification, createUnlinkedExportDONotification, createBulkDOFailureNotification } =
+      await import('./notificationController');
+
+    const notifJobs: Array<Promise<any>> = [];
+
+    for (const n of lockedNotifs) {
+      notifJobs.push(
+        createMissingConfigNotification(n.id, n.missingFields, { doNumber: n.doNumber, truckNo: n.truckNo, destination: n.destination, truckSuffix: n.truckSuffix }, username, userRole, userId)
+          .catch(e => logger.warn(`Missing-config notification failed for ${n.doNumber}: ${e?.message || e}`))
+      );
+    }
+    for (const u of unlinkedExports) {
+      notifJobs.push(
+        createUnlinkedExportDONotification(u.id, { doNumber: u.doNumber, truckNo: u.truckNo, destination: u.destination, loadingPoint: u.loadingPoint }, username)
+          .catch(e => logger.warn(`Unlinked-export notification failed for ${u.doNumber}: ${e?.message || e}`))
+      );
+    }
+    await Promise.all(notifJobs);
+
+    if (failedReasons.length > 0) {
+      await createBulkDOFailureNotification({
+        totalAttempted: incoming.length,
+        successCount: createdDOs.length,
+        skippedCount: 0,
+        failedCount: failedReasons.length,
+        failedReasons,
+      }, username).catch(e => logger.warn(`Bulk failure notification failed: ${e?.message || e}`));
+    }
+  } catch (e: any) {
+    logger.warn('Bulk notification step skipped:', e?.message || e);
+  }
+
+  // ── 8. Single audit entry + one socket broadcast ───────────────────────────
+  await AuditService.logBulkOperation(userId, username, 'DeliveryOrder', 'create', createdDOs.length, req.ip);
+  emitDataChange('delivery_orders', 'create');
+  emitDataChange('fuel_records', 'update');
+
+  logger.info(`Bulk DO creation by ${username}: ${createdDOs.length} created, ${queuedCount} queued, ${failedReasons.length} failed, ${unlinkedExports.length} unlinked exports`);
+
+  res.status(201).json({
+    success: createdDOs.length > 0,
+    message: `Created ${createdDOs.length} delivery order(s)`,
+    data: {
+      createdOrders: createdDOs,
+      summary: {
+        totalAttempted: incoming.length,
+        successCount: createdDOs.length,
+        failedCount: failedReasons.length,
+        queuedCount,
+        unlinkedExportCount: unlinkedExports.length,
+        failedReasons,
+        unlinkedExports: unlinkedExports.map(u => ({ truck: `${u.doNumber} (${u.truckNo})`, reason: 'No matching going journey' })),
+      },
+    },
+  });
 };
 
 /**

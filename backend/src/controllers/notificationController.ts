@@ -337,6 +337,13 @@ export const createMissingConfigNotification = async (
     }
 
     logger.info(`Notifications created for fuel record ${fuelRecordId} — missing: ${missingFields.join(', ')}`);
+
+    // Broadcast a generic notifications-changed event so every connected client's
+    // NotificationBell reloads from the DB. This is more reliable than the
+    // room-targeted emitNotification above (which can miss across instances or if
+    // room membership is stale), and is what makes new notifications appear live
+    // without a page refresh — including for bulk DO creation.
+    emitDataChange('notifications', 'create');
   } catch (error) {
     logger.error('Failed to create config notification:', error);
     // Don't throw — notification failure should never break fuel record creation
@@ -379,6 +386,10 @@ export const createUnlinkedExportDONotification = async (
     });
 
     logger.info(`Created notification for unlinked EXPORT DO ${metadata.doNumber} (truck: ${metadata.truckNo})`);
+
+    // Broadcast so every client's NotificationBell reloads from the DB (live update,
+    // no refresh needed). This is the only real-time signal for this notification type.
+    emitDataChange('notifications', 'create');
   } catch (error) {
     logger.error('Failed to create unlinked EXPORT DO notification:', error);
     // Don't throw - notification failure shouldn't break DO creation

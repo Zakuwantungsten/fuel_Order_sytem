@@ -37,6 +37,13 @@ router.post(
   asyncHandler(deliveryOrderController.downloadAmendedDOsPDF)
 );
 
+// Bulk DOs create route (creates DOs + fuel records server-side in one request)
+router.post(
+  '/bulk',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'),
+  asyncHandler(deliveryOrderController.createBulkDeliveryOrders)
+);
+
 // Bulk DOs PDF download route (must be before /:id routes)
 router.post(
   '/bulk/download-pdf',

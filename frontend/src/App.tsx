@@ -14,6 +14,7 @@ const ForcePasswordChange = lazy(() => import('./pages/ForcePasswordChange'));
 import { systemAdminAPI } from './services/api';
 import { initializeWebSocket, subscribeToMaintenanceEvents, unsubscribeFromMaintenanceEvents, subscribeToSettingsEvents, unsubscribeFromSettingsEvents } from './services/websocket';
 import { setSystemName, setSystemTimezone, setSystemDateFormat } from './utils/timezone';
+import { useRealtimeSync } from './hooks/useRealtimeSync';
 import tahmeedLogo from './assets/logo.png';
 import tahmeedLogoDark from './assets/Dec 2, 2025, 06_08_52 PM.png';
 import { LogOut, RefreshCw, Wrench, Clock, Shield } from 'lucide-react';
@@ -158,6 +159,17 @@ function AppContent() {
   // maintenance status. Unauthenticated users are unaffected because the guard
   // is `isAuthenticated && maintenanceChecking`, which stays false when logged out.
   const [maintenanceChecking, setMaintenanceChecking] = useState(true);
+
+  // App-level real-time sync. Page components also subscribe (for nicer in-place
+  // row patching while mounted), but this always-mounted subscription guarantees
+  // the React Query caches are invalidated for cross-page changes — e.g. an admin
+  // adding a truck-batch suffix unlocks a fuel record, or a bulk DO create — so the
+  // affected lists are fresh the moment you open them, with no manual refresh.
+  useRealtimeSync(
+    ['fuel_records', 'delivery_orders', 'lpo_summaries', 'truck_batches'],
+    () => {},
+    'app-global'
+  );
 
   useEffect(() => {
     if (!isAuthenticated) {

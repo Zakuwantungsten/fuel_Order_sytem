@@ -210,7 +210,24 @@ export const deliveryOrdersAPI = {
     const response = await apiClient.post('/delivery-orders', data);
     return response.data.data;
   },
-  
+
+  // Bulk-create DOs + fuel records in a single backend request.
+  createBulk: async (orders: Partial<DeliveryOrder>[]): Promise<{
+    createdOrders: DeliveryOrder[];
+    summary: {
+      totalAttempted: number;
+      successCount: number;
+      failedCount: number;
+      queuedCount: number;
+      unlinkedExportCount?: number;
+      failedReasons?: { truck: string; reason: string }[];
+      unlinkedExports?: { truck: string; reason: string }[];
+    };
+  }> => {
+    const response = await apiClient.post('/delivery-orders/bulk', { orders });
+    return response.data.data;
+  },
+
   update: async (id: string | number, data: Partial<DeliveryOrder>): Promise<{ order: DeliveryOrder; cascadeResults?: any }> => {
     const response = await apiClient.put(`/delivery-orders/${id}`, data);
     return {
