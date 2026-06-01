@@ -53,7 +53,7 @@ function MetricCard({
 
 function MemoryBar({ used, total, label }: { used: number; total: number; label: string }) {
   const pct = total > 0 ? (used / total) * 100 : 0;
-  const barColor = pct > 85 ? 'bg-red-500' : pct > 65 ? 'bg-amber-500' : 'bg-green-500';
+  const barColor = pct > 90 ? 'bg-red-500' : pct > 75 ? 'bg-amber-500' : 'bg-green-500';
   return (
     <div>
       <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
@@ -108,9 +108,12 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
   if (!health) return null;
 
   const dbOk = health.database.status === 'connected';
+  // Measure against the real heap limit (--max-old-space-size), NOT heapTotal.
+  // heapTotal is the currently-committed heap and a healthy process routinely sits
+  // at 70-95% of it, so heapUsed/heapTotal looks alarming when nothing is wrong.
   const heapPct =
-    health.process.memory.heapTotalMB > 0
-      ? (health.process.memory.heapUsedMB / health.process.memory.heapTotalMB) * 100
+    health.process.memory.heapLimitMB > 0
+      ? (health.process.memory.heapUsedMB / health.process.memory.heapLimitMB) * 100
       : 0;
 
   return (
@@ -167,8 +170,9 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
             {dbOk ? 'All Systems Operational' : 'Database Connection Issue'}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Uptime: {formatUptime(health.process.uptimeSeconds)} · Node{' '}
-            {health.process.nodeVersion} · PID {health.process.pid}
+            Uptime: {formatUptime(health.process.uptimeSeconds)}
+            {health.process.nodeVersion ? ` · Node ${health.process.nodeVersion}` : ''}
+            {health.process.pid ? ` · PID ${health.process.pid}` : ''}
           </p>
         </div>
       </div>
@@ -201,9 +205,9 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
         <MetricCard
           label="Heap Usage"
           value={`${heapPct.toFixed(0)}%`}
-          sub={`${formatBytesMB(health.process.memory.heapUsedMB)} used`}
+          sub={`${formatBytesMB(health.process.memory.heapUsedMB)} / ${formatBytesMB(health.process.memory.heapLimitMB)} limit`}
           icon={Cpu}
-          color={heapPct > 85 ? 'text-red-500' : heapPct > 65 ? 'text-amber-500' : 'text-green-500'}
+          color={heapPct > 90 ? 'text-red-500' : heapPct > 75 ? 'text-amber-500' : 'text-green-500'}
         />
       </div>
 
@@ -218,10 +222,14 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
         <div className="space-y-3">
           <MemoryBar
             used={health.process.memory.heapUsedMB}
-            total={health.process.memory.heapTotalMB}
-            label="Heap"
+            total={health.process.memory.heapLimitMB}
+            label="Heap (used vs limit)"
           />
           <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
+            <span>Heap committed (V8 reserved)</span>
+            <span className="font-medium">{formatBytesMB(health.process.memory.heapTotalMB)}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
             <span>RSS (Resident Set Size)</span>
             <span className="font-medium">{formatBytesMB(health.process.memory.rssMB)}</span>
           </div>
@@ -356,12 +364,14 @@ export default function SystemHealthTab({ onMessage }: SystemHealthTabProps) {
           </h3>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          {[
+          {([
             ['Node.js', health.process.nodeVersion],
             ['Platform', health.process.platform],
-            ['PID', String(health.process.pid)],
+            ['PID', health.process.pid != null ? String(health.process.pid) : undefined],
             ['Collections', String(health.database.collections ?? 'N/A')],
-          ].map(([label, value]) => (
+          ] as [string, string | undefined][])
+            .filter((entry): entry is [string, string] => entry[1] != null)
+            .map(([label, value]) => (
             <div
               key={label}
               className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50"

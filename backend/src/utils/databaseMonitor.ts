@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { EventEmitter } from 'events';
+import * as v8 from 'v8';
 import logger from './logger';
 import { IDatabaseMetrics, IActiveConnection, ISlowQuery, ICollectionStats } from '../types';
 import { activeSessionTracker } from './activeSessionTracker';
@@ -107,13 +108,15 @@ export class DatabaseMonitor extends EventEmitter {
    * Start periodic metrics collection
    */
   private startMetricsCollection(intervalMs: number): void {
-    // Collect immediately on start
-    this.collectMetrics();
+    // Collect immediately on start, then periodically. The periodic path is the
+    // ONLY place that evaluates alert thresholds — see collectMetrics() note below.
+    const tick = async () => {
+      const metrics = await this.collectMetrics();
+      if (metrics) this.checkAlertThresholds(metrics);
+    };
 
-    // Then collect periodically
-    this.metricsInterval = setInterval(() => {
-      this.collectMetrics();
-    }, intervalMs);
+    void tick();
+    this.metricsInterval = setInterval(() => void tick(), intervalMs);
   }
 
   /**
@@ -175,8 +178,12 @@ export class DatabaseMonitor extends EventEmitter {
       };
 
       this.emit('metrics', metrics);
-      this.checkAlertThresholds(metrics);
-
+      // NOTE: alert thresholds are deliberately NOT evaluated here. collectMetrics()
+      // is called on-demand whenever a super-admin opens a monitoring/health tab, so
+      // evaluating (and emailing) alerts here meant alerts only ever fired — and fired
+      // repeatedly — while an admin happened to be watching. Threshold evaluation now
+      // lives solely on the periodic interval started by start(), so it reflects real
+      // server state continuously and independently of who is viewing the dashboard.
       return metrics;
     } catch (error: any) {
       logger.error('Failed to collect database metrics:', error);
@@ -354,19 +361,24 @@ export class DatabaseMonitor extends EventEmitter {
       });
     }
 
-    // Memory usage — 70% heap threshold (early warning before GC starts struggling)
+    // Memory usage — measured against the actual V8 heap *limit* (--max-old-space-size),
+    // NOT heapTotal. heapTotal is the heap V8 has currently committed; it grows lazily
+    // and a healthy process routinely sits at 70-95% of it, so heapUsed/heapTotal is a
+    // false-positive generator. heap_size_limit is the hard ceiling before the process
+    // OOMs, so heapUsed/heap_size_limit is the real "running out of memory" signal.
     const mem = process.memoryUsage();
-    const heapPct = (mem.heapUsed / mem.heapTotal) * 100;
-    if (heapPct >= 70) {
+    const heapLimit = v8.getHeapStatistics().heap_size_limit;
+    const heapPct = heapLimit > 0 ? (mem.heapUsed / heapLimit) * 100 : 0;
+    if (heapPct >= 90) {
       this.emit('alert', {
         type: 'critical',
-        message: `High memory usage: ${heapPct.toFixed(1)}% heap used`,
+        message: `High memory usage: ${heapPct.toFixed(1)}% of heap limit used`,
         timestamp: new Date(),
       });
       if (canAlert('memory_critical')) {
         sendCriticalEmail({
           subject: 'DB Alert: High Memory Usage',
-          message: `Node.js heap usage is at <strong>${heapPct.toFixed(1)}%</strong> (${(mem.heapUsed / 1024 / 1024).toFixed(0)} MB / ${(mem.heapTotal / 1024 / 1024).toFixed(0)} MB).<br/><br/>
+          message: `Node.js heap usage is at <strong>${heapPct.toFixed(1)}%</strong> of the heap limit (${(mem.heapUsed / 1024 / 1024).toFixed(0)} MB used / ${(heapLimit / 1024 / 1024).toFixed(0)} MB limit, RSS ${(mem.rss / 1024 / 1024).toFixed(0)} MB).<br/><br/>
                     <strong>Action Required:</strong> Investigate memory leaks or restart the service.`,
           priority: 'critical',
         }).catch(e => logger.error('Failed to send memory alert email:', e));

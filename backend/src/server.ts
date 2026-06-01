@@ -31,6 +31,7 @@ import { initNotificationQueue, closeNotificationQueue } from './services/notifi
 import BlocklistService from './services/blocklistService';
 import { requestId } from './middleware/requestId';
 import { runFirewallSeed } from './scripts/seedFirewallDefaults';
+import databaseMonitor from './utils/databaseMonitor';
 
 // Validate environment variables
 try {
@@ -327,6 +328,14 @@ const startServer = async () => {
     jobRegistry.startAll();
     logger.info('Job registry started');
 
+    // Start continuous DB/memory health monitoring (every 60s). Threshold alerts
+    // (connection-pool, storage, memory) are evaluated here — independently of
+    // whether a super-admin is viewing a monitoring tab. 60s is a deliberate balance:
+    // frequent enough to catch real pressure, infrequent enough that the serverStatus
+    // / dbStats / collection-count queries don't add meaningful load at 600 users.
+    databaseMonitor.start(60_000);
+    logger.info('Database monitor started (60s interval)');
+
     // Start listening
     httpServer.listen(PORT, () => {
       logger.info(`Server running in ${config.nodeEnv} mode on port ${PORT}`);
@@ -349,6 +358,7 @@ const startServer = async () => {
         process.exit(1);
       }, 15_000).unref();
 
+      databaseMonitor.stop();
       await stopChangeStreams();
       await closeNotificationQueue();
       await disconnectRedis();

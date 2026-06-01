@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
+import * as v8 from 'v8';
 import mongoose from 'mongoose';
 import databaseMonitor from '../utils/databaseMonitor';
 import { activeSessionTracker } from '../utils/activeSessionTracker';
@@ -13,6 +14,9 @@ import logger from '../utils/logger';
 export const getSystemHealth = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const memUsage = process.memoryUsage();
+    // heap_size_limit is the real ceiling (--max-old-space-size) the process OOMs
+    // against — unlike heapTotal which is just the currently-committed heap.
+    const heapLimit = v8.getHeapStatistics().heap_size_limit;
     const uptimeSeconds = process.uptime();
 
     // DB state
@@ -43,6 +47,7 @@ export const getSystemHealth = async (_req: AuthRequest, res: Response): Promise
           memory: {
             heapUsedMB: +(memUsage.heapUsed / 1024 / 1024).toFixed(2),
             heapTotalMB: +(memUsage.heapTotal / 1024 / 1024).toFixed(2),
+            heapLimitMB: +(heapLimit / 1024 / 1024).toFixed(2),
             rssMB: +(memUsage.rss / 1024 / 1024).toFixed(2),
             externalMB: +(memUsage.external / 1024 / 1024).toFixed(2),
           },

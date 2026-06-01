@@ -48,6 +48,14 @@ export interface IYardFuelTimeLimitConfig {
   };
 }
 
+// Journey Configuration
+// Defines which fuel "going" columns, when filled on a QUEUED journey, signal that
+// the truck has physically started that journey — which auto-completes the truck's
+// current active journey and promotes this queued one to active.
+export interface IJourneyConfig {
+  startColumns: string[];
+}
+
 // Standard Allocations
 export interface IStandardAllocations {
   mmsaYard: number;
@@ -187,13 +195,14 @@ export interface ISecuritySettings {
 
 // System Configuration Document
 export interface ISystemConfig {
-  configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'yard_fuel_time_limit' | 'general' | 'system_settings' | 'security_settings';
+  configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'yard_fuel_time_limit' | 'general' | 'system_settings' | 'security_settings' | 'journey_config';
   fuelStations?: IFuelStation[];
   routes?: IRouteConfig[];
   truckBatches?: {
     [extraLiters: string]: ITruckBatch[];  // Dynamic keys for any liter amount
   };
   standardAllocations?: IStandardAllocations;
+  journeyConfig?: IJourneyConfig;
   yardFuelTimeLimit?: IYardFuelTimeLimitConfig;
   defaultFuelPrice?: number;
   systemSettings?: ISystemSettings;
@@ -272,7 +281,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     configType: {
       type: String,
       required: true,
-      enum: ['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'yard_fuel_time_limit', 'general', 'system_settings', 'security_settings'],
+      enum: ['fuel_stations', 'routes', 'truck_batches', 'standard_allocations', 'yard_fuel_time_limit', 'general', 'system_settings', 'security_settings', 'journey_config'],
       unique: true,
     },
     fuelStations: [fuelStationSchema],
@@ -282,6 +291,12 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       default: {},
     },
     standardAllocations: standardAllocationsSchema,
+    journeyConfig: {
+      startColumns: {
+        type: [String],
+        default: ['darYard', 'darGoing', 'moroGoing'],
+      },
+    },
     yardFuelTimeLimit: {
       enabled: { type: Boolean, default: false },
       perYard: {

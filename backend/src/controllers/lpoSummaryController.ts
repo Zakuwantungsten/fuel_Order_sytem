@@ -10,6 +10,7 @@ import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
+import { checkAndPromoteStartedJourney } from '../services/journeyService';
 
 // Dynamic station to fuel field mapping cache
 let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
@@ -112,40 +113,22 @@ const STATION_RATES: Record<string, { rate: number; currency: 'USD' | 'TZS' }> =
 };
 
 /**
- * Check if a journey is complete based on return checkpoints
- * - For non-MSA destinations: mbeyaReturn must be filled (not 0)
- * - For MSA destinations: tangaReturn must be filled (not 0)
- * - balance === 0 is also required
- * - Negative balance is acceptable (not journey complete)
- */
-function isJourneyComplete(record: any): boolean {
-  // Balance must be exactly 0 for journey to be complete
-  // Negative balance is acceptable and means journey is still active
-  if (record.balance !== 0) {
-    return false;
-  }
-  
-  const destination = (record.originalGoingTo || record.to || '').toUpperCase();
-  const isMSADestination = destination.includes('MSA') || destination.includes('MOMBASA');
-  
-  if (isMSADestination) {
-    // For MSA destinations, check if tangaReturn is filled
-    return record.tangaReturn !== 0 && record.tangaReturn !== undefined;
-  } else {
-    // For non-MSA destinations, check if mbeyaReturn is filled
-    return record.mbeyaReturn !== 0 && record.mbeyaReturn !== undefined;
-  }
-}
-
-/**
- * Find fuel record and determine direction
- * Search logic: current month → previous month → two months ago → three months ago (4 months total)
- * Journey is complete when balance=0 AND return checkpoint (mbeyaReturn or tangaReturn) is filled
+ * Find the fuel record to update for an LPO entry and determine its direction.
+ *
+ * Resolution order:
+ *   1. Match by goingDo  → direction 'going'
+ *   2. Match by returnDo → direction 'returning'
+ *   3. Fall back to the truck's current ACTIVE journey (journeyStatus === 'active'),
+ *      else the most recent record for the truck → direction 'going'
+ *
+ * Journey completion is no longer inferred here from balance / return checkpoints.
+ * It is handled by checkAndPromoteStartedJourney once a queued journey's configured
+ * start columns are filled.
  */
 async function findFuelRecordWithDirection(
   doNumber: string,
   truckNo: string
-): Promise<{ fuelRecord: any; direction: 'going' | 'returning'; journeyComplete: boolean } | null> {
+): Promise<{ fuelRecord: any; direction: 'going' | 'returning' } | null> {
   // First try to find by DO number (exclude cancelled and deleted records)
   let fuelRecord = await FuelRecord.findOne({
     goingDo: doNumber,
@@ -161,18 +144,11 @@ async function findFuelRecordWithDirection(
       isDeleted: false,
       isCancelled: { $ne: true },
     });
-    direction = 'returning';
+    if (fuelRecord) direction = 'returning';
   }
 
-  // If not found by DO, search by truck number with month-based priority
+  // If not found by DO, fall back to the truck's active journey
   if (!fuelRecord) {
-    const now = new Date();
-    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-
-    // Get all records for this truck (exclude cancelled and deleted)
     const truckRecords = await FuelRecord.find({
       truckNo: { $regex: truckNo, $options: 'i' },
       isDeleted: false,
@@ -183,66 +159,16 @@ async function findFuelRecordWithDirection(
       return null;
     }
 
-    // Helper to check if a date is within a specific month
-    const isInMonth = (dateStr: string, monthStart: Date): boolean => {
-      const date = new Date(dateStr);
-      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-      return date >= monthStart && date <= monthEnd;
-    };
-
-    // Helper to check if a record is active (balance != 0 OR journey not complete)
-    // Negative balance is acceptable and means journey is still active
-    const isActiveRecord = (r: any): boolean => {
-      if (r.balance !== 0) {
-        return true; // Non-zero balance (including negative) = active
-      }
-      // If balance is 0, check if journey is truly complete based on return checkpoints
-      return !isJourneyComplete(r);
-    };
-
-    // Search for active record: current month → previous month → two months ago → three months ago
-    fuelRecord = truckRecords.find((r: any) => 
-      isInMonth(r.date, currentMonth) && isActiveRecord(r)
-    ) || null;
-
-    if (!fuelRecord) {
-      fuelRecord = truckRecords.find((r: any) => 
-        isInMonth(r.date, previousMonth) && isActiveRecord(r)
-      ) || null;
-    }
-
-    if (!fuelRecord) {
-      fuelRecord = truckRecords.find((r: any) => 
-        isInMonth(r.date, twoMonthsAgo) && isActiveRecord(r)
-      ) || null;
-    }
-
-    if (!fuelRecord) {
-      fuelRecord = truckRecords.find((r: any) => 
-        isInMonth(r.date, threeMonthsAgo) && isActiveRecord(r)
-      ) || null;
-    }
-
-    // If still no active record
-    if (!fuelRecord) {
-      const mostRecent = truckRecords[0];
-      if (mostRecent && isJourneyComplete(mostRecent)) {
-        // Journey truly complete - return checkpoint is filled
-        const destination = (mostRecent.originalGoingTo || mostRecent.to || '').toUpperCase();
-        const isMSA = destination.includes('MSA') || destination.includes('MOMBASA');
-        const returnCheckpoint = isMSA ? 'tangaReturn' : 'mbeyaReturn';
-        logger.info(`Truck ${truckNo}: Journey complete (${returnCheckpoint} filled), no fuel update needed`);
-        return { fuelRecord: mostRecent, direction: 'going', journeyComplete: true };
-      }
-      return null;
-    }
+    fuelRecord =
+      truckRecords.find((r: any) => r.journeyStatus === 'active') || truckRecords[0] || null;
+    direction = 'going';
   }
 
   if (!fuelRecord) {
     return null;
   }
 
-  return { fuelRecord, direction, journeyComplete: false };
+  return { fuelRecord, direction };
 }
 
 /**
@@ -293,13 +219,7 @@ async function updateFuelRecordForLPOEntry(
       return;
     }
 
-    const { fuelRecord, direction, journeyComplete } = result;
-
-    // If journey is complete (balance=0), don't update
-    if (journeyComplete) {
-      logger.warn(`Journey complete for truck ${truckNo} (balance=0). No fuel update needed.`);
-      return;
-    }
+    const { fuelRecord, direction } = result;
 
     const stationUpper = station.toUpperCase().trim();
     let fieldToUpdate: string | undefined;
@@ -377,13 +297,21 @@ async function updateFuelRecordForLPOEntry(
     const action = litersChange > 0 ? 'added' : 'removed';
     logger.info(`Updating field ${fieldToUpdate}: ${currentValue}L -> ${updateData[fieldToUpdate]}L (${action}: ${Math.abs(litersChange)}L, balance: ${oldBalance}L -> ${newBalance}L)`);
 
-    await FuelRecord.findByIdAndUpdate(
+    const updatedRecord = await FuelRecord.findByIdAndUpdate(
       fuelRecord._id,
       { $set: updateData },
       { new: true }
     );
 
     logger.info(`✓ Updated fuel record ${fuelRecord._id} field ${fieldToUpdate}: ${litersChange > 0 ? 'deducted' : 'restored'} ${Math.abs(litersChange)}L`);
+
+    if (updatedRecord) {
+      // Live-update the fuel records table for every connected client (no refresh).
+      emitDataChange('fuel_records', 'update', updatedRecord.toObject());
+      // If this LPO fill just started a queued journey (a start column went non-zero),
+      // auto-complete the truck's prior active journey and promote this one — live.
+      await checkAndPromoteStartedJourney(updatedRecord, 'lpo-system');
+    }
   } catch (error: any) {
     logger.error(`Error updating fuel record for LPO: ${error.message}`);
   }

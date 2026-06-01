@@ -208,6 +208,21 @@ router.put(
 );
 
 // =====================
+// Journey Configuration
+// =====================
+router.get('/journey-config', asyncHandler(adminController.getJourneyConfig));
+
+router.put(
+  '/journey-config',
+  [
+    body('startColumns').isArray({ min: 1 }).withMessage('startColumns must be a non-empty array'),
+    body('startColumns.*').isString().withMessage('Each start column must be a string'),
+  ],
+  validate,
+  asyncHandler(adminController.updateJourneyConfig)
+);
+
+// =====================
 // Combined Config
 // =====================
 router.get('/config', asyncHandler(adminController.getAllConfig));

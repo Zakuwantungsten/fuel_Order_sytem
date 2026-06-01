@@ -1407,6 +1407,13 @@ export interface YardFuelTimeLimitConfig {
   };
 }
 
+export interface JourneyConfig {
+  // Fuel columns whose filling on a queued journey marks it as started
+  startColumns: string[];
+  // All columns selectable as start columns (returned by the API for the UI)
+  selectableColumns?: string[];
+}
+
 export interface AdminStats {
   users: {
     total: number;
@@ -2000,6 +2007,17 @@ export const configAPI = {
 
   updateYardFuelTimeLimit: async (settings: Partial<YardFuelTimeLimitConfig>): Promise<YardFuelTimeLimitConfig> => {
     const response = await apiClient.put('/system-config/yard-fuel-time-limit', settings);
+    return response.data.data;
+  },
+
+  // Journey Configuration (start columns that trigger journey promotion)
+  getJourneyConfig: async (): Promise<JourneyConfig> => {
+    const response = await apiClient.get('/config/journey-config');
+    return response.data.data;
+  },
+
+  updateJourneyConfig: async (startColumns: string[]): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { startColumns });
     return response.data.data;
   },
 };

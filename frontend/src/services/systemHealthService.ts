@@ -4,12 +4,16 @@ export interface SystemHealth {
   timestamp: string;
   process: {
     uptimeSeconds: number;
-    nodeVersion: string;
-    platform: string;
-    pid: number;
+    // Omitted by the backend by design (fingerprint defense) — optional here.
+    nodeVersion?: string;
+    platform?: string;
+    pid?: number;
     memory: {
       heapUsedMB: number;
       heapTotalMB: number;
+      // Real V8 heap ceiling (--max-old-space-size). Use this, not heapTotal,
+      // for "how close are we to OOM".
+      heapLimitMB: number;
       rssMB: number;
       externalMB: number;
     };

@@ -26,6 +26,9 @@ router.get('/formula-variables', configController.getFormulaVariables);
 // Standard allocations (read-only for all authenticated users)
 router.get('/standard-allocations', adminController.getStandardAllocations);
 
+// Journey configuration (read-only for all authenticated users)
+router.get('/journey-config', adminController.getJourneyConfig);
+
 // Yard fuel time limit (read-only for all authenticated users)
 router.get('/yard-fuel-time-limit', configController.getYardFuelTimeLimit);
 

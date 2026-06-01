@@ -82,7 +82,9 @@ export const initializeWebSocket = (server: HTTPServer): SocketIOServer => {
 
   // Connection handler
   io.on('connection', (socket: AuthSocket) => {
-    logger.info(`WebSocket client connected: ${socket.username} (${socket.role}) - Socket ID: ${socket.id}`);
+    // debug, not info: at 600 concurrent users connect/reconnect churn would
+    // otherwise flood the logs and add constant heap/I-O pressure.
+    logger.debug(`WebSocket client connected: ${socket.username} (${socket.role}) - Socket ID: ${socket.id}`);
 
     socket.use((packet, next) => {
       const eventName = packet[0];
@@ -130,25 +132,25 @@ export const initializeWebSocket = (server: HTTPServer): SocketIOServer => {
     // Join room based on role (for role-based notifications)
     if (socket.role) {
       socket.join(`role:${socket.role}`);
-      logger.info(`User ${socket.username} joined role room: role:${socket.role}`);
+      logger.debug(`User ${socket.username} joined role room: role:${socket.role}`);
     }
 
     // Join room based on username (for specific user notifications)
     if (socket.username) {
       socket.join(`user:${socket.username}`);
-      logger.info(`User ${socket.username} joined user room: user:${socket.username}`);
+      logger.debug(`User ${socket.username} joined user room: user:${socket.username}`);
     }
 
     // Join room based on userId (for direct user notifications keyed by MongoDB ObjectId)
     // emitNotification() stores creatorUserId (ObjectId string) as recipient for personal notifications
     if (socket.userId) {
       socket.join(`user:${socket.userId}`);
-      logger.info(`User ${socket.username} joined userId room: user:${socket.userId}`);
+      logger.debug(`User ${socket.username} joined userId room: user:${socket.userId}`);
     }
 
     // Handle disconnection
     socket.on('disconnect', () => {
-      logger.info(`WebSocket client disconnected: ${socket.username} - Socket ID: ${socket.id}`);
+      logger.debug(`WebSocket client disconnected: ${socket.username} - Socket ID: ${socket.id}`);
       
       // Remove from connected users
       if (socket.userId && connectedUsers.has(socket.userId)) {
@@ -197,11 +199,11 @@ export const emitNotification = (
     recipients.forEach((recipient) => {
       if (ROLE_NAMES.has(recipient)) {
         io!.to(`role:${recipient}`).emit('notification', notificationData);
-        logger.info(`Notification emitted to role: ${recipient}`);
+        logger.debug(`Notification emitted to role: ${recipient}`);
       } else {
         // userId (MongoDB ObjectId) or username → user room
         io!.to(`user:${recipient}`).emit('notification', notificationData);
-        logger.info(`Notification emitted to user: ${recipient}`);
+        logger.debug(`Notification emitted to user: ${recipient}`);
       }
     });
   } catch (error) {
@@ -219,7 +221,7 @@ export const emitToAll = (event: string, data: any): void => {
   }
 
   io.emit(event, data);
-  logger.info(`Event '${event}' emitted to all clients`);
+  logger.debug(`Event '${event}' emitted to all clients`);
 };
 
 /**
@@ -246,7 +248,7 @@ export const emitToUser = (username: string, event: string, data: any): void => 
     return;
   }
   io.to(`user:${username}`).emit(event, data);
-  logger.info(`Event '${event}' emitted to user: ${username}`);
+  logger.debug(`Event '${event}' emitted to user: ${username}`);
 };
 
 /**

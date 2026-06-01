@@ -9,6 +9,7 @@ import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
 import { emitToUser, emitMaintenanceEvent, emitSecuritySettingsEvent, emitDataChange } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
+import { DEFAULT_START_COLUMNS, SELECTABLE_START_COLUMNS, invalidateJourneyConfigCache } from '../services/journeyService';
 import {
   findAffectedUsers,
   getMigrationStats,
@@ -1238,6 +1239,105 @@ export const updateStandardAllocations = async (req: AuthRequest, res: Response)
       success: true,
       message: 'Standard allocations updated successfully',
       data: config.standardAllocations,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get journey configuration (start columns that trigger journey promotion).
+ */
+export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let config = await SystemConfig.findOne({
+      configType: 'journey_config',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'journey_config',
+        journeyConfig: { startColumns: DEFAULT_START_COLUMNS },
+        lastUpdatedBy: 'system',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Journey configuration retrieved successfully',
+      data: {
+        startColumns: config.journeyConfig?.startColumns || DEFAULT_START_COLUMNS,
+        selectableColumns: SELECTABLE_START_COLUMNS,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Update journey configuration (which fuel columns mark a journey as started).
+ */
+export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { startColumns } = req.body;
+
+    if (!Array.isArray(startColumns) || startColumns.length === 0) {
+      throw new ApiError(400, 'startColumns must be a non-empty array');
+    }
+
+    // Only allow known fuel columns to be configured as start columns
+    const invalid = startColumns.filter((c: string) => !SELECTABLE_START_COLUMNS.includes(c));
+    if (invalid.length > 0) {
+      throw new ApiError(400, `Invalid start columns: ${invalid.join(', ')}`);
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'journey_config',
+      isDeleted: false,
+    });
+
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'journey_config',
+        journeyConfig: { startColumns },
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    } else {
+      config.journeyConfig = { startColumns };
+      config.lastUpdatedBy = req.user?.username || 'system';
+      await config.save();
+    }
+
+    // Drop the in-memory cache so the new columns take effect immediately
+    invalidateJourneyConfigCache();
+
+    logger.info(`Journey config updated by ${req.user?.username}: [${startColumns.join(', ')}]`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'Config',
+      resourceId: 'journey_config',
+      details: `Journey start columns set to [${startColumns.join(', ')}]`,
+      ipAddress: req.ip,
+      severity: 'high',
+    });
+
+    // Real-time: notify all clients so the Config tab reflects the change live
+    emitDataChange('journey_config', 'update');
+
+    setCacheBustingHeaders(res);
+
+    res.status(200).json({
+      success: true,
+      message: 'Journey configuration updated successfully',
+      data: {
+        startColumns: config.journeyConfig?.startColumns || startColumns,
+        selectableColumns: SELECTABLE_START_COLUMNS,
+      },
     });
   } catch (error: any) {
     throw error;

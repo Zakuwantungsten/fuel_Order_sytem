@@ -41,6 +41,7 @@ import {
   ChevronDown,
   ChevronRight,
   Search,
+  Waypoints,
 } from 'lucide-react';
 // Eagerly loaded — needed on first render (header/auth)
 import { useAuth } from '../contexts/AuthContext';
@@ -72,6 +73,7 @@ const ExcelImport = lazy(() => import('../pages/ExcelImport'));
 const TruckBatchesPage = lazy(() => import('../pages/TruckBatches'));
 const FleetTracking = lazy(() => import('../pages/FleetTracking'));
 const CheckpointManagement = lazy(() => import('../pages/CheckpointManagement'));
+const JourneyConfig = lazy(() => import('../pages/JourneyConfig'));
 
 // Suspense fallback shown while a lazy chunk is loading
 const TabFallback = () => (
@@ -352,6 +354,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'sa_fuel_prices',     label: 'Fuel Prices',       icon: TrendingUp,   impact: 'medium' as const, sectionLabel: 'Platform' },
         { id: 'fleet_tracking',     label: 'Fleet Tracking',    icon: Navigation,   impact: 'low'    as const, sectionLabel: 'Platform' },
         { id: 'checkpoints',        label: 'Checkpoints',       icon: MapPinned,    impact: 'low'    as const, sectionLabel: 'Platform' },
+        { id: 'journey_config',     label: 'Journey Config',    icon: Waypoints,    impact: 'low'    as const, sectionLabel: 'Platform' },
         { id: 'driver_credentials', label: 'Driver Access',     icon: Key,          impact: 'medium' as const, sectionLabel: 'Platform' },
         // ── Monitoring & Alerts ───────────────────────────────────────────
         { id: 'sa_monitoring',      label: 'Monitoring',        icon: Activity,     impact: 'medium' as const, sectionLabel: 'Monitoring & Alerts' },
@@ -380,6 +383,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
         { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
         { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
+        { id: 'journey_config', label: 'Journey Config', icon: Waypoints },
         // Admin sections - expanded in sidebar
         { id: 'admin_overview', label: 'Operational Overview', icon: Activity },
         { id: 'admin_data', label: 'Data Management', icon: FolderOpen },
@@ -401,6 +405,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'lpo', label: 'LPO Management', icon: Receipt },
         { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
         { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
+        { id: 'journey_config', label: 'Journey Config', icon: Waypoints },
         { id: 'reports', label: 'Reports', icon: FileBarChart },
       ];
     }
@@ -445,6 +450,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <FleetTracking />;
       case 'checkpoints':
         return <CheckpointManagement />;
+      case 'journey_config':
+        return <JourneyConfig />;
       case 'yard_fuel':
         return <YardFuelSimple user={user} />;
       case 'driver_portal':

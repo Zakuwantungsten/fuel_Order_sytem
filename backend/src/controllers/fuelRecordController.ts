@@ -1,5 +1,4 @@
 import { Response } from 'express';
-import mongoose from 'mongoose';
 import { matchedData } from 'express-validator';
 import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
@@ -10,115 +9,7 @@ import { createMissingConfigNotification, autoResolveNotifications } from './not
 import { enforceEditLock } from './editLockController';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
-
-/**
- * Check if a journey is complete based on return checkpoints
- * - For non-MSA destinations: mbeyaReturn must be filled (not 0)
- * - For MSA destinations: tangaReturn must be filled (not 0)
- * - balance === 0 is also required
- */
-function isJourneyComplete(fuelRecord: any): boolean {
-  // Balance must be exactly 0 for journey to be complete
-  if (fuelRecord.balance !== 0) {
-    return false;
-  }
-  
-  const destination = (fuelRecord.originalGoingTo || fuelRecord.to || '').toUpperCase();
-  const isMSADestination = destination.includes('MSA') || destination.includes('MOMBASA');
-  
-  if (isMSADestination) {
-    // For MSA destinations, check if tangaReturn is filled
-    return fuelRecord.tangaReturn !== 0 && fuelRecord.tangaReturn !== undefined;
-  } else {
-    // For non-MSA destinations, check if mbeyaReturn is filled
-    return fuelRecord.mbeyaReturn !== 0 && fuelRecord.mbeyaReturn !== undefined;
-  }
-}
-
-/**
- * Check if journey is complete and activate next queued journey if available
- */
-async function checkAndActivateNextJourney(fuelRecord: any, username: string): Promise<void> {
-  try {
-    // Only check if this is an active journey
-    if (fuelRecord.journeyStatus !== 'active') {
-      return;
-    }
-
-    // Check if journey is complete
-    if (!isJourneyComplete(fuelRecord)) {
-      return;
-    }
-
-    // Mark current journey as completed
-    fuelRecord.journeyStatus = 'completed';
-    fuelRecord.completedAt = new Date();
-    await fuelRecord.save();
-
-    logger.info(`Journey ${fuelRecord.goingDo} for truck ${fuelRecord.truckNo} marked as completed`);
-
-    // Find next queued journey for this truck
-    await activateNextQueuedJourney(fuelRecord.truckNo, username);
-  } catch (error: any) {
-    logger.error(`Error checking journey completion for ${fuelRecord.truckNo}:`, error);
-    // Don't throw - this is a background operation
-  }
-}
-
-/**
- * Activate the next queued journey for a truck
- */
-async function activateNextQueuedJourney(truckNo: string, username: string): Promise<void> {
-  const session = await mongoose.startSession();
-  try {
-    await session.withTransaction(async () => {
-      const nextJourney = await FuelRecord.findOne({
-        truckNo,
-        journeyStatus: 'queued',
-        isDeleted: false,
-      }).sort({ queueOrder: 1 }).session(session);
-
-      if (!nextJourney) {
-        logger.info(`No queued journeys found for truck ${truckNo}`);
-        return;
-      }
-
-      // Activate the next journey
-      await FuelRecord.findByIdAndUpdate(
-        nextJourney._id,
-        { journeyStatus: 'active', activatedAt: new Date() },
-        { session }
-      );
-
-      logger.info(
-        `Activated queued journey ${nextJourney.goingDo} for truck ${truckNo} (was position ${nextJourney.queueOrder})`
-      );
-
-      // Reorder remaining queued journeys with bulk write (atomic)
-      const remainingQueued = await FuelRecord.find({
-        truckNo,
-        journeyStatus: 'queued',
-        isDeleted: false,
-      }).sort({ queueOrder: 1 }).session(session);
-
-      if (remainingQueued.length > 0) {
-        const bulkOps = remainingQueued.map((r, i) => ({
-          updateOne: {
-            filter: { _id: r._id },
-            update: { $set: { queueOrder: i + 1 } },
-          },
-        }));
-        await FuelRecord.bulkWrite(bulkOps, { session });
-        logger.info(`Reordered ${remainingQueued.length} remaining queued journey(s) for truck ${truckNo}`);
-      }
-    });
-  } catch (error: any) {
-    logger.error(`Error activating next journey for ${truckNo}:`, error);
-    throw error;
-  } finally {
-    await session.endSession();
-  }
-}
+import { checkAndPromoteStartedJourney } from '../services/journeyService';
 
 /**
  * Get available periods (year-month pairs) for the period picker dropdown.
@@ -807,8 +698,9 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       logger.info(`Fuel record ${id} unlocked and notifications resolved`);
     }
 
-    // Check if journey is now complete and activate next queued journey
-    await checkAndActivateNextJourney(fuelRecord, req.user?.username || 'system');
+    // If this queued journey's start columns were just filled, the truck has begun
+    // it — auto-complete the previous active journey and promote this one (live).
+    await checkAndPromoteStartedJourney(fuelRecord, req.user?.username || 'system');
 
     res.status(200).json({
       success: true,
