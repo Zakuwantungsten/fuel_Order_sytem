@@ -810,45 +810,48 @@ const FuelRecords = () => {
     return `${day}-${mon}`;
   };
 
+  // NOTE: availableMonths is sorted newest-first (see useFuelRecordPeriods —
+  // `.sort().reverse()`). So an *older* (previous) month is at a HIGHER index
+  // and a *newer* (next) month is at a LOWER index.
   const goToPreviousMonth = () => {
     if (!selectedMonth || availableMonths.length === 0) return;
     const currentIndex = availableMonths.indexOf(selectedMonth);
-    if (currentIndex > 0) {
-      // Jump directly to the previous available month (skip empty months)
-      setSelectedMonth(availableMonths[currentIndex - 1]);
+    if (currentIndex >= 0 && currentIndex < availableMonths.length - 1) {
+      // Jump directly to the previous (older) available month (skip empty months)
+      setSelectedMonth(availableMonths[currentIndex + 1]);
     } else if (currentIndex === -1) {
       // Not in list — find nearest available month before this one
       const before = availableMonths.filter(m => m < selectedMonth);
-      if (before.length > 0) setSelectedMonth(before[before.length - 1]);
+      if (before.length > 0) setSelectedMonth(before[0]);
     }
   };
 
   const goToNextMonth = () => {
     if (!selectedMonth || availableMonths.length === 0) return;
     const currentIndex = availableMonths.indexOf(selectedMonth);
-    if (currentIndex >= 0 && currentIndex < availableMonths.length - 1) {
-      // Jump directly to the next available month (skip empty months)
-      setSelectedMonth(availableMonths[currentIndex + 1]);
+    if (currentIndex > 0) {
+      // Jump directly to the next (newer) available month (skip empty months)
+      setSelectedMonth(availableMonths[currentIndex - 1]);
     } else if (currentIndex === -1) {
       // Not in list — find nearest available month after this one
       const after = availableMonths.filter(m => m > selectedMonth);
-      if (after.length > 0) setSelectedMonth(after[0]);
+      if (after.length > 0) setSelectedMonth(after[after.length - 1]);
     }
   };
-  
-  // Check if previous/next available month exists
+
+  // Check if previous (older) / next (newer) available month exists
   const canGoToPreviousMonth = () => {
     if (!selectedMonth || availableMonths.length === 0) return false;
     const currentIndex = availableMonths.indexOf(selectedMonth);
-    if (currentIndex > 0) return true;
+    if (currentIndex >= 0 && currentIndex < availableMonths.length - 1) return true;
     if (currentIndex === -1) return availableMonths.some(m => m < selectedMonth);
     return false;
   };
-  
+
   const canGoToNextMonth = () => {
     if (!selectedMonth || availableMonths.length === 0) return false;
     const currentIndex = availableMonths.indexOf(selectedMonth);
-    if (currentIndex >= 0 && currentIndex < availableMonths.length - 1) return true;
+    if (currentIndex > 0) return true;
     if (currentIndex === -1) return availableMonths.some(m => m > selectedMonth);
     return false;
   };
@@ -998,7 +1001,8 @@ const FuelRecords = () => {
         <>
           {/* Filters */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-3 mb-6 transition-colors">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 flex-1">
           <div className="relative col-span-2 md:col-span-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
             <input
@@ -1006,15 +1010,15 @@ const FuelRecords = () => {
               placeholder="Search by Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm dashboard-search-input"
-              style={{ paddingLeft: '2.5rem', height: '34px' }}
+              className="pl-10 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm dashboard-search-input"
+              style={{ paddingLeft: '2.5rem' }}
             />
           </div>
           <div className="relative" ref={routeTypeDropdownRef}>
             <button
               type="button"
               onClick={() => setShowRouteTypeDropdown(!showRouteTypeDropdown)}
-              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+              className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
             >
               <span>{routeTypeFilter === 'IMPORT' ? 'Import (Going)' : 'Export (Return)'}</span>
               <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRouteTypeDropdown ? 'rotate-180' : ''}`} />
@@ -1056,7 +1060,7 @@ const FuelRecords = () => {
             <button
               type="button"
               onClick={() => setShowRouteDropdown(!showRouteDropdown)}
-              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+              className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
             >
               <span className={!routeFilter ? 'text-gray-400' : ''}>
                 {routeFilter ? routeFilter.replace('-', ' → ') : 'All Routes'}
@@ -1105,7 +1109,7 @@ const FuelRecords = () => {
             <button
               onClick={goToPreviousMonth}
               disabled={!canGoToPreviousMonth()}
-              className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${
+              className={`hidden md:inline-flex items-center justify-center h-9 w-9 flex-shrink-0 rounded-md transition-colors ${
                 canGoToPreviousMonth()
                   ? 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
                   : 'opacity-40 cursor-not-allowed'
@@ -1118,7 +1122,7 @@ const FuelRecords = () => {
               <button
                 type="button"
                 onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-                className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm flex items-center justify-between gap-2"
+                className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm flex items-center justify-between gap-2"
               >
                 <span>{getMonthName(selectedMonth)}</span>
                 <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
@@ -1147,7 +1151,7 @@ const FuelRecords = () => {
             <button
               onClick={goToNextMonth}
               disabled={!canGoToNextMonth()}
-              className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${
+              className={`hidden md:inline-flex items-center justify-center h-9 w-9 flex-shrink-0 rounded-md transition-colors ${
                 canGoToNextMonth()
                   ? 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
                   : 'opacity-40 cursor-not-allowed'
@@ -1162,7 +1166,7 @@ const FuelRecords = () => {
             <button
               type="button"
               onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+              className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
             >
               <span>{statusFilter === 'active' ? 'Active' : statusFilter === 'cancelled' ? 'Cancelled' : 'All Status'}</span>
               <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
@@ -1183,18 +1187,22 @@ const FuelRecords = () => {
               </div>
             )}
           </div>
-          {isAnyFilterActive() && (
-            <button
-              onClick={handleClearFilters}
-              className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              title="Reset all filters to default"
-            >
-              Clear Filters
-            </button>
-          )}
+          <button
+            onClick={handleClearFilters}
+            disabled={!isAnyFilterActive()}
+            className={`col-span-2 md:col-span-1 w-full h-9 inline-flex items-center justify-center px-3 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium transition-colors ${
+              isAnyFilterActive()
+                ? 'text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'
+                : 'text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 opacity-60 cursor-not-allowed'
+            }`}
+            title={isAnyFilterActive() ? 'Reset all filters to default' : 'No active filters to clear'}
+          >
+            Clear Filters
+          </button>
         </div>
-        <div className="mt-2 flex items-center text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap lg:flex-shrink-0">
           Total Records: <span className="ml-2 font-semibold">{totalItems}</span>
+        </div>
         </div>
       </div>
 

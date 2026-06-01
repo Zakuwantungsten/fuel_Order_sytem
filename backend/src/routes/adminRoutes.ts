@@ -15,11 +15,6 @@ router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'boss'));
 
 // =====================
-// Dashboard Stats
-// =====================
-router.get('/stats', asyncHandler(adminController.getAdminStats));
-
-// =====================
 // Fuel Stations
 // =====================
 router.get('/fuel-stations', asyncHandler(adminController.getFuelStations));

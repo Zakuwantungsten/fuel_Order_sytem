@@ -1414,28 +1414,7 @@ export interface JourneyConfig {
   selectableColumns?: string[];
 }
 
-export interface AdminStats {
-  users: {
-    total: number;
-    active: number;
-    inactive: number;
-  };
-  records: {
-    deliveryOrders: number;
-    lpos: number;
-    fuelRecords: number;
-    yardDispenses: number;
-  };
-  roleDistribution: Array<{ role: string; count: number }>;
-  recentUsers: User[];
-}
-
 export const adminAPI = {
-  // Dashboard Stats
-  getStats: async (): Promise<AdminStats> => {
-    const response = await apiClient.get('/admin/stats');
-    return response.data.data;
-  },
 
   // Fuel Stations
   getFuelStations: async (): Promise<FuelStation[]> => {

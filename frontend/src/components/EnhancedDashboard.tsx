@@ -27,7 +27,6 @@ import {
   Key,
   Archive,
   PackageCheck,
-  FolderOpen,
   Navigation,
   MapPinned,
   FileBarChart,
@@ -111,7 +110,7 @@ const getInitialTab = (userRole: string): string => {
     if (userRole === 'admin' || userRole === 'boss') {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'fleet_tracking',
-        'admin_overview', 'admin_data', 'admin_users', 'admin_fuel_stations', 'admin_fuel_prices', 'admin_routes', 'admin_reports', 'driver_credentials', 'excel_import'
+        'admin_users', 'admin_fuel_stations', 'admin_fuel_prices', 'admin_routes', 'admin_reports', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'fuel_order_maker') {
@@ -385,14 +384,12 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
         { id: 'journey_config', label: 'Journey Config', icon: Waypoints },
         // Admin sections - expanded in sidebar
-        { id: 'admin_overview', label: 'Operational Overview', icon: Activity },
-        { id: 'admin_data', label: 'Data Management', icon: FolderOpen },
         { id: 'admin_users', label: 'User Support', icon: Users },
         { id: 'admin_fuel_stations', label: 'Fuel Stations', icon: Building2 },
         { id: 'admin_fuel_prices', label: 'Fuel Prices', icon: TrendingUp },
         { id: 'admin_routes', label: 'Routes', icon: Route },
         { id: 'driver_credentials', label: 'Driver Credentials', icon: Key },
-        { id: 'admin_reports', label: 'Admin Reports', icon: TrendingUp },
+        { id: 'admin_reports', label: 'Admin Reports', icon: FileBarChart },
         { id: 'excel_import', label: 'Excel Import', icon: FileUp },
       ];
     }
@@ -436,7 +433,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const renderActiveComponent = () => {
     switch (activeTab) {
       case 'overview':
-      case 'admin_overview':
         return null; // Always-mounted via CSS hidden below
       case 'do':
         return <DeliveryOrders />;
@@ -502,8 +498,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       // sa_siem_export merged into sa_monitoring
       
       // Admin sections (admin/boss roles)
-      case 'admin_data':
-        return <AdminDashboard user={user} section="data" />;
       case 'admin_users':
         return <AdminDashboard user={user} section="users" />;
       case 'admin_fuel_stations':
@@ -532,8 +526,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
   // Determine which persistent (always-mounted) dashboards to render
   const hasOverviewTab = menuItems.some((item: any) => item.id === 'overview');
-  const hasAdminOverviewTab = menuItems.some((item: any) => item.id === 'admin_overview');
-  
+
   // Check if user is a yard-specific role
   const isYardRole = ['dar_yard', 'tanga_yard', 'mmsa_yard', 'yard_personnel'].includes(user.role);
 
@@ -1000,11 +993,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             {hasOverviewTab && (
               <div className={activeTab === 'overview' ? '' : 'hidden'}>
                 <Dashboard onNavigate={handleNavigate} />
-              </div>
-            )}
-            {hasAdminOverviewTab && (
-              <div className={activeTab === 'admin_overview' ? '' : 'hidden'}>
-                <AdminDashboard user={user} section="overview" />
               </div>
             )}
             {renderActiveComponent()}

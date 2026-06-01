@@ -223,7 +223,6 @@ describe('Attack Pattern Middleware', () => {
         '/api/health',
         '/api/v1/csrf-token',
         '/',
-        '/api/v1/admin/stats',
         '/api/v1/security/events',
         '/api/v1/admin/audit-logs',
       ];
