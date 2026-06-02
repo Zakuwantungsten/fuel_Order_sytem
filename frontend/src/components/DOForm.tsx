@@ -56,14 +56,8 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [reason, setReason] = useState('');
   const isEditMode = !!order;
 
-  const SENSITIVE_FIELDS = ['tonnages', 'ratePerTon', 'destination'];
-  const hasSensitiveChange = order && SENSITIVE_FIELDS.some(
-    (f) => formData[f as keyof DeliveryOrder] !== order[f as keyof DeliveryOrder]
-  );
-  
   // Dropdown states
   const [showRateTypeDropdown, setShowRateTypeDropdown] = useState(false);
   
@@ -186,7 +180,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     
     // Clean and validate data before saving
     const cleanedFormData = cleanDeliveryOrder(
-      hasSensitiveChange ? { ...formData, reason } : formData
+      formData
     );
     
     console.log('Cleaned form data:', cleanedFormData);
@@ -757,27 +751,6 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
               )}
 
             </div>
-
-            {/* Reason for sensitive field change */}
-            {hasSensitiveChange && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Reason for change <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Explain why you are modifying tonnages, rate, or destination (min 10 characters)"
-                  rows={2}
-                  className="w-full px-3 py-2 border rounded-md text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
-                  required
-                  minLength={10}
-                />
-                {reason.length > 0 && reason.length < 10 && (
-                  <p className="text-xs text-red-500 mt-1">Reason must be at least 10 characters ({reason.length}/10)</p>
-                )}
-              </div>
-            )}
 
             {/* Footer */}
             <div className="mt-6 flex justify-end space-x-3">

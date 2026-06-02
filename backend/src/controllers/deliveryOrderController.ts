@@ -1220,13 +1220,6 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     const userRole = req.user?.role || 'user';
     const { clientUpdatedAt, reason, ...rawPayload } = matchedData(req, { locations: ['body'] }) as any;
 
-    // Require justification when changing sensitive fields
-    const SENSITIVE_DO_FIELDS = ['tonnages', 'ratePerTon', 'destination', 'totalAmount'];
-    const hasSensitiveChange = SENSITIVE_DO_FIELDS.some(f => rawPayload[f] !== undefined);
-    if (hasSensitiveChange && (!reason || reason.length < 10)) {
-      throw new ApiError(400, 'A reason of at least 10 characters is required when changing tonnage, rate, or destination fields');
-    }
-
     // Enforce edit lock — the caller must hold a valid lock to update
     await enforceEditLock(DeliveryOrder, id, username);
 

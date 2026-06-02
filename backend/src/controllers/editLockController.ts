@@ -88,7 +88,7 @@ export function createEditLockHandlers(
         'editLock.lockedAt': now,
         'editLock.lockedUntil': lockUntil,
       },
-      { new: true },
+      { new: true, timestamps: false },
     );
 
     if (!record) {
@@ -129,7 +129,7 @@ export function createEditLockHandlers(
         'editLock.lockedAt': null,
         'editLock.lockedUntil': null,
       },
-      { new: true },
+      { new: true, timestamps: false },
     );
 
     if (!record) {
