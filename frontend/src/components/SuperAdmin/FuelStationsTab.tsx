@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ConfirmModal from './ConfirmModal';
 import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-react';
 import { configAPI } from '../../services/api';
@@ -315,13 +315,13 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                 <span className="text-gray-500 dark:text-gray-400 text-xs">Fills Column</span>
                 <div className="mt-0.5 text-xs">
                   {station.fuelRecordFieldGoing && (
-                    <div className="text-green-600 dark:text-green-400">â†‘ {station.fuelRecordFieldGoing}</div>
+                    <div className="text-green-600 dark:text-green-400">↑ {station.fuelRecordFieldGoing}</div>
                   )}
                   {station.fuelRecordFieldReturning && (
-                    <div className="text-blue-600 dark:text-blue-400">â†“ {station.fuelRecordFieldReturning}</div>
+                    <div className="text-blue-600 dark:text-blue-400">↓ {station.fuelRecordFieldReturning}</div>
                   )}
                   {!station.fuelRecordFieldGoing && !station.fuelRecordFieldReturning && (
-                    <span className="text-gray-400">â€”</span>
+                    <span className="text-gray-400">—</span>
                   )}
                 </div>
               </div>
@@ -372,13 +372,13 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                 <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersReturning}</td>
                 <td className="px-3 py-2.5 text-xs">
                   {station.fuelRecordFieldGoing && (
-                    <div className="text-green-600 dark:text-green-400">â†‘ {station.fuelRecordFieldGoing}</div>
+                    <div className="text-green-600 dark:text-green-400">↑ {station.fuelRecordFieldGoing}</div>
                   )}
                   {station.fuelRecordFieldReturning && (
-                    <div className="text-blue-600 dark:text-blue-400">â†“ {station.fuelRecordFieldReturning}</div>
+                    <div className="text-blue-600 dark:text-blue-400">↓ {station.fuelRecordFieldReturning}</div>
                   )}
                   {!station.fuelRecordFieldGoing && !station.fuelRecordFieldReturning && (
-                    <span className="text-gray-400">â€”</span>
+                    <span className="text-gray-400">—</span>
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-sm text-right">
@@ -440,7 +440,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                 </div>
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
                   <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                    âš ï¸ At least one of Going or Returning must be greater than 0
+                    ⚠️ At least one of Going or Returning must be greater than 0
                   </p>
                 </div>
                 <div>
@@ -450,8 +450,8 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                     onChange={(e) => setStationForm({ ...stationForm, currency: e.target.value as 'USD' | 'TZS' })}
                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                   >
-                    <option value="TZS">TZS â€“ Tanzanian Shilling</option>
-                    <option value="USD">USD â€“ US Dollar</option>
+                    <option value="TZS">TZS – Tanzanian Shilling</option>
+                    <option value="USD">USD – US Dollar</option>
                   </select>
                   <p className="mt-1 text-xs text-gray-500">Select USD for Zambia (Lake) stations, TZS for Tanzania stations</p>
                 </div>
@@ -464,7 +464,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
                   >
                     <span className={!stationForm.fuelRecordFieldGoing ? 'text-gray-400' : ''}>
-                      {stationForm.fuelRecordFieldGoing ? fuelRecordFieldsGoing.find(f => f.value === stationForm.fuelRecordFieldGoing)?.label : 'â€” None â€”'}
+                      {stationForm.fuelRecordFieldGoing ? fuelRecordFieldsGoing.find(f => f.value === stationForm.fuelRecordFieldGoing)?.label : '— None —'}
                     </span>
                     <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showGoingFieldDropdown ? 'rotate-180' : ''}`} />
                   </button>
@@ -480,7 +480,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                           !stationForm.fuelRecordFieldGoing ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                         }`}
                       >
-                        <span>â€” None â€”</span>
+                        <span>— None —</span>
                         {!stationForm.fuelRecordFieldGoing && <Check className="w-4 h-4" />}
                       </button>
                       {fuelRecordFieldsGoing.map(field => (
@@ -511,7 +511,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
                   >
                     <span className={!stationForm.fuelRecordFieldReturning ? 'text-gray-400' : ''}>
-                      {stationForm.fuelRecordFieldReturning ? fuelRecordFieldsReturning.find(f => f.value === stationForm.fuelRecordFieldReturning)?.label : 'â€” None â€”'}
+                      {stationForm.fuelRecordFieldReturning ? fuelRecordFieldsReturning.find(f => f.value === stationForm.fuelRecordFieldReturning)?.label : '— None —'}
                     </span>
                     <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showReturningFieldDropdown ? 'rotate-180' : ''}`} />
                   </button>
@@ -527,7 +527,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                           !stationForm.fuelRecordFieldReturning ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                         }`}
                       >
-                        <span>â€” None â€”</span>
+                        <span>— None —</span>
                         {!stationForm.fuelRecordFieldReturning && <Check className="w-4 h-4" />}
                       </button>
                       {fuelRecordFieldsReturning.map(field => (
