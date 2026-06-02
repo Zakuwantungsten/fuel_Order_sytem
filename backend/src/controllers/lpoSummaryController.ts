@@ -11,6 +11,11 @@ import unifiedExportService from '../services/unifiedExportService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
 import { checkAndPromoteStartedJourney } from '../services/journeyService';
+import {
+  createLPOCreatedNotification,
+  createLPOCancelledNotification,
+  createLPOAmendedNotification,
+} from './notificationController';
 
 // Dynamic station to fuel field mapping cache
 let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
@@ -858,6 +863,9 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     });
     emitDataChange('lpo_summaries', 'create');
     emitDataChange('fuel_records', 'update');
+
+    // Notify station manager / super_manager / drivers (best-effort).
+    createLPOCreatedNotification(lpoSummary, req.user?.username || 'system').catch(() => {});
   } catch (error: any) {
     throw error;
   }
@@ -1180,6 +1188,13 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     emitDataChange('lpo_summaries', 'update');
     emitDataChange('fuel_records', 'update');
     emitDataChange('driver_accounts', 'update');
+
+    // Notify on liters amendments. `entriesToUpdate` contains exactly the entries
+    // whose liters changed in this update (it's where amendedAt/originalLiters were set).
+    for (const amended of entriesToUpdate) {
+      if (amended.isCancelled || amended.isDriverAccount) continue;
+      createLPOAmendedNotification(lpoSummary, amended, req.user?.username || 'system').catch(() => {});
+    }
   } catch (error: any) {
     throw error;
   }
@@ -1999,6 +2014,9 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
     });
     emitDataChange('lpo_summaries', 'update');
     emitDataChange('fuel_records', 'update');
+
+    // Notify station manager / super_manager / driver of the cancellation (best-effort).
+    createLPOCancelledNotification(lpo, lpo.entries[entryIndex], req.user?.username || 'system').catch(() => {});
   } catch (error: any) {
     throw error;
   }
@@ -2460,7 +2478,7 @@ const ENTRY_PROJECTION = {
 export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, lpoNo, truckNo, station, search, status, isRefer, isDriverAccount } = req.query;
+    const { dateFrom, dateTo, lpoNo, truckNo, station, stations, search, status, isRefer, isDriverAccount, sort } = req.query;
 
     const docMatch: any = { isDeleted: false };
 
@@ -2471,6 +2489,18 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
     if (station && !search) {
       const s = sanitizeRegexInput(station as string);
       if (s) docMatch.station = { $regex: `^${s}`, $options: 'i' };
+    }
+    // Multi-station filter (e.g. super_manager's allowed station list). Ignored
+    // when a single `station` or `search` is supplied. Matches exact station
+    // names case-insensitively.
+    if (stations && !station && !search) {
+      const list = (stations as string)
+        .split(',')
+        .map((x) => sanitizeRegexInput(x.trim()))
+        .filter(Boolean);
+      if (list.length > 0) {
+        docMatch.$or = list.map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+      }
     }
     if (dateFrom || dateTo) {
       docMatch.date = {};
@@ -2516,7 +2546,17 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
       }
     }
 
-    pipeline.push({ $sort: { date: -1, lpoNo: -1, entryIdx: 1 } });
+    // Sort options for the flat entry list.
+    const SORT_MAP: Record<string, Record<string, 1 | -1>> = {
+      newest: { date: -1, lpoNo: -1, entryIdx: 1 },
+      oldest: { date: 1, lpoNo: 1, entryIdx: 1 },
+      liters_desc: { 'entries.liters': -1, date: -1 },
+      liters_asc: { 'entries.liters': 1, date: -1 },
+      lpo_desc: { lpoNo: -1, entryIdx: 1 },
+      lpo_asc: { lpoNo: 1, entryIdx: 1 },
+    };
+    const sortStage = SORT_MAP[(sort as string) || 'newest'] || SORT_MAP.newest;
+    pipeline.push({ $sort: sortStage });
     pipeline.push({
       $facet: {
         data: [{ $skip: skip }, { $limit: limit }, { $project: ENTRY_PROJECTION }],

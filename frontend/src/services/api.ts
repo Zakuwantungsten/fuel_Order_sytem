@@ -1412,6 +1412,8 @@ export interface JourneyConfig {
   startColumns: string[];
   // All columns selectable as start columns (returned by the API for the UI)
   selectableColumns?: string[];
+  // Stations a super_manager may view (empty => default all-allowed)
+  superManagerStations?: string[];
 }
 
 export const adminAPI = {
@@ -1997,6 +1999,12 @@ export const configAPI = {
 
   updateJourneyConfig: async (startColumns: string[]): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', { startColumns });
+    return response.data.data;
+  },
+
+  // Update only the super-manager allowed-stations list (partial journey-config update)
+  updateSuperManagerStations: async (superManagerStations: string[]): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { superManagerStations });
     return response.data.data;
   },
 };

@@ -119,6 +119,9 @@ export default function JourneyConfig() {
         </div>
       </div>
 
+      {/* Super Manager station access */}
+      <SuperManagerStationsCard />
+
       {/* Selector card */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-700">
@@ -549,6 +552,141 @@ function StandardAllocationsCard() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Super Manager station access — choose which stations a super_manager may view
+ * LPOs for (in the mobile app). Empty selection => default (all stations).
+ */
+function SuperManagerStationsCard() {
+  const [stations, setStations] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [saved, setSaved] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [cfg, stationDocs] = await Promise.all([
+        configAPI.getJourneyConfig(),
+        configAPI.getStations(),
+      ]);
+      const names: string[] = (stationDocs || [])
+        .map((s: any) => s.stationName || s.name)
+        .filter(Boolean);
+      setStations(Array.from(new Set(names)).sort());
+      const sm = cfg.superManagerStations || [];
+      setSelected(sm);
+      setSaved(sm);
+    } catch {
+      toast.error('Failed to load super-manager station access');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeSync('journey_config', () => { load(); }, 'rt-sm-stations');
+
+  const toggle = (s: string) =>
+    setSelected((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+
+  const isDirty = useMemo(() => {
+    if (selected.length !== saved.length) return true;
+    const a = [...selected].sort();
+    const b = [...saved].sort();
+    return a.some((v, i) => v !== b[i]);
+  }, [selected, saved]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const cfg = await configAPI.updateSuperManagerStations(selected);
+      const sm = cfg.superManagerStations || [];
+      setSelected(sm);
+      setSaved(sm);
+      toast.success('Super-manager station access saved');
+    } catch {
+      toast.error('Failed to save super-manager station access');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <Fuel className="w-4 h-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+        <h2 className="font-medium text-gray-900 dark:text-gray-100">Super Manager station access</h2>
+        <span className="ml-auto text-xs font-medium px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+          {selected.length === 0 ? 'All (default)' : `${selected.length} selected`}
+        </span>
+      </div>
+
+      <div className="px-5 py-4 space-y-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Choose which stations a <strong>super manager</strong> can view orders for in the mobile app.
+          Leave all unchecked to allow <strong>all stations</strong> (default).
+        </p>
+
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading stations…
+          </div>
+        ) : stations.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">No stations configured.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {stations.map((s) => {
+              const checked = selected.includes(s);
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => toggle(s)}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+                    checked
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                      : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300'
+                  }`}
+                  aria-pressed={checked}
+                >
+                  <span
+                    className={`flex h-4 w-4 items-center justify-center rounded border ${
+                      checked ? 'border-primary-500 bg-primary-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  >
+                    {checked ? <Check className="w-3 h-3 text-white" /> : null}
+                  </span>
+                  <span className="truncate" title={s}>{s}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setSelected(saved)}
+            disabled={!isDirty || saving}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 disabled:opacity-50"
+          >
+            <RotateCcw className="w-4 h-4" /> Reset
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || saving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save
+          </button>
+        </div>
       </div>
     </div>
   );

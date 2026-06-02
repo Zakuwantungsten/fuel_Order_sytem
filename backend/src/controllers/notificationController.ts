@@ -8,6 +8,50 @@ import { config } from '../config';
 import logger from '../utils/logger';
 import { emitNotification, emitDataChange } from '../services/websocket';
 import { sendPushToRecipients } from '../services/pushNotificationService';
+import { createDriverUserId } from '../utils/truckNumber';
+
+// Station name → station-manager username (for notification targeting).
+const STATION_MANAGER_MAP: Record<string, string> = {
+  'LAKE CHILABOMBWE': 'mgr_chilabombwe',
+  'LAKE NDOLA': 'mgr_ndola',
+  'LAKE KAPIRI': 'mgr_kapiri',
+  'LAKE KITWE': 'mgr_kitwe',
+  'LAKE KABANGWA': 'mgr_kabangwa',
+  'LAKE CHINGOLA': 'mgr_chingola',
+  'LAKE TUNDUMA': 'mgr_tunduma',
+  'GBP MOROGORO': 'mgr_morogoro',
+  'GBP KANGE': 'mgr_kange',
+  'GPB KANGE': 'mgr_kange',
+  'INFINITY': 'mgr_infinity',
+};
+
+/**
+ * Build LPO notification recipients: the station manager, the super_manager role
+ * (for LAKE/custom stations), and the specific driver(s) of the involved trucks.
+ */
+function buildLpoRecipients(station: string, truckNos: string[]): string[] {
+  const recipients = new Set<string>();
+  const mgr = STATION_MANAGER_MAP[station];
+  if (mgr) recipients.add(mgr);
+  if (station.startsWith('LAKE') || !STATION_MANAGER_MAP[station]) recipients.add('super_manager');
+  for (const t of truckNos) {
+    if (t && t.trim()) recipients.add(createDriverUserId(t)); // e.g. driver_T991_EFN
+  }
+  return Array.from(recipients);
+}
+
+const lpoWsPayload = (n: any) => ({
+  id: n._id,
+  type: n.type,
+  title: n.title,
+  message: n.message,
+  relatedModel: n.relatedModel,
+  relatedId: n.relatedId,
+  metadata: n.metadata,
+  status: n.status,
+  createdAt: n.createdAt,
+  isRead: false,
+});
 
 // Helper: build the clean notification message used for config-missing alerts
 function buildConfigMessage(
@@ -822,109 +866,126 @@ export const createBulkDOFailureNotification = async (
  * Create notification when an LPO is created for a station
  * Notifies the station manager and super manager (for LAKE stations)
  */
+/**
+ * Create a notification when an LPO is created.
+ * Notifies the station manager, super_manager (LAKE/custom stations), and the
+ * driver(s) of the trucks on the LPO. One notification per LPO.
+ */
 export const createLPOCreatedNotification = async (
-  lpoEntry: any,
+  lpoDoc: any,
   createdBy: string
 ): Promise<void> => {
   try {
-    const station = lpoEntry.dieselAt?.toUpperCase()?.trim();
-    const lpoNo = lpoEntry.lpoNo;
-    const truckNo = lpoEntry.truckNo;
-    const liters = lpoEntry.ltrs;
-    const pricePerLtr = lpoEntry.pricePerLtr;
-    const doSdo = lpoEntry.doSdo;
+    const station = lpoDoc.station?.toUpperCase()?.trim();
+    if (!station || station === 'CASH') return;
 
-    if (!station || station === 'CASH') {
-      // Don't create notifications for CASH entries
-      return;
-    }
+    const activeEntries = (lpoDoc.entries || []).filter((e: any) => !e.isCancelled);
+    if (activeEntries.length === 0) return;
 
-    // Determine recipients based on station
-    const recipients: string[] = [];
-    
-    // Station name to manager username mapping
-    const stationManagerMap: Record<string, string> = {
-      'LAKE CHILABOMBWE': 'mgr_chilabombwe',
-      'LAKE NDOLA': 'mgr_ndola',
-      'LAKE KAPIRI': 'mgr_kapiri',
-      'LAKE KITWE': 'mgr_kitwe',
-      'LAKE KABANGWA': 'mgr_kabangwa',
-      'LAKE CHINGOLA': 'mgr_chingola',
-      'LAKE TUNDUMA': 'mgr_tunduma',
-      'GBP MOROGORO': 'mgr_morogoro',
-      'GBP KANGE': 'mgr_kange',
-      'GPB KANGE': 'mgr_kange',
-      'INFINITY': 'mgr_infinity',
-    };
+    const truckNos: string[] = activeEntries.map((e: any) => e.truckNo).filter(Boolean);
+    const recipients = buildLpoRecipients(station, truckNos);
+    if (recipients.length === 0) return;
 
-    // Add the specific station manager
-    const stationManager = stationManagerMap[station];
-    if (stationManager) {
-      recipients.push(stationManager);
-    }
-
-    // Check if it's a LAKE station (Zambian stations) or custom station
-    const isLakeStation = station.startsWith('LAKE');
-    const isCustomStation = !stationManagerMap[station]; // Station not in predefined list
-    
-    // Add super_manager role for LAKE stations and custom stations
-    if (isLakeStation || isCustomStation) {
-      recipients.push('super_manager');
-    }
-
-    // If no recipients, don't create notification
-    if (recipients.length === 0) {
-      logger.warn(`No recipients found for LPO notification at station: ${station}`);
-      return;
-    }
-
-    const title = `New LPO Created - ${station}`;
-    const message = `LPO ${lpoNo} created for truck ${truckNo} at ${station}. ${liters}L @ $${pricePerLtr}/L${doSdo ? ` (DO: ${doSdo})` : ''}`;
+    const totalLtrs = activeEntries.reduce((s: number, e: any) => s + (e.liters || 0), 0);
+    const trucksLabel = truckNos.length === 1 ? truckNos[0] : `${truckNos.length} trucks`;
+    const title = `New LPO — ${station}`;
+    const message = `LPO ${lpoDoc.lpoNo} created at ${station} for ${trucksLabel} (${totalLtrs}L).`;
 
     const notification = await Notification.create({
       type: 'lpo_created',
       title,
       message,
       relatedModel: 'LPO',
-      relatedId: lpoEntry._id.toString(),
-      metadata: {
-        lpoNo,
-        station,
-        truckNo,
-        liters,
-        pricePerLtr,
-        doSdo,
-      },
+      relatedId: lpoDoc._id.toString(),
+      metadata: { lpoNo: lpoDoc.lpoNo, station, truckNo: truckNos.join(', ') },
       recipients,
       createdBy,
     });
 
-    logger.info(`Created LPO notification for station ${station}, recipients: ${recipients.join(', ')}`);
-
-    // Emit real-time notification via WebSocket
-    try {
-      emitNotification(recipients, {
-        id: notification._id,
-        type: notification.type,
-        title: notification.title,
-        message: notification.message,
-        relatedModel: notification.relatedModel,
-        relatedId: notification.relatedId,
-        metadata: notification.metadata,
-        status: notification.status,
-        createdAt: notification.createdAt,
-        isRead: false,
-      });
-      logger.info(`Real-time notification emitted for LPO ${lpoNo}`);
-    } catch (wsError) {
-      logger.error('Failed to emit WebSocket notification:', wsError);
-      // Don't fail the function if WebSocket emission fails
-    }
-
-    // Send push notification to recipients (async via BullMQ — does not block)
+    emitNotification(recipients, lpoWsPayload(notification));
     sendPushToRecipients(recipients, { title, body: message });
+    emitDataChange('notifications', 'create');
+    logger.info(`LPO created notification: ${lpoDoc.lpoNo} @ ${station} → ${recipients.join(', ')}`);
   } catch (error) {
-    logger.error('Failed to create LPO notification:', error);
+    logger.error('Failed to create LPO created notification:', error);
+  }
+};
+
+/**
+ * Notify when a truck entry on an LPO is cancelled.
+ */
+export const createLPOCancelledNotification = async (
+  lpoDoc: any,
+  entry: any,
+  createdBy: string
+): Promise<void> => {
+  try {
+    const station = lpoDoc.station?.toUpperCase()?.trim();
+    if (!station || station === 'CASH') return;
+
+    const recipients = buildLpoRecipients(station, [entry.truckNo]);
+    if (recipients.length === 0) return;
+
+    const title = `LPO Cancelled — ${station}`;
+    const message = `Truck ${entry.truckNo} on LPO ${lpoDoc.lpoNo} was cancelled${entry.cancellationReason ? `: ${entry.cancellationReason}` : ''}.`;
+
+    const notification = await Notification.create({
+      type: 'lpo_cancelled',
+      title,
+      message,
+      relatedModel: 'LPO',
+      relatedId: lpoDoc._id.toString(),
+      metadata: { lpoNo: lpoDoc.lpoNo, station, truckNo: entry.truckNo },
+      recipients,
+      createdBy,
+    });
+
+    emitNotification(recipients, lpoWsPayload(notification));
+    sendPushToRecipients(recipients, { title, body: message });
+    emitDataChange('notifications', 'create');
+    logger.info(`LPO cancelled notification: ${lpoDoc.lpoNo} truck ${entry.truckNo} @ ${station}`);
+  } catch (error) {
+    logger.error('Failed to create LPO cancelled notification:', error);
+  }
+};
+
+/**
+ * Notify when a truck entry's liters are amended on an LPO.
+ */
+export const createLPOAmendedNotification = async (
+  lpoDoc: any,
+  entry: any,
+  createdBy: string
+): Promise<void> => {
+  try {
+    const station = lpoDoc.station?.toUpperCase()?.trim();
+    if (!station || station === 'CASH') return;
+
+    const recipients = buildLpoRecipients(station, [entry.truckNo]);
+    if (recipients.length === 0) return;
+
+    const change =
+      entry.originalLiters != null ? ` ${entry.originalLiters}L → ${entry.liters}L` : ` (now ${entry.liters}L)`;
+    const title = `LPO Amended — ${station}`;
+    const message = `Truck ${entry.truckNo} on LPO ${lpoDoc.lpoNo} liters updated${change}.`;
+
+    const notification = await Notification.create({
+      type: 'lpo_amended',
+      title,
+      message,
+      relatedModel: 'LPO',
+      relatedId: lpoDoc._id.toString(),
+      metadata: { lpoNo: lpoDoc.lpoNo, station, truckNo: entry.truckNo },
+      recipients,
+      createdBy,
+    });
+
+    emitNotification(recipients, lpoWsPayload(notification));
+    sendPushToRecipients(recipients, { title, body: message });
+    emitDataChange('notifications', 'create');
+    logger.info(`LPO amended notification: ${lpoDoc.lpoNo} truck ${entry.truckNo} @ ${station}`);
+  } catch (error) {
+    logger.error('Failed to create LPO amended notification:', error);
   }
 };
 
@@ -1056,4 +1117,6 @@ export default {
   resolvePendingYardFuelNotifications,
   createBulkDOFailureNotification,
   createLPOCreatedNotification,
+  createLPOCancelledNotification,
+  createLPOAmendedNotification,
 };

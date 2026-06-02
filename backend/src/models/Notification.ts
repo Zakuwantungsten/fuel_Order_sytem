@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface INotification extends Document {
-  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'lpo_created' | 'info' | 'warning' | 'error';
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'lpo_created' | 'lpo_cancelled' | 'lpo_amended' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
   relatedModel: 'FuelRecord' | 'DeliveryOrder' | 'LPO' | 'User' | 'YardFuelDispense';
@@ -44,7 +44,7 @@ const notificationSchema = new Schema<INotification>(
   {
     type: {
       type: String,
-      enum: ['missing_total_liters', 'missing_extra_fuel', 'both', 'unlinked_export_do', 'yard_fuel_recorded', 'truck_pending_linking', 'truck_entry_rejected', 'lpo_created', 'info', 'warning', 'error'],
+      enum: ['missing_total_liters', 'missing_extra_fuel', 'both', 'unlinked_export_do', 'yard_fuel_recorded', 'truck_pending_linking', 'truck_entry_rejected', 'lpo_created', 'lpo_cancelled', 'lpo_amended', 'info', 'warning', 'error'],
       required: true,
     },
     title: {

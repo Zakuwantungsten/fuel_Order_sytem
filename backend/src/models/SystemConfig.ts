@@ -54,6 +54,9 @@ export interface IYardFuelTimeLimitConfig {
 // current active journey and promotes this queued one to active.
 export interface IJourneyConfig {
   startColumns: string[];
+  // Stations a super_manager is allowed to view LPOs for. Empty/unset => default
+  // (all stations except the hard-excluded set, resolved on the client).
+  superManagerStations?: string[];
 }
 
 // Standard Allocations
@@ -295,6 +298,10 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       startColumns: {
         type: [String],
         default: ['darYard', 'darGoing', 'moroGoing'],
+      },
+      superManagerStations: {
+        type: [String],
+        default: [],
       },
     },
     yardFuelTimeLimit: {

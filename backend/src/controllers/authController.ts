@@ -153,7 +153,15 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     const jwtExpiryHours = sessionConfig?.systemSettings?.session?.jwtExpiry;
     const refreshExpiryDays = sessionConfig?.systemSettings?.session?.refreshTokenExpiry;
     const accessExpiry = jwtExpiryHours ? `${jwtExpiryHours}h` : undefined;
-    const refreshExpiry = refreshExpiryDays ? `${refreshExpiryDays}d` : undefined;
+    // Mobile app sessions are long-lived ("stay logged in until logout"): issue a
+    // 365-day refresh token for the mobile client (identified by its user-agent),
+    // while web keeps the admin-configured TTL. Rotation extends it on each use.
+    const isMobileClient = (req.get('user-agent') || '').includes('FuelOrderMobile');
+    const refreshExpiry = isMobileClient
+      ? '365d'
+      : refreshExpiryDays
+      ? `${refreshExpiryDays}d`
+      : undefined;
 
     if (isDriverLogin) {
       // Secure driver authentication using DriverCredential model
@@ -1345,7 +1353,13 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
     const rtJwtExpiryHours = sessionSysConfig?.systemSettings?.session?.jwtExpiry;
     const rtRefreshExpiryDays = sessionSysConfig?.systemSettings?.session?.refreshTokenExpiry;
     const rtAccessExpiry = rtJwtExpiryHours ? `${rtJwtExpiryHours}h` : undefined;
-    const rtRefreshExpiry = rtRefreshExpiryDays ? `${rtRefreshExpiryDays}d` : undefined;
+    // Keep mobile sessions long-lived on rotation too (see login handler).
+    const rtIsMobileClient = (req.get('user-agent') || '').includes('FuelOrderMobile');
+    const rtRefreshExpiry = rtIsMobileClient
+      ? '365d'
+      : rtRefreshExpiryDays
+      ? `${rtRefreshExpiryDays}d`
+      : undefined;
 
     // Driver refresh token path (Gap 8)
     if (decoded.userId.startsWith('driver_')) {

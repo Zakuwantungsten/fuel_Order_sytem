@@ -137,34 +137,31 @@ export function ManagerView({ user }: ManagerViewProps) {
     return userStation ? [userStation] : [];
   }, [isSuperManager, userStation]);
 
-  // Calculate date range (rolling 30 days)
-  const dateRange = useMemo(() => {
-    const today = new Date();
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    return {
-      from: thirtyDaysAgo,
-      to: today,
-      fromFormatted: thirtyDaysAgo.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-      toFormatted: today.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-    };
-  }, []);
-
-  // Parse date string
+  // Parse a stored LPO date. The canonical stored format is ISO "YYYY-MM-DD";
+  // we also tolerate the legacy "dd-mmm" display format.
   const parseEntryDate = useCallback((dateStr: string, year: number = new Date().getFullYear()): Date => {
+    if (!dateStr) return new Date(0);
+
+    // ISO format (the stored format) → parse directly.
+    if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) return d;
+    }
+
+    // Legacy "dd-mmm" format.
     const parts = dateStr.split('-');
-    if (parts.length !== 2) return new Date(0);
-    
-    const day = parseInt(parts[0], 10);
-    const monthStr = parts[1];
-    const monthMap: Record<string, number> = {
-      'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
-      'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
-    };
-    const month = monthMap[monthStr.toLowerCase()] ?? 0;
-    
-    return new Date(year, month, day);
+    if (parts.length === 2) {
+      const day = parseInt(parts[0], 10);
+      const monthMap: Record<string, number> = {
+        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+      };
+      const month = monthMap[parts[1].toLowerCase()] ?? 0;
+      return new Date(year, month, day);
+    }
+
+    const fallback = new Date(dateStr);
+    return isNaN(fallback.getTime()) ? new Date(0) : fallback;
   }, []);
 
   // Fetch LPO entries (with optional silent refresh for real-time updates)
@@ -177,35 +174,25 @@ export function ManagerView({ user }: ManagerViewProps) {
     setError(null);
     
     try {
-      const currentYear = new Date().getFullYear();
-      // Fetch all LPOs without date filters - LPO dates are in "dd-mmm" format (e.g., "13-Jan")
-      // which doesn't work with backend's ISO date string comparison.
-      // Frontend filtering handles date ranges properly.
       const response = await lposAPI.getAll({ limit: 10000 });
       const entries = response.data;
-      
+
+      // Show all accessible LPOs (no rolling-date window) so the web mirrors the
+      // mobile app. Scope only by role/station and exclude CASH.
       const processedEntries: LPODisplayEntry[] = entries
-        .map((entry: LPOEntry) => {
-          const entryDate = parseEntryDate(entry.date, currentYear);
-          return {
-            ...entry,
-            formattedDate: entry.date,
-            totalAmount: entry.ltrs * entry.pricePerLtr,
-            _parsedDate: entryDate,
-          };
-        })
-        .filter((entry: LPODisplayEntry & { _parsedDate: Date }) => {
-          const isInDateRange = entry._parsedDate >= dateRange.from && entry._parsedDate <= dateRange.to;
+        .map((entry: LPOEntry) => ({
+          ...entry,
+          formattedDate: entry.date,
+          totalAmount: entry.ltrs * entry.pricePerLtr,
+        }))
+        .filter((entry: LPODisplayEntry) => {
           const station = entry.dieselAt?.toUpperCase()?.trim();
-          
           if (station === 'CASH') return false;
           if (isSuperManager && EXCLUDED_STATIONS_SUPER.includes(station)) return false;
           if (!isSuperManager && userStation && station !== userStation) return false;
-          
-          return isInDateRange;
-        })
-        .map(({ _parsedDate, ...rest }: any) => rest as LPODisplayEntry);
-      
+          return true;
+        });
+
       setLpoEntries(processedEntries);
       setLastUpdated(new Date());
     } catch (err: any) {
@@ -220,7 +207,7 @@ export function ManagerView({ user }: ManagerViewProps) {
         setIsRefreshing(false);
       }
     }
-  }, [dateRange, userStation, isSuperManager, parseEntryDate]);
+  }, [userStation, isSuperManager]);
 
   // Click-outside detection for dropdowns
   useEffect(() => {

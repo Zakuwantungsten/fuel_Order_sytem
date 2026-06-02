@@ -1193,7 +1193,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
     if (!config) {
       config = await SystemConfig.create({
         configType: 'journey_config',
-        journeyConfig: { startColumns: DEFAULT_START_COLUMNS },
+        journeyConfig: { startColumns: DEFAULT_START_COLUMNS, superManagerStations: [] },
         lastUpdatedBy: 'system',
       });
     }
@@ -1204,6 +1204,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
       data: {
         startColumns: config.journeyConfig?.startColumns || DEFAULT_START_COLUMNS,
         selectableColumns: SELECTABLE_START_COLUMNS,
+        superManagerStations: config.journeyConfig?.superManagerStations || [],
       },
     });
   } catch (error: any) {
@@ -1212,20 +1213,35 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
- * Update journey configuration (which fuel columns mark a journey as started).
+ * Update journey configuration. Accepts a partial body: `startColumns` (which
+ * fuel columns mark a journey as started) and/or `superManagerStations` (the
+ * stations a super_manager may view). Unspecified fields are preserved.
  */
 export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { startColumns } = req.body;
+    const { startColumns, superManagerStations } = req.body;
 
-    if (!Array.isArray(startColumns) || startColumns.length === 0) {
-      throw new ApiError(400, 'startColumns must be a non-empty array');
+    const hasStartColumns = startColumns !== undefined;
+    const hasSmStations = superManagerStations !== undefined;
+
+    if (!hasStartColumns && !hasSmStations) {
+      throw new ApiError(400, 'Provide startColumns and/or superManagerStations');
     }
 
-    // Only allow known fuel columns to be configured as start columns
-    const invalid = startColumns.filter((c: string) => !SELECTABLE_START_COLUMNS.includes(c));
-    if (invalid.length > 0) {
-      throw new ApiError(400, `Invalid start columns: ${invalid.join(', ')}`);
+    if (hasStartColumns) {
+      if (!Array.isArray(startColumns) || startColumns.length === 0) {
+        throw new ApiError(400, 'startColumns must be a non-empty array');
+      }
+      const invalid = startColumns.filter((c: string) => !SELECTABLE_START_COLUMNS.includes(c));
+      if (invalid.length > 0) {
+        throw new ApiError(400, `Invalid start columns: ${invalid.join(', ')}`);
+      }
+    }
+
+    if (hasSmStations) {
+      if (!Array.isArray(superManagerStations) || superManagerStations.some((s: any) => typeof s !== 'string')) {
+        throw new ApiError(400, 'superManagerStations must be an array of station names');
+      }
     }
 
     let config = await SystemConfig.findOne({
@@ -1233,14 +1249,23 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       isDeleted: false,
     });
 
+    // Merge onto the existing config so partial updates don't wipe other fields.
+    const existing = config?.journeyConfig || { startColumns: DEFAULT_START_COLUMNS, superManagerStations: [] };
+    const nextJourneyConfig = {
+      startColumns: hasStartColumns ? startColumns : (existing.startColumns || DEFAULT_START_COLUMNS),
+      superManagerStations: hasSmStations
+        ? superManagerStations.map((s: string) => s.trim()).filter(Boolean)
+        : (existing.superManagerStations || []),
+    };
+
     if (!config) {
       config = await SystemConfig.create({
         configType: 'journey_config',
-        journeyConfig: { startColumns },
+        journeyConfig: nextJourneyConfig,
         lastUpdatedBy: req.user?.username || 'system',
       });
     } else {
-      config.journeyConfig = { startColumns };
+      config.journeyConfig = nextJourneyConfig;
       config.lastUpdatedBy = req.user?.username || 'system';
       await config.save();
     }
@@ -1248,7 +1273,10 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     // Drop the in-memory cache so the new columns take effect immediately
     invalidateJourneyConfigCache();
 
-    logger.info(`Journey config updated by ${req.user?.username}: [${startColumns.join(', ')}]`);
+    const detailParts: string[] = [];
+    if (hasStartColumns) detailParts.push(`start columns [${nextJourneyConfig.startColumns.join(', ')}]`);
+    if (hasSmStations) detailParts.push(`super-manager stations [${nextJourneyConfig.superManagerStations.join(', ')}]`);
+    logger.info(`Journey config updated by ${req.user?.username}: ${detailParts.join('; ')}`);
 
     await AuditService.log({
       userId: req.user?.userId,
@@ -1256,7 +1284,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       action: 'UPDATE',
       resourceType: 'Config',
       resourceId: 'journey_config',
-      details: `Journey start columns set to [${startColumns.join(', ')}]`,
+      details: `Journey config updated: ${detailParts.join('; ')}`,
       ipAddress: req.ip,
       severity: 'high',
     });
@@ -1270,8 +1298,9 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       success: true,
       message: 'Journey configuration updated successfully',
       data: {
-        startColumns: config.journeyConfig?.startColumns || startColumns,
+        startColumns: nextJourneyConfig.startColumns,
         selectableColumns: SELECTABLE_START_COLUMNS,
+        superManagerStations: nextJourneyConfig.superManagerStations,
       },
     });
   } catch (error: any) {
