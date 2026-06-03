@@ -244,10 +244,8 @@ export const deliveryOrdersAPI = {
     };
   },
   
-  delete: async (id: string | number): Promise<void> => {
-    await apiClient.delete(`/delivery-orders/${id}`);
-  },
-  
+  // NOTE: delivery orders are cancelled (see `cancel`), never deleted — no delete method.
+
   getNextNumber: async (doType: 'DO' | 'SDO' = 'DO'): Promise<string> => {
     const response = await apiClient.get('/delivery-orders/next-do-number', { 
       params: { doType } 
@@ -653,9 +651,7 @@ export const lpoWorkbookAPI = {
     return response.data.data;
   },
 
-  deleteSheet: async (workbookId: string | number, sheetId: string | number): Promise<void> => {
-    await apiClient.delete(`/lpo-documents/${workbookId}/sheets/${sheetId}`);
-  },
+  // NOTE: no deleteSheet — an LPO sheet/document cannot be deleted, only cancelled.
 };
 
 // LPO Documents API (Detailed LPO format - each document is a sheet in a workbook)
@@ -685,9 +681,7 @@ export const lpoDocumentsAPI = {
     return response.data.data;
   },
   
-  delete: async (id: string | number): Promise<void> => {
-    await apiClient.delete(`/lpo-documents/${id}`);
-  },
+  // NOTE: LPO documents are cancelled, never deleted (business rule) — no delete method.
 
   getNextLpoNumber: async (): Promise<string> => {
     const response = await apiClient.get('/lpo-documents/next-number');
@@ -1422,6 +1416,17 @@ export interface YardFuelTimeLimitConfig {
   };
 }
 
+// Per-operation fuel-record automation toggles (all default true server-side).
+export interface FuelAutomationConfig {
+  lpoCreateDeduct: boolean;
+  lpoCancelRevert: boolean;
+  lpoEditAdjust: boolean;
+  doImportCreate: boolean;
+  doExportUpdate: boolean;
+  doAmendCascade: boolean;
+  doCancelCascade: boolean;
+}
+
 export interface JourneyConfig {
   // Fuel columns whose filling on a queued journey marks it as started
   startColumns: string[];
@@ -1433,6 +1438,8 @@ export interface JourneyConfig {
   autoDownloadDOPdf?: boolean;
   // Whether to auto-download PDF after LPO "Create and Forward"
   autoDownloadLPOPdf?: boolean;
+  // Per-operation fuel-record automation switches
+  fuelAutomation?: FuelAutomationConfig;
 }
 
 export const adminAPI = {
@@ -2030,6 +2037,13 @@ export const configAPI = {
   // Update PDF auto-download toggles (partial journey-config update)
   updatePdfDownloadSettings: async (settings: { autoDownloadDOPdf?: boolean; autoDownloadLPOPdf?: boolean }): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', settings);
+    return response.data.data;
+  },
+
+  // Update fuel-record automation toggles (partial journey-config update).
+  // Accepts a partial set of keys; unspecified keys are preserved server-side.
+  updateFuelAutomation: async (fuelAutomation: Partial<FuelAutomationConfig>): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { fuelAutomation });
     return response.data.data;
   },
 };

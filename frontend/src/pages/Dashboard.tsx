@@ -1004,9 +1004,9 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {stats.recentActivities?.deliveryOrders && stats.recentActivities.deliveryOrders.length > 0 ? (
-              stats.recentActivities.deliveryOrders.slice(0, 5).map((DO: any) => (
+              stats.recentActivities.deliveryOrders.slice(0, 5).map((DO: any, i: number) => (
                 <div
-                  key={DO._id || DO.id}
+                  key={DO._id || DO.id || DO.doNumber || `do-${i}`}
                   className="py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded px-1 -mx-1 transition-colors"
                   onClick={() => {
                     const rawDate = DO.createdAt || DO.date;
@@ -1057,9 +1057,9 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {stats.recentActivities?.lpoEntries && stats.recentActivities.lpoEntries.length > 0 ? (
-              stats.recentActivities.lpoEntries.slice(0, 5).map((lpo: any) => (
+              stats.recentActivities.lpoEntries.slice(0, 5).map((lpo: any, i: number) => (
                 <div
-                  key={lpo._id || lpo.id}
+                  key={lpo._id || lpo.id || lpo.lpoNo || `lpo-${i}`}
                   className="py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded px-1 -mx-1 transition-colors"
                   onClick={() => {
                     const rawDate = lpo.actualDate || lpo.createdAt;

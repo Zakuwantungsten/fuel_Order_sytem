@@ -128,14 +128,8 @@ import { createEditLockHandlers } from '../controllers/editLockController';
 import { getResourceHistory } from '../controllers/historyController';
 import { DeliveryOrder } from '../models';
 
-// Delete route (requires appropriate role)
-router.delete(
-  '/:id',
-  commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'boss'),
-  validate,
-  asyncHandler(deliveryOrderController.deleteDeliveryOrder)
-);
+// NOTE: Delivery orders cannot be deleted — business rule. They are cancelled
+// (POST /:id/cancel) instead, which preserves the record. No DELETE /:id route.
 
 // Edit lock routes (same roles as update)
 const doLock = createEditLockHandlers(DeliveryOrder, 'delivery_orders');

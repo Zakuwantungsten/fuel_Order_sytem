@@ -25,7 +25,8 @@ router.delete('/routes/:id', configController.deleteRoute);
 router.get('/formula-variables', configController.getFormulaVariables);
 
 // Yard fuel time limit settings
+// Read: any admin-level role. Write: strictly admin/super_admin (boss excluded).
 router.get('/yard-fuel-time-limit', configController.getYardFuelTimeLimit);
-router.put('/yard-fuel-time-limit', configController.updateYardFuelTimeLimit);
+router.put('/yard-fuel-time-limit', authorize('super_admin', 'admin'), configController.updateYardFuelTimeLimit);
 
 export default router;

@@ -12,6 +12,7 @@ import { enforceEditLock } from './editLockController';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { emitDataChange } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
+import { getFuelAutomationFlags } from '../services/journeyService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
@@ -830,6 +831,194 @@ export const getDeliveryOrderById = async (req: AuthRequest, res: Response): Pro
   }
 };
 
+// ── Shared fuel-record orchestration (used by single + bulk DO creation) ──────
+
+type LockedFuelNotif = {
+  id: string;
+  missingFields: Array<'totalLiters' | 'extraFuel'>;
+  doNumber: string;
+  truckNo: string;
+  destination: string;
+  truckSuffix: string;
+};
+type UnlinkedExportNotif = {
+  id: string;
+  doNumber: string;
+  truckNo: string;
+  destination: string;
+  loadingPoint: string;
+};
+
+/** Load active routes + truck-batch config once. Shared by single + bulk paths. */
+const loadFuelConfig = async (): Promise<{ routes: RouteLike[]; truckBatches: Record<string, any> }> => {
+  const { SystemConfig } = await import('../models/SystemConfig');
+  const [routeDocs, batchConfig] = await Promise.all([
+    RouteConfig.find({ isActive: true }).lean(),
+    SystemConfig.findOne({ configType: 'truck_batches', isDeleted: false }).lean(),
+  ]);
+  return {
+    routes: routeDocs as unknown as RouteLike[],
+    truckBatches: (batchConfig?.truckBatches as Record<string, any>) || {},
+  };
+};
+
+/**
+ * Build + insert going-journey fuel records for a set of IMPORT delivery orders.
+ * Trucks with an existing active journey are queued (with a contiguous queueOrder);
+ * records missing route/batch config are locked. Pending yard-fuel entries are
+ * auto-linked. Returns the queued count and the locked-record notifications to
+ * dispatch (the caller owns notification side-effects). Single create passes a
+ * 1-element array — same path as the bulk endpoint, no duplicated logic.
+ */
+const applyImportFuelRecords = async (
+  importDOs: any[],
+  routes: RouteLike[],
+  truckBatches: Record<string, any>,
+  username: string,
+): Promise<{ queuedCount: number; lockedNotifs: LockedFuelNotif[] }> => {
+  let queuedCount = 0;
+  const lockedNotifs: LockedFuelNotif[] = [];
+  if (importDOs.length === 0) return { queuedCount, lockedNotifs };
+
+  const importTrucks = [...new Set(importDOs.map((o: any) => o.truckNo))];
+  const [activeRecords, queuedRecords] = await Promise.all([
+    FuelRecord.find({ truckNo: { $in: importTrucks }, journeyStatus: 'active', isDeleted: false }).select('_id truckNo').lean(),
+    FuelRecord.find({ truckNo: { $in: importTrucks }, journeyStatus: 'queued', isDeleted: false }).select('truckNo').lean(),
+  ]);
+
+  // Per-truck journey state, seeded from the DB and updated as we build the batch
+  const truckState = new Map<string, { activeId: string | null; queuedCount: number }>();
+  for (const t of importTrucks) truckState.set(t, { activeId: null, queuedCount: 0 });
+  for (const r of activeRecords) {
+    const s = truckState.get(r.truckNo)!;
+    s.activeId = String(r._id);
+  }
+  for (const r of queuedRecords) {
+    const s = truckState.get(r.truckNo)!;
+    s.queuedCount += 1;
+  }
+
+  const fuelRecordsToInsert: any[] = [];
+  const linkTargets: Array<{ id: string; truckNo: string; doNumber: string; date: string }> = [];
+
+  for (const order of importDOs) {
+    const routeMatch = matchRouteLiters(routes, order.destination);
+    const totalLiters = routeMatch.matched ? routeMatch.liters : null;
+
+    const batchMatch = matchExtraFuel(order.truckNo, truckBatches, order.destination);
+    // Mirror the client: unmatched batch → null extra → record is locked
+    const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
+
+    const built = buildImportFuelRecord(order as unknown as DeliveryOrderLike, totalLiters, extraFuel);
+    const rec = built.fuelRecord;
+    const _id = new mongoose.Types.ObjectId();
+    rec._id = _id;
+
+    const state = truckState.get(order.truckNo)!;
+    if (state.activeId) {
+      rec.journeyStatus = 'queued';
+      rec.queueOrder = state.queuedCount + 1;
+      rec.previousJourneyId = state.activeId;
+      state.queuedCount += 1;
+      queuedCount += 1;
+    } else {
+      rec.journeyStatus = 'active';
+      rec.activatedAt = new Date();
+      state.activeId = String(_id);
+    }
+
+    fuelRecordsToInsert.push(rec);
+    linkTargets.push({ id: String(_id), truckNo: order.truckNo, doNumber: order.doNumber, date: order.date });
+
+    if (built.isLocked) {
+      lockedNotifs.push({
+        id: String(_id),
+        missingFields: built.missingFields,
+        doNumber: order.doNumber,
+        truckNo: order.truckNo,
+        destination: order.destination,
+        truckSuffix: (batchMatch.truckSuffix || '').toUpperCase(),
+      });
+    }
+  }
+
+  try {
+    await FuelRecord.insertMany(fuelRecordsToInsert, { ordered: false });
+  } catch (err: any) {
+    logger.error('Fuel record insert had errors:', err?.message || err);
+  }
+
+  // Auto-link any pending yard fuel entries, parallelized
+  try {
+    const { linkPendingYardFuelDirect } = await import('./yardFuelController');
+    await Promise.all(
+      linkTargets.map(t =>
+        linkPendingYardFuelDirect(t.id, t.truckNo, t.doNumber, t.date, username).catch(e => {
+          logger.warn(`Yard-fuel auto-link failed for ${t.truckNo}: ${e?.message || e}`);
+          return { linkedCount: 0 };
+        })
+      )
+    );
+  } catch (e: any) {
+    logger.warn('Yard-fuel auto-link step skipped:', e?.message || e);
+  }
+
+  return { queuedCount, lockedNotifs };
+};
+
+/**
+ * Update the matching going record with return-leg fuel for a set of EXPORT DOs.
+ * Each export matches the most recent going record for its truck that has no
+ * return DO yet; unmatched exports are returned for notification. Returns the
+ * unlinked exports the caller should notify on.
+ */
+const applyExportFuelUpdates = async (
+  exportDOs: any[],
+  routes: RouteLike[],
+): Promise<{ unlinkedExports: UnlinkedExportNotif[] }> => {
+  const unlinkedExports: UnlinkedExportNotif[] = [];
+  if (exportDOs.length === 0) return { unlinkedExports };
+
+  const exportTrucks = [...new Set(exportDOs.map((o: any) => o.truckNo))];
+  const goingRecords = await FuelRecord.find({
+    truckNo: { $in: exportTrucks },
+    isDeleted: false,
+    $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
+  })
+    .sort({ date: -1 })
+    .lean();
+
+  // Most recent unmatched going record per truck
+  const recordByTruck = new Map<string, any>();
+  for (const r of goingRecords) {
+    if (!recordByTruck.has(r.truckNo)) recordByTruck.set(r.truckNo, r);
+  }
+
+  const usedRecordIds = new Set<string>();
+  const bulkOps: any[] = [];
+  for (const order of exportDOs) {
+    const match = recordByTruck.get(order.truckNo);
+    if (!match || usedRecordIds.has(String(match._id))) {
+      unlinkedExports.push({ id: String(order._id), doNumber: order.doNumber, truckNo: order.truckNo, destination: order.destination, loadingPoint: order.loadingPoint });
+      continue;
+    }
+    usedRecordIds.add(String(match._id));
+    const routeMatch = matchExportRouteLiters(routes, order.loadingPoint || '', order.destination || '');
+    const { update } = buildReturnUpdate(match, order as unknown as DeliveryOrderLike, routeMatch.liters);
+    bulkOps.push({ updateOne: { filter: { _id: match._id }, update: { $set: update } } });
+  }
+
+  if (bulkOps.length > 0) {
+    try {
+      await FuelRecord.bulkWrite(bulkOps, { ordered: false });
+    } catch (err: any) {
+      logger.error('Fuel record update (export) had errors:', err?.message || err);
+    }
+  }
+
+  return { unlinkedExports };
+};
+
 /**
  * Create new delivery order
  */
@@ -867,6 +1056,67 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     logger.info(`Delivery order created: ${deliveryOrder.doNumber} by ${req.user?.username}`);
 
+    // ── Server-side fuel-record side-effects (previously done in the browser) ──
+    // IMPORT → create a going-journey fuel record. EXPORT → fill the return leg of
+    // the matched going record. SDO → nothing. Each gated by its automation toggle.
+    const username = req.user?.username || 'system';
+    const userId = req.user?.userId || 'system';
+    const userRole = req.user?.role;
+    const order = deliveryOrder.toObject() as any;
+    let fuelAutomationSkipped: string | null = null;
+
+    if (order.doType === 'DO' && (order.importOrExport === 'IMPORT' || order.importOrExport === 'EXPORT')) {
+      const fuelFlags = await getFuelAutomationFlags();
+      try {
+        if (order.importOrExport === 'IMPORT') {
+          if (fuelFlags.doImportCreate) {
+            const { routes, truckBatches } = await loadFuelConfig();
+            const { lockedNotifs } = await applyImportFuelRecords([order], routes, truckBatches, username);
+            if (lockedNotifs.length > 0) {
+              const { createMissingConfigNotification } = await import('./notificationController');
+              for (const n of lockedNotifs) {
+                await createMissingConfigNotification(n.id, n.missingFields, { doNumber: n.doNumber, truckNo: n.truckNo, destination: n.destination, truckSuffix: n.truckSuffix }, username, userRole, userId)
+                  .catch(e => logger.warn(`Missing-config notification failed for ${n.doNumber}: ${e?.message || e}`));
+              }
+            }
+          } else {
+            fuelAutomationSkipped = 'doImportCreate';
+          }
+        } else {
+          if (fuelFlags.doExportUpdate) {
+            const { routes } = await loadFuelConfig();
+            const { unlinkedExports } = await applyExportFuelUpdates([order], routes);
+            if (unlinkedExports.length > 0) {
+              const { createUnlinkedExportDONotification } = await import('./notificationController');
+              for (const u of unlinkedExports) {
+                await createUnlinkedExportDONotification(u.id, { doNumber: u.doNumber, truckNo: u.truckNo, destination: u.destination, loadingPoint: u.loadingPoint }, username)
+                  .catch(e => logger.warn(`Unlinked-export notification failed for ${u.doNumber}: ${e?.message || e}`));
+              }
+            }
+          } else {
+            fuelAutomationSkipped = 'doExportUpdate';
+          }
+        }
+      } catch (e: any) {
+        // Fuel side-effects must not fail the DO creation; the DO is already saved.
+        logger.error(`Fuel-record side-effect failed for DO ${order.doNumber}: ${e?.message || e}`);
+      }
+
+      if (fuelAutomationSkipped) {
+        logger.info(`[fuelAutomation] ${fuelAutomationSkipped} OFF — skipping fuel-record side-effect for DO ${order.doNumber}`);
+        await AuditService.log({
+          userId: req.user?.userId,
+          username,
+          action: order.importOrExport === 'IMPORT' ? 'CREATE' : 'UPDATE',
+          resourceType: 'FuelRecord',
+          resourceId: order.doNumber,
+          details: `Fuel-record automation SKIPPED for DO ${order.doNumber} — '${fuelAutomationSkipped}' is disabled. Manual fuel-record management required.`,
+          ipAddress: req.ip,
+          severity: 'high',
+        }).catch(() => {});
+      }
+    }
+
     // Log audit trail
     await AuditService.logCreate(
       req.user?.userId || 'system',
@@ -879,7 +1129,9 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     res.status(201).json({
       success: true,
-      message: 'Delivery order created successfully',
+      message: fuelAutomationSkipped
+        ? 'Delivery order created. Note: fuel-record automation is disabled — manage the fuel record manually.'
+        : 'Delivery order created successfully',
       data: deliveryOrder,
     });
     emitDataChange('delivery_orders', 'create', deliveryOrder.toObject());
@@ -1009,9 +1261,14 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
   const importDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'IMPORT');
   const exportDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'EXPORT');
 
+  // Per-operation automation toggles. When OFF, the DOs are still created but the
+  // fuel-record build (import) / return-leg update (export) is skipped.
+  const fuelFlags = await getFuelAutomationFlags();
+  const automationSkips: string[] = [];
+
   let routes: RouteLike[] = [];
   let truckBatches: Record<string, any> = {};
-  if (importDOs.length > 0 || exportDOs.length > 0) {
+  if ((importDOs.length > 0 && fuelFlags.doImportCreate) || (exportDOs.length > 0 && fuelFlags.doExportUpdate)) {
     const { SystemConfig } = await import('../models/SystemConfig');
     const [routeDocs, batchConfig] = await Promise.all([
       RouteConfig.find({ isActive: true }).lean(),
@@ -1022,133 +1279,26 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
   }
 
   let queuedCount = 0;
-  const lockedNotifs: Array<{ id: string; missingFields: Array<'totalLiters' | 'extraFuel'>; doNumber: string; truckNo: string; destination: string; truckSuffix: string }> = [];
+  const lockedNotifs: LockedFuelNotif[] = [];
+  const unlinkedExports: UnlinkedExportNotif[] = [];
 
-  // ── 5. IMPORT: build + insert going-journey fuel records ───────────────────
-  if (importDOs.length > 0) {
-    const importTrucks = [...new Set(importDOs.map((o: any) => o.truckNo))];
-    const [activeRecords, queuedRecords] = await Promise.all([
-      FuelRecord.find({ truckNo: { $in: importTrucks }, journeyStatus: 'active', isDeleted: false }).select('_id truckNo').lean(),
-      FuelRecord.find({ truckNo: { $in: importTrucks }, journeyStatus: 'queued', isDeleted: false }).select('truckNo').lean(),
-    ]);
-
-    // Per-truck journey state, seeded from the DB and updated as we build the batch
-    const truckState = new Map<string, { activeId: string | null; queuedCount: number }>();
-    for (const t of importTrucks) truckState.set(t, { activeId: null, queuedCount: 0 });
-    for (const r of activeRecords) {
-      const s = truckState.get(r.truckNo)!;
-      s.activeId = String(r._id);
-    }
-    for (const r of queuedRecords) {
-      const s = truckState.get(r.truckNo)!;
-      s.queuedCount += 1;
-    }
-
-    const fuelRecordsToInsert: any[] = [];
-    const linkTargets: Array<{ id: string; truckNo: string; doNumber: string; date: string }> = [];
-
-    for (const order of importDOs) {
-      const routeMatch = matchRouteLiters(routes, order.destination);
-      const totalLiters = routeMatch.matched ? routeMatch.liters : null;
-
-      const batchMatch = matchExtraFuel(order.truckNo, truckBatches, order.destination);
-      // Mirror the client: unmatched batch → null extra → record is locked
-      const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
-
-      const built = buildImportFuelRecord(order as unknown as DeliveryOrderLike, totalLiters, extraFuel);
-      const rec = built.fuelRecord;
-      const _id = new mongoose.Types.ObjectId();
-      rec._id = _id;
-
-      const state = truckState.get(order.truckNo)!;
-      if (state.activeId) {
-        rec.journeyStatus = 'queued';
-        rec.queueOrder = state.queuedCount + 1;
-        rec.previousJourneyId = state.activeId;
-        state.queuedCount += 1;
-        queuedCount += 1;
-      } else {
-        rec.journeyStatus = 'active';
-        rec.activatedAt = new Date();
-        state.activeId = String(_id);
-      }
-
-      fuelRecordsToInsert.push(rec);
-      linkTargets.push({ id: String(_id), truckNo: order.truckNo, doNumber: order.doNumber, date: order.date });
-
-      if (built.isLocked) {
-        lockedNotifs.push({
-          id: String(_id),
-          missingFields: built.missingFields,
-          doNumber: order.doNumber,
-          truckNo: order.truckNo,
-          destination: order.destination,
-          truckSuffix: (batchMatch.truckSuffix || '').toUpperCase(),
-        });
-      }
-    }
-
-    try {
-      await FuelRecord.insertMany(fuelRecordsToInsert, { ordered: false });
-    } catch (err: any) {
-      logger.error('Bulk fuel record insert had errors:', err?.message || err);
-    }
-
-    // Auto-link any pending yard fuel entries (parity with single create), parallelized
-    try {
-      const { linkPendingYardFuelDirect } = await import('./yardFuelController');
-      await Promise.all(
-        linkTargets.map(t =>
-          linkPendingYardFuelDirect(t.id, t.truckNo, t.doNumber, t.date, username).catch(e => {
-            logger.warn(`Yard-fuel auto-link failed for ${t.truckNo}: ${e?.message || e}`);
-            return { linkedCount: 0 };
-          })
-        )
-      );
-    } catch (e: any) {
-      logger.warn('Yard-fuel auto-link step skipped:', e?.message || e);
-    }
+  // ── 5. IMPORT: build + insert going-journey fuel records (shared helper) ────
+  if (importDOs.length > 0 && fuelFlags.doImportCreate) {
+    const importResult = await applyImportFuelRecords(importDOs, routes, truckBatches, username);
+    queuedCount = importResult.queuedCount;
+    lockedNotifs.push(...importResult.lockedNotifs);
+  } else if (importDOs.length > 0) {
+    automationSkips.push(`doImportCreate (${importDOs.length} import DO${importDOs.length === 1 ? '' : 's'} — no fuel records created)`);
+    logger.info(`[fuelAutomation] doImportCreate OFF — skipping fuel-record creation for ${importDOs.length} import DO(s)`);
   }
 
   // ── 6. EXPORT: update the matching going records with return-leg fuel ───────
-  const unlinkedExports: Array<{ id: string; doNumber: string; truckNo: string; destination: string; loadingPoint: string }> = [];
-  if (exportDOs.length > 0) {
-    const exportTrucks = [...new Set(exportDOs.map((o: any) => o.truckNo))];
-    const goingRecords = await FuelRecord.find({
-      truckNo: { $in: exportTrucks },
-      isDeleted: false,
-      $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
-    })
-      .sort({ date: -1 })
-      .lean();
-
-    // Most recent unmatched going record per truck
-    const recordByTruck = new Map<string, any>();
-    for (const r of goingRecords) {
-      if (!recordByTruck.has(r.truckNo)) recordByTruck.set(r.truckNo, r);
-    }
-
-    const usedRecordIds = new Set<string>();
-    const bulkOps: any[] = [];
-    for (const order of exportDOs) {
-      const match = recordByTruck.get(order.truckNo);
-      if (!match || usedRecordIds.has(String(match._id))) {
-        unlinkedExports.push({ id: String(order._id), doNumber: order.doNumber, truckNo: order.truckNo, destination: order.destination, loadingPoint: order.loadingPoint });
-        continue;
-      }
-      usedRecordIds.add(String(match._id));
-      const routeMatch = matchExportRouteLiters(routes, order.loadingPoint || '', order.destination || '');
-      const { update } = buildReturnUpdate(match, order as unknown as DeliveryOrderLike, routeMatch.liters);
-      bulkOps.push({ updateOne: { filter: { _id: match._id }, update: { $set: update } } });
-    }
-
-    if (bulkOps.length > 0) {
-      try {
-        await FuelRecord.bulkWrite(bulkOps, { ordered: false });
-      } catch (err: any) {
-        logger.error('Bulk fuel record update (export) had errors:', err?.message || err);
-      }
-    }
+  if (exportDOs.length > 0 && fuelFlags.doExportUpdate) {
+    const exportResult = await applyExportFuelUpdates(exportDOs, routes);
+    unlinkedExports.push(...exportResult.unlinkedExports);
+  } else if (exportDOs.length > 0) {
+    automationSkips.push(`doExportUpdate (${exportDOs.length} export DO${exportDOs.length === 1 ? '' : 's'} — return leg not applied)`);
+    logger.info(`[fuelAutomation] doExportUpdate OFF — skipping return-leg fuel update for ${exportDOs.length} export DO(s)`);
   }
 
   // ── 7. Notifications (parallel; failures are non-fatal) ────────────────────
@@ -1187,6 +1337,21 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
 
   // ── 8. Single audit entry + one socket broadcast ───────────────────────────
   await AuditService.logBulkOperation(userId, username, 'DeliveryOrder', 'create', createdDOs.length, req.ip);
+
+  // Audit breadcrumb when automation suppressed fuel-record side-effects.
+  if (automationSkips.length > 0) {
+    await AuditService.log({
+      userId,
+      username,
+      action: 'CREATE',
+      resourceType: 'FuelRecord',
+      resourceId: 'bulk',
+      details: `Fuel-record automation SKIPPED during bulk DO creation: ${automationSkips.join('; ')}. Manual fuel-record management required.`,
+      ipAddress: req.ip,
+      severity: 'high',
+    }).catch(() => {});
+  }
+
   emitDataChange('delivery_orders', 'create');
   emitDataChange('fuel_records', 'update');
 
@@ -1282,6 +1447,10 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       updateFilter.updatedAt = new Date(clientUpdatedAt);
     }
 
+    // Per-operation automation toggle for the DO→fuel-record amendment cascade.
+    const fuelAutomationFlags = await getFuelAutomationFlags();
+    let amendCascadeSkipped = false;
+
     // Run the DO update + all cascade operations inside a transaction
     // so partial cascade failures roll back everything
     const session = await mongoose.startSession();
@@ -1318,15 +1487,20 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           throw new ApiError(404, 'Delivery order not found');
         }
 
-        // Cascade to fuel records if relevant fields changed
+        // Cascade to fuel records if relevant fields changed — gated by automation toggle.
         if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
-          const bodyWithRole = { ...payload, userRole, userId: req.user?.userId };
-          const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username, session);
-          cascadeResults.fuelRecordUpdated = fuelResult.updated;
-          cascadeResults.fuelRecordChanges = fuelResult.changes || [];
-          cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
-          if (fuelResult.routeNotificationCreated) {
-            cascadeResults.fuelRecordLocked = true;
+          if (fuelAutomationFlags.doAmendCascade) {
+            const bodyWithRole = { ...payload, userRole, userId: req.user?.userId };
+            const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username, session);
+            cascadeResults.fuelRecordUpdated = fuelResult.updated;
+            cascadeResults.fuelRecordChanges = fuelResult.changes || [];
+            cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
+            if (fuelResult.routeNotificationCreated) {
+              cascadeResults.fuelRecordLocked = true;
+            }
+          } else {
+            amendCascadeSkipped = true;
+            logger.info(`[fuelAutomation] doAmendCascade OFF — skipping fuel-record cascade for DO ${originalDO.doNumber}`);
           }
         }
 
@@ -1358,10 +1532,27 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       );
     }
 
+    // Audit breadcrumb when automation suppressed the amendment cascade.
+    if (amendCascadeSkipped) {
+      await AuditService.log({
+        userId: req.user?.userId,
+        username,
+        action: 'UPDATE',
+        resourceType: 'FuelRecord',
+        resourceId: deliveryOrder.doNumber,
+        details: `Fuel-record amendment cascade SKIPPED for DO ${deliveryOrder.doNumber} — automation 'doAmendCascade' is disabled. Manual fuel-record adjustment required.`,
+        ipAddress: req.ip,
+        severity: 'high',
+      }).catch(() => {});
+    }
+
     // Build response message
     let responseMessage = 'Delivery order updated successfully';
     if (cascadeResults.routeNotificationCreated) {
       responseMessage += '. Note: Route configuration not found - fuel record locked and notification created for admin';
+    }
+    if (amendCascadeSkipped) {
+      responseMessage += '. Note: fuel-record automation is disabled — adjust the fuel record manually.';
     }
 
     res.status(200).json({
@@ -1398,6 +1589,10 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     if (originalDO.isCancelled) {
       throw new ApiError(400, 'Delivery order is already cancelled');
     }
+
+    // Per-operation automation toggle for the DO→fuel-record cancellation cascade.
+    const fuelAutomationFlags = await getFuelAutomationFlags();
+    let cancelCascadeSkipped = false;
 
     // Run DO cancellation + all cascade operations inside a transaction
     const session = await mongoose.startSession();
@@ -1442,12 +1637,17 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           throw new ApiError(404, 'Delivery order not found');
         }
 
-        // Cancel related fuel record
-        const fuelResult = await cascadeCancelFuelRecord(deliveryOrder, cancellationReason, username, session);
-        cascadeResults.fuelRecordCancelled = fuelResult.cancelled;
-        cascadeResults.fuelRecordId = fuelResult.fuelRecordId || '';
-        cascadeResults.fuelRecordAction = fuelResult.action || '';
-        fuelAction = fuelResult.action;
+        // Cancel related fuel record — gated by automation toggle.
+        if (fuelAutomationFlags.doCancelCascade) {
+          const fuelResult = await cascadeCancelFuelRecord(deliveryOrder, cancellationReason, username, session);
+          cascadeResults.fuelRecordCancelled = fuelResult.cancelled;
+          cascadeResults.fuelRecordId = fuelResult.fuelRecordId || '';
+          cascadeResults.fuelRecordAction = fuelResult.action || '';
+          fuelAction = fuelResult.action;
+        } else {
+          cancelCascadeSkipped = true;
+          logger.info(`[fuelAutomation] doCancelCascade OFF — skipping fuel-record cancellation for DO ${deliveryOrder.doNumber}`);
+        }
 
         // Cancel related LPO entries
         const lpoResult = await cascadeToLPOEntries(deliveryOrder.doNumber, 'cancel', undefined, session);
@@ -1463,6 +1663,22 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       message += '. Associated fuel record was fully cancelled.';
     } else if (fuelAction === 'return_do_removed') {
       message += '. Return DO removed from fuel record (going journey preserved).';
+    } else if (cancelCascadeSkipped) {
+      message += '. Note: fuel-record automation is disabled — the linked fuel record was NOT changed. Adjust it manually.';
+    }
+
+    // Audit breadcrumb when automation suppressed the cancellation cascade.
+    if (cancelCascadeSkipped) {
+      await AuditService.log({
+        userId: req.user?.userId,
+        username,
+        action: 'UPDATE',
+        resourceType: 'FuelRecord',
+        resourceId: deliveryOrder.doNumber,
+        details: `Fuel-record cancellation cascade SKIPPED for DO ${deliveryOrder.doNumber} — automation 'doCancelCascade' is disabled. Manual fuel-record adjustment required.`,
+        ipAddress: req.ip,
+        severity: 'high',
+      }).catch(() => {});
     }
 
     logger.info(`Delivery order cancelled: ${deliveryOrder.doNumber} by ${username}. Reason: ${reason}. Fuel action: ${fuelAction}`);
@@ -1486,93 +1702,6 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     });
     emitDataChange('delivery_orders', 'update');
     emitDataChange('fuel_records', 'update');
-  } catch (error: any) {
-    throw error;
-  }
-};
-
-/**
- * Soft delete delivery order
- */
-export const deleteDeliveryOrder = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const username = req.user?.username || 'system';
-
-    // Read the DO first so we know which collections to cascade to
-    const originalDO = await DeliveryOrder.findOne({ _id: id, isDeleted: false }).lean();
-    if (!originalDO) {
-      throw new ApiError(404, 'Delivery order not found');
-    }
-
-    const session = await mongoose.startSession();
-    let deliveryOrder: any;
-
-    try {
-      await session.withTransaction(async () => {
-        // Soft-delete the DO
-        deliveryOrder = await DeliveryOrder.findByIdAndUpdate(
-          id,
-          { isDeleted: true, deletedAt: new Date() },
-          { new: true, session }
-        );
-
-        if (!deliveryOrder) {
-          throw new ApiError(404, 'Delivery order not found');
-        }
-
-        // Cascade: null out the DO reference on the linked FuelRecord
-        if (originalDO.doType !== 'SDO') {
-          if (originalDO.importOrExport === 'IMPORT') {
-            await FuelRecord.updateMany(
-              { goingDo: originalDO.doNumber, isDeleted: false },
-              { $set: { goingDo: null } },
-              { session }
-            );
-          } else if (originalDO.importOrExport === 'EXPORT') {
-            await FuelRecord.updateMany(
-              { returnDo: originalDO.doNumber, isDeleted: false },
-              { $set: { returnDo: null } },
-              { session }
-            );
-          }
-        }
-
-        // Cascade: mark related LPO entries as cancelled within LPOSummary docs
-        await LPOSummary.updateMany(
-          { isDeleted: false, 'entries.doNo': originalDO.doNumber },
-          {
-            $set: {
-              'entries.$[e].isCancelled': true,
-              'entries.$[e].cancelledAt': new Date(),
-            },
-          },
-          { arrayFilters: [{ 'e.doNo': originalDO.doNumber }], session }
-        );
-      });
-    } finally {
-      await session.endSession();
-    }
-
-    logger.info(`Delivery order deleted: ${deliveryOrder.doNumber} by ${username}. Cascaded to fuel records and LPO entries.`);
-
-    // Log audit trail
-    await AuditService.logDelete(
-      req.user?.userId || 'system',
-      username,
-      'DeliveryOrder',
-      deliveryOrder._id.toString(),
-      { doNumber: deliveryOrder.doNumber, truckNo: deliveryOrder.truckNo },
-      req.ip
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'Delivery order deleted successfully',
-    });
-    emitDataChange('delivery_orders', 'delete');
-    emitDataChange('fuel_records', 'update');
-    emitDataChange('lpo_summaries', 'update');
   } catch (error: any) {
     throw error;
   }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI, configAPI } from '../services/api';
@@ -507,7 +507,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // Load stations from database using React Query
   const queryClient = useQueryClient();
   const { data: fuelStations, isLoading: loadingStations } = useActiveFuelStations();
-  const availableStations: FuelStationConfig[] = fuelStations || [];
+  // Memoize so the reference stays stable across renders (especially while the query
+  // is loading and `fuelStations` is undefined). A fresh `[]` each render would make
+  // every effect that depends on `availableStations` re-run, triggering an infinite
+  // update loop in the effects below.
+  const availableStations: FuelStationConfig[] = useMemo(() => fuelStations || [], [fuelStations]);
 
   // Real-time sync: invalidate React Query cache when stations change
   const invalidateStations = useCallback(() => {
@@ -766,9 +770,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           setIsFetchingLPOs(false);
         }
       } else {
-        setExistingLPOsForTrucks(new Map());
-        setTrucksWithoutLPOs(new Set());
-        setSelectedLPOsToCancel(new Map());
+        // Only reset when there's actually something to clear, otherwise we'd
+        // hand React a brand-new empty Map/Set on every run and force a re-render.
+        setExistingLPOsForTrucks(prev => (prev.size === 0 ? prev : new Map()));
+        setTrucksWithoutLPOs(prev => (prev.size === 0 ? prev : new Set()));
+        setSelectedLPOsToCancel(prev => (prev.size === 0 ? prev : new Map()));
       }
     };
 

@@ -193,12 +193,4 @@ export function useCancelDeliveryOrder() {
   });
 }
 
-export function useDeleteDeliveryOrder() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string | number) => deliveryOrdersAPI.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
-    },
-  });
-}
+// NOTE: No delete hook — delivery orders are cancelled, never deleted (business rule).

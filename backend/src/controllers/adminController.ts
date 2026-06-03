@@ -1,6 +1,7 @@
  import { Response } from 'express';
 import ExcelJS from 'exceljs';
 import { SystemConfig, User, DeliveryOrder, LPOSummary, FuelRecord, YardFuelDispense, AuditLog } from '../models';
+import { DEFAULT_FUEL_AUTOMATION, IFuelAutomationConfig } from '../models/SystemConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils';
@@ -1207,6 +1208,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
         superManagerStations: config.journeyConfig?.superManagerStations || [],
         autoDownloadDOPdf: config.journeyConfig?.autoDownloadDOPdf ?? true,
         autoDownloadLPOPdf: config.journeyConfig?.autoDownloadLPOPdf ?? true,
+        fuelAutomation: { ...DEFAULT_FUEL_AUTOMATION, ...(config.journeyConfig?.fuelAutomation || {}) },
       },
     });
   } catch (error: any) {
@@ -1221,15 +1223,32 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
  */
 export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { startColumns, superManagerStations, autoDownloadDOPdf, autoDownloadLPOPdf } = req.body;
+    const { startColumns, superManagerStations, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation } = req.body;
 
     const hasStartColumns = startColumns !== undefined;
     const hasSmStations = superManagerStations !== undefined;
     const hasAutoDownloadDO = autoDownloadDOPdf !== undefined;
     const hasAutoDownloadLPO = autoDownloadLPOPdf !== undefined;
+    const hasFuelAutomation = fuelAutomation !== undefined;
 
-    if (!hasStartColumns && !hasSmStations && !hasAutoDownloadDO && !hasAutoDownloadLPO) {
+    if (!hasStartColumns && !hasSmStations && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation) {
       throw new ApiError(400, 'Provide at least one field to update');
+    }
+
+    // Validate fuel-automation: must be a flat object of known boolean keys only.
+    const FUEL_AUTOMATION_KEYS = Object.keys(DEFAULT_FUEL_AUTOMATION) as (keyof IFuelAutomationConfig)[];
+    if (hasFuelAutomation) {
+      if (typeof fuelAutomation !== 'object' || fuelAutomation === null || Array.isArray(fuelAutomation)) {
+        throw new ApiError(400, 'fuelAutomation must be an object');
+      }
+      for (const key of Object.keys(fuelAutomation)) {
+        if (!FUEL_AUTOMATION_KEYS.includes(key as keyof IFuelAutomationConfig)) {
+          throw new ApiError(400, `Unknown fuelAutomation key: ${key}`);
+        }
+        if (typeof fuelAutomation[key] !== 'boolean') {
+          throw new ApiError(400, `fuelAutomation.${key} must be a boolean`);
+        }
+      }
     }
 
     if (hasStartColumns) {
@@ -1270,6 +1289,12 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         : (existing.superManagerStations || []),
       autoDownloadDOPdf: hasAutoDownloadDO ? autoDownloadDOPdf : (existing.autoDownloadDOPdf ?? true),
       autoDownloadLPOPdf: hasAutoDownloadLPO ? autoDownloadLPOPdf : (existing.autoDownloadLPOPdf ?? true),
+      // Merge: defaults < stored < incoming partial. Only known keys survive validation above.
+      fuelAutomation: {
+        ...DEFAULT_FUEL_AUTOMATION,
+        ...(existing.fuelAutomation || {}),
+        ...(hasFuelAutomation ? fuelAutomation : {}),
+      },
     };
 
     if (!config) {
@@ -1292,6 +1317,10 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     if (hasSmStations) detailParts.push(`super-manager stations [${nextJourneyConfig.superManagerStations.join(', ')}]`);
     if (hasAutoDownloadDO) detailParts.push(`autoDownloadDOPdf=${nextJourneyConfig.autoDownloadDOPdf}`);
     if (hasAutoDownloadLPO) detailParts.push(`autoDownloadLPOPdf=${nextJourneyConfig.autoDownloadLPOPdf}`);
+    if (hasFuelAutomation) {
+      const changed = Object.keys(fuelAutomation).map((k) => `${k}=${fuelAutomation[k]}`).join(', ');
+      detailParts.push(`fuelAutomation {${changed}}`);
+    }
     logger.info(`Journey config updated by ${req.user?.username}: ${detailParts.join('; ')}`);
 
     await AuditService.log({
@@ -1319,6 +1348,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         superManagerStations: nextJourneyConfig.superManagerStations,
         autoDownloadDOPdf: nextJourneyConfig.autoDownloadDOPdf,
         autoDownloadLPOPdf: nextJourneyConfig.autoDownloadLPOPdf,
+        fuelAutomation: nextJourneyConfig.fuelAutomation,
       },
     });
   } catch (error: any) {

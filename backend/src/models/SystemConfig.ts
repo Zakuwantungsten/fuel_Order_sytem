@@ -48,6 +48,22 @@ export interface IYardFuelTimeLimitConfig {
   };
 }
 
+// Fuel-record automation toggles.
+// Each flag controls one automatic side-effect that mutates fuel records when an
+// LPO or DO is created/edited/cancelled. When a flag is OFF the originating
+// LPO/DO operation still completes, but the fuel-record mutation is skipped and an
+// audit breadcrumb is written so staff can reconcile fuel records manually.
+// All default to `true` so existing behaviour is preserved on deploy.
+export interface IFuelAutomationConfig {
+  lpoCreateDeduct: boolean;   // LPO creation deducts fuel from the matched record
+  lpoCancelRevert: boolean;   // LPO entry cancellation/removal reverts the deduction
+  lpoEditAdjust: boolean;     // LPO entry liters edit re-adjusts the fuel record
+  doImportCreate: boolean;    // Import DO creates a new going-journey fuel record
+  doExportUpdate: boolean;    // Export DO updates the matched going record's return leg
+  doAmendCascade: boolean;    // DO amendment (truck/destination/loadingPoint) recalcs the fuel record
+  doCancelCascade: boolean;   // DO cancellation cancels/reverts the linked fuel record
+}
+
 // Journey Configuration
 // Defines which fuel "going" columns, when filled on a QUEUED journey, signal that
 // the truck has physically started that journey — which auto-completes the truck's
@@ -61,7 +77,20 @@ export interface IJourneyConfig {
   autoDownloadDOPdf?: boolean;
   // Controls whether PDF is auto-downloaded after LPO "Create and Forward".
   autoDownloadLPOPdf?: boolean;
+  // Per-operation fuel-record automation switches (see IFuelAutomationConfig).
+  fuelAutomation?: IFuelAutomationConfig;
 }
+
+// Canonical default for the fuel-automation flags (all enabled).
+export const DEFAULT_FUEL_AUTOMATION: IFuelAutomationConfig = {
+  lpoCreateDeduct: true,
+  lpoCancelRevert: true,
+  lpoEditAdjust: true,
+  doImportCreate: true,
+  doExportUpdate: true,
+  doAmendCascade: true,
+  doCancelCascade: true,
+};
 
 // Standard Allocations
 export interface IStandardAllocations {
@@ -314,6 +343,15 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       autoDownloadLPOPdf: {
         type: Boolean,
         default: true,
+      },
+      fuelAutomation: {
+        lpoCreateDeduct: { type: Boolean, default: true },
+        lpoCancelRevert: { type: Boolean, default: true },
+        lpoEditAdjust: { type: Boolean, default: true },
+        doImportCreate: { type: Boolean, default: true },
+        doExportUpdate: { type: Boolean, default: true },
+        doAmendCascade: { type: Boolean, default: true },
+        doCancelCascade: { type: Boolean, default: true },
       },
     },
     yardFuelTimeLimit: {

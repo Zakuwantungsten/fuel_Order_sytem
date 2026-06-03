@@ -14,7 +14,7 @@
  */
 import mongoose from 'mongoose';
 import { FuelRecord } from '../models';
-import { SystemConfig } from '../models/SystemConfig';
+import { SystemConfig, IFuelAutomationConfig, DEFAULT_FUEL_AUTOMATION } from '../models/SystemConfig';
 import { emitDataChange } from './websocket';
 import { logger } from '../utils';
 
@@ -42,10 +42,54 @@ let _startColumnsCache: string[] | null = null;
 let _cacheUpdatedAt = 0;
 const CACHE_TTL_MS = 30000;
 
+// Separate short-lived cache for the fuel-automation flags. Read inside the hot
+// LPO/DO bulk loops, so it must avoid an N+1 DB hit per entry. Invalidated together
+// with the start-columns cache whenever journey_config is saved.
+let _fuelAutomationCache: IFuelAutomationConfig | null = null;
+let _fuelAutomationCacheUpdatedAt = 0;
+
 /** Drop the cache so the next read reflects a freshly-saved config. */
 export function invalidateJourneyConfigCache(): void {
   _startColumnsCache = null;
   _cacheUpdatedAt = 0;
+  _fuelAutomationCache = null;
+  _fuelAutomationCacheUpdatedAt = 0;
+}
+
+/**
+ * Read the per-operation fuel-record automation flags (cached, 30s TTL). Any
+ * missing flag falls back to `true` (enabled) so a partially-written config never
+ * silently disables automation. Never throws — on error returns all-enabled
+ * defaults so a config read failure can't block LPO/DO operations.
+ */
+export async function getFuelAutomationFlags(): Promise<IFuelAutomationConfig> {
+  const now = Date.now();
+  if (_fuelAutomationCache && now - _fuelAutomationCacheUpdatedAt < CACHE_TTL_MS) {
+    return _fuelAutomationCache;
+  }
+
+  try {
+    const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false })
+      .select('journeyConfig.fuelAutomation')
+      .lean();
+    const stored = (cfg?.journeyConfig?.fuelAutomation || {}) as Partial<IFuelAutomationConfig>;
+    // Merge over defaults so unset keys stay enabled; coerce only explicit `false`.
+    const flags: IFuelAutomationConfig = {
+      lpoCreateDeduct: stored.lpoCreateDeduct !== false,
+      lpoCancelRevert: stored.lpoCancelRevert !== false,
+      lpoEditAdjust: stored.lpoEditAdjust !== false,
+      doImportCreate: stored.doImportCreate !== false,
+      doExportUpdate: stored.doExportUpdate !== false,
+      doAmendCascade: stored.doAmendCascade !== false,
+      doCancelCascade: stored.doCancelCascade !== false,
+    };
+    _fuelAutomationCache = flags;
+    _fuelAutomationCacheUpdatedAt = now;
+    return flags;
+  } catch (error: any) {
+    logger.error(`Failed to load fuel-automation flags, using all-enabled defaults: ${error.message}`);
+    return { ...DEFAULT_FUEL_AUTOMATION };
+  }
 }
 
 /** Read the configured start columns (cached). Falls back to defaults. */

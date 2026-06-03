@@ -4,9 +4,7 @@ import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
 import { DeliveryOrder } from '../types';
-import { fuelRecordsAPI, deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, adminAPI } from '../services/api';
-import fuelRecordService from '../services/fuelRecordService';
-import { configService } from '../services/configService';
+import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
 import DODetailModal from '../components/DODetailModal';
 import DOForm from '../components/DOForm';
 import BulkDOForm from '../components/BulkDOForm';
@@ -17,8 +15,8 @@ import AmendedDOsModal from '../components/AmendedDOsModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
-import { useTruckBatches, getExtraFuelFromBatches } from '../hooks/useTruckBatches';
-import { useRoutes, getTotalLitersFromRoutes } from '../hooks/useRoutes';
+import { useTruckBatches } from '../hooks/useTruckBatches';
+import { useRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
 import ConflictModal from '../components/ConflictModal';
@@ -732,25 +730,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           }
         }
       } else {
-        // Create new DO
+        // Create new DO. The backend creates/updates the linked fuel record
+        // server-side (IMPORT → new going-journey record, EXPORT → return-leg
+        // update), gated by the Journey Config fuel-automation toggles. SDO orders
+        // are standalone and never touch fuel records. Nothing to do client-side.
         console.log('=== CREATE MODE ===');
         console.log('Calling deliveryOrdersAPI.create with:', orderData);
         savedOrder = await deliveryOrdersAPI.create(orderData);
         console.log('API returned saved order:', savedOrder);
-        
-        // Handle fuel record creation/update ONLY for DO type (not SDO)
-        // SDO orders are standalone and don't interact with fuel records
-        if (savedOrder.doType === 'DO') {
-          if (savedOrder.importOrExport === 'IMPORT') {
-            // IMPORT = Going journey = Create new fuel record
-            await handleCreateFuelRecordForImport(savedOrder);
-          } else if (savedOrder.importOrExport === 'EXPORT') {
-            // EXPORT = Return journey = Update existing fuel record
-            await handleUpdateFuelRecordForExport(savedOrder);
-          }
-        } else {
-          console.log(`SDO ${savedOrder.doNumber} created - skipping fuel record operations`);
-        }
 
         // Reset month filter to current month so the newly created DO is visible
         const now = new Date();
@@ -828,219 +815,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       alert(errorMessage);
     } finally {
       setIsCancelling(false);
-    }
-  };
-
-  const handleCreateFuelRecordForImport = async (deliveryOrder: DeliveryOrder) => {
-    try {
-      console.log('  → Generating fuel record for DO:', deliveryOrder.doNumber);
-      
-      // Check if truck already has an open fuel record (without returnDo)
-      // This validation only applies to IMPORT DOs (going journey)
-      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
-      const allRecords = response.data;
-      const activeRecord = allRecords.find(
-        (record: any) => record.truckNo === deliveryOrder.truckNo && record.journeyStatus === 'active'
-      );
-      
-      if (activeRecord && !activeRecord.returnDo) {
-        // Show info message instead of blocking - journey will be queued
-        const queuedCount = allRecords.filter(
-          (record: any) => record.truckNo === deliveryOrder.truckNo && record.journeyStatus === 'queued'
-        ).length;
-        
-        const position = queuedCount + 1;
-        const message = `ℹ️ Truck ${deliveryOrder.truckNo} has an active journey (DO: ${activeRecord.goingDo}). This new journey will be queued (position #${position}) and will automatically activate when the current journey completes.`;
-        console.log(message);
-        // Show alert but don't block
-        if (confirm(message + '\n\nDo you want to proceed with creating this queued journey?')) {
-          // Continue with fuel record creation - backend will handle queuing
-        } else {
-          throw new Error('Journey creation cancelled by user');
-        }
-      }
-      
-      // Always fetch fresh routes and truck-batch data from the server at the
-      // moment of creation.  The React Query cache has a 5-minute stale time,
-      // so it may not reflect routes/batches added or removed since page load.
-      // A false-positive match here would create the fuel record with isLocked:false
-      // and silently skip the notification — which is exactly the reported bug.
-      const [freshRoutes, freshBatches] = await Promise.all([
-        configService.getRoutes(true), // forceRefresh=true bypasses the service cache
-        adminAPI.getTruckBatches(),    // always a live API call
-      ]);
-
-      // Get total liters from API data (NOT localStorage)
-      const destinationMatch = getTotalLitersFromRoutes(freshRoutes, deliveryOrder.destination);
-      let totalLiters: number | null = destinationMatch.matched ? destinationMatch.liters : null;
-      let missingTotalLiters = !destinationMatch.matched;
-      
-      console.log(`  → POL: ${deliveryOrder.loadingPoint || 'N/A'}, Destination: ${deliveryOrder.destination}`);
-      console.log(`  → Match Type: ${destinationMatch.matchType}`);
-      
-      if (missingTotalLiters) {
-        console.log(`  ⚠️ Route "${deliveryOrder.destination}" not configured - will notify admin`);
-      } else {
-        console.log(`  → Total Liters: ${totalLiters}L`);
-      }
-      
-      // Check truck batch configuration for extra fuel from API data (NOT localStorage)
-      // Pass destination to support destination-based fuel rules
-      const truckBatchInfo = getExtraFuelFromBatches(
-        deliveryOrder.truckNo,
-        freshBatches,
-        deliveryOrder.destination
-      );
-      let extraFuel: number | null = truckBatchInfo.matched ? truckBatchInfo.extraFuel : null;
-      let missingExtraFuel = !truckBatchInfo.matched && truckBatchInfo.truckSuffix !== '';
-      
-      console.log(`  → Truck: ${deliveryOrder.truckNo}, Suffix: ${truckBatchInfo.truckSuffix.toUpperCase()}`);
-      
-      if (missingExtraFuel) {
-        console.log(`  ⚠️ Truck suffix "${truckBatchInfo.truckSuffix}" not configured - will notify admin`);
-      } else {
-        const overrideInfo = truckBatchInfo.destinationOverride 
-          ? ` (destination override for ${deliveryOrder.destination})` 
-          : ` (${truckBatchInfo.batchName})`;
-        console.log(`  → Extra fuel: ${extraFuel}L${overrideInfo}`);
-      }
-      
-      // Log info message if any configuration is missing (no alert in bulk mode)
-      if (missingTotalLiters || missingExtraFuel) {
-        console.log('  ⚠️ Missing configuration detected:');
-        if (missingTotalLiters) {
-          console.log(`  - Route "${deliveryOrder.destination}" needs total liters`);
-        }
-        if (missingExtraFuel) {
-          console.log(`  - Truck suffix "${truckBatchInfo.truckSuffix.toUpperCase()}" needs batch assignment`);
-        }
-        console.log('  → Fuel record will be created but LOCKED until admin configures these values');
-      }
-      
-      // For now, use default loading point. Later, this can come from a configuration dialog
-      const loadingPoint: 'DAR_YARD' | 'KISARAWE' | 'DAR_STATION' = 'DAR_YARD';
-      console.log('  → Loading point:', loadingPoint);
-      
-      // Generate fuel record (checkpoints will be empty until LPOs are created)
-      const { fuelRecord, lposToGenerate, isLocked, missingFields } = fuelRecordService.createFuelRecordFromDO(
-        deliveryOrder,
-        loadingPoint,
-        totalLiters,
-        extraFuel
-      );
-      
-      console.log('  → Fuel record to create:', JSON.stringify(fuelRecord, null, 2));
-      console.log('  → Is Locked:', isLocked);
-      console.log('  → Missing Fields:', missingFields);
-      console.log('  → LPOs to generate:', lposToGenerate.length);
-      
-      // Create the fuel record (even if locked)
-      const createdRecord = await fuelRecordsAPI.create(fuelRecord);
-      console.log('  ✓ Created fuel record with ID:', createdRecord.id);
-      
-      if (isLocked) {
-        console.log(`  🔒 Fuel record LOCKED - pending admin configuration for: ${missingFields.join(', ')}`);
-      }
-      
-      // Note: LPOs will be created manually as fuel is ordered, not automatically
-      if (lposToGenerate.length > 0) {
-        console.log(`  → ${lposToGenerate.length} LPOs can be generated when fuel is ordered`);
-      } else {
-        console.log('  → Fuel record created with empty checkpoints (ready for fuel orders)');
-      }
-      
-      console.log(`  ✓✓ Fuel record created successfully for DO-${deliveryOrder.doNumber}`);
-    } catch (error: any) {
-      console.error('  ✗ Failed to create fuel record:', error);
-      console.error('  ✗ Error details:', error.response?.data);
-      throw error; // Re-throw to be caught by parent
-    }
-  };
-
-  const handleUpdateFuelRecordForExport = async (deliveryOrder: DeliveryOrder) => {
-    try {
-      // Find the matching going record for this truck
-      const response = await fuelRecordsAPI.getAll({ limit: 10000 });
-      const allRecords = response.data;
-      const matchingRecord = fuelRecordService.findMatchingGoingRecord(
-        deliveryOrder.truckNo,
-        allRecords
-      );
-      
-      if (!matchingRecord) {
-        console.warn('No matching going record found for truck:', deliveryOrder.truckNo);
-        
-        // Create notification for admin about unlinked EXPORT DO
-        try {
-          const doId = deliveryOrder.id || (deliveryOrder as any)._id;
-          if (doId) {
-            await deliveryOrdersAPI.notifyUnlinkedExport({
-              deliveryOrderId: String(doId),
-              doNumber: deliveryOrder.doNumber,
-              truckNo: deliveryOrder.truckNo,
-              destination: deliveryOrder.destination,
-              loadingPoint: deliveryOrder.loadingPoint,
-            });
-            console.log('✓ Notification created for unlinked EXPORT DO');
-          }
-        } catch (notifyError) {
-          console.error('Failed to create notification for unlinked DO:', notifyError);
-        }
-        
-        alert(`⚠️ Warning: No fuel record found for truck ${deliveryOrder.truckNo}.\n\nReturn DO-${deliveryOrder.doNumber} has been saved, but could not be linked to a fuel record.\n\nA notification has been created. Please check the truck number - if incorrect, edit the DO and it will attempt to re-link automatically.`);
-        return;
-      }
-      
-      // Use the service function to properly update returnDo, from, and to fields
-      // This now includes fuel difference calculation logic
-      const { updatedRecord, additionalFuelInfo } = await fuelRecordService.updateFuelRecordWithReturnDO(
-        matchingRecord,
-        deliveryOrder
-      );
-      
-      // Update the fuel record with proper from/to reversal
-      // MongoDB returns _id but we need to check for both id and _id
-      const recordId = matchingRecord.id || (matchingRecord as any)._id;
-      
-      if (!recordId) {
-        console.error('❌ No ID found on fuel record:', matchingRecord);
-        throw new Error('Fuel record has no ID');
-      }
-      
-      console.log('→ Updating fuel record ID:', recordId);
-      await fuelRecordsAPI.update(recordId, updatedRecord);
-      console.log('✓ Updated fuel record with return DO:', deliveryOrder.doNumber);
-      console.log('  - Updated from:', updatedRecord.from);
-      console.log('  - Updated to:', updatedRecord.to);
-      console.log('  - Return DO:', updatedRecord.returnDo);
-      
-      // Display fuel information
-      if (additionalFuelInfo) {
-        const messages = [];
-        
-        // Show export route liters that were added
-        if (additionalFuelInfo.exportRouteLiters > 0) {
-          messages.push(`✓ Added export route fuel: +${additionalFuelInfo.exportRouteLiters}L\n` +
-            `  Route: ${additionalFuelInfo.returnLoadingPoint} → ${additionalFuelInfo.finalDestination}`);
-        }
-        
-        // Note: All fuel extras are now configured via database RouteConfig
-        
-        // Show total update
-        messages.push(`\nTotal Liters Updated:\n` +
-          `  Before: ${additionalFuelInfo.originalTotalLiters}L\n` +
-          `  Added: +${additionalFuelInfo.totalAdditionalFuel}L\n` +
-          `  After: ${additionalFuelInfo.newTotalLiters}L`);
-        
-        // Show success message
-        const fullMessage = `✓ Fuel record updated with return DO-${deliveryOrder.doNumber}\n\n` + messages.join('\n\n');
-        alert(fullMessage);
-      } else {
-        alert(`Fuel record updated with return DO-${deliveryOrder.doNumber}`);
-      }
-    } catch (error) {
-      console.error('❌ Failed to update fuel record:', error);
-      alert('Delivery order saved, but fuel record update failed. Please update manually.');
     }
   };
 

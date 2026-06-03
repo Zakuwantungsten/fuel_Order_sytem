@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Route, Check, Save, RotateCcw, Loader2, Info, Flag, Fuel, Clock, Gauge, Pencil, X, FileDown } from 'lucide-react';
+import { Route, Check, Save, RotateCcw, Loader2, Info, Flag, Fuel, Clock, Gauge, Pencil, X, FileDown, Workflow, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { configAPI, JourneyConfig as JourneyConfigData, StandardAllocations, YardFuelTimeLimitConfig } from '../services/api';
+import { configAPI, JourneyConfig as JourneyConfigData, StandardAllocations, YardFuelTimeLimitConfig, FuelAutomationConfig } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 const COLUMN_LABELS: Record<string, string> = {
@@ -76,7 +76,7 @@ export default function JourneyConfig() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="max-w-7xl mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-sm flex-shrink-0">
@@ -98,10 +98,13 @@ export default function JourneyConfig() {
         </p>
       </div>
 
-      {/* Row 1: Start Columns (left, wider) + Super Manager Stations (right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        {/* Start Columns — takes 3/5 */}
-        <div className="lg:col-span-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm flex flex-col">
+      {/* Masonry: each card flows top-to-bottom down a column, then wraps to the
+          next column — fills vertical space first, then horizontal as the viewport
+          widens. Cards keep their natural height (no equal-height stretching), so
+          short cards no longer leave dead space below them. */}
+      <div className="columns-1 lg:columns-2 gap-4 [&>*]:mb-4 [&>*]:break-inside-avoid">
+        {/* Start columns */}
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm flex flex-col">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
             <Flag className="w-4 h-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
             <h2 className="font-medium text-sm text-gray-900 dark:text-gray-100">Start columns</h2>
@@ -183,19 +186,13 @@ export default function JourneyConfig() {
           </div>
         </div>
 
-        {/* Super Manager Stations — takes 2/5 */}
-        <div className="lg:col-span-2">
-          <SuperManagerStationsCard />
-        </div>
-      </div>
-
-      {/* Row 2: Yard Time Limit (left) + PDF Download Settings (right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SuperManagerStationsCard />
         <YardTimeLimitCard />
         <PdfDownloadSettingsCard />
+        <FuelAutomationCard />
       </div>
 
-      {/* Row 3: Standard Allocations — full width */}
+      {/* Standard Allocations — full width (its multi-column number grid needs the room) */}
       <StandardAllocationsCard />
     </div>
   );
@@ -636,6 +633,147 @@ function StandardAllocationsCard() {
   );
 }
 
+// ── Fuel Record Automation ───────────────────────────────────────────────────
+
+const FUEL_AUTOMATION_DEFAULTS: FuelAutomationConfig = {
+  lpoCreateDeduct: true,
+  lpoCancelRevert: true,
+  lpoEditAdjust: true,
+  doImportCreate: true,
+  doExportUpdate: true,
+  doAmendCascade: true,
+  doCancelCascade: true,
+};
+
+const FUEL_AUTOMATION_GROUPS: {
+  title: string;
+  rows: { key: keyof FuelAutomationConfig; label: string; sub: string }[];
+}[] = [
+  {
+    title: 'LPO → Fuel record',
+    rows: [
+      { key: 'lpoCreateDeduct', label: 'Deduct on LPO creation', sub: 'When an LPO is created, deduct its liters from the matched fuel record.' },
+      { key: 'lpoCancelRevert', label: 'Revert on LPO cancellation', sub: 'When an LPO entry is cancelled/restored, add the liters back / re-deduct.' },
+      { key: 'lpoEditAdjust', label: 'Re-adjust on LPO edit', sub: 'When LPO liters change, an entry is removed, added, or converted, re-balance the fuel record.' },
+    ],
+  },
+  {
+    title: 'DO → Fuel record',
+    rows: [
+      { key: 'doImportCreate', label: 'Create on import DO', sub: 'An IMPORT delivery order creates a new going-journey fuel record.' },
+      { key: 'doExportUpdate', label: 'Update on export DO', sub: 'An EXPORT delivery order fills the matched going record’s return leg.' },
+      { key: 'doAmendCascade', label: 'Cascade DO amendments', sub: 'Truck / destination / loading-point edits recalculate the linked fuel record.' },
+      { key: 'doCancelCascade', label: 'Cascade DO cancellation', sub: 'Cancelling a DO cancels or reverts its linked fuel record.' },
+    ],
+  },
+];
+
+function FuelAutomationCard() {
+  const [flags, setFlags] = useState<FuelAutomationConfig>(FUEL_AUTOMATION_DEFAULTS);
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<keyof FuelAutomationConfig | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const cfg = await configAPI.getJourneyConfig();
+      setFlags({ ...FUEL_AUTOMATION_DEFAULTS, ...(cfg.fuelAutomation || {}) });
+    } catch {
+      toast.error('Failed to load fuel automation settings');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeSync('journey_config', load, 'rt-fuel-automation');
+
+  const toggle = async (key: keyof FuelAutomationConfig, value: boolean) => {
+    if (savingKey) return;
+    const prev = flags[key];
+    setFlags((f) => ({ ...f, [key]: value }));
+    setSavingKey(key);
+    try {
+      const cfg = await configAPI.updateFuelAutomation({ [key]: value });
+      if (cfg.fuelAutomation) setFlags({ ...FUEL_AUTOMATION_DEFAULTS, ...cfg.fuelAutomation });
+      toast.success(`${value ? 'Enabled' : 'Disabled'} — ${String(key)}`);
+    } catch {
+      setFlags((f) => ({ ...f, [key]: prev }));
+      toast.error('Failed to update fuel automation');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const anyOff = (Object.keys(FUEL_AUTOMATION_DEFAULTS) as (keyof FuelAutomationConfig)[]).some((k) => !flags[k]);
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+        <Workflow className="w-4 h-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+        <h2 className="font-medium text-sm text-gray-900 dark:text-gray-100">Fuel record automation</h2>
+      </div>
+
+      <div className="px-4 py-3 space-y-3">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Control the automatic fuel-record side-effects of LPO and DO operations. Turn one off to manage that part of fuel records manually. The originating LPO/DO still saves; only the fuel-record change is skipped (and logged to the audit trail).
+        </p>
+
+        {anyOff && !loading && (
+          <div className="flex gap-2 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-[11px] text-amber-800/90 dark:text-amber-200/80 leading-relaxed">
+              One or more automations are off. While off, fuel records are <strong>not</strong> kept in sync and changes are <strong>not</strong> replayed when you turn them back on — reconcile affected fuel records manually.
+            </p>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-14 rounded-lg bg-gray-100 dark:bg-gray-700/50 animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {FUEL_AUTOMATION_GROUPS.map((group) => (
+              <div key={group.title}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{group.title}</span>
+                  <span className="h-px flex-1 bg-gray-100 dark:bg-gray-700" />
+                </div>
+                <div className="space-y-2">
+                  {group.rows.map(({ key, label, sub }) => {
+                    const value = flags[key];
+                    return (
+                      <div
+                        key={key}
+                        className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+                          value
+                            ? 'border-primary-200 dark:border-primary-800/60 bg-primary-50/50 dark:bg-primary-900/10'
+                            : 'border-amber-200 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-900/10'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className={`text-xs font-medium ${value ? 'text-primary-900 dark:text-primary-100' : 'text-amber-900 dark:text-amber-200'}`}>{label}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{sub}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+                          <span className={`text-[10px] font-semibold ${value ? 'text-primary-600 dark:text-primary-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                            {value ? 'ON' : 'OFF'}
+                          </span>
+                          <Switch checked={value} onChange={(v) => toggle(key, v)} disabled={savingKey !== null} label={label} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Super Manager Station Access ─────────────────────────────────────────────
 
 function SuperManagerStationsCard() {
@@ -694,7 +832,7 @@ function SuperManagerStationsCard() {
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm flex flex-col h-full">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm flex flex-col">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
         <Fuel className="w-4 h-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
         <h2 className="font-medium text-sm text-gray-900 dark:text-gray-100">Super Manager stations</h2>

@@ -321,22 +321,9 @@ describe('Delivery Order API Integration Tests', () => {
     });
   });
 
-  describe('DELETE /api/delivery-orders/:id', () => {
-    it('should soft delete a delivery order', async () => {
-      const order = await createTestDeliveryOrder({ doNumber: 'DO-DELETE-001' });
-
-      const response = await request(app)
-        .delete(`/api/delivery-orders/${order._id}`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
-
-      expect(response.body.success).toBe(true);
-
-      // Verify soft delete
-      const deletedOrder = await DeliveryOrder.findById(order._id);
-      expect(deletedOrder!.isDeleted).toBe(true);
-    });
-  });
+  // NOTE: Delivery orders cannot be deleted (business rule) — no DELETE endpoint.
+  // They are cancelled via POST /api/delivery-orders/:id/cancel, which preserves
+  // the record. The cancellation flow is covered by its own tests.
 
   describe('GET /api/delivery-orders/by-do/:doNumber', () => {
     it('should find delivery order by DO number', async () => {

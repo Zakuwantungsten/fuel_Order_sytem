@@ -71,14 +71,8 @@ router.put(
   asyncHandler(lpoSummaryController.updateLPOSummary)
 );
 
-// Delete route - per frontend LPOS DELETE permissions (super_admin, admin, boss only)
-router.delete(
-  '/:id',
-  commonValidation.mongoId,
-  authorize('super_admin', 'admin', 'boss'),
-  validate,
-  asyncHandler(lpoSummaryController.deleteLPOSummary)
-);
+// NOTE: LPO documents cannot be deleted — business rule. They are cancelled
+// (per-entry isCancelled) instead, which preserves the record. No DELETE route.
 
 // Legacy workbook sheet management routes (backward compatibility)
 router.post(
@@ -95,12 +89,8 @@ router.put(
   asyncHandler(lpoSummaryController.updateSheetInWorkbook)
 );
 
-router.delete(
-  '/:workbookId/sheets/:sheetId',
-  authorize('super_admin', 'admin', 'boss'),
-  validate,
-  asyncHandler(lpoSummaryController.deleteSheetFromWorkbook)
-);
+// NOTE: No sheet-delete route — deleting a workbook sheet is deleting an LPO
+// document, which is disallowed. Sheets are cancelled, not deleted.
 
 // Edit lock routes for LPO Summary documents (same roles as update)
 const lpoSummaryLock = createEditLockHandlers(LPOSummary, 'lpo_documents');

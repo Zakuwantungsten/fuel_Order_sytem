@@ -87,15 +87,7 @@ describe('API Service', () => {
       expect(response.data.data.destination).toBe('NEW DESTINATION');
     });
 
-    it('should delete a delivery order', async () => {
-      mockedAxios.delete.mockResolvedValueOnce({
-        data: { success: true }
-      });
-
-      const response = await mockedAxios.delete('/delivery-orders/1');
-      expect(mockedAxios.delete).toHaveBeenCalledWith('/delivery-orders/1');
-      expect(response.data.success).toBe(true);
-    });
+    // NOTE: delivery orders cannot be deleted (business rule) — only cancelled.
   });
 
   describe('fuelRecordsAPI', () => {

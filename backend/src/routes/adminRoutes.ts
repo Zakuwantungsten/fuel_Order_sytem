@@ -209,12 +209,19 @@ router.get('/journey-config', asyncHandler(adminController.getJourneyConfig));
 
 router.put(
   '/journey-config',
+  // These settings (start columns, super-manager stations, PDF auto-download,
+  // fuel automation) may only be CHANGED by admin/super_admin. 'boss' keeps
+  // read access via GET but cannot mutate them.
+  authorize('super_admin', 'admin'),
   [
-    // Partial updates allowed: startColumns and/or superManagerStations.
+    // Partial updates allowed: any subset of the fields below.
     body('startColumns').optional().isArray({ min: 1 }).withMessage('startColumns must be a non-empty array'),
     body('startColumns.*').optional().isString().withMessage('Each start column must be a string'),
     body('superManagerStations').optional().isArray().withMessage('superManagerStations must be an array'),
     body('superManagerStations.*').optional().isString().withMessage('Each station must be a string'),
+    body('autoDownloadDOPdf').optional().isBoolean().withMessage('autoDownloadDOPdf must be a boolean'),
+    body('autoDownloadLPOPdf').optional().isBoolean().withMessage('autoDownloadLPOPdf must be a boolean'),
+    body('fuelAutomation').optional().isObject().withMessage('fuelAutomation must be an object'),
   ],
   validate,
   asyncHandler(adminController.updateJourneyConfig)
