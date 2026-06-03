@@ -1,5 +1,4 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { apiClient } from '../api/client';
@@ -11,17 +10,15 @@ import { apiClient } from '../api/client';
  * build. This module is written so it safely no-ops in Expo Go (or anywhere a
  * token can't be obtained) and only registers a token when running in a real
  * build with an EAS projectId configured.
+ *
+ * IMPORTANT: `expo-notifications` is imported lazily (inside the functions
+ * below) rather than at the top of the module. Statically importing it runs an
+ * auto-registration side-effect that *throws* in Expo Go on SDK 53+, which
+ * would crash the app at startup before any of our guards run.
  */
 
-// Show banners/sounds when a push arrives while the app is foregrounded.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// True when running inside the Expo Go client (where remote push is unavailable).
+const isExpoGo = Constants.appOwnership === 'expo';
 
 function getProjectId(): string | undefined {
   return (
@@ -36,14 +33,28 @@ let registeredToken: string | null = null;
 /** Best-effort: obtain an Expo push token and register it with the backend. */
 export async function registerForPush(): Promise<void> {
   try {
-    if (!Device.isDevice) return; // simulators can't get push tokens
+    if (isExpoGo) return;          // remote push isn't supported in Expo Go
+    if (!Device.isDevice) return;  // simulators can't get push tokens
 
     const projectId = getProjectId();
     if (!projectId) {
-      // Expo Go / not yet `eas init`-ed — skip silently. Device push activates
+      // Not yet `eas init`-ed — skip silently. Device push activates
       // once a development build with a projectId is installed.
       return;
     }
+
+    // Lazy import: only loaded in a real build, never in Expo Go.
+    const Notifications = await import('expo-notifications');
+
+    // Show banners/sounds when a push arrives while the app is foregrounded.
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {

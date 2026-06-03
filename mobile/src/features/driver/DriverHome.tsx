@@ -197,37 +197,122 @@ export default function DriverHome() {
   function LpoCard({ entry }: { entry: DriverLpoEntry }) {
     const cancelled = entry.isCancelled;
     const amended = !cancelled && !!entry.amendedAt;
-    const accent = cancelled ? colors.danger : entry.isDriverAccount ? colors.warning : colors.primary;
+    const driverAc = entry.isDriverAccount && !cancelled;
     const sym = symbolFor(entry.station);
+
+    const stationColor = cancelled ? colors.textMuted : colors.text;
+    const dateLabel = entry.date ? new Date(entry.date).toLocaleDateString() : null;
+
     return (
-      <Pressable onPress={() => setSelected(entry)} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-        <Card accent={accent} style={{ marginBottom: spacing.sm }}>
-          <View style={styles.lpoTop}>
-            <Text style={{ fontSize: font.body, fontWeight: weight.bold, color: cancelled ? colors.textMuted : colors.text }}>{entry.station}</Text>
-            {cancelled ? <Tag label="CANCELLED" color={colors.textMuted} /> : null}
-            {amended ? <Tag label="AMENDED" color={colors.warning} /> : null}
-            {entry.isDriverAccount && !cancelled ? <Tag label="DRIVER A/C" color={colors.warning} /> : null}
+      <Pressable onPress={() => setSelected(entry)} style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}>
+        <Card style={{ marginBottom: spacing.sm, padding: 0, overflow: 'hidden' }}>
+          {/* Header: station (stands out) + amount */}
+          <View style={[styles.lpoHeader, { padding: spacing.md, paddingBottom: spacing.sm }]}>
+            <View style={[styles.inline, { gap: spacing.sm, flex: 1 }]}>
+              <View style={[styles.stationBadge, { backgroundColor: cancelled ? colors.surfaceAlt : colors.primaryMuted }]}>
+                <Ionicons name="business" size={18} color={cancelled ? colors.textMuted : colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.miniLabel, { color: colors.textMuted }]}>STATION</Text>
+                <Text numberOfLines={1} style={{ fontSize: font.h3, fontWeight: weight.heavy, color: stationColor }}>
+                  {entry.station}
+                </Text>
+              </View>
+            </View>
+            <View style={{ alignItems: 'flex-end', marginLeft: spacing.sm }}>
+              <Text style={[styles.miniLabel, { color: colors.textMuted }]}>LITERS</Text>
+              <View style={styles.litersWrap}>
+                <Text
+                  style={{
+                    fontSize: font.display,
+                    fontWeight: weight.heavy,
+                    lineHeight: font.display + 2,
+                    color: cancelled ? colors.textMuted : colors.text,
+                    textDecorationLine: cancelled ? 'line-through' : 'none',
+                  }}
+                >
+                  {entry.liters?.toLocaleString()}
+                </Text>
+                <Text style={{ fontSize: font.h3, fontWeight: weight.bold, color: colors.textMuted, marginBottom: 3 }}>L</Text>
+              </View>
+            </View>
           </View>
-          <Text
-            style={{
-              fontSize: font.body,
-              color: cancelled ? colors.textMuted : colors.text,
-              marginTop: spacing.xs,
-              textDecorationLine: cancelled ? 'line-through' : 'none',
-            }}
-          >
-            {entry.liters}L @ {entry.rate} ={' '}
-            <Text style={{ fontWeight: weight.bold }}>{sym} {entry.amount?.toLocaleString()}</Text>
-          </Text>
-          <Text style={{ fontSize: font.small, color: colors.textMuted, marginTop: 2 }}>
-            LPO: {entry.lpoNo || 'N/A'} • DO: {entry.doNo}
-          </Text>
-          <Text style={{ fontSize: font.small, color: colors.textMuted, marginTop: 2 }}>Dest: {entry.destination}</Text>
-          {entry.date ? (
-            <Text style={{ fontSize: font.tiny, color: colors.textMuted, marginTop: spacing.xs }}>
-              {new Date(entry.date).toLocaleDateString()}
-            </Text>
+
+          {/* Status tags */}
+          {(cancelled || amended || driverAc) && (
+            <View style={[styles.lpoTop, { paddingHorizontal: spacing.md, paddingBottom: spacing.sm }]}>
+              {cancelled ? <Tag label="CANCELLED" color={colors.danger} bg={colors.dangerMuted} /> : null}
+              {amended ? <Tag label="AMENDED" color={colors.warning} bg={colors.warningMuted} /> : null}
+              {driverAc ? <Tag label="DRIVER A/C" color={colors.warning} bg={colors.warningMuted} /> : null}
+            </View>
+          )}
+
+          {/* Contextual note: what changed / why cancelled */}
+          {amended && entry.originalLiters != null ? (
+            <View style={[styles.noteBox, { backgroundColor: colors.warningMuted, marginHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md }]}>
+              <Ionicons name="create-outline" size={15} color={colors.warning} />
+              <Text style={{ color: colors.warning, fontSize: font.small, marginLeft: 6, flex: 1 }}>
+                Amended{' '}
+                <Text style={{ fontWeight: weight.bold, textDecorationLine: 'line-through' }}>{entry.originalLiters.toLocaleString()}L</Text>
+                {' → '}
+                <Text style={{ fontWeight: weight.bold }}>{entry.liters.toLocaleString()}L</Text>
+              </Text>
+            </View>
           ) : null}
+          {cancelled ? (
+            <View style={[styles.noteBox, { backgroundColor: colors.dangerMuted, marginHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md }]}>
+              <Ionicons name="close-circle-outline" size={15} color={colors.danger} />
+              <Text style={{ color: colors.danger, fontSize: font.small, marginLeft: 6, flex: 1 }} numberOfLines={2}>
+                {entry.cancellationReason || 'This entry was cancelled.'}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* LPO + DO — the two identifiers that should stand out */}
+          <View style={[styles.idRow, { paddingHorizontal: spacing.md, gap: spacing.sm }]}>
+            <View style={[styles.idTile, { backgroundColor: colors.primaryMuted, borderRadius: radius.md }]}>
+              <View style={styles.inline}>
+                <Ionicons name="receipt-outline" size={13} color={colors.primary} />
+                <Text style={[styles.idLabel, { color: colors.primary }]}>LPO No.</Text>
+              </View>
+              <Text numberOfLines={1} style={{ fontSize: font.h3, fontWeight: weight.heavy, color: colors.primary, marginTop: 2 }}>
+                {entry.lpoNo || 'N/A'}
+              </Text>
+            </View>
+            <View style={[styles.idTile, { backgroundColor: colors.surfaceAlt, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }]}>
+              <View style={styles.inline}>
+                <Ionicons name="cube-outline" size={13} color={colors.text} />
+                <Text style={[styles.idLabel, { color: colors.textMuted }]}>DO No.</Text>
+              </View>
+              <Text numberOfLines={1} style={{ fontSize: font.h3, fontWeight: weight.bold, color: colors.text, marginTop: 2 }}>
+                {entry.doNo || 'N/A'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Footer: destination • liters • date */}
+          <View style={[styles.lpoFooter, { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginTop: spacing.sm, borderTopColor: colors.border }]}>
+            <View style={[styles.inline, { flex: 1 }]}>
+              <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+              <Text numberOfLines={1} style={{ fontSize: font.small, color: colors.textMuted, flex: 1 }}>
+                {entry.destination || 'N/A'}
+              </Text>
+            </View>
+            <View style={styles.inline}>
+              <Ionicons name="cash-outline" size={14} color={colors.textMuted} />
+              <Text
+                style={{
+                  fontSize: font.small,
+                  fontWeight: weight.semibold,
+                  color: cancelled ? colors.textMuted : colors.text,
+                  textDecorationLine: cancelled ? 'line-through' : 'none',
+                }}
+              >
+                {sym} {entry.amount?.toLocaleString()}
+              </Text>
+            </View>
+            {dateLabel ? <Text style={{ fontSize: font.tiny, color: colors.textMuted }}>{dateLabel}</Text> : null}
+          </View>
         </Card>
       </Pressable>
     );
@@ -250,4 +335,13 @@ const styles = StyleSheet.create({
   doDest: { fontSize: 12 },
   stats: { flexDirection: 'row' },
   lpoTop: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  lpoHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  stationBadge: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  miniLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginBottom: 1 },
+  litersWrap: { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
+  idRow: { flexDirection: 'row' },
+  idTile: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
+  idLabel: { fontSize: 11, fontWeight: '700', marginLeft: 4 },
+  lpoFooter: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  noteBox: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8 },
 });

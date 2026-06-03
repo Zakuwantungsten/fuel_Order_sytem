@@ -46,8 +46,12 @@ export function AppHeader({
     router.replace('/login');
   }
 
+  // Driver accounts have an encrypted `username`, so never surface it. Prefer a
+  // real name, then the truck number, before any generic fallback.
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+  const isDriver = user?.role === 'driver';
   const displayName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || 'User';
+    fullName || user?.truckNo || (isDriver ? 'Driver' : user?.username) || 'User';
 
   return (
     <>
