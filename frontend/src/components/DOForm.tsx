@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
-import { deliveryOrdersAPI } from '../services/api';
+import { deliveryOrdersAPI, configAPI } from '../services/api';
 import axios from 'axios';
 import { cleanDeliveryOrder, isCorruptedDriverName } from '../utils/dataCleanup';
 
@@ -56,6 +56,14 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [autoDownloadPdf, setAutoDownloadPdf] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    configAPI.getJourneyConfig()
+      .then((cfg) => setAutoDownloadPdf(cfg.autoDownloadDOPdf ?? true))
+      .catch(() => {/* keep default true */});
+  }, [isOpen]);
   const isEditMode = !!order;
 
   // Dropdown states
@@ -201,9 +209,10 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       console.log('onSave returned:', savedOrder);
       
       if (!order && savedOrder) {
-        // For new DOs, auto-download PDF then close
-        console.log('Auto-downloading PDF for new DO...');
-        await handleDownload(savedOrder as DeliveryOrder);
+        if (autoDownloadPdf) {
+          console.log('Auto-downloading PDF for new DO...');
+          await handleDownload(savedOrder as DeliveryOrder);
+        }
         onClose();
       } else {
         // For edits, just close

@@ -179,6 +179,14 @@ const userSchema = new Schema<IUserDocument>(
       type: Date,
       default: null,
     },
+    activationToken: {
+      type: String,
+      select: false,
+    },
+    activationTokenExpires: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,

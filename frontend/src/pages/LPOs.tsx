@@ -6,7 +6,7 @@ import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSq
 import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import type { LPOEntry, LPOSummary as LPOSummaryType } from '../types';
-import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI } from '../services/api';
+import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI, configAPI } from '../services/api';
 import LPODetailForm from '../components/LPODetailForm';
 import LPOWorkbook from '../components/LPOWorkbook';
 import LPOSummaryComponent from '../components/LPOSummary';
@@ -66,6 +66,13 @@ const LPOs = () => {
     } catch { /* ignore */ }
   }, [selectedYear]);
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
+  const [autoDownloadLPOPdf, setAutoDownloadLPOPdf] = useState(true);
+
+  useEffect(() => {
+    configAPI.getJourneyConfig()
+      .then((cfg) => setAutoDownloadLPOPdf(cfg.autoDownloadLPOPdf ?? true))
+      .catch(() => {/* keep default true */});
+  }, []);
   const [stationFilter, setStationFilter] = usePersistedState('lpo:stationFilter', '');
   const [statusFilter, setStatusFilter] = usePersistedState('lpo:statusFilter', 'all');
   const [dateFilter, setDateFilter] = usePersistedState('lpo:dateFilter', '');
@@ -818,28 +825,32 @@ const LPOs = () => {
       queryClient.invalidateQueries({ queryKey: lpoKeys.availableYears() });
       queryClient.invalidateQueries({ queryKey: lpoKeys.referEntries() });
 
-      // Auto-download PDF for the created LPO
-      const pdfToastId = toast.loading(`Preparing PDF — LPO ${createdLpo.lpoNo}...`, {
-        style: { background: '#0284c7', color: '#fff' },
-      });
-      try {
-        await downloadLPOPDF(createdLpo, undefined, user?.username);
-        toast.update(pdfToastId, {
-          render: `LPO ${createdLpo.lpoNo} created — PDF downloaded`,
-          type: 'success',
-          isLoading: false,
-          autoClose: 4000,
-          style: undefined,
+      // Auto-download PDF for the created LPO (only if enabled in config)
+      if (autoDownloadLPOPdf) {
+        const pdfToastId = toast.loading(`Preparing PDF — LPO ${createdLpo.lpoNo}...`, {
+          style: { background: '#0284c7', color: '#fff' },
         });
-      } catch (pdfErr: any) {
-        console.error('Error downloading PDF:', pdfErr);
-        toast.update(pdfToastId, {
-          render: `LPO ${createdLpo.lpoNo} created, but PDF download failed`,
-          type: 'warning',
-          isLoading: false,
-          autoClose: 6000,
-          style: undefined,
-        });
+        try {
+          await downloadLPOPDF(createdLpo, undefined, user?.username);
+          toast.update(pdfToastId, {
+            render: `LPO ${createdLpo.lpoNo} created — PDF downloaded`,
+            type: 'success',
+            isLoading: false,
+            autoClose: 4000,
+            style: undefined,
+          });
+        } catch (pdfErr: any) {
+          console.error('Error downloading PDF:', pdfErr);
+          toast.update(pdfToastId, {
+            render: `LPO ${createdLpo.lpoNo} created, but PDF download failed`,
+            type: 'warning',
+            isLoading: false,
+            autoClose: 6000,
+            style: undefined,
+          });
+        }
+      } else {
+        toast.success(`LPO ${createdLpo.lpoNo} created`);
       }
     } catch (error: any) {
       console.error('Error saving LPO document:', error);

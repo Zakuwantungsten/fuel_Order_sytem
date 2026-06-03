@@ -243,6 +243,10 @@ export interface IUser {
   pendingActivation?: boolean;
   /** When set, the temporary password issued at account creation / admin reset expires at this time */
   tempPasswordExpiresAt?: Date;
+  /** Hashed one-time activation token for magic-link onboarding (select: false in schema) */
+  activationToken?: string;
+  /** When the activation token expires */
+  activationTokenExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

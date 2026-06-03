@@ -1038,6 +1038,12 @@ export const authAPI = {
     const response = await apiClient.get('/auth/password-policy');
     return response.data.data;
   },
+
+  /** Activate account via one-time magic link token */
+  activateAccount: async (token: string, rememberMe?: boolean): Promise<any> => {
+    const response = await apiClient.post('/auth/activate-account', { token, rememberMe });
+    return response.data.data;
+  },
 };
 
 // Users Management API (Admin only)
@@ -1073,12 +1079,13 @@ export const usersAPI = {
     return response.data.data;
   },
 
-  create: async (data: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ user: User; emailSent: boolean; temporaryPassword?: string; message: string }> => {
+  create: async (data: Omit<User, 'id' | 'createdAt' | 'updatedAt'> & { provisioningMethod?: string; customPassword?: string }): Promise<{ user: User; emailSent: boolean; temporaryPassword?: string; provisioningMethod?: string; message: string }> => {
     const response = await apiClient.post('/users', data);
     return {
       user: response.data.data,
       emailSent: response.data.emailSent,
       temporaryPassword: response.data.temporaryPassword,
+      provisioningMethod: response.data.provisioningMethod,
       message: response.data.message,
     };
   },
@@ -1096,8 +1103,11 @@ export const usersAPI = {
     await apiClient.delete(`/users/${id}`);
   },
 
-  resetPassword: async (id: string | number): Promise<{ temporaryPassword?: string; emailSent: boolean }> => {
-    const response = await apiClient.post(`/users/${id}/reset-password`);
+  resetPassword: async (
+    id: string | number,
+    options?: { provisioningMethod?: 'temp_password' | 'email_link' | 'manual'; customPassword?: string }
+  ): Promise<{ temporaryPassword?: string; emailSent: boolean; provisioningMethod?: string }> => {
+    const response = await apiClient.post(`/users/${id}/reset-password`, options ?? {});
     return response.data.data;
   },
 
@@ -1414,6 +1424,10 @@ export interface JourneyConfig {
   selectableColumns?: string[];
   // Stations a super_manager may view (empty => default all-allowed)
   superManagerStations?: string[];
+  // Whether to auto-download PDF immediately after DO creation (single or bulk)
+  autoDownloadDOPdf?: boolean;
+  // Whether to auto-download PDF after LPO "Create and Forward"
+  autoDownloadLPOPdf?: boolean;
 }
 
 export const adminAPI = {
@@ -2005,6 +2019,12 @@ export const configAPI = {
   // Update only the super-manager allowed-stations list (partial journey-config update)
   updateSuperManagerStations: async (superManagerStations: string[]): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', { superManagerStations });
+    return response.data.data;
+  },
+
+  // Update PDF auto-download toggles (partial journey-config update)
+  updatePdfDownloadSettings: async (settings: { autoDownloadDOPdf?: boolean; autoDownloadLPOPdf?: boolean }): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', settings);
     return response.data.data;
   },
 };

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import { AuthState, AuthUser, AuthResponse, LoginCredentials } from '../types';
 import { getRolePermissions } from '../utils/permissions';
 import { authAPI } from '../services/api';
@@ -160,9 +160,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [state.user?.id]);
 
+  // Prevent React Strict Mode from running session restore twice. Unlike a
+  // closure `let`, a ref persists across the effect's double-invocation so
+  // only the first run proceeds and the second is a no-op.
+  const sessionRestoreRef = useRef(false);
+
   // Check for existing session on mount
   useEffect(() => {
-    let cancelled = false; // guard against React StrictMode double-invocation
+    if (sessionRestoreRef.current) return;
+    sessionRestoreRef.current = true;
+
     const checkExistingSession = async () => {
       try {
         const stored = sessionStorage.getItem('fuel_order_auth');
@@ -170,12 +177,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const authData = JSON.parse(stored);
 
           // If the stored session says the user must change their password,
-          // validate the token is still alive before trusting the stale data.
-          // This prevents the infinite ForcePasswordChange loop caused by an
-          // expired token left in sessionStorage.
+          // fetch fresh data from the DB to confirm — the flag may have been
+          // cleared already (password changed in another tab or session).
+          // Also validates that the token is still alive.
           if (authData.mustChangePassword) {
             try {
-              await authAPI.getCurrentUser();
+              const freshUser = await authAPI.getCurrentUser();
+              // Trust the authoritative DB value over the cached sessionStorage.
+              authData.mustChangePassword = freshUser.mustChangePassword ?? false;
+              if (!authData.mustChangePassword) {
+                // Persist the corrected value so subsequent restores are clean.
+                sessionStorage.setItem('fuel_order_auth', JSON.stringify(authData));
+              }
             } catch {
               // Token is invalid/expired — clear everything and show login.
               sessionStorage.removeItem('fuel_order_auth');
@@ -209,7 +222,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (hasRememberMe) {
             try {
               // POST /auth/refresh — cookie is sent automatically, no body needed
-              if (cancelled) return;
               const refreshResult = await authAPI.refreshToken();
               const newAccessToken = (refreshResult as any).accessToken || (refreshResult as any).token;
               if (!newAccessToken) throw new Error('No access token in refresh response');
@@ -260,15 +272,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     checkExistingSession();
 
-    return () => { cancelled = true; };
     // Load system settings to apply timezone, date format, and system name
     const loadSystemSettings = async () => {
       try {
-        // Check if user is authenticated first
         const authData = sessionStorage.getItem('fuel_order_auth');
         if (!authData) return;
 
-        // Apply cached system name for all roles immediately
         const cachedName = localStorage.getItem('fuel_order_system_name');
         if (cachedName) setSystemName(cachedName);
 
@@ -284,9 +293,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setSystemName(settings.general.systemName);
           }
         }
-      } catch (error) {
+      } catch {
         // Silently fail - keep defaults
-        console.log('Could not load system settings, using defaults');
       }
     };
 

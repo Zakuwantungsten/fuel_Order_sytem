@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, FileDown, Plus, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
-import { deliveryOrdersAPI } from '../services/api';
+import { deliveryOrdersAPI, configAPI } from '../services/api';
 import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
 
 interface BulkDOFormProps {
@@ -79,10 +79,18 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   const [bulkInput, setBulkInput] = useState('');
   const [parsedRows, setParsedRows] = useState<BulkDORow[]>([]);
   const [createdOrders, setCreatedOrders] = useState<Partial<DeliveryOrder>[]>([]);
-  
+  const [autoDownloadPdf, setAutoDownloadPdf] = useState(true);
+
   // Progress tracking state
   const [isCreating, setIsCreating] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    configAPI.getJourneyConfig()
+      .then((cfg) => setAutoDownloadPdf(cfg.autoDownloadDOPdf ?? true))
+      .catch(() => {/* keep default true */});
+  }, [isOpen]);
   
   // Dropdown states
   const [showCargoTypeDropdown, setShowCargoTypeDropdown] = useState(false);
@@ -340,30 +348,38 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       setCreatedOrders(result.createdOrders);
       setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Generating PDF...' });
       
-      // Automatically download PDF from backend - use only the successfully created orders
-      console.log('Starting PDF download from backend...');
-      try {
-        await downloadAllAsPDF(result.createdOrders);
-        console.log('✓ PDF downloaded successfully!');
-        
+      // Conditionally download PDF based on config setting
+      const orderTypeLabel = commonData.doType === 'SDO' ? 'special delivery orders (SDOs)' : 'delivery orders';
+      const additionalInfo = commonData.doType === 'SDO' ? '' : ' with fuel records and LPOs';
+
+      if (autoDownloadPdf) {
+        console.log('Starting PDF download from backend...');
+        try {
+          await downloadAllAsPDF(result.createdOrders);
+          console.log('✓ PDF downloaded successfully!');
+
+          setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Complete!' });
+          setIsCreating(false);
+
+          const successMsg = result.createdOrders.length === paddedOrders.length
+            ? `✓ Success!\n\nCreated ${result.createdOrders.length} ${orderTypeLabel}${additionalInfo}.\n\nPDF file has been downloaded to your Downloads folder.`
+            : `✓ Partially Complete\n\nCreated ${result.createdOrders.length} out of ${paddedOrders.length} ${orderTypeLabel}.\n\nPDF includes only successfully created orders.\n\nSee summary for skipped/failed orders.`;
+
+          alert(successMsg);
+        } catch (pdfError) {
+          console.error('PDF generation error:', pdfError);
+          setIsCreating(false);
+          alert(`Orders created successfully, but PDF download failed.\n\nYou can download the PDF again using the button below.`);
+        }
+      } else {
         setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Complete!' });
         setIsCreating(false);
-        
-        // Show success message with download confirmation - dynamic based on order type
-        const orderTypeLabel = commonData.doType === 'SDO' ? 'special delivery orders (SDOs)' : 'delivery orders';
-        const additionalInfo = commonData.doType === 'SDO' 
-          ? '' 
-          : ' with fuel records and LPOs';
-        
+
         const successMsg = result.createdOrders.length === paddedOrders.length
-          ? `✓ Success!\n\nCreated ${result.createdOrders.length} ${orderTypeLabel}${additionalInfo}.\n\nPDF file has been downloaded to your Downloads folder.`
-          : `✓ Partially Complete\n\nCreated ${result.createdOrders.length} out of ${paddedOrders.length} ${orderTypeLabel}.\n\nPDF includes only successfully created orders.\n\nSee summary for skipped/failed orders.`;
-        
+          ? `✓ Success!\n\nCreated ${result.createdOrders.length} ${orderTypeLabel}${additionalInfo}.`
+          : `✓ Partially Complete\n\nCreated ${result.createdOrders.length} out of ${paddedOrders.length} ${orderTypeLabel}.\n\nSee summary for skipped/failed orders.`;
+
         alert(successMsg);
-      } catch (pdfError) {
-        console.error('PDF generation error:', pdfError);
-        setIsCreating(false);
-        alert(`Orders created successfully, but PDF download failed.\n\nYou can download the PDF again using the button below.`);
       }
       
       // Don't close automatically - let user review and close manually

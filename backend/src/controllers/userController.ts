@@ -154,11 +154,24 @@ export const getUserById = async (req: AuthRequest, res: Response): Promise<void
  */
 export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { username, email, firstName, lastName, role, department, station, yard, truckNo } = req.body;
+    const {
+      username, email, firstName, lastName, role,
+      department, station, yard, truckNo,
+      // provisioningMethod:
+      //   'temp_password' (default) — generate random temp password, send via email
+      //   'email_link'             — send a one-time activation link, no password needed
+      //   'manual'                 — admin supplies the initial password on the spot
+      provisioningMethod = 'temp_password',
+      customPassword,
+    } = req.body;
 
     // Prevent admins from creating users with equal or higher privilege roles
     if (req.user?.role === 'admin' && (role === 'super_admin' || role === 'admin')) {
       throw new ApiError(403, 'Admins cannot create users with super_admin or admin roles');
+    }
+
+    if (provisioningMethod === 'manual' && (!customPassword || typeof customPassword !== 'string' || customPassword.length < 4)) {
+      throw new ApiError(400, 'A password of at least 4 characters is required for manual provisioning.');
     }
 
     // Format truck number to standard format
@@ -179,30 +192,46 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       }
     }
 
-    // Generate secure temporary password
-    const temporaryPassword = crypto.randomBytes(8).toString('hex'); // 16 character password
-
-    // Check whether credentials email is enabled in system settings
-    let sendCredentialsEmail = true; // default ON
-    let credentialsExpiryHours = 24; // default 24h
+    // Check system-config defaults (shared across all provisioning methods)
+    let sendCredentialsEmail = true;
+    let credentialsExpiryHours = 24;
     try {
       const sysConfig = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
       const notifSettings = sysConfig?.systemSettings?.notifications as any;
-      if (notifSettings?.sendCredentialsEmail === false) {
-        sendCredentialsEmail = false;
-      }
+      if (notifSettings?.sendCredentialsEmail === false) sendCredentialsEmail = false;
       if (typeof notifSettings?.credentialsExpiryHours === 'number') {
         credentialsExpiryHours = notifSettings.credentialsExpiryHours;
       }
     } catch {
-      // If config fetch fails, use defaults
+      // use defaults
     }
 
-    // Create new user
+    // Determine the initial password and any activation token
+    let initialPassword: string;
+    let rawActivationToken: string | undefined;
+    let hashedActivationToken: string | undefined;
+    let activationExpiresAt: Date | undefined;
+
+    if (provisioningMethod === 'email_link') {
+      // The initial password is a random placeholder — never exposed, never used.
+      // The user authenticates exclusively via the one-time activation link.
+      initialPassword = crypto.randomBytes(16).toString('hex');
+      rawActivationToken = crypto.randomBytes(32).toString('hex');
+      hashedActivationToken = crypto.createHash('sha256').update(rawActivationToken).digest('hex');
+      // Activation links expire after the same window as temp passwords (or 48h default)
+      const expiryHours = credentialsExpiryHours > 0 ? credentialsExpiryHours : 48;
+      activationExpiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
+    } else if (provisioningMethod === 'manual') {
+      initialPassword = customPassword as string;
+    } else {
+      // Default: temp_password
+      initialPassword = crypto.randomBytes(8).toString('hex');
+    }
+
     const user = await User.create({
       username,
       email,
-      password: temporaryPassword,
+      password: initialPassword,
       firstName,
       lastName,
       role: role || 'viewer',
@@ -215,62 +244,88 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       mustChangePassword: true,
       pendingActivation: true,
       createdBy: req.user?.username,
-      // Set passwordResetAt so the auto-clear in login knows this is a legitimate
-      // forced-change (not stale legacy data) and preserves the flag.
       passwordResetAt: new Date(),
-      // Expire the temporary credentials after the configured window (0 = never)
-      ...(credentialsExpiryHours > 0
-        ? { tempPasswordExpiresAt: new Date(Date.now() + credentialsExpiryHours * 60 * 60 * 1000) }
-        : {}),
+      ...(provisioningMethod === 'email_link'
+        ? { activationToken: hashedActivationToken, activationTokenExpires: activationExpiresAt }
+        : credentialsExpiryHours > 0
+          ? { tempPasswordExpiresAt: new Date(Date.now() + credentialsExpiryHours * 60 * 60 * 1000) }
+          : {}),
     });
 
-    // Send welcome email with credentials (unless disabled by admin)
+    // Send the appropriate email based on provisioning method
     let emailSent = false;
-    if (sendCredentialsEmail) {
+    const fullName = `${firstName} ${lastName}`;
+
+    if (provisioningMethod === 'email_link') {
+      // Always send the activation link regardless of sendCredentialsEmail toggle —
+      // without the link the user cannot activate their account at all.
+      try {
+        await emailService.sendActivationLinkEmail(
+          email,
+          fullName,
+          username,
+          rawActivationToken!,
+          activationExpiresAt!
+        );
+        emailSent = true;
+        logger.info(`Activation link email sent to ${email}`);
+      } catch (emailError: any) {
+        logger.error(`Failed to send activation link email to ${email}:`, emailError);
+      }
+    } else if (provisioningMethod === 'temp_password' && sendCredentialsEmail) {
       try {
         await emailService.sendWelcomeEmail(
           email,
-          `${firstName} ${lastName}`,
+          fullName,
           username,
-          temporaryPassword,
+          initialPassword,
           credentialsExpiryHours
         );
         emailSent = true;
         logger.info(`Welcome email sent to ${email}`);
       } catch (emailError: any) {
         logger.error(`Failed to send welcome email to ${email}:`, emailError);
-        // Don't fail user creation if email fails, but log it
       }
     } else {
-      logger.info(`Credentials email skipped for ${email} (sendCredentialsEmail disabled by admin)`);
+      logger.info(`No email sent for ${email} (provisioningMethod=${provisioningMethod})`);
     }
 
-    // Remove sensitive data
     const userResponse = user.toJSON();
 
-    logger.info(`New user created: ${username} by ${req.user?.username}`);
+    logger.info(`New user created: ${username} by ${req.user?.username} (method: ${provisioningMethod})`);
 
-    // Log audit trail
     await AuditService.logCreate(
       req.user?.userId || 'system',
       req.user?.username || 'system',
       'User',
       user._id.toString(),
-      { username, role, department, station, yard },
+      { username, role, department, station, yard, provisioningMethod },
       req.ip
     );
 
+    const message =
+      provisioningMethod === 'email_link'
+        ? emailSent
+          ? 'User created successfully. Activation link sent to their email.'
+          : 'User created successfully. Activation link email failed — resend it from the user detail page.'
+        : provisioningMethod === 'manual'
+          ? 'User created successfully. Share the password with the user manually.'
+          : emailSent
+            ? 'User created successfully. Welcome email sent with login credentials.'
+            : sendCredentialsEmail
+              ? 'User created successfully. Welcome email could not be sent — check email configuration.'
+              : 'User created successfully. Share the credentials below with the user manually.';
+
     res.status(201).json({
       success: true,
-      message: emailSent
-        ? 'User created successfully. Welcome email sent with login credentials.'
-        : sendCredentialsEmail
-          ? 'User created successfully. Welcome email could not be sent — check email configuration.'
-          : 'User created successfully. Share the credentials below with the user manually.',
+      message,
       data: userResponse,
       emailSent,
-      // Always surface temporaryPassword when email was not sent (disabled or failed)
-      ...(!emailSent ? { temporaryPassword } : {}),
+      provisioningMethod,
+      // Expose the initial password when it won't arrive via email
+      ...((provisioningMethod === 'temp_password' && !emailSent) || provisioningMethod === 'manual'
+        ? { temporaryPassword: initialPassword }
+        : {}),
     });
     emitDataChange('users', 'create');
   } catch (error: any) {
@@ -422,87 +477,153 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 
 /**
  * Reset user password (Admin only)
+ * Supports three provisioning methods:
+ *   'temp_password' (default) — generate random temp password, send via email
+ *   'email_link'              — send a one-time activation link
+ *   'manual'                  — admin supplies a short password in req.body.customPassword
  */
 export const resetUserPassword = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const {
+      provisioningMethod = 'temp_password',
+      customPassword,
+    } = req.body;
+
+    if (provisioningMethod === 'manual' && (!customPassword || typeof customPassword !== 'string' || customPassword.length < 4)) {
+      throw new ApiError(400, 'A password of at least 4 characters is required for manual provisioning.');
+    }
 
     const user = await User.findOne({ _id: id, isDeleted: false });
-
     if (!user) {
       throw new ApiError(404, 'User not found');
     }
 
-    // Generate temporary password
-    const temporaryPassword = crypto.randomBytes(8).toString('hex');
-
     // Read configured expiry window
-    let credentialsExpiryHoursReset = 24;
+    let credentialsExpiryHours = 24;
     try {
       const sc = await SystemConfig.findOne({ configType: 'system_settings', isDeleted: false });
       const notif = sc?.systemSettings?.notifications as any;
       if (typeof notif?.credentialsExpiryHours === 'number') {
-        credentialsExpiryHoursReset = notif.credentialsExpiryHours;
+        credentialsExpiryHours = notif.credentialsExpiryHours;
       }
     } catch { /* use default */ }
 
-    // Update password, clear refresh token and flag for password change
-    user.password = temporaryPassword;
+    // Determine initial credentials
+    let initialPassword: string;
+    let rawActivationToken: string | undefined;
+    let hashedActivationToken: string | undefined;
+    let activationExpiresAt: Date | undefined;
+
+    if (provisioningMethod === 'email_link') {
+      initialPassword = crypto.randomBytes(16).toString('hex'); // placeholder, never used
+      rawActivationToken = crypto.randomBytes(32).toString('hex');
+      hashedActivationToken = crypto.createHash('sha256').update(rawActivationToken).digest('hex');
+      const expiryHours = credentialsExpiryHours > 0 ? credentialsExpiryHours : 48;
+      activationExpiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
+    } else if (provisioningMethod === 'manual') {
+      initialPassword = customPassword as string;
+    } else {
+      initialPassword = crypto.randomBytes(8).toString('hex');
+    }
+
+    // Apply the new credentials
+    user.password = initialPassword;
     user.mustChangePassword = true;
     user.passwordResetAt = new Date();
     user.refreshToken = undefined;
-    if (credentialsExpiryHoursReset > 0) {
-      user.tempPasswordExpiresAt = new Date(Date.now() + credentialsExpiryHoursReset * 60 * 60 * 1000);
+    // Clear any old activation token
+    user.activationToken = undefined;
+    user.activationTokenExpires = undefined;
+
+    if (provisioningMethod === 'email_link') {
+      user.activationToken = hashedActivationToken;
+      user.activationTokenExpires = activationExpiresAt;
+      user.tempPasswordExpiresAt = undefined;
+    } else if (credentialsExpiryHours > 0) {
+      user.tempPasswordExpiresAt = new Date(Date.now() + credentialsExpiryHours * 60 * 60 * 1000);
     } else {
       user.tempPasswordExpiresAt = undefined;
     }
+
     await user.save();
 
-    logger.info(`Password reset for user: ${user.username} by ${req.user?.username}`);
+    logger.info(`Password reset for user: ${user.username} by ${req.user?.username} (method: ${provisioningMethod})`);
 
-    // Immediately kick the user out so they must re-login with the new password
+    // Kick the user out so they must re-authenticate with the new credentials
     emitToUser(user.username, 'session_event', {
       type: 'password_reset',
       message: 'Your password has been reset by an administrator. Please log in with your new credentials.',
     });
 
-    // Send password reset email
+    // Send appropriate email
     let emailSent = false;
-    try {
-      await emailService.sendPasswordResetByAdminEmail(
-        user.email,
-        `${user.firstName} ${user.lastName}`,
-        user.username,
-        temporaryPassword,
-        credentialsExpiryHoursReset
-      );
-      emailSent = true;
-      logger.info(`Password reset email sent to ${user.email}`);
-    } catch (emailError: any) {
-      logger.error(`Failed to send password reset email to ${user.email}:`, emailError);
-      // Don't fail the operation if email fails
+    const fullName = `${user.firstName} ${user.lastName}`;
+
+    if (provisioningMethod === 'email_link') {
+      try {
+        await emailService.sendActivationLinkEmail(
+          user.email,
+          fullName,
+          user.username,
+          rawActivationToken!,
+          activationExpiresAt!
+        );
+        emailSent = true;
+        logger.info(`Activation link email sent to ${user.email} (password reset)`);
+      } catch (emailError: any) {
+        logger.error(`Failed to send activation link email to ${user.email}:`, emailError);
+      }
+    } else if (provisioningMethod === 'temp_password') {
+      try {
+        await emailService.sendPasswordResetByAdminEmail(
+          user.email,
+          fullName,
+          user.username,
+          initialPassword,
+          credentialsExpiryHours
+        );
+        emailSent = true;
+        logger.info(`Password reset email sent to ${user.email}`);
+      } catch (emailError: any) {
+        logger.error(`Failed to send password reset email to ${user.email}:`, emailError);
+      }
+    } else {
+      logger.info(`Manual provisioning — no email sent for ${user.email}`);
     }
 
-    // Log audit trail
     await AuditService.log({
       userId: req.user?.userId,
       username: req.user?.username || 'system',
       action: 'PASSWORD_RESET',
       resourceType: 'User',
       resourceId: user._id.toString(),
-      details: `Password reset for user: ${user.username}${emailSent ? ' (email sent)' : ' (email failed)'}`,
+      details: `Password reset for user: ${user.username} (method: ${provisioningMethod})${emailSent ? ' (email sent)' : ''}`,
       ipAddress: req.ip,
       severity: 'medium',
     });
 
+    const message =
+      provisioningMethod === 'email_link'
+        ? emailSent
+          ? 'Password reset. Activation link sent to their email.'
+          : 'Password reset. Activation link email failed — resend from the user detail page.'
+        : provisioningMethod === 'manual'
+          ? 'Password reset. Share the new password with the user manually.'
+          : emailSent
+            ? 'Password reset successfully. New password sent to user\'s email.'
+            : 'Password reset successfully, but email notification failed.';
+
     res.status(200).json({
       success: true,
-      message: emailSent 
-        ? 'Password reset successfully. New password sent to user\'s email.'
-        : 'Password reset successfully, but email notification failed.',
-      data: { 
-        temporaryPassword: emailSent ? undefined : temporaryPassword, // Only return password if email failed
-        emailSent 
+      message,
+      data: {
+        emailSent,
+        provisioningMethod,
+        // Expose the password when the admin needs to share it manually
+        ...((provisioningMethod === 'temp_password' && !emailSent) || provisioningMethod === 'manual'
+          ? { temporaryPassword: initialPassword }
+          : {}),
       },
     });
     emitDataChange('users', 'update');

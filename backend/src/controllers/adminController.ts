@@ -1205,6 +1205,8 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
         startColumns: config.journeyConfig?.startColumns || DEFAULT_START_COLUMNS,
         selectableColumns: SELECTABLE_START_COLUMNS,
         superManagerStations: config.journeyConfig?.superManagerStations || [],
+        autoDownloadDOPdf: config.journeyConfig?.autoDownloadDOPdf ?? true,
+        autoDownloadLPOPdf: config.journeyConfig?.autoDownloadLPOPdf ?? true,
       },
     });
   } catch (error: any) {
@@ -1219,13 +1221,15 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
  */
 export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { startColumns, superManagerStations } = req.body;
+    const { startColumns, superManagerStations, autoDownloadDOPdf, autoDownloadLPOPdf } = req.body;
 
     const hasStartColumns = startColumns !== undefined;
     const hasSmStations = superManagerStations !== undefined;
+    const hasAutoDownloadDO = autoDownloadDOPdf !== undefined;
+    const hasAutoDownloadLPO = autoDownloadLPOPdf !== undefined;
 
-    if (!hasStartColumns && !hasSmStations) {
-      throw new ApiError(400, 'Provide startColumns and/or superManagerStations');
+    if (!hasStartColumns && !hasSmStations && !hasAutoDownloadDO && !hasAutoDownloadLPO) {
+      throw new ApiError(400, 'Provide at least one field to update');
     }
 
     if (hasStartColumns) {
@@ -1244,6 +1248,14 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       }
     }
 
+    if (hasAutoDownloadDO && typeof autoDownloadDOPdf !== 'boolean') {
+      throw new ApiError(400, 'autoDownloadDOPdf must be a boolean');
+    }
+
+    if (hasAutoDownloadLPO && typeof autoDownloadLPOPdf !== 'boolean') {
+      throw new ApiError(400, 'autoDownloadLPOPdf must be a boolean');
+    }
+
     let config = await SystemConfig.findOne({
       configType: 'journey_config',
       isDeleted: false,
@@ -1256,6 +1268,8 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       superManagerStations: hasSmStations
         ? superManagerStations.map((s: string) => s.trim()).filter(Boolean)
         : (existing.superManagerStations || []),
+      autoDownloadDOPdf: hasAutoDownloadDO ? autoDownloadDOPdf : (existing.autoDownloadDOPdf ?? true),
+      autoDownloadLPOPdf: hasAutoDownloadLPO ? autoDownloadLPOPdf : (existing.autoDownloadLPOPdf ?? true),
     };
 
     if (!config) {
@@ -1276,6 +1290,8 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     const detailParts: string[] = [];
     if (hasStartColumns) detailParts.push(`start columns [${nextJourneyConfig.startColumns.join(', ')}]`);
     if (hasSmStations) detailParts.push(`super-manager stations [${nextJourneyConfig.superManagerStations.join(', ')}]`);
+    if (hasAutoDownloadDO) detailParts.push(`autoDownloadDOPdf=${nextJourneyConfig.autoDownloadDOPdf}`);
+    if (hasAutoDownloadLPO) detailParts.push(`autoDownloadLPOPdf=${nextJourneyConfig.autoDownloadLPOPdf}`);
     logger.info(`Journey config updated by ${req.user?.username}: ${detailParts.join('; ')}`);
 
     await AuditService.log({
@@ -1301,6 +1317,8 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         startColumns: nextJourneyConfig.startColumns,
         selectableColumns: SELECTABLE_START_COLUMNS,
         superManagerStations: nextJourneyConfig.superManagerStations,
+        autoDownloadDOPdf: nextJourneyConfig.autoDownloadDOPdf,
+        autoDownloadLPOPdf: nextJourneyConfig.autoDownloadLPOPdf,
       },
     });
   } catch (error: any) {

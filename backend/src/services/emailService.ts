@@ -695,6 +695,68 @@ class EmailService {
   }
 
   /**
+   * Send a one-time account activation link to a new user (magic-link onboarding)
+   */
+  async sendActivationLinkEmail(
+    email: string,
+    name: string,
+    username: string,
+    rawToken: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    if (!this.isConfigured) await this.reinitialize();
+    if (!this.isConfigured) {
+      logger.warn('Email service not configured — cannot send activation link email');
+      throw new Error('Email service is not configured');
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const activationUrl = `${frontendUrl}/activate?token=${rawToken}`;
+    const expiryLabel = expiresAt.toLocaleString('en-US', { timeZoneName: 'short' });
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+        <div style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:white;padding:30px;text-align:center">
+          <h1 style="margin:0;font-size:26px">Activate Your Account</h1>
+        </div>
+        <div style="padding:30px;background:#f9fafb">
+          <div style="background:white;padding:25px;border-radius:8px;margin-bottom:20px">
+            <p style="margin:0 0 15px;color:#1f2937;font-size:16px">Hello <strong>${name}</strong>,</p>
+            <p style="margin:0 0 15px;color:#6b7280;font-size:15px;line-height:1.6">
+              Your account (<strong>${username}</strong>) has been created. Click the button below to set your password and get started — no temporary password required.
+            </p>
+            <div style="text-align:center;margin:30px 0">
+              <a href="${activationUrl}"
+                 style="display:inline-block;background:#6366f1;color:white;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:bold">
+                Activate My Account
+              </a>
+            </div>
+            <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:15px;margin:20px 0;border-radius:4px">
+              <p style="margin:0;color:#92400e;font-size:14px;line-height:1.6">
+                ⏱ This link expires on <strong>${expiryLabel}</strong>. If it has expired, ask your administrator to resend the activation link.
+              </p>
+            </div>
+            <p style="margin:0;color:#9ca3af;font-size:13px;word-break:break-all">
+              If the button above does not work, copy this link into your browser:<br/>${activationUrl}
+            </p>
+          </div>
+          <div style="text-align:center;color:#9ca3af;font-size:13px">
+            <p>Automated email — please do not reply.</p>
+          </div>
+        </div>
+      </div>`;
+
+    await this.dispatchMail({
+      from: this.sender,
+      to: email,
+      subject: 'Activate your Fuel Order Management System account',
+      html,
+    });
+
+    logger.info(`Activation link email sent to: ${email}`);
+  }
+
+  /**
    * Send a login notification (new sign-in alert)
    */
   async sendLoginNotification(

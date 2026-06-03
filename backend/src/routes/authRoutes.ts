@@ -65,8 +65,15 @@ router.post(
 
 router.post('/refresh', asyncHandler(authController.refreshToken));
 
+// Magic-link account activation (public — token acts as the credential)
 router.post(
-  '/forgot-password', 
+  '/activate-account',
+  authRateLimiter,
+  asyncHandler(authController.activateAccount)
+);
+
+router.post(
+  '/forgot-password',
   passwordResetRateLimiter,
   userValidation.forgotPassword, 
   validate, 

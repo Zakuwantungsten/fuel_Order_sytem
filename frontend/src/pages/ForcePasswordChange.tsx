@@ -41,7 +41,7 @@ interface Props {
 }
 
 const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, completeLogin } = useAuth();
 
   const [policy, setPolicy]                   = useState<PasswordPolicy>(DEFAULT_POLICY);
   const [newPassword, setNewPassword]         = useState('');
@@ -87,18 +87,13 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
       // what makes Remember Me actually stick for newly-created users.
       const rememberMe = localStorage.getItem('fuel_order_remember_me') === '1';
       const response = await authAPI.firstLoginPassword({ newPassword, rememberMe });
-      
-      // Update tokens if returned from backend
-      if (response?.accessToken) {
-        sessionStorage.setItem('fuel_order_token', response.accessToken);
-        
-        // Update auth context with new user data
-        const authData = JSON.parse(sessionStorage.getItem('fuel_order_auth') || '{}');
-        authData.mustChangePassword = false;
-        authData.token = response.accessToken;
-        sessionStorage.setItem('fuel_order_auth', JSON.stringify(authData));
+
+      // Use completeLogin to fully sync auth state (tokens + user object) so
+      // the next Remember Me restore gets a clean session with mustChangePassword=false.
+      if (response) {
+        await completeLogin(response, rememberMe);
       }
-      
+
       setSuccess(true);
       // Give the user a moment to read the success message, then continue
       setTimeout(() => {

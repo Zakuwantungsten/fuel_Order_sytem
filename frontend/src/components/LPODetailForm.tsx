@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
-import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI } from '../services/api';
+import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI, configAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
@@ -89,7 +89,7 @@ interface InspectModalState {
 interface LPODetailFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Partial<LPOSummary>) => void;
+  onSubmit: (data: Partial<LPOSummary>) => Promise<void> | void;
   initialData?: LPOSummary;
 }
 
@@ -273,6 +273,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     station: string;
   } | null>(null);
   const [isCreatingAndForwarding, setIsCreatingAndForwarding] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [autoDownloadLPOPdf, setAutoDownloadLPOPdf] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    configAPI.getJourneyConfig()
+      .then((cfg) => setAutoDownloadLPOPdf(cfg.autoDownloadLPOPdf ?? true))
+      .catch(() => {/* keep default true */});
+  }, [isOpen]);
 
   // Forward LPO Modal state
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
@@ -2498,11 +2507,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       customReturnCheckpoint: formData.station === 'CUSTOM' && customReturnEnabled ? customReturnCheckpoint : undefined,
     };
 
-    onSubmit(submitData);
-    
-    // Clear the draft from local storage after successful submit
-    clearFormStorage();
-    setHasDraft(false);
+    setIsSubmitting(true);
+    try {
+      await onSubmit(submitData);
+      clearFormStorage();
+      setHasDraft(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle forward button click for NEW LPOs - create and reload form with trucks
@@ -2604,28 +2616,32 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       };
       localStorage.setItem('lpo_draft', JSON.stringify(forwardedDraft));
 
-      // Auto-download PDF for the created LPO
-      const pdfToastId = toast.loading(`Preparing PDF — LPO ${createdLpo.lpoNo}...`, {
-        style: { background: '#0284c7', color: '#fff' },
-      });
-      try {
-        await downloadLPOPDF(createdLpo);
-        toast.update(pdfToastId, {
-          render: `LPO #${createdLpo.lpoNo} created & forwarded to #${nextLpoNo} — PDF downloaded`,
-          type: 'success',
-          isLoading: false,
-          autoClose: 4000,
-          style: undefined,
+      // Auto-download PDF for the created LPO (only if enabled in config)
+      if (autoDownloadLPOPdf) {
+        const pdfToastId = toast.loading(`Preparing PDF — LPO ${createdLpo.lpoNo}...`, {
+          style: { background: '#0284c7', color: '#fff' },
         });
-      } catch (pdfErr: any) {
-        console.error('Error downloading PDF:', pdfErr);
-        toast.update(pdfToastId, {
-          render: `LPO #${createdLpo.lpoNo} created & forwarded to #${nextLpoNo}, but PDF download failed`,
-          type: 'warning',
-          isLoading: false,
-          autoClose: 6000,
-          style: undefined,
-        });
+        try {
+          await downloadLPOPDF(createdLpo);
+          toast.update(pdfToastId, {
+            render: `LPO #${createdLpo.lpoNo} created & forwarded to #${nextLpoNo} — PDF downloaded`,
+            type: 'success',
+            isLoading: false,
+            autoClose: 4000,
+            style: undefined,
+          });
+        } catch (pdfErr: any) {
+          console.error('Error downloading PDF:', pdfErr);
+          toast.update(pdfToastId, {
+            render: `LPO #${createdLpo.lpoNo} created & forwarded to #${nextLpoNo}, but PDF download failed`,
+            type: 'warning',
+            isLoading: false,
+            autoClose: 6000,
+            style: undefined,
+          });
+        }
+      } else {
+        toast.success(`LPO #${createdLpo.lpoNo} created & forwarded to #${nextLpoNo}`, { autoClose: 4000 });
       }
 
     } catch (error: any) {
@@ -4185,13 +4201,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             <button
               type="submit"
               disabled={
+                isSubmitting ||
                 !formData.entries || formData.entries.length === 0 ||
                 (formData.entries || []).some((_, idx) => {
                   const af = entryAutoFillData[idx];
                   return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
                 })
               }
-              className="flex-shrink-0 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed whitespace-nowrap"
+              className="flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed whitespace-nowrap"
               title={
                 (formData.entries || []).some((_, idx) => {
                   const af = entryAutoFillData[idx];
@@ -4199,7 +4216,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 }) ? 'Cannot submit: Some trucks have no Return DO. Switch them to Going or wait for Return DO entry.' : undefined
               }
             >
-              {initialData ? 'Update' : 'Create'} LPO Document
+              {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {isSubmitting ? (initialData ? 'Updating…' : 'Creating…') : `${initialData ? 'Update' : 'Create'} LPO Document`}
             </button>
           </div>
         </form>

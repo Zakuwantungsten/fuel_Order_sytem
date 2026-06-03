@@ -57,6 +57,10 @@ export interface IJourneyConfig {
   // Stations a super_manager is allowed to view LPOs for. Empty/unset => default
   // (all stations except the hard-excluded set, resolved on the client).
   superManagerStations?: string[];
+  // Controls whether PDF is auto-downloaded after DO (single or bulk) creation.
+  autoDownloadDOPdf?: boolean;
+  // Controls whether PDF is auto-downloaded after LPO "Create and Forward".
+  autoDownloadLPOPdf?: boolean;
 }
 
 // Standard Allocations
@@ -302,6 +306,14 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       superManagerStations: {
         type: [String],
         default: [],
+      },
+      autoDownloadDOPdf: {
+        type: Boolean,
+        default: true,
+      },
+      autoDownloadLPOPdf: {
+        type: Boolean,
+        default: true,
       },
     },
     yardFuelTimeLimit: {

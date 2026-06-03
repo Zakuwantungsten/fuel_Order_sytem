@@ -11,6 +11,7 @@ import EnhancedDashboard from './components/EnhancedDashboard';
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const ForcePasswordChange = lazy(() => import('./pages/ForcePasswordChange'));
+const ActivateAccount = lazy(() => import('./pages/ActivateAccount'));
 import { systemAdminAPI } from './services/api';
 import { initializeWebSocket, subscribeToMaintenanceEvents, unsubscribeFromMaintenanceEvents, subscribeToSettingsEvents, unsubscribeFromSettingsEvents } from './services/websocket';
 import { setSystemName, setSystemTimezone, setSystemDateFormat } from './utils/timezone';
@@ -284,6 +285,7 @@ function AppContent() {
         <Routes>
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/activate" element={<ActivateAccount />} />
           <Route path="*" element={<Login />} />
         </Routes>
       </Suspense>
