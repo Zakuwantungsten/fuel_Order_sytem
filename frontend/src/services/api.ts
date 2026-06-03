@@ -975,6 +975,11 @@ export const dashboardAPI = {
     const response = await apiClient.get('/dashboard/journey-queue');
     return response.data.data;
   },
+
+  getOfficerStats: async (): Promise<any> => {
+    const response = await apiClient.get('/dashboard/officer-stats');
+    return response.data.data;
+  },
 };
 
 // Authentication API

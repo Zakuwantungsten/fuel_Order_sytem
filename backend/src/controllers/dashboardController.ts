@@ -839,3 +839,138 @@ export const getJourneyQueueStats = async (req: AuthRequest, res: Response): Pro
     throw error;
   }
 };
+
+/**
+ * Get officer-scoped dashboard stats for import_officer and export_officer roles.
+ * Filters all delivery order data by the officer's import/export type.
+ */
+export const getOfficerStats = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const role = (req.user as any)?.role || '';
+    const ioType = role === 'import_officer' ? 'IMPORT' : 'EXPORT';
+
+    const now = new Date();
+    const currStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    const baseFilter = { isDeleted: false, importOrExport: ioType };
+    const currFilter = { ...baseFilter, date: { $gte: toDateStr(currStart), $lte: toDateStr(currEnd) } };
+    const prevFilter = { ...baseFilter, date: { $gte: toDateStr(prevStart), $lte: toDateStr(prevEnd) } };
+
+    // Current month aggregation
+    const [currDOs, prevDOs, recentDOs] = await Promise.all([
+      DeliveryOrder.aggregate([
+        { $match: currFilter },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            active: { $sum: { $cond: [{ $eq: ['$isCancelled', true] }, 0, 1] } },
+            cancelled: { $sum: { $cond: [{ $eq: ['$isCancelled', true] }, 1, 0] } },
+            doCount: { $sum: { $cond: [{ $eq: ['$doType', 'DO'] }, 1, 0] } },
+            sdoCount: { $sum: { $cond: [{ $eq: ['$doType', 'SDO'] }, 1, 0] } },
+            tonnage: { $sum: { $toDouble: '$tonnages' } },
+          },
+        },
+      ]),
+      DeliveryOrder.aggregate([
+        { $match: prevFilter },
+        { $group: { _id: null, total: { $sum: 1 }, tonnage: { $sum: { $toDouble: '$tonnages' } } } },
+      ]),
+      DeliveryOrder.find(baseFilter)
+        .sort({ date: -1, createdAt: -1 })
+        .limit(8)
+        .lean(),
+    ]);
+
+    const curr = currDOs[0] || { total: 0, active: 0, cancelled: 0, doCount: 0, sdoCount: 0, tonnage: 0 };
+    const prev = prevDOs[0] || { total: 0, tonnage: 0 };
+
+    const pct = (a: number, b: number) =>
+      b === 0 ? null : Math.round(((a - b) / b) * 100);
+
+    // Monthly trend — last 6 months (active + cancelled + tonnage per month for sparklines)
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const monthlyTrend = await DeliveryOrder.aggregate([
+      { $match: { ...baseFilter, date: { $gte: toDateStr(sixMonthsAgo) } } },
+      {
+        $group: {
+          _id: { $substr: ['$date', 0, 7] },
+          count: { $sum: 1 },
+          active: { $sum: { $cond: [{ $eq: ['$isCancelled', true] }, 0, 1] } },
+          cancelled: { $sum: { $cond: [{ $eq: ['$isCancelled', true] }, 1, 0] } },
+          tonnage: { $sum: { $toDouble: '$tonnages' } },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthlyTrendFormatted = monthlyTrend.map((m: any) => {
+      const [y, mo] = (m._id as string).split('-').map(Number);
+      return {
+        month: `${MONTH_SHORT[mo - 1]} ${y}`,
+        count: m.count,
+        active: m.active,
+        cancelled: m.cancelled,
+        tonnage: Math.round(m.tonnage),
+      };
+    });
+
+    // Top 5 locations — destination for export, loadingPoint for import
+    // Includes tonnage for the table view
+    const locationField = ioType === 'EXPORT' ? '$destination' : '$loadingPoint';
+    const topLocations = await DeliveryOrder.aggregate([
+      { $match: baseFilter },
+      {
+        $group: {
+          _id: locationField,
+          count: { $sum: 1 },
+          tonnage: { $sum: { $toDouble: '$tonnages' } },
+          active: { $sum: { $cond: [{ $eq: ['$isCancelled', true] }, 0, 1] } },
+          cancelled: { $sum: { $cond: [{ $eq: ['$isCancelled', true] }, 1, 0] } },
+        },
+      },
+      { $match: { _id: { $nin: [null, ''] } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+      {
+        $project: {
+          _id: 0,
+          name: '$_id',
+          count: 1,
+          tonnage: { $round: ['$tonnage', 0] },
+          active: 1,
+          cancelled: 1,
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ioType,
+        monthStats: {
+          totalDOs: curr.total,
+          activeDOs: curr.active,
+          cancelledDOs: curr.cancelled,
+          doCount: curr.doCount,
+          sdoCount: curr.sdoCount,
+          totalTonnage: Math.round(curr.tonnage),
+          trends: {
+            totalDOs: pct(curr.total, prev.total),
+            tonnage: pct(curr.tonnage, prev.tonnage),
+          },
+        },
+        monthlyTrend: monthlyTrendFormatted,
+        topLocations,
+        recentDOs,
+      },
+    });
+  } catch (error: any) {
+    console.error('Officer stats error:', error);
+    throw error;
+  }
+};

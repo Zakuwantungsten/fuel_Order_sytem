@@ -15,5 +15,6 @@ router.get('/reports', asyncHandler(dashboardController.getReportStats));
 router.get('/chart-data', asyncHandler(dashboardController.getChartData));
 router.get('/journey-queue', asyncHandler(dashboardController.getJourneyQueueStats));
 router.get('/health', asyncHandler(dashboardController.healthCheck));
+router.get('/officer-stats', asyncHandler(dashboardController.getOfficerStats));
 
 export default router;
