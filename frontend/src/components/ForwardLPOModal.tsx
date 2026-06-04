@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { X, ArrowRight, Loader2, CheckCircle, AlertTriangle, Truck, Fuel } from 'lucide-react';
 import { LPOSummary, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI } from '../services/api';
@@ -28,7 +29,6 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [orderOf, setOrderOf] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{
     sourceLpo?: LPOSummary;  // Only present when creating source first
     forwardedLpo: LPOSummary;
@@ -75,7 +75,6 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
   // Initialize with recommended route or source LPO values
   useEffect(() => {
     if (isOpen) {
-      setError(null);
       setSuccess(null);
       setOrderOf(sourceLpo.orderOf);
       setCustomStationName('');
@@ -112,17 +111,16 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
 
   const handleForward = async () => {
     if (!targetStation || defaultLiters <= 0 || rate <= 0) {
-      setError('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
-    
+
     if (targetStation === 'CUSTOM' && !customStationName.trim()) {
-      setError('Please enter a custom station name');
+      toast.error('Please enter a custom station name');
       return;
     }
 
     setIsLoading(true);
-    setError(null);
 
     try {
       let sourceLpoId = sourceLpo.id;
@@ -181,7 +179,7 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
         onForwardComplete(result.forwardedLpo);
       }, 2500);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to forward LPO. Please try again.');
+      toast.error(err.response?.data?.message || 'Failed to forward LPO. Please try again.');
       setCreatingSource(false);
     } finally {
       setIsLoading(false);
@@ -556,14 +554,6 @@ const ForwardLPOModal: React.FC<ForwardLPOModalProps> = ({
                   <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                     {activeEntries.length} trucks × {defaultLiters}L × {rate}/L
                   </p>
-                </div>
-              )}
-
-              {/* Error */}
-              {error && (
-                <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg mb-4">
-                  <AlertTriangle className="w-5 h-5 text-red-500" />
-                  <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
                 </div>
               )}
 

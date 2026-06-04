@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { Upload, TruckIcon, CheckCircle, Trash2, Map } from 'lucide-react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap, Marker } from 'react-leaflet';
 import L from 'leaflet';
@@ -253,14 +254,14 @@ const FleetTracking = () => {
       setTimeout(() => setUploadProgress(null), 1200);
 
       if (totalTrucks === 0) {
-        alert(`⚠️ Upload completed but 0 trucks were processed.\n\nThis usually means:\n• The CSV/Excel format doesn't match expected structure\n• Headers are not recognized\n• Column positions are incorrect\n\nPlease check the file format and try again.`);
+        toast.warn('Upload completed but 0 trucks were processed. Check that the file format, headers, and column positions match the expected structure.');
       }
 
       event.target.value = '';
     } catch (error) {
       console.error('Error uploading file:', error);
       setUploadProgress(null);
-      alert('Error uploading file. Please try again.');
+      toast.error('Error uploading file. Please try again.');
     } finally {
       setUploadingFile(false);
     }
@@ -296,10 +297,10 @@ const FleetTracking = () => {
         }
       }
       
-      alert('Fleet report deleted successfully');
+      toast.success('Fleet report deleted successfully');
     } catch (error) {
       console.error('Error deleting snapshot:', error);
-      alert('Error deleting fleet report. Please try again.');
+      toast.error('Error deleting fleet report. Please try again.');
     } finally {
       setDeletingSnapshot(null);
     }
@@ -845,7 +846,7 @@ const FleetTracking = () => {
                                   e.preventDefault();
                                   e.stopPropagation();
                                   navigator.clipboard.writeText(truck.truckNo);
-                                  alert(`Copied: ${truck.truckNo}`);
+                                  toast.success(`Copied: ${truck.truckNo}`);
                                 }}
                                 onMouseDown={(e) => e.stopPropagation()}
                                 className="w-full text-xs text-white px-2 py-1 rounded"

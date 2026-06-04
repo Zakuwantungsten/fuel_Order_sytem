@@ -47,7 +47,6 @@ export default function SIEMExportTab() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
-  const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -73,7 +72,7 @@ const headers = () => {
       const res = await fetch(`${API_BASE}/system-admin/siem`, { headers: headers() });
       const json = await res.json();
       if (json.success) setConfigs(json.data);
-    } catch (err: any) { setError(err.message); }
+    } catch (err: any) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 
@@ -100,8 +99,8 @@ const headers = () => {
         toast.success('SIEM config created');
         setShowCreate(false);
         fetchConfigs();
-      } else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      } else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const toggleConfig = async (id: string) => {
@@ -109,8 +108,8 @@ const headers = () => {
       const res = await fetch(`${API_BASE}/system-admin/siem/${id}/toggle`, { method: 'PATCH', headers: headers() });
       const json = await res.json();
       if (json.success) fetchConfigs();
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const testConnection = async (id: string) => {
@@ -135,8 +134,8 @@ const headers = () => {
       const res = await fetch(`${API_BASE}/system-admin/siem/${deleteTarget}`, { method: 'DELETE', headers: headers() });
       const json = await res.json();
       if (json.success) { toast.success('Config deleted'); fetchConfigs(); setDeleteTarget(null); }
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
     finally { setDeleting(false); }
   };
 
@@ -153,8 +152,6 @@ const headers = () => {
           <Plus className="w-4 h-4" /> Add Destination
         </button>
       </div>
-
-      {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
 
       {/* Create Form */}
       {showCreate && (

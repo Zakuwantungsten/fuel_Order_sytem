@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
+import { toast } from 'react-toastify';
 
 // Use the same base URL as api.ts so fetch() calls reach the backend in
 // both development (Vite proxy) and production (cross-origin Railway).
@@ -69,7 +70,6 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
   const [verificationCode, setVerificationCode] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [copiedBackupCodes, setCopiedBackupCodes] = useState(false);
   const [pendingTokens, setPendingTokens] = useState<{ accessToken: string; refreshToken: string; user: any } | null>(null);
   const [trustDevice, setTrustDevice] = useState(false);
@@ -92,7 +92,6 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
   // ── TOTP flow ──
   const handleSelectTOTP = async () => {
     setLoading(true);
-    setError('');
     try {
       const response = await fetch(`${API_BASE}/auth/setup-mfa/generate`, {
         method: 'POST',
@@ -112,7 +111,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
         setStep('scan');
       }
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -120,15 +119,14 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
 
   const handleVerifyTOTP = async () => {
     if (!alreadyConfigured && !totpData) {
-      setError('Please generate a TOTP secret first');
+      toast.error('Please generate a TOTP secret first');
       return;
     }
     if (!verificationCode) {
-      setError('Please enter the 6-digit code from your authenticator app');
+      toast.error('Please enter the 6-digit code from your authenticator app');
       return;
     }
     setLoading(true);
-    setError('');
     try {
       const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
       localStorage.setItem('device_id', deviceId);
@@ -160,7 +158,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
       setBackupCodes(data.data.backupCodes || []);
       setStep('backup-codes');
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -169,7 +167,6 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
   // ── Email flow ──
   const handleSelectEmail = async () => {
     setLoading(true);
-    setError('');
     try {
       const response = await fetch(`${API_BASE}/auth/setup-mfa/email/send`, {
         method: 'POST',
@@ -202,7 +199,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
 
       setStep('email-verify');
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -210,11 +207,10 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
 
   const handleVerifyEmail = async () => {
     if (!verificationCode) {
-      setError('Please enter the 6-digit code from your email');
+      toast.error('Please enter the 6-digit code from your email');
       return;
     }
     setLoading(true);
-    setError('');
     try {
       const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
       localStorage.setItem('device_id', deviceId);
@@ -244,7 +240,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
         user: data.data.user,
       });
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -302,12 +298,6 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
           Your administrator requires two-factor authentication for your account.{!singleMethod ? ' Choose a verification method to continue.' : ''}
         </p>
       </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 rounded text-sm">
-          {error}
-        </div>
-      )}
 
       {/* Step: Choose method */}
       {step === 'method' && (
@@ -398,7 +388,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
             </button>
           )}
           <button
-            onClick={() => { singleMethod ? onCancel() : (setStep('method'), setError('')); }}
+            onClick={() => { singleMethod ? onCancel() : setStep('method'); }}
             className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
           >
             {singleMethod ? 'Cancel' : 'Back'}
@@ -449,7 +439,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
           </label>
 
           <button
-            onClick={() => { setVerificationCode(''); setStep(alreadyConfigured ? (singleMethod ? 'scan' : 'method') : 'scan'); setError(''); }}
+            onClick={() => { setVerificationCode(''); setStep(alreadyConfigured ? (singleMethod ? 'scan' : 'method') : 'scan'); }}
             disabled={loading}
             className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
           >
@@ -511,7 +501,7 @@ export const MFASetupLogin: React.FC<MFASetupLoginProps> = ({
             Resend code
           </button>
           <button
-            onClick={() => { setVerificationCode(''); singleMethod ? onCancel() : (setStep('method'), setError('')); }}
+            onClick={() => { setVerificationCode(''); singleMethod ? onCancel() : setStep('method'); }}
             disabled={loading}
             className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
           >

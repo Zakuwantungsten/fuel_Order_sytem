@@ -2,8 +2,9 @@
 import {
   Monitor, Smartphone, Tablet, RefreshCw, Search,
   ShieldCheck, ShieldBan, Trash2, CheckCircle, XCircle,
-  AlertTriangle, X, Laptop, HardDrive,
+  AlertTriangle, Laptop, HardDrive,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
@@ -69,7 +70,6 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<KnownDevice | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const authHeaders = () => ({
     'Content-Type': 'application/json',
@@ -89,7 +89,7 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
       const json = await res.json();
       if (json.success) setDevices(json.data.devices);
     } catch {
-      setError('Failed to load devices');
+      toast.error('Failed to load devices');
     } finally {
       setLoading(false);
     }
@@ -173,14 +173,6 @@ export default function DeviceManagementPanel({ onMessage }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Error banner */}
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-          <span className="text-sm text-red-700 dark:text-red-300 flex-1">{error}</span>
-          <button onClick={() => setError(null)}><X className="w-4 h-4 text-red-400" /></button>
-        </div>
-      )}
 
       {/* Stats row */}
       {stats && (

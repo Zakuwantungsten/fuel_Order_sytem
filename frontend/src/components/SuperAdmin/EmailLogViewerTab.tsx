@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, RefreshCw, Search, AlertTriangle, X, Info } from 'lucide-react';
+import { Mail, RefreshCw, Search, Info } from 'lucide-react';
+import { toast } from 'react-toastify';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
 
@@ -13,17 +14,15 @@ interface LogEntry {
 export const EmailLogViewerTab: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const fetchLogs = async () => {
     setLoading(true);
-    setError(null);
     try {
       const res = await apiClient.get('/system-admin/email-logs', { params: { limit: 200 } });
       setLogs(res.data.data);
     } catch {
-      setError('Failed to load email logs');
+      toast.error('Failed to load email logs');
     } finally {
       setLoading(false);
     }
@@ -63,12 +62,6 @@ export const EmailLogViewerTab: React.FC = () => {
         </button>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0" />{error}
-          <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
-        </div>
-      )}
 
       {/* Info banner */}
       <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs">

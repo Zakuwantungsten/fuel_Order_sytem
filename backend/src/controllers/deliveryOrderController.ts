@@ -9,6 +9,7 @@ import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { enforceEditLock } from './editLockController';
+import { attachLocks } from '../services/lockService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { emitDataChange } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
@@ -796,6 +797,9 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
       ]);
     }
 
+    // Attach live edit-lock info so the "Editing: …" badge shows on load.
+    await attachLocks('delivery_orders', deliveryOrders);
+
     const response = createPaginatedResponse(deliveryOrders, page, limit, total);
 
     res.status(200).json({
@@ -1386,7 +1390,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     const { clientUpdatedAt, reason, ...rawPayload } = matchedData(req, { locations: ['body'] }) as any;
 
     // Enforce edit lock — the caller must hold a valid lock to update
-    await enforceEditLock(DeliveryOrder, id, username);
+    await enforceEditLock(DeliveryOrder, id, username, 'delivery_orders');
 
     // Strip fields the caller’s role is not allowed to write
     const payload = filterDeliveryOrderFields(rawPayload, userRole) as any;

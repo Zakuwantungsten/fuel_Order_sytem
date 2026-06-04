@@ -3,6 +3,7 @@
  * audit log entries (who changed what security setting, when).
  */
 import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import {
   History, ChevronDown, ChevronRight, RefreshCw, User, Clock,
 } from 'lucide-react';
@@ -61,11 +62,9 @@ export default function SecurityChangeLog() {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchLog = async () => {
     setLoading(true);
-    setError(null);
     try {
       const token = sessionStorage.getItem('fuel_order_token');
       const res = await fetch(`${API}?limit=15`, {
@@ -75,7 +74,7 @@ export default function SecurityChangeLog() {
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed');
       setEntries(json.data.entries || []);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -133,8 +132,6 @@ export default function SecurityChangeLog() {
         <div className="border-t border-gray-100 dark:border-gray-700">
           {loading && entries.length === 0 ? (
             <UnifiedTabLoader label="Loading security changes..." heightClassName="py-8" />
-          ) : error ? (
-            <p className="text-sm text-red-500 px-5 py-4">{error}</p>
           ) : entries.length === 0 ? (
             <p className="text-sm text-gray-400 dark:text-gray-500 px-5 py-6 text-center">No security changes recorded yet.</p>
           ) : (

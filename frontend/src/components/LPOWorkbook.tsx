@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { X, Download, Save, FileSpreadsheet, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { LPOWorkbook, LPOSummary } from '../types';
 import { lpoWorkbookAPI, lpoDocumentsAPI } from '../services/api';
@@ -66,7 +67,35 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
     }
   };
 
-  useRealtimeSync(['lpo_summaries'], () => {
+  // Real-time sync. For an `update` to a sheet already in this workbook we patch
+  // that single sheet in local state — no network refetch, and the rest of the
+  // workbook (including any sheet the user is mid-edit on) is left untouched.
+  // Structural changes (create/delete) or updates for sheets not currently loaded
+  // fall back to a full refetch; thanks to the loader gate this no longer unmounts
+  // the sheet view.
+  useRealtimeSync(['lpo_summaries'], (event) => {
+    const record = event?.record;
+    const recordId = record && String(record._id || record.id);
+
+    // The callback closure always sees the latest `workbook` (useRealtimeSync
+    // refreshes it every render), so we can decide here whether the changed
+    // sheet is one we already hold, then patch it with a functional update.
+    if (event?.action === 'update' && recordId && workbook?.sheets) {
+      const idx = workbook.sheets.findIndex(s => String(s.id) === recordId);
+      if (idx !== -1) {
+        setWorkbook(prev => {
+          if (!prev?.sheets) return prev;
+          const i = prev.sheets.findIndex(s => String(s.id) === recordId);
+          if (i === -1) return prev;
+          const sheets = [...prev.sheets];
+          sheets[i] = { ...sheets[i], ...record, id: sheets[i].id };
+          return { ...prev, sheets };
+        });
+        return;
+      }
+    }
+
+    // create / delete / unknown record / sheet not loaded → resync structure
     fetchWorkbook(workbookId || new Date().getFullYear());
   });
 
@@ -83,7 +112,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
 
   const handleRenameSheet = async (sheetId: string | number | undefined, newName: string) => {
     if (!workbook || !sheetId) {
-      alert('Cannot rename: Sheet ID is missing.');
+      toast.error('Cannot rename: Sheet ID is missing.');
       setIsRenaming(null);
       return;
     }
@@ -104,7 +133,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
     } catch (error: any) {
       console.error('Error renaming sheet:', error);
       const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Error renaming LPO sheet: ${errorMsg}`);
+      toast.error(`Error renaming LPO sheet: ${errorMsg}`);
     }
   };
 
@@ -112,7 +141,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
     // In the new model, workbooks are auto-managed by year
     // Individual sheets are saved automatically
     setIsRenamingWorkbook(false);
-    alert('All changes are saved automatically!');
+    toast.info('All changes are saved automatically!');
   };
 
   const handleExportWorkbook = async () => {
@@ -121,10 +150,10 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
     try {
       setExporting(true);
       await lpoWorkbookAPI.exportWorkbook(workbook.year);
-      alert(`✓ Workbook LPOS_${workbook.year}.xlsx downloaded successfully!`);
+      toast.success(`Workbook LPOS_${workbook.year}.xlsx downloaded successfully!`);
     } catch (error) {
       console.error('Error exporting workbook:', error);
-      alert('Error exporting workbook. Please try again.');
+      toast.error('Error exporting workbook. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -135,7 +164,11 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
     return workbook.sheets.find(sheet => sheet.id === activeSheetId) || null;
   };
 
-  if (loading) {
+  // Only show the full-screen loader on the FIRST load. Background refreshes
+  // (triggered by real-time data-change events) must keep the workbook — and
+  // therefore the sheet view — mounted, so in-progress edits, scroll position
+  // and focus are not destroyed by a remount.
+  if (loading && !workbook) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-gray-500 dark:text-gray-400">Loading workbook...</div>

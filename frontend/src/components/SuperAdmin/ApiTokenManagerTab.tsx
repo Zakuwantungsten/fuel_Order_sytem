@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
-import { Key, Plus, Trash2, RefreshCw, AlertTriangle, Loader2, X, Eye, EyeOff } from 'lucide-react';
+import { Key, Plus, Trash2, RefreshCw, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
@@ -24,7 +24,6 @@ export const ApiTokenManagerTab: React.FC = () => {
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [availableScopes, setAvailableScopes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [newRawToken, setNewRawToken] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', expiresInDays: '', scopes: [] as string[] });
@@ -40,7 +39,7 @@ export const ApiTokenManagerTab: React.FC = () => {
       setTokens(res.data.data);
       setAvailableScopes(res.data.scopes || []);
     } catch {
-      setError('Failed to load tokens');
+      toast.error('Failed to load tokens');
     } finally {
       setLoading(false);
     }
@@ -49,7 +48,7 @@ export const ApiTokenManagerTab: React.FC = () => {
   useEffect(() => { fetchTokens(); }, []);
 
   const handleCreate = async () => {
-    if (!form.name.trim()) { setError('Token name is required'); return; }
+    if (!form.name.trim()) { toast.error('Token name is required'); return; }
     setCreating(true);
     try {
       const res = await apiClient.post('/system-admin/api-tokens', form);
@@ -59,7 +58,7 @@ export const ApiTokenManagerTab: React.FC = () => {
       await fetchTokens();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to create token';
-      setError(msg);
+      toast.error(msg);
     } finally {
       setCreating(false);
     }
@@ -78,7 +77,7 @@ export const ApiTokenManagerTab: React.FC = () => {
       setRevokeTarget(null);
       await fetchTokens();
     } catch {
-      setError('Failed to revoke token');
+      toast.error('Failed to revoke token');
     } finally {
       setRevoking(false);
     }
@@ -113,7 +112,6 @@ export const ApiTokenManagerTab: React.FC = () => {
         </div>
       </div>
 
-      {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}<button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button></div>}
 
       {/* New token reveal */}
       {newRawToken && (

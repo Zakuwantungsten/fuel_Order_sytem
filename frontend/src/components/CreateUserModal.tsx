@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { 
   Plus, 
   X, 
@@ -25,7 +26,6 @@ interface CreateUserModalProps {
 export default function CreateUserModal({ isOpen, onClose, onUserCreated, restrictedRoles = [] }: CreateUserModalProps) {
   const [loading, setLoading] = useState(false);
   const [loadingStations, setLoadingStations] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [fuelStations, setFuelStations] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     username: '',
@@ -97,18 +97,17 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated, restri
     e.preventDefault();
     
     if (!formData.username || !formData.email || !formData.password || !formData.firstName || !formData.lastName) {
-      setError('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     // Validate station selection for manager role
     if (requiresStationSelection && !formData.station) {
-      setError('Please select a station for the manager');
+      toast.error('Please select a station for the manager');
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
       await usersAPI.create({
@@ -131,7 +130,7 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated, restri
       onUserCreated();
       onClose();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create user');
+      toast.error(err.response?.data?.message || 'Failed to create user');
     } finally {
       setLoading(false);
     }
@@ -158,11 +157,6 @@ export default function CreateUserModal({ isOpen, onClose, onUserCreated, restri
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )}
 
           {/* Name Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -400,20 +394,16 @@ interface BatchUserCreationProps {
 export function BatchTruckCreation({ onUsersCreated }: BatchUserCreationProps) {
   const [trucks, setTrucks] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!trucks.trim()) {
-      setError('Please enter truck numbers');
+      toast.error('Please enter truck numbers');
       return;
     }
 
     setLoading(true);
-    setError(null);
-    setSuccess(null);
 
     // Parse truck numbers (comma or newline separated)
     const truckList = trucks
@@ -453,13 +443,13 @@ export function BatchTruckCreation({ onUsersCreated }: BatchUserCreationProps) {
     setLoading(false);
     
     if (created > 0) {
-      setSuccess(`Created ${created} driver accounts${failed > 0 ? `. ${failed} failed.` : ''}`);
+      toast.success(`Created ${created} driver accounts${failed > 0 ? `. ${failed} failed.` : ''}`);
       onUsersCreated();
       setTrucks('');
     }
-    
+
     if (errors.length > 0 && created === 0) {
-      setError(errors.join('\n'));
+      toast.error(errors.join('\n'));
     }
   };
 
@@ -475,17 +465,6 @@ export function BatchTruckCreation({ onUsersCreated }: BatchUserCreationProps) {
       </p>
       
       <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg whitespace-pre-wrap text-sm">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg">
-            {success}
-          </div>
-        )}
-        
         <textarea
           value={trucks}
           onChange={e => setTrucks(e.target.value)}

@@ -7,6 +7,7 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, fo
 import { AuditService } from '../utils/auditService';
 import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
 import { enforceEditLock } from './editLockController';
+import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
 import { checkAndPromoteStartedJourney } from '../services/journeyService';
@@ -293,6 +294,9 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       id: record._id,
     }));
 
+    // Attach live edit-lock info so the "Editing: …" badge shows on load.
+    await attachLocks('fuel_records', transformedRecords);
+
     const response = createPaginatedResponse(transformedRecords, page, limit, total);
 
     res.status(200).json({
@@ -575,7 +579,7 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     // Enforce edit lock — the caller must hold a valid lock to update
     const username = req.user?.username;
     if (!username) throw new ApiError(401, 'Authentication required');
-    await enforceEditLock(FuelRecord, id, username);
+    await enforceEditLock(FuelRecord, id, username, 'fuel_records');
 
     // Strip fields the caller’s role is not allowed to write
     const safeUpdates = filterFuelRecordFields(rawUpdates, req.user?.role || 'fuel_order_maker') as any;

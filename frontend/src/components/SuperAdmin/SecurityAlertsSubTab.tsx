@@ -3,9 +3,10 @@
  * Shows unresolved alerts with acknowledge/investigate/resolve workflow.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import { getCsrfToken } from '../../services/api';
 import {
-  Bell, RefreshCw, AlertTriangle, CheckCircle, Eye, Search as SearchIcon,
+  Bell, RefreshCw, CheckCircle, Eye, Search as SearchIcon,
   ShieldAlert, XCircle, ChevronDown, ChevronRight, MessageSquare,
   Filter, Send, Clock,
 } from 'lucide-react';
@@ -119,7 +120,6 @@ function relativeTime(iso: string): string {
 export default function SecurityAlertsSubTab() {
   const [section, setSection] = useState<'alerts' | 'incidents'>('alerts');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [alertsPage, setAlertsPage] = useState<AlertsPage | null>(null);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('new,acknowledged,investigating');
@@ -131,7 +131,6 @@ export default function SecurityAlertsSubTab() {
 
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const params = new URLSearchParams();
       params.set('page', page.toString());
@@ -141,7 +140,7 @@ export default function SecurityAlertsSubTab() {
       const data = await apiFetch<AlertsPage>(`?${params.toString()}`);
       setAlertsPage(data);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -158,7 +157,7 @@ export default function SecurityAlertsSubTab() {
       });
       await fetchAlerts();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setActionLoading(null);
     }
@@ -285,13 +284,6 @@ export default function SecurityAlertsSubTab() {
               <option value="resolved,false_positive">Closed</option>
             </select>
           </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-600" />
-          <span className="text-sm text-red-700">{error}</span>
         </div>
       )}
 

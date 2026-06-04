@@ -16,7 +16,7 @@ const Login: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const [sessionMessageTitle, setSessionMessageTitle] = useState<string>('Session Expired');
-  
+
   // MFA Challenge State
   const [mfaChallenge, setMfaChallenge] = useState<{
     userId: string;
@@ -50,7 +50,7 @@ const Login: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const reason = params.get('reason');
-    
+
     if (reason === 'expired') {
       setSessionMessageTitle('Session Expired');
       setSessionMessage('Your session has expired. Please log in again.');
@@ -116,12 +116,6 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Clear any lingering session messages so they don't overlap with login errors
-    if (sessionMessage) {
-      setSessionMessage(null);
-      window.history.replaceState({}, '', '/login');
-    }
     
     try {
       // Get device ID for trusted device feature

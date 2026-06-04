@@ -28,11 +28,11 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
 
     try {
       setLoading(true);
-      
+
       // Check if truck exists in the system
       const response = await api.get('/delivery-orders/trucks');
       const trucks = response.data.data?.trucks || [];
-      
+
       const truckExists = trucks.some(
         (t: any) => t.truckNo.toLowerCase() === truckNo.trim().toLowerCase()
       );
@@ -45,12 +45,10 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
         onLoginSuccess(truckNo.trim());
       } else {
         setError('Truck number not found. Please check and try again.');
-        toast.error('Invalid truck number');
       }
     } catch (error: any) {
       console.error('Driver login error:', error);
       setError('Unable to verify truck number. Please try again.');
-      toast.error('Login failed');
     } finally {
       setLoading(false);
     }
@@ -122,8 +120,8 @@ export function DriverLogin({ onLoginSuccess }: DriverLoginProps) {
             This portal is for drivers only. If you're not a driver, please use the main login portal.
           </p>
           <div className="mt-3 sm:mt-4 text-center">
-            <a 
-              href="/" 
+            <a
+              href="/"
               className="text-sm sm:text-base text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium inline-flex items-center"
             >
               ← Back to Main Login

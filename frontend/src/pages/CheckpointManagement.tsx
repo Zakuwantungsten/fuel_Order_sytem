@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
-import { 
-  MapPin, 
-  Plus, 
-  Edit2, 
-  Trash2, 
-  Save, 
-  X,
-  AlertCircle,
-  CheckCircle
+import {
+  MapPin,
+  Plus,
+  Edit2,
+  Trash2,
+  Save,
+  X
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import apiClient from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,8 +38,6 @@ const CheckpointManagement = () => {
   const { isDark } = useAuth();
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState<Partial<Checkpoint>>({
@@ -87,9 +84,8 @@ const CheckpointManagement = () => {
       setLoading(true);
       const response = await apiClient.get('/checkpoints?includeInactive=true');
       setCheckpoints(response.data.data || []);
-      setError(null);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to fetch checkpoints');
+      toast.error(err.response?.data?.message || 'Failed to fetch checkpoints');
     } finally {
       setLoading(false);
     }
@@ -97,37 +93,28 @@ const CheckpointManagement = () => {
 
   useRealtimeSync('checkpoints', fetchCheckpoints);
 
-  const showMessage = (message: string, type: 'success' | 'error') => {
-    if (type === 'success') {
-      setSuccess(message);
-      setTimeout(() => setSuccess(null), 3000);
-    } else {
-      setError(message);
-      setTimeout(() => setError(null), 5000);
-    }
-  };
 
   const handleCreate = async () => {
     try {
       await apiClient.post('/checkpoints', formData);
-      showMessage('Checkpoint created successfully', 'success');
+      toast.success('Checkpoint created successfully');
       setShowAddForm(false);
       resetForm();
       fetchCheckpoints();
     } catch (err: any) {
-      showMessage(err.response?.data?.message || 'Failed to create checkpoint', 'error');
+      toast.error(err.response?.data?.message || 'Failed to create checkpoint');
     }
   };
 
   const handleUpdate = async (id: string, data: Partial<Checkpoint>) => {
     try {
       await apiClient.put(`/checkpoints/${id}`, data);
-      showMessage('Checkpoint updated successfully', 'success');
+      toast.success('Checkpoint updated successfully');
       setEditingId(null);
       setShowAddForm(false);
       fetchCheckpoints();
     } catch (err: any) {
-      showMessage(err.response?.data?.message || 'Failed to update checkpoint', 'error');
+      toast.error(err.response?.data?.message || 'Failed to update checkpoint');
     }
   };
 
@@ -136,10 +123,10 @@ const CheckpointManagement = () => {
     
     try {
       await apiClient.delete(`/checkpoints/${id}`);
-      showMessage('Checkpoint deleted successfully', 'success');
+      toast.success('Checkpoint deleted successfully');
       fetchCheckpoints();
     } catch (err: any) {
-      showMessage(err.response?.data?.message || 'Failed to delete checkpoint', 'error');
+      toast.error(err.response?.data?.message || 'Failed to delete checkpoint');
     }
   };
 
@@ -216,21 +203,6 @@ const CheckpointManagement = () => {
           </button>
         </div>
       </div>
-
-      {/* Messages */}
-      {success && (
-        <div className="mb-4 p-4 rounded-lg flex items-center gap-2" style={{ background: isDark ? 'rgba(22,163,74,0.15)' : '#DCFCE7', border: `1px solid ${isDark ? 'rgba(22,163,74,0.4)' : '#86EFAC'}`, color: isDark ? '#86EFAC' : '#15803D' }}>
-          <CheckCircle className="w-5 h-5" />
-          {success}
-        </div>
-      )}
-      
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-800 dark:text-red-200">
-          <AlertCircle className="w-5 h-5" />
-          {error}
-        </div>
-      )}
 
       {/* Add/Edit Form as Modal */}
       {showAddForm && (

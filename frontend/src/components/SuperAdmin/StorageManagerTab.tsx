@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HardDrive, RefreshCw, Trash2, AlertTriangle, X, FolderOpen } from 'lucide-react';
+import { HardDrive, RefreshCw, Trash2, FolderOpen } from 'lucide-react';
 import { toast } from 'react-toastify';
 import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
@@ -17,18 +17,16 @@ function fmtBytes(bytes: number): string {
 export const StorageManagerTab: React.FC = () => {
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [purging, setPurging] = useState(false);
   const [confirmPurge, setConfirmPurge] = useState(false);
 
   const fetchInfo = async () => {
     setLoading(true);
-    setError(null);
     try {
       const data = await storageService.getStorageInfo();
       setInfo(data);
     } catch {
-      setError('Failed to load storage info');
+      toast.error('Failed to load storage info');
     } finally {
       setLoading(false);
     }
@@ -45,7 +43,7 @@ export const StorageManagerTab: React.FC = () => {
       await fetchInfo();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Purge failed';
-      setError(msg);
+      toast.error(msg);
     } finally {
       setPurging(false);
     }
@@ -87,14 +85,6 @@ export const StorageManagerTab: React.FC = () => {
           )}
         </div>
       </div>
-
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          {error}
-          <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
-        </div>
-      )}
 
       {loading && !info ? (
         <UnifiedTabLoader label="Loading storage overview..." heightClassName="py-20" />

@@ -3,6 +3,7 @@ import {
   Key, Loader2, Check, AlertTriangle, Copy, CheckCheck, Info, Mail,
   Link2, KeyRound, Lock, Eye, EyeOff, AlertCircle,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { usersAPI } from '../../../../services/api';
 import type { User } from '../../../../types';
 import AccessibleModal from './AccessibleModal';
@@ -27,7 +28,6 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
   const [resultMethod, setResultMethod] = useState<ProvisioningMethod>('temp_password');
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [copiedPw, setCopiedPw] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const resetState = useCallback(() => {
     setPhase('confirm');
@@ -38,8 +38,7 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
     setResultEmailSent(false);
     setTempPassword(null);
     setCopiedPw(false);
-    setError(null);
-  }, []);
+      }, []);
 
   if (!isOpen && phase !== 'confirm') resetState();
 
@@ -54,8 +53,7 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
   const handleReset = useCallback(async () => {
     if (!canSubmit) return;
     setLoading(true);
-    setError(null);
-    try {
+        try {
       const userId = String(user.id || (user as any)._id);
       const result = await usersAPI.resetPassword(userId, {
         provisioningMethod,
@@ -66,7 +64,7 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
       setTempPassword(result.temporaryPassword || null);
       setPhase('success');
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to reset password. Please try again.');
+      toast.error(err?.response?.data?.message || 'Failed to reset password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -196,7 +194,7 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
                   name="resetProvisioningMethod"
                   value={opt.value}
                   checked={provisioningMethod === opt.value}
-                  onChange={() => { setProvisioningMethod(opt.value); setCustomPassword(''); setError(null); }}
+                  onChange={() => { setProvisioningMethod(opt.value); setCustomPassword(''); }}
                   className="mt-0.5 accent-orange-500"
                 />
                 <span className={`mt-0.5 flex-shrink-0 ${provisioningMethod === opt.value ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`}>
@@ -223,7 +221,7 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
                 <input
                   type={showCustomPw ? 'text' : 'password'}
                   value={customPassword}
-                  onChange={e => { setCustomPassword(e.target.value); setError(null); }}
+                  onChange={e => { setCustomPassword(e.target.value); }}
                   placeholder="e.g. 1234 or Admin@123"
                   autoComplete="new-password"
                   className={`w-full px-4 py-2.5 pr-10 text-sm border rounded-lg transition-colors focus:ring-2 focus:outline-none
@@ -252,13 +250,6 @@ export default function ResetPasswordModal({ isOpen, user, onClose, onSuccess }:
             </div>
           )}
 
-          {/* Error */}
-          {error && (
-            <div className="flex items-start gap-2.5 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg">
-              <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700 dark:text-red-300">{error}</p>
-            </div>
-          )}
         </div>
       )}
 

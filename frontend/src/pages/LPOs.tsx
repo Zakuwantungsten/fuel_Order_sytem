@@ -542,13 +542,13 @@ const LPOs = () => {
     try {
       setExportingYear(year);
       await lpoWorkbookAPI.exportWorkbook(year);
-      alert(`✓ Workbook LPOS_${year}.xlsx downloaded successfully!`);
+      toast.success(`Workbook LPOS_${year}.xlsx downloaded successfully!`);
     } catch (error: any) {
       console.error('Error exporting workbook:', error);
       if (error.response?.status === 404) {
-        alert(`No LPO documents found for year ${year}`);
+        toast.warn(`No LPO documents found for year ${year}`);
       } else {
-        alert('Failed to export workbook. Please try again.');
+        toast.error('Failed to export workbook. Please try again.');
       }
     } finally {
       setExportingYear(null);
@@ -590,13 +590,13 @@ const LPOs = () => {
       const success = await copyLPOImageToClipboard(lpoSummary, user?.username);
       
       if (success) {
-        alert('✓ LPO image copied to clipboard successfully!\nYou can now paste it anywhere.');
+        toast.success('LPO image copied to clipboard. You can now paste it anywhere.');
       } else {
-        alert('Failed to copy LPO image to clipboard. Please try again.');
+        toast.error('Failed to copy LPO image to clipboard. Please try again.');
       }
     } catch (error) {
       console.error('Error copying image to clipboard:', error);
-      alert('Failed to copy LPO image to clipboard. Your browser may not support this feature.');
+      toast.error('Failed to copy LPO image to clipboard. Your browser may not support this feature.');
     }
   };
 
@@ -672,13 +672,13 @@ const LPOs = () => {
       const success = await copyLPOForWhatsApp(lpoSummary);
       
       if (success) {
-        alert('✓ LPO text for WhatsApp copied to clipboard successfully!\nYou can now paste it in WhatsApp.');
+        toast.success('LPO text for WhatsApp copied to clipboard. You can now paste it in WhatsApp.');
       } else {
-        alert('Failed to copy LPO text to clipboard. Please try again.');
+        toast.error('Failed to copy LPO text to clipboard. Please try again.');
       }
     } catch (error) {
       console.error('Error copying WhatsApp text to clipboard:', error);
-      alert('Failed to copy LPO text to clipboard.');
+      toast.error('Failed to copy LPO text to clipboard.');
     }
   };
 
@@ -690,13 +690,13 @@ const LPOs = () => {
       const success = await copyLPOTextToClipboard(lpoSummary);
       
       if (success) {
-        alert('✓ LPO CSV text copied to clipboard successfully!');
+        toast.success('LPO CSV text copied to clipboard successfully!');
       } else {
-        alert('Failed to copy LPO CSV text to clipboard. Please try again.');
+        toast.error('Failed to copy LPO CSV text to clipboard. Please try again.');
       }
     } catch (error) {
       console.error('Error copying CSV text to clipboard:', error);
-      alert('Failed to copy LPO CSV text to clipboard.');
+      toast.error('Failed to copy LPO CSV text to clipboard.');
     }
   };
 
@@ -872,7 +872,7 @@ const LPOs = () => {
         errorMessage = error.message;
       }
       
-      alert(`Error creating LPO document:\n${errorMessage}`);
+      toast.error(`Error creating LPO document: ${errorMessage}`);
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { yardFuelService } from '../services/yardFuelService';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'react-toastify';
 import { Fuel, Truck, Calendar, LogOut, RefreshCw, Sun, Moon, Wifi, WifiOff, CheckCircle, Clock, Link2 } from 'lucide-react';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
@@ -20,7 +21,6 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
   const [rejectionHistory, setRejectionHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'entries' | 'rejections'>('entries');
   const [showResolved, setShowResolved] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -139,21 +139,17 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
     }));
   };
 
-  const showMessage = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 4000);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.truckNo.trim()) {
-      showMessage('error', 'Truck number is required');
+      toast.error('Truck number is required');
       return;
     }
     
     if (formData.liters <= 0) {
-      showMessage('error', 'Liters must be greater than 0');
+      toast.error('Liters must be greater than 0');
       return;
     }
 
@@ -167,7 +163,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
     );
     
     if (duplicate) {
-      showMessage('error', `⚠️ Duplicate Entry! Truck ${formattedTruckNo} with ${formData.liters}L already recorded on ${formData.date}. Use different liters if this is a new entry.`);
+      toast.error(`⚠️ Duplicate Entry! Truck ${formattedTruckNo} with ${formData.liters}L already recorded on ${formData.date}. Use different liters if this is a new entry.`);
       return;
     }
 
@@ -184,9 +180,9 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
       const doNumber = (response as any)?.linkedInfo?.doNumber;
       
       if (wasLinked && doNumber) {
-        showMessage('success', `✓ Fuel recorded and linked to DO ${doNumber}!`);
+        toast.success(`✓ Fuel recorded and linked to DO ${doNumber}!`);
       } else {
-        showMessage('success', '✓ Fuel recorded! Will be linked when fuel record is created.');
+        toast.success('✓ Fuel recorded! Will be linked when fuel record is created.');
       }
       
       // Reset form
@@ -201,7 +197,7 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
       fetchRecentEntries();
     } catch (error: any) {
       const errorMsg = error.response?.data?.message || error.message || 'Failed to record fuel dispense';
-      showMessage('error', errorMsg);
+      toast.error(errorMsg);
       console.error('Error:', error);
     } finally {
       setSubmitting(false);
@@ -273,12 +269,6 @@ export function YardFuelSimple({ user }: YardFuelSimpleProps) {
 
       {/* Main Content */}
       <main className="pb-20 overflow-x-hidden max-w-7xl mx-auto">
-        {/* Message Banner */}
-        {message && (
-          <div className={`mx-3 sm:mx-4 mt-3 sm:mt-4 p-3 sm:p-4 rounded-lg text-sm sm:text-base ${message.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'}`}>
-            {message.text}
-          </div>
-        )}
 
         {/* Stats Cards */}
         <div className="px-3 sm:px-4 py-3 sm:py-4">

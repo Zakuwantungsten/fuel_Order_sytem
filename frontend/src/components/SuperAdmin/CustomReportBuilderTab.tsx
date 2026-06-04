@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FileBarChart, AlertTriangle, Loader2, Plus, Trash2, Play, Download } from 'lucide-react';
+import { FileBarChart, Loader2, Plus, Trash2, Play, Download } from 'lucide-react';
+import { toast } from 'react-toastify';
 import apiClient from '../../services/api';
 
 interface ModelInfo {
@@ -28,14 +29,13 @@ export const CustomReportBuilderTab: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [result, setResult] = useState<ReportResult | null>(null);
   const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
 
   useEffect(() => {
     setLoadingModels(true);
     apiClient.get('/system-admin/custom-report/models')
       .then((res) => { setModels(res.data.data || []); if (res.data.data?.[0]) setSelectedModel(res.data.data[0].id); })
-      .catch(() => setError('Failed to load models'))
+      .catch(() => toast.error('Failed to load models'))
       .finally(() => setLoadingModels(false));
   }, []);
 
@@ -46,7 +46,6 @@ export const CustomReportBuilderTab: React.FC = () => {
   const runReport = async () => {
     if (!selectedModel) return;
     setRunning(true);
-    setError(null);
     setResult(null);
     try {
       const filtersObj: Record<string, string> = {};
@@ -63,7 +62,7 @@ export const CustomReportBuilderTab: React.FC = () => {
       setResult({ total: res.data.data.total, rows, columns });
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || 'Failed to run report');
+      toast.error(msg || 'Failed to run report');
     } finally {
       setRunning(false);
     }
@@ -105,7 +104,6 @@ export const CustomReportBuilderTab: React.FC = () => {
         </div>
       </div>
 
-      {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-5">
         <h3 className="font-medium text-gray-900 dark:text-white text-sm">Report Configuration</h3>

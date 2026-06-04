@@ -1,5 +1,13 @@
 import { io, Socket } from 'socket.io-client';
 
+/** Edit-lock change broadcast — drives the "Editing: <name>" badge in place. */
+export interface LockChangeEvent {
+  collection: string;
+  documentId: string;
+  lock: { lockedBy: string; lockedByName?: string; lockedUntil: string } | null;
+  timestamp: number;
+}
+
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -19,6 +27,7 @@ let _maintenanceEventCallback: ((event: any) => void) | null = null;
 let _settingsEventCallback: ((event: any) => void) | null = null;
 let _securityEventCallback: ((event: any) => void) | null = null;
 const _dataChangedCallbacks = new Map<string, (event: { collection: string; action: string; timestamp: number; record?: any }) => void>();
+const _lockChangedCallbacks = new Map<string, (event: LockChangeEvent) => void>();
 let _announcementEventCallback: ((event: { action: string; announcement: any; timestamp: number }) => void) | null = null;
 // Fired whenever the socket successfully reconnects so subscribers can reload stale data
 const _reconnectCallbacks = new Map<string, () => void>();
@@ -84,6 +93,9 @@ export const initializeWebSocket = (token: string): Socket => {
   });
   socket.on('data_changed', (event) => {
     _dataChangedCallbacks.forEach((cb) => cb(event));
+  });
+  socket.on('lock_changed', (event) => {
+    _lockChangedCallbacks.forEach((cb) => cb(event));
   });
   socket.on('announcement_event', (event) => {
     if (_announcementEventCallback) _announcementEventCallback(event);
@@ -237,6 +249,19 @@ export const unsubscribeFromDataChanges = (id: string): void => {
 };
 
 /**
+ * Subscribe to edit-lock change events (the "Editing: <name>" badge).
+ * Kept separate from data-change events so lock activity never triggers a list
+ * refetch — it only patches the badge in place.
+ */
+export const subscribeToLockChanges = (callback: (event: LockChangeEvent) => void, id: string): void => {
+  _lockChangedCallbacks.set(id, callback);
+};
+
+export const unsubscribeFromLockChanges = (id: string): void => {
+  _lockChangedCallbacks.delete(id);
+};
+
+/**
  * Subscribe to socket reconnect events.
  * Called every time the socket re-establishes a connection after a drop.
  * Use this to reload any data that may have arrived while the socket was down.
@@ -288,6 +313,8 @@ export default {
   unsubscribeFromSecurityEvents,
   subscribeToDataChanges,
   unsubscribeFromDataChanges,
+  subscribeToLockChanges,
+  unsubscribeFromLockChanges,
   subscribeToReconnect,
   unsubscribeFromReconnect,
   disconnectWebSocket,

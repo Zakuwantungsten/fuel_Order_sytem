@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Eye, EyeOff, CheckCircle, XCircle, AlertCircle, Loader, ArrowLeft } from 'lucide-react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
@@ -153,7 +153,7 @@ const ResetPassword: React.FC = () => {
               <div>
                 <h4 className="text-sm font-medium text-green-800 dark:text-green-300">Password Reset Successful!</h4>
                 <p className="text-sm text-green-700 dark:text-green-400 mt-1">
-                  Your password has been updated. Redirecting to loginâ€¦
+                  Your password has been updated. Redirecting to login…
                 </p>
               </div>
             </div>

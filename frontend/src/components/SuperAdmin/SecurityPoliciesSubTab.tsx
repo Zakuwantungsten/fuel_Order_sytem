@@ -4,7 +4,7 @@ import {
   Lock, Key, Fingerprint, ShieldBan, Mail, Save,
   Loader2, AlertTriangle, Send, CheckCircle, XCircle,
   Plus, Trash2, ToggleLeft, ToggleRight,
-  X, Shield, Bell, ArrowRight,
+  Shield, Bell, ArrowRight,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
@@ -106,7 +106,6 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
   });
 
   /* Messages & UI */
-  const [error, setError] = useState<string | null>(null);
   const [dlpDeleteTarget, setDlpDeleteTarget] = useState<string | null>(null);
   const [dlpDeleting, setDlpDeleting] = useState(false);
 
@@ -185,7 +184,7 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
       return;
     }
 
-    setError(result.error);
+    toast.error(result.error);
   };
 
   useEffect(() => { loadDLP(); }, []);
@@ -315,16 +314,16 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
         setShowDLPCreate(false);
         setDlpForm({ name: '', description: '', ruleType: 'export_limit', maxRecords: 500, appliesTo: ['fuel_records'], action: 'block' });
         loadDLP();
-      } else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      } else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const toggleDLPRule = async (id: string) => {
     try {
       const res = await fetch(`${API_BASE}/system-admin/dlp/${id}/toggle`, { method: 'PATCH', headers: authHeaders() });
       const json = await res.json();
-      if (json.success) loadDLP(); else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      if (json.success) loadDLP(); else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const deleteDLPRule = (id: string) => {
@@ -337,8 +336,8 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
     try {
       const res = await fetch(`${API_BASE}/system-admin/dlp/${dlpDeleteTarget}`, { method: 'DELETE', headers: authHeaders() });
       const json = await res.json();
-      if (json.success) { toast.success('Rule deleted'); loadDLP(); setDlpDeleteTarget(null); } else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      if (json.success) { toast.success('Rule deleted'); loadDLP(); setDlpDeleteTarget(null); } else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
     finally { setDlpDeleting(false); }
   };
 
@@ -358,15 +357,6 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
   /* ── Render ── */
   return (
     <div className="space-y-4">
-      {/* Messages */}
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-          <span className="text-sm text-red-700 dark:text-red-300 flex-1">{error}</span>
-          <button onClick={() => setError(null)}><X className="w-4 h-4 text-red-400" /></button>
-        </div>
-      )}
-
       {/* ── Security Templates ── */}
       <SecurityTemplates
         currentSession={serverSession}

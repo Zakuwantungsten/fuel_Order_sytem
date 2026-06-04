@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'react-toastify';
 import { X, AlertCircle, CheckCircle, User, Ban, Info, AlertTriangle, Loader, MapPin, FileText, ChevronDown, Check } from 'lucide-react';
 import { LPOEntry, CancellationPoint, LPOSummary, FuelStationConfig } from '../types';
 import { getAutoFillDataForLPO } from '../services/lpoAutoFetchService';
@@ -276,26 +277,26 @@ const LPOForm: React.FC<LPOFormProps> = ({
 
     // Validate: CASH mode requires cancellation point
     if (paymentMode === 'CASH' && !cancellationPoint) {
-      alert('For CASH payments, you must select a checkpoint (going/returning direction and specific checkpoint). This determines which fuel record column gets updated for the truck.');
+      toast.warn('For CASH payments, you must select a checkpoint (going/returning direction and specific checkpoint). This determines which fuel record column gets updated for the truck.');
       return;
     }
 
     // Validate: Custom station requires name and at least one direction enabled
     if (isCustomStation) {
       if (!customStationName.trim()) {
-        alert('For Custom station, you must enter the station name.');
+        toast.warn('For Custom station, you must enter the station name.');
         return;
       }
       if (!customGoingEnabled && !customReturnEnabled) {
-        alert('For Custom station, you must enable at least one direction (Custom1 for Going or Custom2 for Return).');
+        toast.warn('For Custom station, you must enable at least one direction (Custom1 for Going or Custom2 for Return).');
         return;
       }
       if (customGoingEnabled && !customGoingCheckpoint) {
-        alert('For Custom1 (Going), you must select which fuel record column to update.');
+        toast.warn('For Custom1 (Going), you must select which fuel record column to update.');
         return;
       }
       if (customReturnEnabled && !customReturnCheckpoint) {
-        alert('For Custom2 (Return), you must select which fuel record column to update.');
+        toast.warn('For Custom2 (Return), you must select which fuel record column to update.');
         return;
       }
     }

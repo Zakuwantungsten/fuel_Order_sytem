@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { formatDateOnly } from '../utils/timezone';
-import { Lock, Unlock, Save, X, AlertCircle, CheckCircle, Truck, MapPin } from 'lucide-react';
+import { Lock, Unlock, Save, X, Truck, MapPin } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { fuelRecordsAPI } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
@@ -23,7 +24,6 @@ export default function PendingConfigurations() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ totalLts?: number; extra?: number }>({});
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     loadLockedRecords();
@@ -39,18 +39,13 @@ export default function PendingConfigurations() {
       setLockedRecords(locked as LocalFuelRecord[]);
     } catch (error: any) {
       console.error('Failed to load locked records:', error);
-      showMessage('error', 'Failed to load pending configurations');
+      toast.error('Failed to load pending configurations');
     } finally {
       setLoading(false);
     }
   };
 
   useRealtimeSync('fuel_records', loadLockedRecords);
-
-  const showMessage = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 5000);
-  };
 
   const startEditing = (record: LocalFuelRecord) => {
     setEditingId(record.id);
@@ -78,14 +73,14 @@ export default function PendingConfigurations() {
       }
 
       await fuelRecordsAPI.update(recordId, updateData);
-      
-      showMessage('success', 'Configuration saved and fuel record unlocked!');
+
+      toast.success('Configuration saved and fuel record unlocked!');
       setEditingId(null);
       setEditValues({});
-      loadLockedRecords(); // Reload to get updated list
+      loadLockedRecords();
     } catch (error: any) {
       console.error('Failed to save configuration:', error);
-      showMessage('error', error.response?.data?.message || 'Failed to save configuration');
+      toast.error(error.response?.data?.message || 'Failed to save configuration');
     } finally {
       setSaving(false);
     }
@@ -132,24 +127,6 @@ export default function PendingConfigurations() {
           Refresh
         </button>
       </div>
-
-      {/* Message */}
-      {message && (
-        <div
-          className={`p-4 rounded-lg flex items-center gap-3 ${
-            message.type === 'success'
-              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-              : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-          }`}
-        >
-          {message.type === 'success' ? (
-            <CheckCircle className="w-5 h-5" />
-          ) : (
-            <AlertCircle className="w-5 h-5" />
-          )}
-          <span>{message.text}</span>
-        </div>
-      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

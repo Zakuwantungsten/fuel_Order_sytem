@@ -19,9 +19,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Upload, FileSpreadsheet, Eye, Play, RotateCcw, CheckCircle2,
-  AlertTriangle, XCircle, Info, ChevronDown, ChevronUp, Loader2,
+  AlertTriangle, Info, ChevronDown, ChevronUp, Loader2,
   Fuel, PackageCheck, Receipt, HelpCircle, X
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import apiClient from '../services/api';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
@@ -102,7 +103,6 @@ export default function ExcelImport() {
   const [dryRun, setDryRun] = useState(true);
   const [year, setYear] = useState<string>('');
   const [status, setStatus] = useState<ImportStatus>('idle');
-  const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [sheetResults, setSheetResults] = useState<SheetResult[]>([]);
   const [progress, setProgress] = useState<{ current: number; total: number; sheet: string } | null>(null);
@@ -119,7 +119,7 @@ export default function ExcelImport() {
 
   const handleFile = useCallback((f: File) => {
     if (!f.name.match(/\.(xlsx|xls|csv)$/i)) {
-      setError('Only Excel (.xlsx, .xls) or CSV (.csv) files are accepted.');
+      toast.error('Only Excel (.xlsx, .xls) or CSV (.csv) files are accepted.');
       return;
     }
     setFile(f);
@@ -128,7 +128,6 @@ export default function ExcelImport() {
     setSummary(null);
     setSheetResults([]);
     setStatus('idle');
-    setError(null);
   }, []);
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -151,7 +150,6 @@ export default function ExcelImport() {
     setSummary(null);
     setSheetResults([]);
     setStatus('idle');
-    setError(null);
   };
 
   // ── Preview ────────────────────────────────────────────────────────────────
@@ -159,7 +157,6 @@ export default function ExcelImport() {
   const handlePreview = async () => {
     if (!file) return;
     setStatus('previewing');
-    setError(null);
 
     const formData = new FormData();
     formData.append('excelFile', file);
@@ -173,7 +170,7 @@ export default function ExcelImport() {
       setSelectedSheets(new Set(data.sheets.filter((s: SheetPreview) => s.detectedType !== 'unknown').map((s: SheetPreview) => s.name)));
       setStatus('previewed');
     } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Preview failed.');
+      toast.error(err.response?.data?.message ?? 'Preview failed.');
       setStatus('error');
     }
   };
@@ -183,7 +180,6 @@ export default function ExcelImport() {
   const handleImport = async () => {
     if (!file) return;
     setStatus('importing');
-    setError(null);
     setSummary(null);
     setSheetResults([]);
 
@@ -221,7 +217,7 @@ export default function ExcelImport() {
       setSheetResults(allResults);
       setStatus('done');
     } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Import failed.');
+      toast.error(err.response?.data?.message ?? 'Import failed.');
       setStatus('error');
     } finally {
       setProgress(null);
@@ -320,12 +316,6 @@ export default function ExcelImport() {
             </div>
           )}
 
-          {error && (
-            <div className="mt-3 flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
-              <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              {error}
-            </div>
-          )}
 
           <button
             onClick={handlePreview}

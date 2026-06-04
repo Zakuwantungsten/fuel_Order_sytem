@@ -162,7 +162,6 @@ export default function SecurityBlocklistTab() {
   const { exporting, exportClientCSV } = useSecurityExport();
   const [tab, setTab] = useState<'active' | 'suspicious' | 'history'>('active');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Data
   const [blocked, setBlocked] = useState<BlockedIPEntry[]>([]);
@@ -207,7 +206,7 @@ export default function SecurityBlocklistTab() {
       setConfigDraft(updated);
       toast.success('Autoblock configuration saved');
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setSavingConfig(false);
     }
@@ -218,7 +217,6 @@ export default function SecurityBlocklistTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const [blockedData, statsData] = await Promise.all([
         apiFetch<BlockedIPEntry[]>('/'),
@@ -236,7 +234,7 @@ export default function SecurityBlocklistTab() {
         setHistory(histData);
       }
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -262,7 +260,7 @@ export default function SecurityBlocklistTab() {
       setBlockReason('');
       fetchData();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -272,7 +270,7 @@ export default function SecurityBlocklistTab() {
       toast.success(`Unblocked ${ip}`);
       fetchData();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -315,15 +313,6 @@ export default function SecurityBlocklistTab() {
           </button>
         </div>
       </div>
-
-      {/* Messages */}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
-          <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
-        </div>
-      )}
-
 
       {/* Manual Block Form */}
       {showBlockForm && (

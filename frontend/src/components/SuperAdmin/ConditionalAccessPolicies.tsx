@@ -22,6 +22,7 @@ import {
   UserCheck,
   Globe,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import ConfirmModal from './ConfirmModal';
 
@@ -123,7 +124,6 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 export default function ConditionalAccessPolicies() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [editing, setEditing] = useState<Policy | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -147,9 +147,8 @@ export default function ConditionalAccessPolicies() {
       setLoading(true);
       const data = await apiFetch<Policy[]>('/');
       setPolicies(data);
-      setError('');
     } catch (e: any) {
-      setError(e.message || 'Failed to load policies');
+      toast.error(e.message || 'Failed to load policies');
     } finally {
       setLoading(false);
     }
@@ -197,7 +196,7 @@ export default function ConditionalAccessPolicies() {
       resetForm();
       await fetchPolicies();
     } catch (e: any) {
-      setError(e.message);
+      toast.error(e.message);
     } finally {
       setSaving(false);
     }
@@ -214,7 +213,7 @@ export default function ConditionalAccessPolicies() {
       await apiFetch(`/${toggleTarget}/toggle`, { method: 'PATCH' });
       await fetchPolicies();
       setToggleTarget(null);
-    } catch (e: any) { setError(e.message); }
+    } catch (e: any) { toast.error(e.message); }
     finally { setToggling(false); }
   };
 
@@ -229,7 +228,7 @@ export default function ConditionalAccessPolicies() {
       await apiFetch(`/${deleteTarget}`, { method: 'DELETE' });
       await fetchPolicies();
       setDeleteTarget(null);
-    } catch (e: any) { setError(e.message); }
+    } catch (e: any) { toast.error(e.message); }
     finally { setDeleting(false); }
   };
 
@@ -345,12 +344,6 @@ export default function ConditionalAccessPolicies() {
         </button>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {error}
-          <button onClick={() => setError('')} className="ml-auto"><X className="w-4 h-4" /></button>
-        </div>
-      )}
 
       {/* Form */}
       {showForm && (

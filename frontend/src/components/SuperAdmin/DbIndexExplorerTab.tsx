@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Database, RefreshCw, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Database, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import { toast } from 'react-toastify';
 import apiClient from '../../services/api';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
@@ -20,18 +21,16 @@ interface CollectionInfo {
 export const DbIndexExplorerTab: React.FC = () => {
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
 
   const fetchData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const res = await apiClient.get('/system-admin/db-indexes');
       setCollections(Array.isArray(res.data.data?.collections) ? res.data.data.collections : []);
     } catch {
-      setError('Failed to load index information');
+      toast.error('Failed to load index information');
     } finally {
       setLoading(false);
     }
@@ -81,7 +80,6 @@ export const DbIndexExplorerTab: React.FC = () => {
         ))}
       </div>
 
-      {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
 
       <div>
         <input

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI } from '../services/api';
@@ -146,10 +147,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     try {
       await navigator.clipboard.writeText(cancellationReport.reportText);
       saveCancellationToHistory(cancellationReport);
-      alert('Cancellation report copied to clipboard!');
+      toast.success('Cancellation report copied to clipboard!');
     } catch (error) {
       console.error('Error copying cancellation report:', error);
-      alert('Failed to copy. Please try again.');
+      toast.error('Failed to copy. Please try again.');
     }
   };
 
@@ -166,7 +167,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-          alert(`This LPO is being edited by ${lockHolder}.`);
+          toast.error(`This LPO is being edited by ${lockHolder}.`);
           return;
         }
       }
@@ -190,10 +191,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       onUpdate(updatedSheet);
       setIsEditing(false);
       await releaseLockIfNeeded();
-      alert('✓ Changes saved successfully! Fuel records have been updated.');
+      toast.success('Changes saved successfully! Fuel records have been updated.');
     } catch (error) {
       console.error('Error saving sheet:', error);
-      alert('Error saving changes. Please try again.');
+      toast.error('Error saving changes. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -208,10 +209,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       onUpdate(updatedSheet);
       setEditingRow(null);
       await releaseLockIfNeeded();
-      alert('✓ Entry updated! Fuel records have been adjusted.');
+      toast.success('Entry updated! Fuel records have been adjusted.');
     } catch (error) {
       console.error('Error saving entry:', error);
-      alert('Error saving entry. Please try again.');
+      toast.error('Error saving entry. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -242,7 +243,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-          alert(`This LPO is being edited by ${lockHolder}.`);
+          toast.error(`This LPO is being edited by ${lockHolder}.`);
           return;
         }
       }
@@ -326,7 +327,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   // Handle cancelling an entry
   const handleCancelEntry = async () => {
     if (cancellingEntryIndex === null || !detectedCancellationPoint) {
-      alert('Unable to determine cancellation point. Please try again.');
+      toast.error('Unable to determine cancellation point. Please try again.');
       return;
     }
 
@@ -341,7 +342,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         } catch (err: any) {
           if (err.response?.status === 423) {
             const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-            alert(`This LPO is being edited by ${lockHolder}.`);
+            toast.error(`This LPO is being edited by ${lockHolder}.`);
             return;
           }
         }
@@ -388,11 +389,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       setEntryTypeMessage(null);
 
       await releaseLockIfNeeded();
-      alert(successMessage);
+      toast.success(successMessage);
     } catch (error) {
       console.error('Error cancelling entry:', error);
       await releaseLockIfNeeded();
-      alert('Error cancelling entry. Please try again.');
+      toast.error('Error cancelling entry. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -411,7 +412,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         } catch (err: any) {
           if (err.response?.status === 423) {
             const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-            alert(`This LPO is being edited by ${lockHolder}.`);
+            toast.error(`This LPO is being edited by ${lockHolder}.`);
             return;
           }
         }
@@ -445,11 +446,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       setEditedSheet(savedSheet);
 
       await releaseLockIfNeeded();
-      alert('✓ Entry restored successfully! Fuel record has been updated.');
+      toast.success('Entry restored successfully! Fuel record has been updated.');
     } catch (error) {
       console.error('Error restoring entry:', error);
       await releaseLockIfNeeded();
-      alert('Error restoring entry. Please try again.');
+      toast.error('Error restoring entry. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -463,9 +464,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       setShowCancelAllModal(false);
       // Refresh sheet from server to get updated state
       await refreshSheet();
-      alert(`✓ LPO ${editedSheet.lpoNo} — all entries cancelled successfully`);
+      toast.success(`LPO ${editedSheet.lpoNo} — all entries cancelled successfully`);
     } catch (err: any) {
-      alert(`Failed to cancel LPO: ${err?.response?.data?.message || err?.message || 'Unknown error'}`);
+      toast.error(`Failed to cancel LPO: ${err?.response?.data?.message || err?.message || 'Unknown error'}`);
     } finally {
       setIsCancellingAll(false);
     }
@@ -498,13 +499,13 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const success = await copyLPOImageToClipboard(lpoSummary, user?.username, sheet.approvedBy);
       
       if (success) {
-        alert('LPO image copied to clipboard successfully!');
+        toast.success('LPO image copied to clipboard successfully!');
       } else {
-        alert('Failed to copy LPO image to clipboard. Please try again.');
+        toast.error('Failed to copy LPO image to clipboard. Please try again.');
       }
     } catch (error) {
       console.error('Error copying image to clipboard:', error);
-      alert('Failed to copy LPO image to clipboard. Your browser may not support this feature.');
+      toast.error('Failed to copy LPO image to clipboard. Your browser may not support this feature.');
     }
     setShowCopyDropdown(false);
   };
@@ -516,13 +517,13 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const success = await copyLPOForWhatsApp(lpoSummary);
       
       if (success) {
-        alert('LPO text for WhatsApp copied to clipboard successfully!');
+        toast.success('LPO text for WhatsApp copied to clipboard successfully!');
       } else {
-        alert('Failed to copy LPO text to clipboard. Please try again.');
+        toast.error('Failed to copy LPO text to clipboard. Please try again.');
       }
     } catch (error) {
       console.error('Error copying WhatsApp text to clipboard:', error);
-      alert('Failed to copy LPO text to clipboard.');
+      toast.error('Failed to copy LPO text to clipboard.');
     }
     setShowCopyDropdown(false);
   };
@@ -534,13 +535,13 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const success = await copyLPOTextToClipboard(lpoSummary);
       
       if (success) {
-        alert('LPO CSV text copied to clipboard successfully!');
+        toast.success('LPO CSV text copied to clipboard successfully!');
       } else {
-        alert('Failed to copy LPO CSV text to clipboard. Please try again.');
+        toast.error('Failed to copy LPO CSV text to clipboard. Please try again.');
       }
     } catch (error) {
       console.error('Error copying CSV text to clipboard:', error);
-      alert('Failed to copy LPO CSV text to clipboard.');
+      toast.error('Failed to copy LPO CSV text to clipboard.');
     }
     setShowCopyDropdown(false);
   };
@@ -551,10 +552,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     try {
       const lpoSummary = convertToLPOSummary();
       await downloadLPOPDF(lpoSummary, undefined, user?.username, sheet.approvedBy);
-      alert('✓ LPO PDF downloaded successfully!');
+      toast.success('LPO PDF downloaded successfully!');
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      alert('Failed to download LPO as PDF. Please try again.');
+      toast.error('Failed to download LPO as PDF. Please try again.');
     } finally {
       setDownloadingPdf(false);
     }
@@ -567,10 +568,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     try {
       const lpoSummary = convertToLPOSummary();
       await downloadLPOImage(lpoSummary, undefined, user?.username, sheet.approvedBy);
-      alert('✓ LPO image downloaded successfully!');
+      toast.success('LPO image downloaded successfully!');
     } catch (error) {
       console.error('Error downloading image:', error);
-      alert('Failed to download LPO as image. Please try again.');
+      toast.error('Failed to download LPO as image. Please try again.');
     } finally {
       setDownloadingImage(false);
     }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import ConfirmModal from './ConfirmModal';
 import Pagination from '../Pagination';
@@ -61,20 +62,18 @@ function ScheduleSlideOver({
   const [newPrice, setNewPrice] = useState('');
   const [effectiveAt, setEffectiveAt] = useState('');
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
 
   const selectedStation = stations.find((s) => s.id === stationId);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
     const price = parseFloat(newPrice);
     if (!stationId || isNaN(price) || price <= 0) {
-      setError('Please select a station and enter a valid price.');
+      toast.error('Please select a station and enter a valid price.');
       return;
     }
     if (!effectiveAt || new Date(effectiveAt) <= new Date()) {
-      setError('Effective date must be in the future.');
+      toast.error('Effective date must be in the future.');
       return;
     }
     setSaving(true);
@@ -86,7 +85,7 @@ function ScheduleSlideOver({
       });
       onSaved();
     } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Failed to create schedule.');
+      toast.error(err?.response?.data?.message ?? 'Failed to create schedule.');
     } finally {
       setSaving(false);
     }
@@ -103,11 +102,6 @@ function ScheduleSlideOver({
           </button>
         </div>
         <form onSubmit={handleSubmit} className="flex-1 p-6 space-y-5">
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
-              {error}
-            </div>
-          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Station</label>
             <select

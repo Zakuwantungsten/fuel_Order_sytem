@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Save, RefreshCw, AlertTriangle, Loader2, X } from 'lucide-react';
+import { Bell, Save, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import apiClient from '../../services/api';
 
@@ -31,7 +31,6 @@ export const AlertThresholdsTab: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchThresholds = async () => {
     setLoading(true);
@@ -39,7 +38,7 @@ export const AlertThresholdsTab: React.FC = () => {
       const res = await apiClient.get(API);
       setThresholds(res.data.data);
     } catch {
-      setError('Failed to load thresholds');
+      toast.error('Failed to load thresholds');
     } finally {
       setLoading(false);
     }
@@ -49,13 +48,12 @@ export const AlertThresholdsTab: React.FC = () => {
 
   const handleSave = async () => {
     setSaving(true);
-    setError(null);
     try {
       await apiClient.put(API, thresholds);
       toast.success('Alert thresholds saved');
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Save failed';
-      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -93,12 +91,6 @@ export const AlertThresholdsTab: React.FC = () => {
         </div>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0" />{error}
-          <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
-        </div>
-      )}
 
 
       <div className="grid grid-cols-1 gap-4">

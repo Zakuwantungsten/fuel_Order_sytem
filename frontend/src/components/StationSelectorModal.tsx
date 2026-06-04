@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { X, ArrowRight } from 'lucide-react';
 import { FuelStationConfig } from '../types';
 import { configService } from '../services/configService';
@@ -48,12 +49,12 @@ const StationSelectorModal: React.FC<StationSelectorModalProps> = ({
 
   const handleConfirm = () => {
     if (!selectedStation) {
-      alert('Please select a target station');
+      toast.warn('Please select a target station');
       return;
     }
     
     if (selectedStation === 'CUSTOM' && !customStationName.trim()) {
-      alert('Please enter a custom station name');
+      toast.warn('Please enter a custom station name');
       return;
     }
     

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, Smartphone, Mail, MessageSquare, KeyRound, AlertCircle, CheckCircle2, Loader2, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, Smartphone, Mail, MessageSquare, KeyRound, CheckCircle2, Loader2, ArrowLeft } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 // Use the same base URL as api.ts so fetch() calls reach the backend in
 // both development (Vite proxy) and production (cross-origin Railway).
@@ -81,7 +82,6 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
   const [trustDevice, setTrustDevice] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [showMethodPicker, setShowMethodPicker] = useState(false);
@@ -112,7 +112,6 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
 
   const sendOTP = async (otpMethod: 'email' | 'sms') => {
     setSendingOtp(true);
-    setError('');
     try {
       const response = await fetch(`${API_BASE}/mfa/send-otp`, {
         method: 'POST',
@@ -127,7 +126,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
       setOtpSent(true);
       setResendCountdown(60);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setSendingOtp(false);
     }
@@ -136,7 +135,6 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
   const handleMethodSelect = (m: 'totp' | 'backup' | 'sms' | 'email') => {
     setMethod(m);
     setCode('');
-    setError('');
     setShowMethodPicker(false);
     if (m === 'email' || m === 'sms') {
       sendOTP(m);
@@ -166,11 +164,10 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
 
   const handleVerify = async () => {
     if (!code || code.length < 6) {
-      setError('Please enter the verification code');
+      toast.error('Please enter the verification code');
       return;
     }
     setLoading(true);
-    setError('');
     try {
       const deviceId = localStorage.getItem('device_id') || crypto.randomUUID();
       localStorage.setItem('device_id', deviceId);
@@ -201,7 +198,7 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
         user: data.data.user,
       });
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
       setCode('');
       // Refocus first input on error
       setTimeout(() => inputRefs.current[0]?.focus(), 50);
@@ -396,14 +393,6 @@ export const MFAVerification: React.FC<MFAVerificationProps> = ({
 
         {/* Body */}
         <div className="px-6 pb-8 sm:px-8">
-          {/* Error */}
-          {error && (
-            <div className="flex items-start gap-2.5 mb-5 p-3.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-            </div>
-          )}
-
           {/* OTP status banner (email/sms) */}
           {(method === 'email' || method === 'sms') && (
             <div className="mb-5">

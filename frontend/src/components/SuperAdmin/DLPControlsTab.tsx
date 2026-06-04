@@ -46,7 +46,6 @@ export default function DLPControlsTab() {
   const [stats, setStats] = useState<DLPStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -79,7 +78,7 @@ const headers = () => {
       if (rulesJson.success) setRules(rulesJson.data);
       if (statsJson.success) setStats(statsJson.data);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -98,8 +97,8 @@ const headers = () => {
         setShowCreate(false);
         setForm({ name: '', description: '', ruleType: 'export_limit', maxRecords: 500, allowedHoursStart: 8, allowedHoursEnd: 18, appliesTo: ['fuel_records'], action: 'block' });
         fetchData();
-      } else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      } else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const toggleRule = async (id: string) => {
@@ -107,8 +106,8 @@ const headers = () => {
       const res = await fetch(`${API_BASE}/system-admin/dlp/${id}/toggle`, { method: 'PATCH', headers: headers() });
       const json = await res.json();
       if (json.success) fetchData();
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const deleteRule = async (id: string) => {
@@ -122,8 +121,8 @@ const headers = () => {
       const res = await fetch(`${API_BASE}/system-admin/dlp/${deleteTarget}`, { method: 'DELETE', headers: headers() });
       const json = await res.json();
       if (json.success) { toast.success('Rule deleted'); fetchData(); }
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
     finally { setDeleting(false); setDeleteTarget(null); }
   };
 
@@ -140,8 +139,6 @@ const headers = () => {
           <Plus className="w-4 h-4" /> Add Rule
         </button>
       </div>
-
-      {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
 
       {/* Stats */}
       {stats && (

@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { Radar, Users, Clock, Download, MapPin, RefreshCw, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
@@ -31,7 +32,6 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 export default function ThreatDetectionTab() {
   const [overview, setOverview] = useState<ThreatOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['highRiskUsers', 'failedLoginClusters']));
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [baseline, setBaseline] = useState<UserBaseline | null>(null);
@@ -93,8 +93,8 @@ const headers = () => {
           })),
         });
       }
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 
@@ -105,7 +105,7 @@ const headers = () => {
       const res = await fetch(`${API_BASE}/system-admin/threat-detection/baseline/${userId}`, { headers: headers() });
       const json = await res.json();
       if (json.success) setBaseline(json.data);
-    } catch (err: any) { setError(err.message); }
+    } catch (err: any) { toast.error(err.message); }
     finally { setBaselineLoading(false); }
   };
 
@@ -134,8 +134,6 @@ const headers = () => {
           <RefreshCw className="w-4 h-4" /> Refresh
         </button>
       </div>
-
-      {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
 
       {/* Threat Level Banner */}
       {overview && (

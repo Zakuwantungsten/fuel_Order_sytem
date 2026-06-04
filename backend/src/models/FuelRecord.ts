@@ -189,12 +189,9 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
     deletedAt: {
       type: Date,
     },
-    // Soft edit lock — prevents concurrent edits with 5-min TTL
-    editLock: {
-      lockedBy: { type: String, default: null },
-      lockedAt: { type: Date, default: null },
-      lockedUntil: { type: Date, default: null },
-    },
+    // Edit locks are NOT stored here — they live in the dedicated `EditLock`
+    // collection (see services/lockService.ts). The `editLock` field on the
+    // response type is populated at read-time via attachLocks().
   },
   {
     timestamps: true,

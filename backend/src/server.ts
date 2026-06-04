@@ -26,6 +26,7 @@ import honeypotRoutes from './routes/honeypotRoutes';
 import logger from './utils/logger';
 import { initializeWebSocket } from './services/websocket';
 import { startChangeStreams, stopChangeStreams } from './services/changeStreamListener';
+import { EditLock } from './models';
 import { connectRedis, disconnectRedis } from './config/redis';
 import { initNotificationQueue, closeNotificationQueue } from './services/notificationQueue';
 import BlocklistService from './services/blocklistService';
@@ -168,7 +169,6 @@ import './jobs/fuelPriceScheduler';
 import './jobs/securityEventRetention';
 import './jobs/securityScoreSnapshot';
 import './jobs/fleetDailyCleanup';
-import './jobs/editLockCleanup';
 import './jobs/backupTrashCleanup'; // LE-3: purge soft-deleted backups after retention window
 import { jobRegistry } from './jobs/jobRegistry';
 
@@ -292,6 +292,16 @@ const startServer = async () => {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Ensure the EditLock indexes exist (unique lock key + TTL auto-expiry).
+    // Mongoose builds indexes for new collections automatically, but syncing
+    // here guarantees the TTL index is applied to pre-existing databases too.
+    try {
+      await EditLock.syncIndexes();
+      logger.info('EditLock indexes synced (unique key + TTL)');
+    } catch (idxErr) {
+      logger.warn('EditLock index sync failed (non-fatal):', idxErr);
+    }
 
     // Seed firewall defaults (path rules, honeypots, bot UAs) on every boot.
     // Idempotent — skips rows that already exist, only inserts new ones.

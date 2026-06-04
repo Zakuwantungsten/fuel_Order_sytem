@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { MFASetup } from './MFASetup';
 import { getCsrfToken } from '../services/api';
 
@@ -32,8 +33,6 @@ export const MFASettings: React.FC = () => {
   const [showSetup, setShowSetup] = useState(false);
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
   const [disablePassword, setDisablePassword] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     fetchMFAStatus();
@@ -62,7 +61,7 @@ export const MFASettings: React.FC = () => {
         setStatus(data.data);
       }
     } catch (err: any) {
-      setError('Failed to load MFA status');
+      toast.error('Failed to load MFA status');
     } finally {
       setLoading(false);
     }
@@ -86,12 +85,11 @@ export const MFASettings: React.FC = () => {
 
   const handleDisableMFA = async () => {
     if (!disablePassword) {
-      setError('Please enter your password to disable MFA');
+      toast.error('Please enter your password to disable MFA');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const response = await fetch(`${API_BASE}/mfa/disable`, {
@@ -106,12 +104,12 @@ export const MFASettings: React.FC = () => {
         throw new Error(data.message || 'Failed to disable MFA');
       }
 
-      setSuccess('MFA disabled successfully');
+      toast.success('MFA disabled successfully');
       setShowDisableConfirm(false);
       setDisablePassword('');
       await fetchMFAStatus();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -123,7 +121,6 @@ export const MFASettings: React.FC = () => {
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const response = await fetch(`${API_BASE}/mfa/backup-codes/regenerate`, {
@@ -149,10 +146,10 @@ export const MFASettings: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      setSuccess('Backup codes regenerated and downloaded');
+      toast.success('Backup codes regenerated and downloaded');
       await fetchMFAStatus();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -172,13 +169,13 @@ export const MFASettings: React.FC = () => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setSuccess('Trusted device removed');
+        toast.success('Trusted device removed');
         await fetchTrustedDevices();
       } else {
         throw new Error(data.message || 'Failed to remove device');
       }
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -191,7 +188,7 @@ export const MFASettings: React.FC = () => {
       <MFASetup
         onComplete={() => {
           setShowSetup(false);
-          setSuccess('MFA enabled successfully');
+          toast.success('MFA enabled successfully');
           fetchMFAStatus();
         }}
         onCancel={() => setShowSetup(false)}
@@ -201,20 +198,6 @@ export const MFASettings: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
-      {error && (
-        <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-          <button onClick={() => setError('')} className="float-right font-bold">×</button>
-        </div>
-      )}
-
-      {success && (
-        <div className="p-4 bg-green-100 border border-green-400 text-green-700 rounded">
-          {success}
-          <button onClick={() => setSuccess('')} className="float-right font-bold">×</button>
-        </div>
-      )}
-
       {/* MFA Status Card */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
@@ -363,7 +346,6 @@ export const MFASettings: React.FC = () => {
                 onClick={() => {
                   setShowDisableConfirm(false);
                   setDisablePassword('');
-                  setError('');
                 }}
                 disabled={loading}
                 className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded hover:bg-gray-300"

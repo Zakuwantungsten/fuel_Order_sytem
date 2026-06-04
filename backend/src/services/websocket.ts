@@ -338,6 +338,25 @@ export const emitDataChange = (
 };
 
 /**
+ * Broadcast an edit-lock change to all connected clients.
+ *
+ * This is intentionally separate from `data_changed`: acquiring/releasing a lock
+ * is NOT a domain-data change, so it must not cause lists/workbooks to refetch
+ * (that was the cause of the "click edit → reload → edit lost" bug). Clients use
+ * this only to update the lightweight "Editing: <name>" badge in place.
+ *
+ * @param lock  The current lock holder info, or null when the lock was released.
+ */
+export const emitLockChange = (
+  collection: string,
+  documentId: string,
+  lock: { lockedBy: string; lockedByName?: string; lockedUntil: Date } | null
+): void => {
+  if (!io) return;
+  io.emit('lock_changed', { collection, documentId, lock, timestamp: Date.now() });
+};
+
+/**
  * Broadcast a system announcement event to all connected clients.
  * Used when a super_admin creates, updates, or deletes an announcement so every
  * open browser tab immediately refreshes its banners without a reload.
@@ -366,4 +385,5 @@ export default {
   emitGeneralSettingsEvent,
   emitSecuritySettingsEvent,
   emitAnnouncementEvent,
+  emitLockChange,
 };

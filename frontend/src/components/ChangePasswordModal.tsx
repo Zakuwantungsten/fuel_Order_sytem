@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Eye, EyeOff, Lock, Check, AlertCircle } from 'lucide-react';
+import { X, Eye, EyeOff, Lock, Check } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { authAPI } from '../services/api';
 
 interface ChangePasswordModalProps {
@@ -17,7 +18,6 @@ export default function ChangePasswordModal({ onClose, onSuccess }: ChangePasswo
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const passwordRequirements = [
     { met: formData.newPassword.length >= 8, text: 'At least 8 characters' },
@@ -31,26 +31,24 @@ export default function ChangePasswordModal({ onClose, onSuccess }: ChangePasswo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
     // Validations
     if (!formData.currentPassword) {
-      setError('Current password is required');
+      toast.error('Current password is required');
       return;
     }
 
     if (!isPasswordValid) {
-      setError('New password does not meet requirements');
+      toast.error('New password does not meet requirements');
       return;
     }
 
     if (formData.newPassword !== formData.confirmPassword) {
-      setError('New passwords do not match');
+      toast.error('New passwords do not match');
       return;
     }
 
     if (formData.currentPassword === formData.newPassword) {
-      setError('New password must be different from current password');
+      toast.error('New password must be different from current password');
       return;
     }
 
@@ -62,7 +60,7 @@ export default function ChangePasswordModal({ onClose, onSuccess }: ChangePasswo
       });
       onSuccess();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to change password');
+      toast.error(err.response?.data?.message || 'Failed to change password');
     } finally {
       setLoading(false);
     }
@@ -96,13 +94,6 @@ export default function ChangePasswordModal({ onClose, onSuccess }: ChangePasswo
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-            </div>
-          )}
-
           {/* Current Password */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
+import { toast } from 'react-toastify';
 import { User } from '../types';
 import NotificationBell from './NotificationBell';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -9,7 +10,6 @@ import {
   Sun,
   Moon,
   Key,
-  X,
   LayoutDashboard,
   FileText,
   Settings,
@@ -47,7 +47,6 @@ export function OfficerPortal({ user }: OfficerPortalProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   // Params passed from overview search / quick actions to the DO tab
   const [doTabParams, setDoTabParams] = useState<string | undefined>(undefined);
 
@@ -318,15 +317,6 @@ export function OfficerPortal({ user }: OfficerPortalProps) {
 
         {/* Content area */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6" id="main-scroll-container">
-          {successMessage && (
-            <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center justify-between">
-              <span className="text-green-800 dark:text-green-200">{successMessage}</span>
-              <button onClick={() => setSuccessMessage(null)}>
-                <X className="w-4 h-4 text-green-600" />
-              </button>
-            </div>
-          )}
-
           <Suspense fallback={<TabFallback />}>
             {activeTab === 'overview' && (
               <OfficerOverview user={user} onNavigateToDO={handleNavigateToDO} />
@@ -346,8 +336,7 @@ export function OfficerPortal({ user }: OfficerPortalProps) {
           onClose={() => setShowChangePassword(false)}
           onSuccess={() => {
             setShowChangePassword(false);
-            setSuccessMessage('Password changed successfully!');
-            setTimeout(() => setSuccessMessage(null), 5000);
+            toast.success('Password changed successfully!');
           }}
         />
       )}

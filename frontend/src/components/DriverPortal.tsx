@@ -57,7 +57,6 @@ export function DriverPortal({ user }: DriverPortalProps) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const { logout, toggleTheme, isDark } = useAuth();
@@ -355,8 +354,7 @@ export function DriverPortal({ user }: DriverPortalProps) {
   };
 
   const handlePasswordChangeSuccess = () => {
-    setSuccessMessage('Password changed successfully!');
-    setTimeout(() => setSuccessMessage(''), 3000);
+    toast.success('Password changed successfully!');
   };
 
   const markNotificationRead = (id: string) => {
@@ -829,15 +827,6 @@ export function DriverPortal({ user }: DriverPortalProps) {
         />
       )}
 
-      {/* Success Message */}
-      {successMessage && (
-        <div className="fixed top-4 right-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 px-6 py-3 rounded-lg shadow-lg z-50 flex items-center space-x-3">
-          <span>{successMessage}</span>
-          <button onClick={() => setSuccessMessage('')} className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </div>
   );
 }

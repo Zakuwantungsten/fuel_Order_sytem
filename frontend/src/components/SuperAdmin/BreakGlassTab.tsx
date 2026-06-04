@@ -27,7 +27,6 @@ export default function BreakGlassTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [showPassword, setShowPassword] = useState<string | null>(null);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [rotateTarget, setRotateTarget] = useState<string | null>(null);
@@ -54,7 +53,7 @@ const headers = () => {
       const json = await res.json();
       if (json.success) setAccounts(json.data);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -63,8 +62,8 @@ const headers = () => {
   useEffect(() => { fetchAccounts(); }, []);
 
   const createAccount = async () => {
-    if (form.password !== form.confirmPassword) { setError('Passwords do not match'); return; }
-    if (form.password.length < 20) { setError('Password must be at least 20 characters'); return; }
+    if (form.password !== form.confirmPassword) { toast.error('Passwords do not match'); return; }
+    if (form.password.length < 20) { toast.error('Password must be at least 20 characters'); return; }
     try {
       const res = await fetch(`${API_BASE}/system-admin/break-glass`, {
         method: 'POST', headers: headers(),
@@ -76,8 +75,8 @@ const headers = () => {
         setShowCreate(false);
         setForm({ username: '', description: '', password: '', confirmPassword: '' });
         fetchAccounts();
-      } else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      } else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const toggleAccount = async (id: string) => {
@@ -85,8 +84,8 @@ const headers = () => {
       const res = await fetch(`${API_BASE}/system-admin/break-glass/${id}/toggle`, { method: 'PATCH', headers: headers() });
       const json = await res.json();
       if (json.success) fetchAccounts();
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const rotatePassword = (id: string) => {
@@ -97,7 +96,7 @@ const headers = () => {
 
   const confirmRotate = async () => {
     if (!rotateTarget) return;
-    if (rotateNewPassword.length < 20) { setError('Password must be at least 20 characters'); return; }
+    if (rotateNewPassword.length < 20) { toast.error('Password must be at least 20 characters'); return; }
     setRotating(true);
     try {
       const res = await fetch(`${API_BASE}/system-admin/break-glass/${rotateTarget}/rotate`, {
@@ -105,8 +104,8 @@ const headers = () => {
       });
       const json = await res.json();
       if (json.success) { toast.success('Password rotated successfully'); fetchAccounts(); setRotateTarget(null); }
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
     finally { setRotating(false); }
   };
 
@@ -121,8 +120,8 @@ const headers = () => {
       const res = await fetch(`${API_BASE}/system-admin/break-glass/${deleteTarget}`, { method: 'DELETE', headers: headers() });
       const json = await res.json();
       if (json.success) { toast.success('Account deleted'); fetchAccounts(); setDeleteTarget(null); }
-      else setError(json.message);
-    } catch (err: any) { setError(err.message); }
+      else toast.error(json.message);
+    } catch (err: any) { toast.error(err.message); }
     finally { setDeleting(false); }
   };
 
@@ -158,7 +157,6 @@ const headers = () => {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
 
       {/* Create Form */}
       {showCreate && (

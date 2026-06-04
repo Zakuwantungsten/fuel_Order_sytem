@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { Plus, Trash2, Save, X, MapPin, Fuel } from 'lucide-react';
 import FuelConfigService from '../services/fuelConfigService';
 
@@ -23,12 +24,12 @@ export function RouteManagement({ onClose }: RouteManagementProps) {
 
   const handleAddRoute = () => {
     if (!newRoute.destination.trim()) {
-      alert('Please enter a destination');
+      toast.warn('Please enter a destination');
       return;
     }
 
     if (newRoute.liters <= 0 || newRoute.liters > 5000) {
-      alert('Please enter valid liters (1-5000)');
+      toast.warn('Please enter valid liters (1-5000)');
       return;
     }
 

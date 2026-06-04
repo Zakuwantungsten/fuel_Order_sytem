@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { X, Download, FileSpreadsheet, Edit2 } from 'lucide-react';
 import type { DOWorkbook as DOWorkbookType, DeliveryOrder } from '../types';
 import { doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
@@ -76,10 +77,10 @@ const DOWorkbook: React.FC<DOWorkbookProps> = ({ workbookId, workbookType = 'DO'
       const api = workbookType === 'SDO' ? sdoWorkbookAPI : doWorkbookAPI;
       await api.exportWorkbook(workbook.year);
       const filename = workbookType === 'SDO' ? `SDO_${workbook.year}.xlsx` : `DELIVERY_ORDERS_${workbook.year}.xlsx`;
-      alert(`✓ Workbook ${filename} downloaded successfully!`);
+      toast.success(`Workbook ${filename} downloaded successfully!`);
     } catch (error) {
       console.error('Error exporting workbook:', error);
-      alert('Error exporting workbook. Please try again.');
+      toast.error('Error exporting workbook. Please try again.');
     } finally {
       setExporting(false);
     }

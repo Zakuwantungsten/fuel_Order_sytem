@@ -190,7 +190,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       setShowAddForm(false);
     } catch (error) {
       console.error('Error adding entry:', error);
-      alert('Failed to add entry. Please try again.');
+      toast.error('Failed to add entry. Please try again.');
     }
   };
 
@@ -208,7 +208,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       setShowAddForm(false);
     } catch (error) {
       console.error('Error adding batch entries:', error);
-      alert('Failed to add entries. Please try again.');
+      toast.error('Failed to add entries. Please try again.');
     }
   };
 
@@ -225,7 +225,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       });
     } catch (error) {
       console.error('Error deleting entry:', error);
-      alert('Failed to delete entry. Please try again.');
+      toast.error('Failed to delete entry. Please try again.');
     }
   };
 
@@ -442,10 +442,10 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
 
     try {
       await navigator.clipboard.writeText(text);
-      alert('Copied to clipboard!');
+      toast.success('Copied to clipboard!');
     } catch (error) {
       console.error('Error copying to clipboard:', error);
-      alert('Failed to copy to clipboard');
+      toast.error('Failed to copy to clipboard');
     }
     setShowCopyDropdown(false);
   };
@@ -1329,7 +1329,7 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
       const validTrucks = trucks.filter(t => t.truckNo && t.liters > 0);
       
       if (validTrucks.length === 0) {
-        alert('Please add at least one truck with liters');
+        toast.warn('Please add at least one truck with liters');
         setIsLoading(false);
         return;
       }
@@ -1377,7 +1377,7 @@ const AddDriverAccountEntryModal: React.FC<AddDriverAccountEntryModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Error submitting driver account entry:', error);
-      alert('Failed to create entry. Please try again.');
+      toast.error('Failed to create entry. Please try again.');
     } finally {
       setIsLoading(false);
     }

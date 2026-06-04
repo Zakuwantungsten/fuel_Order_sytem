@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { formatDate as formatSystemDate } from '../utils/timezone';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import { amendedDOsAPI } from '../services/api';
+import { toast } from 'react-toastify';
 import { X, Trash2, Download, FileText } from 'lucide-react';
 
 interface AmendedDOsModalProps {
@@ -12,7 +13,6 @@ interface AmendedDOsModalProps {
 const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
   const { amendedDOs, removeAmendedDO, clearAmendedDOs, count } = useAmendedDOs();
   const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedDOs, setSelectedDOs] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
 
@@ -48,15 +48,14 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
       : amendedDOs.map(d => d.id);
 
     if (doIdsToDownload.length === 0) {
-      setError('No amended/cancelled DOs to download');
+      toast.error('No amended/cancelled DOs to download');
       return;
     }
 
     setDownloading(true);
-    setError(null);
     try {
       await amendedDOsAPI.downloadPDF(doIdsToDownload);
-      
+
       // Clear the downloaded DOs from the session list
       if (selectedDOs.size > 0) {
         // Only clear selected ones
@@ -66,10 +65,10 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
         // Clear all
         clearAmendedDOs();
       }
-      
+
       onClose();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to download PDF');
+      toast.error(err.response?.data?.message || 'Failed to download PDF');
     } finally {
       setDownloading(false);
     }
@@ -112,13 +111,6 @@ const AmendedDOsModal = ({ isOpen, onClose }: AmendedDOsModalProps) => {
             </button>
           </div>
         </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="px-6 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          </div>
-        )}
 
         {/* Content */}
         <div className="flex-1 overflow-auto px-6 py-4">

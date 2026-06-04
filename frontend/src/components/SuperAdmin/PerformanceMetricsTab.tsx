@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, RefreshCw, AlertTriangle } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { TrendingUp, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import apiClient from '../../services/api';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
@@ -22,17 +23,15 @@ interface MetricsData {
 export const PerformanceMetricsTab: React.FC = () => {
   const [data, setData] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(7);
 
   const fetchData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const res = await apiClient.get('/system-admin/performance-metrics', { params: { days } });
       setData(res.data.data);
     } catch {
-      setError('Failed to load metrics');
+      toast.error('Failed to load metrics');
     } finally {
       setLoading(false);
     }
@@ -63,8 +62,6 @@ export const PerformanceMetricsTab: React.FC = () => {
           </button>
         </div>
       </div>
-
-      {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
 
       {loading ? (
         <UnifiedTabLoader label="Loading performance metrics..." heightClassName="py-20" />

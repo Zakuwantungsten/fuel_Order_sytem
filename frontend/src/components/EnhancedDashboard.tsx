@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { fuelRecordKeys } from '../hooks/useFuelRecords';
@@ -169,7 +170,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [editDoId, setEditDoId] = useState<string | null>(null);
   const [pendingTruckSuffix, setPendingTruckSuffix] = useState<string>('');
   const [, setHighlightParam] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const { logout, toggleTheme, isDark } = useAuth();
   const queryClient = useQueryClient();
@@ -993,17 +993,6 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         </header>
 
         <main id="main-scroll-container" className="flex-1 overflow-y-auto p-6" style={{ background: isDark ? '#0F172A' : '#F8FAFC' }}>
-          {successMessage && (
-            <div className="mb-4 rounded-lg p-4 flex items-center justify-between" style={{ background: isDark ? 'rgba(22,163,74,0.15)' : '#DCFCE7', border: `1px solid ${isDark ? 'rgba(22,163,74,0.3)' : '#86EFAC'}` }}>
-              <span style={{ color: isDark ? '#86EFAC' : '#15803D' }}>{successMessage}</span>
-              <button
-                onClick={() => setSuccessMessage(null)}
-                style={{ color: isDark ? '#86EFAC' : '#16A34A' }}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
           {/* Always-mounted overview dashboards — stay alive when navigating to other tabs */}
           <Suspense fallback={<TabFallback />}>
             {hasOverviewTab && (
@@ -1023,8 +1012,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             onClose={() => setShowChangePassword(false)}
             onSuccess={() => {
               setShowChangePassword(false);
-              setSuccessMessage('Password changed successfully!');
-              setTimeout(() => setSuccessMessage(null), 5000);
+              toast.success('Password changed successfully!');
             }}
           />
         </Suspense>

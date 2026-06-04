@@ -32,7 +32,6 @@ const STATUS_BADGES: Record<string, { color: string; icon: any }> = {
 export default function PrivilegeElevationTab() {
   const [requests, setRequests] = useState<PrivilegeRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [denyReason, setDenyReason] = useState('');
   const [denyingId, setDenyingId] = useState<string | null>(null);
@@ -43,9 +42,9 @@ export default function PrivilegeElevationTab() {
       const params = statusFilter ? { status: statusFilter } : {};
       const res = await apiClient.get('/system-admin/privilege-elevation', { params });
       if (res.data.success) setRequests(res.data.data);
-      else setError(res.data.message);
+      else toast.error(res.data.message);
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message);
+      toast.error(err.response?.data?.message || err.message);
     } finally {
       setLoading(false);
     }
@@ -62,11 +61,10 @@ export default function PrivilegeElevationTab() {
         setDenyReason('');
         fetchRequests();
       } else {
-        setError(res.data.message);
-        setTimeout(() => setError(null), 5000);
+        toast.error(res.data.message);
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message);
+      toast.error(err.response?.data?.message || err.message);
     }
   };
 
@@ -83,12 +81,6 @@ export default function PrivilegeElevationTab() {
           <RefreshCw className="w-5 h-5 text-gray-500" />
         </button>
       </div>
-
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
-          {error}
-        </div>
-      )}
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">

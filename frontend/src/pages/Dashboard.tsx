@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Search, 
-  FileText, 
-  Fuel, 
-  ClipboardList, 
+import {
+  Search,
+  FileText,
+  Fuel,
+  ClipboardList,
   TrendingUp,
   ChevronUp,
   ChevronDown,
@@ -13,13 +13,13 @@ import {
   Package,
   Plus,
   BarChart3,
-  AlertCircle,
   ArrowRight,
   Loader,
   X,
   Truck,
   Clock,
   CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
@@ -463,7 +463,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     return <UnifiedTabLoader label="Loading dashboard..." />;
   }
 
-  if (error || !stats) {
+  if (!stats) {
     return (
       <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
         <p className="text-red-800 dark:text-red-300">{error || 'No data available'}</p>

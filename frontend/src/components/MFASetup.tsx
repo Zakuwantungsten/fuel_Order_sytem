@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import QRCode from 'react-qr-code';
+import { toast } from 'react-toastify';
 import { getCsrfToken } from '../services/api';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
@@ -25,7 +26,6 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [copiedBackupCodes, setCopiedBackupCodes] = useState(false);
 
   const authHeaders = () => {
@@ -39,7 +39,6 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
   };
 
   const handleMethodSelection = async (method: 'totp' | 'sms' | 'email') => {
-    setError('');
     setVerificationCode('');
     if (method === 'totp') {
       await generateTOTPSecret();
@@ -53,7 +52,6 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
   // ── TOTP ──
   const generateTOTPSecret = async () => {
     setLoading(true);
-    setError('');
     try {
       const res = await fetch(`${API_BASE}/mfa/setup/totp/generate`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
@@ -65,22 +63,21 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
         setTotpData(data.data);
         setStep('totp-scan');
       }
-    } catch (err: any) { setError(err.message); }
+    } catch (err: any) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 
   const handleVerifyTOTP = async () => {
     if (!alreadyConfigured && !totpData) {
-      setError('Please generate a TOTP secret first');
+      toast.error('Please generate a TOTP secret first');
       return;
     }
     if (!verificationCode) {
-      setError('Please enter the verification code');
+      toast.error('Please enter the verification code');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const response = await fetch(`${API_BASE}/mfa/setup/totp/verify`, {
@@ -101,7 +98,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
       setBackupCodes(data.data.backupCodes);
       setStep('backup-codes');
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -130,20 +127,18 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
   // ── Email OTP ──
   const startEmailSetup = async () => {
     setLoading(true);
-    setError('');
     try {
       const res = await fetch(`${API_BASE}/mfa/setup/email/enable`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to send email code');
       setStep('email-verify');
-    } catch (err: any) { setError(err.message); }
+    } catch (err: any) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 
   const handleVerifyEmail = async () => {
-    if (!verificationCode) { setError('Please enter the code'); return; }
+    if (!verificationCode) { toast.error('Please enter the code'); return; }
     setLoading(true);
-    setError('');
     try {
       const res = await fetch(`${API_BASE}/mfa/setup/email/verify`, {
         method: 'POST', headers: authHeaders(),
@@ -152,15 +147,14 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Invalid code');
       onComplete();
-    } catch (err: any) { setError(err.message); }
+    } catch (err: any) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 
   // ── SMS OTP ──
   const handleSendSMSCode = async () => {
-    if (!phoneNumber) { setError('Enter your phone number'); return; }
+    if (!phoneNumber) { toast.error('Enter your phone number'); return; }
     setLoading(true);
-    setError('');
     try {
       const res = await fetch(`${API_BASE}/mfa/setup/sms/send`, {
         method: 'POST', headers: authHeaders(),
@@ -169,14 +163,13 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to send SMS');
       setStep('sms-verify');
-    } catch (err: any) { setError(err.message); }
+    } catch (err: any) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 
   const handleVerifySMS = async () => {
-    if (!verificationCode) { setError('Enter the code'); return; }
+    if (!verificationCode) { toast.error('Enter the code'); return; }
     setLoading(true);
-    setError('');
     try {
       const res = await fetch(`${API_BASE}/mfa/setup/sms/verify`, {
         method: 'POST', headers: authHeaders(),
@@ -185,7 +178,7 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Invalid code');
       onComplete();
-    } catch (err: any) { setError(err.message); }
+    } catch (err: any) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 
@@ -194,12 +187,6 @@ export const MFASetup: React.FC<MFASetupProps> = ({ onComplete, onCancel }) => {
       <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
         Enable Two-Factor Authentication
       </h2>
-
-      {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-        </div>
-      )}
 
       {/* Step 1: Choose Method */}
       {step === 'method' && (

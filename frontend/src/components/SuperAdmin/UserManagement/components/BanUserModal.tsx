@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import {
   Ban, Loader2, AlertTriangle,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { usersAPI } from '../../../../services/api';
 import type { User } from '../../../../types';
 import AccessibleModal from './AccessibleModal';
@@ -18,31 +19,28 @@ interface BanUserModalProps {
 export default function BanUserModal({ isOpen, user, onClose, onSuccess }: BanUserModalProps) {
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Reset on open
   useEffect(() => {
     if (isOpen) {
       setReason('');
-      setError(null);
       setLoading(false);
     }
   }, [isOpen]);
 
   const handleBan = useCallback(async () => {
     if (!reason.trim()) {
-      setError('A reason is required when banning a user.');
+      toast.error('A reason is required when banning a user.');
       return;
     }
     setLoading(true);
-    setError(null);
     try {
       const userId = String(user.id || (user as any)._id);
       await usersAPI.ban(userId, reason.trim());
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to ban user. Please try again.');
+      toast.error(err?.response?.data?.message || 'Failed to ban user. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -115,7 +113,7 @@ export default function BanUserModal({ isOpen, user, onClose, onSuccess }: BanUs
           <textarea
             id="ban-reason"
             value={reason}
-            onChange={e => { setReason(e.target.value); setError(null); }}
+            onChange={e => { setReason(e.target.value); }}
             rows={3}
             placeholder="Provide a reason for banning this user..."
             disabled={loading}
@@ -126,13 +124,6 @@ export default function BanUserModal({ isOpen, user, onClose, onSuccess }: BanUs
           </p>
         </div>
 
-        {/* Error */}
-        {error && (
-          <div className="flex items-start gap-2.5 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg">
-            <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-red-700 dark:text-red-300">{error}</p>
-          </div>
-        )}
       </div>
     </AccessibleModal>
   );

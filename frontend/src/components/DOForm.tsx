@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { toast } from 'react-toastify';
 import { X, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI, configAPI } from '../services/api';
@@ -182,7 +183,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     
     // Check for corrupted data and alert user if found
     if (isCorruptedDriverName(formData.driverName)) {
-      alert('Driver name field contains invalid data (appears to be tonnage data). Please enter a valid driver name.');
+      toast.warn('Driver name field contains invalid data (appears to be tonnage data). Please enter a valid driver name.');
       return;
     }
     
@@ -221,7 +222,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       }
     } catch (error) {
       console.error('Error in handleSubmit:', error);
-      alert('Failed to save delivery order. Check console for details.');
+      toast.error('Failed to save delivery order. Check console for details.');
     } finally {
       setIsSubmitting(false);
     }
@@ -236,13 +237,13 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       const token = sessionStorage.getItem('fuel_order_token');
 
       if (!token) {
-        alert('Authentication required. Please log in again.');
+        toast.error('Authentication required. Please log in again.');
         return;
       }
 
       const orderId = (targetOrder as any)._id || targetOrder.id;
       if (!orderId) {
-        alert('Error: Could not find the delivery order ID. You can download it from the orders list.');
+        toast.error('Error: Could not find the delivery order ID. You can download it from the orders list.');
         return;
       }
 
@@ -274,7 +275,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     } catch (error: any) {
       console.error('Error downloading PDF:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Failed to download PDF: ${errorMessage}\n\nYou can download it from the orders list.`);
+      toast.error(`Failed to download PDF: ${errorMessage}. You can download it from the orders list.`);
     } finally {
       setIsDownloading(false);
     }

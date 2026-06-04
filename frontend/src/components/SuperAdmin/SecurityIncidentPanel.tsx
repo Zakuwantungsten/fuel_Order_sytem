@@ -3,6 +3,7 @@
  * Create, track, investigate, and resolve security incidents.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import { getCsrfToken } from '../../services/api';
 import {
   AlertTriangle, RefreshCw, CheckCircle, Eye, Search as SearchIcon,
@@ -118,7 +119,6 @@ function relativeTime(iso: string): string {
 
 export default function SecurityIncidentPanel() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [incidentsPage, setIncidentsPage] = useState<IncidentsPage | null>(null);
   const [stats, setStats] = useState<IncidentStats | null>(null);
   const [page, setPage] = useState(1);
@@ -137,7 +137,6 @@ export default function SecurityIncidentPanel() {
 
   const fetchIncidents = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const params = new URLSearchParams();
       params.set('page', page.toString());
@@ -146,7 +145,7 @@ export default function SecurityIncidentPanel() {
       const data = await apiFetch<IncidentsPage>(`?${params.toString()}`);
       setIncidentsPage(data);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -171,7 +170,7 @@ export default function SecurityIncidentPanel() {
       await fetchIncidents();
       await fetchStats();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setActionLoading(null);
     }
@@ -188,7 +187,7 @@ export default function SecurityIncidentPanel() {
       setNoteText('');
       await fetchIncidents();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setActionLoading(null);
     }
@@ -212,7 +211,7 @@ export default function SecurityIncidentPanel() {
       await fetchIncidents();
       await fetchStats();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setActionLoading(null);
     }
@@ -233,7 +232,7 @@ export default function SecurityIncidentPanel() {
       setRootCauseForm({ rootCause: '', impactAssessment: '' });
       await fetchIncidents();
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setActionLoading(null);
     }
@@ -423,13 +422,6 @@ export default function SecurityIncidentPanel() {
               className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >Save</button>
           </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
-          <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
         </div>
       )}
 

@@ -7,11 +7,10 @@ import {
   LogOut,
   Shield,
   Clock,
-  AlertTriangle,
   RefreshCw,
-  CheckCircle,
   X,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import apiClient from '../services/api';
 
 interface Session {
@@ -44,18 +43,9 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [revokingAll, setRevokingAll] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  useEffect(() => {
-    if (!success) return;
-    const timer = setTimeout(() => setSuccess(''), 4000);
-    return () => clearTimeout(timer);
-  }, [success]);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
-    setError('');
     try {
       const response = await apiClient.get('/mfa/login-activity');
       const data = response.data;
@@ -64,7 +54,7 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
       }
       setSessions(data.data.activities || []);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -76,18 +66,16 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
 
   const revokeSession = async (sessionId: string) => {
     setRevoking(sessionId);
-    setError('');
-    setSuccess('');
     try {
       const response = await apiClient.delete(`/mfa/sessions/${sessionId}`);
       const data = response.data;
       if (!data.success) {
         throw new Error(data.message || 'Failed to revoke session');
       }
-      setSuccess('Session signed out successfully');
+      toast.success('Session signed out successfully');
       setSessions(prev => prev.filter(s => s._id !== sessionId));
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setRevoking(null);
     }
@@ -95,18 +83,16 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
 
   const revokeAllOthers = async () => {
     setRevokingAll(true);
-    setError('');
-    setSuccess('');
     try {
       const response = await apiClient.post('/mfa/sessions/revoke-all');
       const data = response.data;
       if (!data.success) {
         throw new Error(data.message || 'Failed to revoke sessions');
       }
-      setSuccess(`Signed out of ${data.data.revokedCount} other session(s)`);
+      toast.success(`Signed out of ${data.data.revokedCount} other session(s)`);
       setSessions(prev => prev.filter(s => s.isCurrent));
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setRevokingAll(false);
     }
@@ -160,20 +146,6 @@ const DevicesSessionsPanel: React.FC<DevicesSessionsPanelProps> = ({ onClose }) 
           </div>
         </div>
       </div>
-
-      {/* Alerts */}
-      {error && (
-        <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-          <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
-        </div>
-      )}
-      {success && (
-        <div className="mx-6 mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-          <span className="text-sm text-green-700 dark:text-green-300">{success}</span>
-        </div>
-      )}
 
       {/* Content */}
       <div className="p-6">

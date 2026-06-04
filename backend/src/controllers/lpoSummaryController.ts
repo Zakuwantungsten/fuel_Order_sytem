@@ -918,7 +918,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     // Enforce edit lock — the caller must hold a valid lock to update
     const username = req.user?.username;
     if (!username) throw new ApiError(401, 'Authentication required');
-    await enforceEditLock(LPOSummary, id, username);
+    await enforceEditLock(LPOSummary, id, username, 'lpo_summaries');
 
     logger.info(`Updating LPO ${existingLpo.lpoNo}, station: ${existingLpo.station}`);
 

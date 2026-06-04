@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import {
   ShieldAlert,
   RefreshCw,
-  AlertTriangle,
   ChevronDown,
   Search,
   BarChart3,
@@ -127,7 +127,6 @@ export default function SecurityEventsTab() {
   const { exporting, exportSecurityEvents } = useSecurityExport();
   const [view, setView] = useState<'events' | 'stats'>('stats');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Stats
   const [stats, setStats] = useState<EventStats | null>(null);
@@ -147,7 +146,6 @@ export default function SecurityEventsTab() {
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const [s, ips, tl] = await Promise.all([
         apiFetch<EventStats>(`/stats?hours=${statsHours}`),
@@ -158,7 +156,7 @@ export default function SecurityEventsTab() {
       setTopIPs(ips);
       setTimeline(tl);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -166,7 +164,6 @@ export default function SecurityEventsTab() {
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const params = new URLSearchParams();
       params.set('page', page.toString());
@@ -177,7 +174,7 @@ export default function SecurityEventsTab() {
       const data = await apiFetch<EventsPage>(`?${params.toString()}`);
       setEventsPage(data);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -236,13 +233,6 @@ export default function SecurityEventsTab() {
           </button>
         </div>
       </div>
-
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
-          <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
-        </div>
-      )}
 
       {/* ─── Stats Dashboard View ─── */}
       {view === 'stats' && stats && (

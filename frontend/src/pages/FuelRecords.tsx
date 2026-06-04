@@ -15,6 +15,7 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useEditLockSync } from '../hooks/useEditLockSync';
 import ConflictModal from '../components/ConflictModal';
 import EditLockBadge from '../components/EditLockBadge';
 import { useAuth } from '../contexts/AuthContext';
@@ -527,6 +528,9 @@ const FuelRecords = () => {
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
   }, 'rt-fuel-records');
 
+  // Live-update the "Editing: …" badge without refetching the list.
+  useEditLockSync('fuel_records');
+
   // Real-time sync for LPO changes — when an LPO is modified the fuel records
   // list may reflect different linkage so we do a full list refresh here.
   useRealtimeSync('lpo_summaries', () => {
@@ -705,7 +709,7 @@ const FuelRecords = () => {
       });
     
       if (yearlyRecords.length === 0) {
-        alert(`No records found for year ${year}`);
+        toast.warn(`No records found for year ${year}`);
         return;
       }
     
@@ -791,7 +795,7 @@ const FuelRecords = () => {
     });
     } catch (error) {
       console.error('Error exporting fuel records:', error);
-      alert('Failed to export fuel records. Please try again.');
+      toast.error('Failed to export fuel records. Please try again.');
     }
   };
 

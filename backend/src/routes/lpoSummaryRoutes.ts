@@ -93,7 +93,7 @@ router.put(
 // document, which is disallowed. Sheets are cancelled, not deleted.
 
 // Edit lock routes for LPO Summary documents (same roles as update)
-const lpoSummaryLock = createEditLockHandlers(LPOSummary, 'lpo_documents');
+const lpoSummaryLock = createEditLockHandlers(LPOSummary, 'lpo_summaries');
 router.post('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(lpoSummaryLock.acquireEditLock));
 router.delete('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(lpoSummaryLock.releaseEditLock));
 

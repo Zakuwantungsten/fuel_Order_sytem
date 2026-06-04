@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronRight, ClipboardCheck,
   AlertOctagon,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 /* ───────── Types ───────── */
@@ -60,13 +61,11 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export default function ComplianceDashboard() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ComplianceData | null>(null);
   const [expandedFramework, setExpandedFramework] = useState<string | null>(null);
 
   const fetchCompliance = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const token = sessionStorage.getItem('fuel_order_token');
       const res = await fetch(`${API_BASE}/system-admin/compliance`, {
@@ -76,7 +75,7 @@ export default function ComplianceDashboard() {
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load compliance data');
       setData(json.data);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -86,16 +85,6 @@ export default function ComplianceDashboard() {
 
   if (loading && !data) {
     return <UnifiedTabLoader label="Loading compliance dashboard..." heightClassName="py-16" />;
-  }
-
-  if (error && !data) {
-    return (
-      <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-2">
-        <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
-        <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
-        <button onClick={fetchCompliance} className="ml-auto text-xs text-red-600 hover:underline">Retry</button>
-      </div>
-    );
   }
 
   if (!data) return null;

@@ -66,7 +66,6 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
     if (!newPassword || !confirmPassword) {
       setError('Please fill in both fields.');
       return;
@@ -95,7 +94,6 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
       }
 
       setSuccess(true);
-      // Give the user a moment to read the success message, then continue
       setTimeout(() => {
         onSuccess();
       }, 1800);
@@ -197,7 +195,7 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
                     autoComplete="new-password"
                     required
                     value={newPassword}
-                    onChange={(e) => { setNewPassword(e.target.value); setError(null); }}
+                    onChange={(e) => setNewPassword(e.target.value)}
                     disabled={isLoading}
                     placeholder={`Minimum ${policy.minLength} characters`}
                     className="block w-full pl-9 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-xl
@@ -254,7 +252,7 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
                     autoComplete="new-password"
                     required
                     value={confirmPassword}
-                    onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     disabled={isLoading}
                     placeholder="Repeat your new password"
                     className="block w-full pl-9 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-xl

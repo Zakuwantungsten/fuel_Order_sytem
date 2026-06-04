@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'react-toastify';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { initializeWebSocket, subscribeToNotifications, unsubscribeFromNotifications, subscribeToSessionEvents, unsubscribeFromSessionEvents, subscribeToReconnect, unsubscribeFromReconnect, subscribeToDataChanges, unsubscribeFromDataChanges } from '../services/websocket';
@@ -359,15 +360,15 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
         const response = await api.post(`/delivery-orders/${doId}/relink-to-fuel-record`);
         
         if (response.data.success && response.data.data?.fuelRecord) {
-          alert(`✓ Successfully linked DO-${notification.metadata?.doNumber} to fuel record!`);
+          toast.success(`Successfully linked DO-${notification.metadata?.doNumber} to fuel record!`);
           loadNotifications();
         } else {
-          alert(`Could not link: ${response.data.message}\n\nPlease edit the DO to correct the truck number.`);
+          toast.error(`Could not link: ${response.data.message}. Please edit the DO to correct the truck number.`);
         }
       }
     } catch (error) {
       console.error('Failed to re-link DO:', error);
-      alert('Failed to re-link. Please try again.');
+      toast.error('Failed to re-link. Please try again.');
     } finally {
       setRelinkingId(null);
     }

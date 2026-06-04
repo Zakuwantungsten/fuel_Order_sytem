@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { formatDate as formatSystemDate } from '../utils/timezone';
 import { X, Clock, Copy, Trash2, AlertTriangle, Search } from 'lucide-react';
 import { CancellationReport } from '../types';
@@ -35,10 +36,10 @@ const CancellationHistoryModal: React.FC<CancellationHistoryModalProps> = ({ isO
   const handleCopyReport = async (report: CancellationReport) => {
     try {
       await navigator.clipboard.writeText(report.reportText);
-      alert('Report copied to clipboard!');
+      toast.success('Report copied to clipboard!');
     } catch (error) {
       console.error('Error copying report:', error);
-      alert('Failed to copy report');
+      toast.error('Failed to copy report');
     }
   };
 

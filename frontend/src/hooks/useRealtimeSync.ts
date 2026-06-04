@@ -5,6 +5,14 @@ import { lpoKeys } from './useLPOs';
 import { deliveryOrderKeys } from './useDeliveryOrders';
 import { fuelRecordKeys } from './useFuelRecords';
 
+/** Shape of a real-time data-change event delivered over the WebSocket. */
+export interface DataChangeEvent {
+  collection: string;
+  action: 'create' | 'update' | 'delete' | string;
+  timestamp: number;
+  record?: any;
+}
+
 /**
  * Map WebSocket collection names → the React Query cache keys they should invalidate.
  * A single event may need to bust multiple query families (cross-entity dependencies).
@@ -87,12 +95,15 @@ function patchRecordInListCaches(
  * - Always calls the onRefresh() callback for extra component-level invalidations.
  *
  * @param collections  Collection name(s) to watch
- * @param onRefresh    Called after every matching event — use for extra invalidations
+ * @param onRefresh    Called after every matching event. Receives the raw event
+ *                     so consumers that manage their own local state can patch a
+ *                     single record in place instead of refetching everything.
+ *                     Existing zero-argument callbacks keep working unchanged.
  * @param id           Unique subscriber ID (auto-derived from collection names if omitted)
  */
 export function useRealtimeSync(
   collections: string | string[],
-  onRefresh: () => void,
+  onRefresh: (event?: DataChangeEvent) => void,
   id?: string
 ) {
   const queryClient = useQueryClient();
@@ -132,7 +143,7 @@ export function useRealtimeSync(
             }
           }
 
-          refreshRef.current();
+          refreshRef.current(event as DataChangeEvent);
           return;
         }
       }
@@ -153,7 +164,7 @@ export function useRealtimeSync(
         }
       }
 
-      refreshRef.current();
+      refreshRef.current(event as DataChangeEvent);
     }, subId);
 
     return () => {

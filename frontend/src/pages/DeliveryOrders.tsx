@@ -4,7 +4,7 @@ import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
 import { DeliveryOrder } from '../types';
-import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
+import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, resourceLockAPI } from '../services/api';
 import DODetailModal from '../components/DODetailModal';
 import DOForm from '../components/DOForm';
 import BulkDOForm from '../components/BulkDOForm';
@@ -18,6 +18,7 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { useTruckBatches } from '../hooks/useTruckBatches';
 import { useRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useEditLockSync } from '../hooks/useEditLockSync';
 import { useAuth } from '../contexts/AuthContext';
 import ConflictModal from '../components/ConflictModal';
 import EditLockBadge from '../components/EditLockBadge';
@@ -30,6 +31,7 @@ import {
   useDOAvailablePeriods,
 } from '../hooks/useDeliveryOrders';
 import { fuelRecordKeys } from '../hooks/useFuelRecords';
+import { toast } from 'react-toastify';
 
 // Month names for display
 const MONTH_NAMES = [
@@ -433,6 +435,35 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
   });
 
+  // Live-update the "Editing: …" badge without refetching the list.
+  useEditLockSync('delivery_orders');
+
+  // Creation lock: only one DO creation (single-form OR bulk) may be in progress
+  // at a time, globally. We acquire a 'do_create' resource lock whenever a create
+  // UI is open (editing an existing DO uses the per-document lock instead, so it's
+  // excluded) and release it when the UI closes. A held lock blocks the new flow.
+  const doCreateActive = (isFormOpen && !editingOrder) || isBulkFormOpen;
+  useEffect(() => {
+    if (!doCreateActive) return;
+    let cancelled = false;
+    resourceLockAPI.acquire('do_create').catch((err: any) => {
+      if (err?.response?.status === 423) {
+        const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+        toast.error(`DO creation is currently in use by ${holder}. Please try again shortly.`);
+        if (!cancelled) {
+          setIsFormOpen(false);
+          setEditingOrder(null);
+          setIsBulkFormOpen(false);
+        }
+      }
+      // Other errors: fail open — don't block creation on a lock-service hiccup.
+    });
+    return () => {
+      cancelled = true;
+      resourceLockAPI.release('do_create').catch(() => { /* idempotent / not holder */ });
+    };
+  }, [doCreateActive]);
+
   const handleExportWorkbook = async (year: number, workbookType?: string) => {
     try {
       setExportingYear(year);
@@ -441,18 +472,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       
       if (type === 'SDO') {
         await sdoWorkbookAPI.exportWorkbook(year);
-        alert(`✓ SDO Workbook SDO_${year}.xlsx downloaded successfully!`);
+        toast.success(`SDO Workbook SDO_${year}.xlsx downloaded successfully!`);
       } else {
         await doWorkbookAPI.exportWorkbook(year);
-        alert(`✓ Workbook DELIVERY_ORDERS_${year}.xlsx downloaded successfully!`);
+        toast.success(`Workbook DELIVERY_ORDERS_${year}.xlsx downloaded successfully!`);
       }
     } catch (error: any) {
       console.error('Error exporting workbook:', error);
       const type = workbookType || filterDoType;
       if (error.response?.status === 404) {
-        alert(`No ${type === 'SDO' ? 'SDO' : 'delivery'} orders found for year ${year}`);
+        toast.warn(`No ${type === 'SDO' ? 'SDO' : 'delivery'} orders found for year ${year}`);
       } else {
-        alert('Failed to export workbook. Please try again.');
+        toast.error('Failed to export workbook. Please try again.');
       }
     } finally {
       setExportingYear(null);
@@ -467,18 +498,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       
       if (type === 'SDO') {
         await sdoWorkbookAPI.exportYearlyMonthlySummaries(year);
-        alert(`✓ SDO Monthly Summaries SDO_Monthly_Summaries_${year}.xlsx downloaded successfully!`);
+        toast.success(`SDO Monthly Summaries SDO_Monthly_Summaries_${year}.xlsx downloaded successfully!`);
       } else {
         await doWorkbookAPI.exportYearlyMonthlySummaries(year);
-        alert(`✓ Monthly Summaries DO_Monthly_Summaries_${year}.xlsx downloaded successfully!`);
+        toast.success(`Monthly Summaries DO_Monthly_Summaries_${year}.xlsx downloaded successfully!`);
       }
     } catch (error: any) {
       console.error('Error exporting monthly summaries:', error);
       const type = workbookType || filterDoType;
       if (error.response?.status === 404) {
-        alert(`No ${type === 'SDO' ? 'SDO' : 'delivery'} orders found for year ${year}`);
+        toast.warn(`No ${type === 'SDO' ? 'SDO' : 'delivery'} orders found for year ${year}`);
       } else {
-        alert('Failed to export monthly summaries. Please try again.');
+        toast.error('Failed to export monthly summaries. Please try again.');
       }
     } finally {
       setExportingYear(null);
@@ -621,7 +652,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-          alert(`This delivery order is being edited by ${lockHolder}.`);
+          toast.error(`This delivery order is being edited by ${lockHolder}.`);
           return;
         }
       }
@@ -719,7 +750,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                 }
                 
                 message += '\n\nNotification resolved.';
-                alert(message);
+                toast.success(message);
               }
             } else {
               console.log('Re-link result:', relinkResult.message);
@@ -759,9 +790,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
       } else if (error.response?.status === 423) {
         const lockHolder = error.response?.data?.data?.editLock?.lockedByName || 'another user';
-        alert(`This delivery order is being edited by ${lockHolder}. Please try again later.`);
+        toast.error(`This delivery order is being edited by ${lockHolder}. Please try again later.`);
       } else {
-        alert('Failed to save delivery order. Error: ' + (error.response?.data?.message || error.message));
+        toast.error('Failed to save delivery order. Error: ' + (error.response?.data?.message || error.message));
       }
       throw error;
     }
@@ -804,7 +835,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         }
       }
       
-      alert(message);
+      toast.success(message);
       handleCloseCancelModal();
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
@@ -812,7 +843,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     } catch (error: any) {
       console.error('Failed to cancel order:', error);
       const errorMessage = error.response?.data?.message || 'Failed to cancel delivery order';
-      alert(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsCancelling(false);
     }
@@ -842,7 +873,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     } catch (error: any) {
       const msg = error.response?.data?.message || error.message || 'Unknown error';
       console.error('✗ Bulk creation request failed:', msg);
-      alert(`Failed to create delivery orders.\n\n${msg}`);
+      toast.error(`Failed to create delivery orders. ${msg}`);
       return { success: false, createdOrders: [] };
     }
 
@@ -880,7 +911,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       }
 
       summaryMsg += `\n\nℹ️ Check the notification bell for details.`;
-      alert(summaryMsg);
+      toast.info(summaryMsg);
     }
 
     return {
@@ -1894,7 +1925,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
               queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
               handleCloseForm();
             } catch (err: any) {
-              alert(err.response?.data?.message || 'Retry failed');
+              toast.error(err.response?.data?.message || 'Retry failed');
             }
           }
           setConflictData(null);

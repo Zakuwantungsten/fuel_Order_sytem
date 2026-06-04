@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
-import { ShieldCheck, RefreshCw, AlertTriangle, Loader2, X, Lock, Unlock, ShieldOff } from 'lucide-react';
+import { ShieldCheck, RefreshCw, Loader2, Lock, Unlock, ShieldOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import apiClient from '../../services/api';
@@ -28,7 +28,6 @@ export const MFAManagementTab: React.FC = () => {
   const [users, setUsers] = useState<UserMFAStatus[]>([]);
   const [policy, setPolicy] = useState<{ globalEnabled: boolean; requiredRoles: string[]; allowedMethods: string[]; roleMethodOverrides: Record<string, string[]> } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterMfa, setFilterMfa] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -37,13 +36,12 @@ export const MFAManagementTab: React.FC = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const res = await apiClient.get('/system-admin/mfa-management');
       setUsers(res.data.data);
       if (res.data.policy) setPolicy(res.data.policy);
     } catch {
-      setError('Failed to load MFA status');
+      toast.error('Failed to load MFA status');
     } finally {
       setLoading(false);
     }
@@ -65,7 +63,7 @@ export const MFAManagementTab: React.FC = () => {
       setDisableTarget(null);
       await fetchData();
     } catch {
-      setError('Failed to disable MFA');
+      toast.error('Failed to disable MFA');
     } finally {
       setActionLoading(null);
       setDisabling(false);
@@ -79,7 +77,7 @@ export const MFAManagementTab: React.FC = () => {
       toast.success(`MFA mandatory=${!current} for ${username}`);
       await fetchData();
     } catch {
-      setError('Failed to update MFA requirement');
+      toast.error('Failed to update MFA requirement');
     } finally {
       setActionLoading(null);
     }
@@ -94,7 +92,7 @@ export const MFAManagementTab: React.FC = () => {
     if (effective.includes(method)) {
       updated = effective.filter(m => m !== method);
       if (updated.length === 0) {
-        setError('At least one verification method must remain enabled');
+        toast.error('At least one verification method must remain enabled');
         return;
       }
     } else {
@@ -106,7 +104,7 @@ export const MFAManagementTab: React.FC = () => {
       toast.success(`Allowed methods updated for ${username}`);
       await fetchData();
     } catch {
-      setError('Failed to update allowed methods');
+      toast.error('Failed to update allowed methods');
     } finally {
       setActionLoading(null);
     }
@@ -134,8 +132,6 @@ export const MFAManagementTab: React.FC = () => {
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh
         </button>
       </div>
-
-      {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}<button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button></div>}
 
       {/* Policy info banner */}
       {policy && (

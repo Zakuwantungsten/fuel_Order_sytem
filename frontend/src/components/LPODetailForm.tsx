@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
-import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI, configAPI } from '../services/api';
+import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI, configAPI, resourceLockAPI } from '../services/api';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
@@ -282,6 +282,28 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       .then((cfg) => setAutoDownloadLPOPdf(cfg.autoDownloadLPOPdf ?? true))
       .catch(() => {/* keep default true */});
   }, [isOpen]);
+
+  // Creation lock: only one user may use the new-LPO form at a time. Acquire a
+  // global 'lpo_create' resource lock while the form is open (creating only),
+  // and release it on close/unmount. The 5-minute TTL backs out abandoned locks.
+  useEffect(() => {
+    if (!isOpen || initialData) return;
+    let cancelled = false;
+    resourceLockAPI.acquire('lpo_create').catch((err: any) => {
+      if (err?.response?.status === 423) {
+        const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+        toast.error(`The LPO form is currently being used by ${holder}. Please try again shortly.`);
+        if (!cancelled) onClose();
+      }
+      // Other errors: fail open — don't block creation on a lock-service hiccup.
+    });
+    return () => {
+      cancelled = true;
+      resourceLockAPI.release('lpo_create').catch(() => { /* idempotent / not holder */ });
+    };
+    // onClose intentionally omitted — captured by closure; effect keys on open state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialData]);
 
   // Forward LPO Modal state
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
@@ -2319,40 +2341,40 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     
     // Validate entries
     if (!formData.entries || formData.entries.length === 0) {
-      alert('Please add at least one entry');
+      toast.warn('Please add at least one entry');
       return;
     }
 
     // Validate required fields
     if (!formData.lpoNo || !formData.lpoNo.trim()) {
-      alert('LPO number is required');
+      toast.warn('LPO number is required');
       return;
     }
     if (!formData.date) {
-      alert('Date is required');
+      toast.warn('Date is required');
       return;
     }
     if (!formData.station || !formData.station.trim()) {
-      alert('Station is required');
+      toast.warn('Station is required');
       return;
     }
     if (!formData.orderOf || !formData.orderOf.trim()) {
-      alert('Order of is required');
+      toast.warn('Order of is required');
       return;
     }
 
     // CASH station requires at least one direction with checkpoint selection
     if (formData.station === 'CASH') {
       if (!goingEnabled && !returningEnabled) {
-        alert('For CASH payments, you must enable at least one direction (Going or Returning).');
+        toast.warn('For CASH payments, you must enable at least one direction (Going or Returning).');
         return;
       }
       if (goingEnabled && !goingCheckpoint) {
-        alert('Going direction is enabled but no checkpoint is selected. Please select a checkpoint or disable Going direction.');
+        toast.warn('Going direction is enabled but no checkpoint is selected. Please select a checkpoint or disable Going direction.');
         return;
       }
       if (returningEnabled && !returningCheckpoint) {
-        alert('Returning direction is enabled but no checkpoint is selected. Please select a checkpoint or disable Returning direction.');
+        toast.warn('Returning direction is enabled but no checkpoint is selected. Please select a checkpoint or disable Returning direction.');
         return;
       }
     }
@@ -2360,19 +2382,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     // CUSTOM station validation
     if (formData.station === 'CUSTOM') {
       if (!customStationName || !customStationName.trim()) {
-        alert('For CUSTOM station, you must enter a station name.');
+        toast.warn('For CUSTOM station, you must enter a station name.');
         return;
       }
       if (!customGoingEnabled && !customReturnEnabled) {
-        alert('For CUSTOM station, you must select at least one direction (Going or Return).');
+        toast.warn('For CUSTOM station, you must select at least one direction (Going or Return).');
         return;
       }
       if (customGoingEnabled && !customGoingCheckpoint) {
-        alert('For CUSTOM station Going direction, you must select which fuel record column to update.');
+        toast.warn('For CUSTOM station Going direction, you must select which fuel record column to update.');
         return;
       }
       if (customReturnEnabled && !customReturnCheckpoint) {
-        alert('For CUSTOM station Return direction, you must select which fuel record column to update.');
+        toast.warn('For CUSTOM station Return direction, you must select which fuel record column to update.');
         return;
       }
     }
@@ -2388,7 +2410,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         const duplicateTrucks = exactDuplicates.map(([truckNo, info]) => 
           `${truckNo} (${info.liters}L in LPO #${info.lpoNo})`
         ).join('\n');
-        alert(`Cannot create LPO: The following trucks already have the SAME fuel amount allocated at ${formData.station}:\n\n${duplicateTrucks}\n\nThis looks like a duplicate entry. If you need to add extra fuel, please change the liters amount.`);
+        toast.error(`Cannot create LPO: The following trucks already have the SAME fuel amount allocated at ${formData.station}: ${duplicateTrucks}. This looks like a duplicate entry. If you need to add extra fuel, please change the liters amount.`);
         return;
       }
     }
@@ -2398,7 +2420,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       (entry) => !entry.truckNo || !entry.truckNo.trim()
     );
     if (invalidEntries.length > 0) {
-      alert('All entries must have a truck number');
+      toast.warn('All entries must have a truck number');
       return;
     }
     
@@ -2409,7 +2431,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     );
     if (duplicateTrucks.length > 0) {
       const uniqueDuplicates = [...new Set(duplicateTrucks)];
-      alert(`Cannot submit: The following trucks are entered multiple times in this form:\n\n${uniqueDuplicates.join(', ')}\n\nPlease remove the duplicate entries before submitting.`);
+      toast.error(`Cannot submit: Trucks entered multiple times: ${uniqueDuplicates.join(', ')}. Please remove the duplicate entries before submitting.`);
       return;
     }
 
@@ -2420,7 +2442,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       .filter(({ af }) => af && af.direction === 'returning' && af.returnDoMissing && af.fetched)
       .map(({ entry }) => entry.truckNo);
     if (trucksWithMissingReturnDo.length > 0) {
-      alert(`Cannot submit: The following trucks are set to "Return" direction but have no Return DO in the system:\n\n${trucksWithMissingReturnDo.join(', ')}\n\nPlease switch them back to "Going" or wait until the Return DO is entered.`);
+      toast.error(`Cannot submit: Trucks set to "Return" but missing a Return DO: ${trucksWithMissingReturnDo.join(', ')}. Switch them back to "Going" or wait until the Return DO is entered.`);
       return;
     }
 
@@ -2487,7 +2509,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           }
         } catch (error: any) {
           const msg = error?.response?.data?.message || error?.message || 'Unknown error';
-          alert(`Failed to cancel existing LPO: ${msg}\n\nFix the issue and try again. The CASH LPO has NOT been saved.`);
+          toast.error(`Failed to cancel existing LPO: ${msg}. Fix the issue and try again. The CASH LPO has NOT been saved.`);
           return; // Abort — do not save the CASH LPO with a partially-cancelled state
         }
       }
@@ -2526,7 +2548,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // Handle forward button click for NEW LPOs - create and reload form with trucks
   const handleCreateAndForward = async () => {
     if (!formData.lpoNo || !formData.station || !formData.entries || formData.entries.length === 0) {
-      alert('Please ensure the LPO has a number, station, and at least one entry before forwarding');
+      toast.warn('Please ensure the LPO has a number, station, and at least one entry before forwarding');
       return;
     }
 
@@ -2542,7 +2564,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         (entry) => !entry.truckNo || !entry.truckNo.trim()
       );
       if (invalidEntries.length > 0) {
-        alert('All entries must have a truck number');
+        toast.warn('All entries must have a truck number');
         return;
       }
 
@@ -2654,7 +2676,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       console.error('Error during create and forward:', error);
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
-      alert(`Failed to create LPO: ${error.response?.data?.message || error.message || 'Unknown error'}`);
+      toast.error(`Failed to create LPO: ${error.response?.data?.message || error.message || 'Unknown error'}`);
     } finally {
       setIsCreatingAndForwarding(false);
     }
@@ -2663,7 +2685,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // Handle forward LPO button click for EXISTING LPOs - opens full forward modal
   const handleOpenForwardModal = () => {
     if (!formData.lpoNo || !formData.station || !formData.entries || formData.entries.length === 0) {
-      alert('Please ensure the LPO has a number, station, and at least one entry before forwarding');
+      toast.warn('Please ensure the LPO has a number, station, and at least one entry before forwarding');
       return;
     }
     
@@ -2687,7 +2709,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setIsForwardModalOpen(false);
     setLpoToForward(null);
     // Optionally show success message
-    alert(`Successfully forwarded to LPO #${forwardedLpo.lpoNo} at ${forwardedLpo.station}`);
+    toast.success(`Successfully forwarded to LPO #${forwardedLpo.lpoNo} at ${forwardedLpo.station}`);
   };
 
   if (!isOpen) return null;

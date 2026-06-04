@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import ConfirmModal from './ConfirmModal';
 import {
   Flag, Plus, RefreshCw, Trash2, Edit3, X, Check, Users,
@@ -43,7 +44,6 @@ function FlagSlideOver({
   const [isEnabled, setIsEnabled] = useState(flag?.isEnabled ?? false);
   const [enabledForRoles, setEnabledForRoles] = useState<string[]>(flag?.enabledForRoles ?? []);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
   const isEditing = !!flag;
 
   function toggleRole(role: string) {
@@ -54,9 +54,8 @@ function FlagSlideOver({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
-    if (!name.trim()) { setError('Name is required'); return; }
-    if (!isEditing && !key.trim()) { setError('Key is required'); return; }
+    if (!name.trim()) { toast.error('Name is required'); return; }
+    if (!isEditing && !key.trim()) { toast.error('Key is required'); return; }
     setSaving(true);
     try {
       if (isEditing) {
@@ -66,7 +65,7 @@ function FlagSlideOver({
       }
       onSaved();
     } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Save failed');
+      toast.error(err?.response?.data?.message ?? 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -85,11 +84,6 @@ function FlagSlideOver({
           </button>
         </div>
         <form onSubmit={handleSubmit} className="flex-1 p-6 space-y-5">
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
-              {error}
-            </div>
-          )}
           {!isEditing && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Key <span className="text-red-500">*</span></label>

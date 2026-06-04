@@ -3,6 +3,7 @@ import { X, FileDown, Plus, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI, configAPI } from '../services/api';
 import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
+import { toast } from 'react-toastify';
 
 interface BulkDOFormProps {
   isOpen: boolean;
@@ -202,7 +203,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       console.log('Rate Type:', commonData.rateType);
       
       if (!bulkInput.trim()) {
-        alert('Please enter truck data to parse');
+        toast.warn('Please enter truck data to parse');
         return;
       }
       
@@ -252,15 +253,15 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         const expectedFormat = commonData.rateType === 'per_ton'
           ? 'Truck No | Trailer No | Driver Name | Tonnage | Rate Per Ton'
           : 'Truck No | Trailer No | Driver Name | Tonnage | Total Amount';
-        alert(`No valid data found. Please ensure data is tab-separated:\n${expectedFormat}`);
+        toast.warn(`No valid data found. Expected tab-separated format: ${expectedFormat}`);
         return;
       }
       
       setParsedRows(rows);
-      alert(`✓ Successfully parsed ${rows.length} truck entries`);
+      toast.success(`Successfully parsed ${rows.length} truck entries`);
     } catch (error) {
       console.error('Error parsing bulk data:', error);
-      alert('Error parsing data. Please check the format and try again.');
+      toast.error('Error parsing data. Please check the format and try again.');
     }
   };
 
@@ -272,25 +273,25 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       console.log('Parsed Rows:', parsedRows);
       
       if (parsedRows.length === 0) {
-        alert('Please parse the truck data first by clicking "Parse Data"');
+        toast.warn('Please parse the truck data first by clicking "Parse Data"');
         return;
       }
       
       // Validate required fields
       if (!commonData.clientName || !commonData.loadingPoint || !commonData.destination) {
-        alert('Please fill in all required fields:\n- Client Name\n- Loading Point\n- Destination');
+        toast.warn('Please fill in all required fields: Client Name, Loading Point, and Destination');
         return;
       }
       
       if (!commonData.startingNumber) {
-        alert('Please enter a starting number for the orders');
+        toast.warn('Please enter a starting number for the orders');
         return;
       }
       
       // Parse the starting DO number (format: XXXX/YY)
       const parsed = parseDONumber(commonData.startingNumber);
       if (!parsed) {
-        alert('Invalid DO number format. Expected format: XXXX/YY (e.g., 0001/26)');
+        toast.error('Invalid DO number format. Expected format: XXXX/YY (e.g., 0001/26)');
         return;
       }
 
@@ -338,7 +339,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         console.error('No orders were created');
         setIsCreating(false);
         setCreatedOrders([]);
-        alert('Failed to create any delivery orders. Check console for details.');
+        toast.error('Failed to create any delivery orders. Check console for details.');
         return;
       }
       
@@ -365,11 +366,11 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
             ? `✓ Success!\n\nCreated ${result.createdOrders.length} ${orderTypeLabel}${additionalInfo}.\n\nPDF file has been downloaded to your Downloads folder.`
             : `✓ Partially Complete\n\nCreated ${result.createdOrders.length} out of ${paddedOrders.length} ${orderTypeLabel}.\n\nPDF includes only successfully created orders.\n\nSee summary for skipped/failed orders.`;
 
-          alert(successMsg);
+          toast.success(successMsg);
         } catch (pdfError) {
           console.error('PDF generation error:', pdfError);
           setIsCreating(false);
-          alert(`Orders created successfully, but PDF download failed.\n\nYou can download the PDF again using the button below.`);
+          toast.warn('Orders created successfully, but PDF download failed. Use the button below to re-download.');
         }
       } else {
         setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Complete!' });
@@ -379,14 +380,14 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
           ? `✓ Success!\n\nCreated ${result.createdOrders.length} ${orderTypeLabel}${additionalInfo}.`
           : `✓ Partially Complete\n\nCreated ${result.createdOrders.length} out of ${paddedOrders.length} ${orderTypeLabel}.\n\nSee summary for skipped/failed orders.`;
 
-        alert(successMsg);
+        toast.success(successMsg);
       }
-      
+
       // Don't close automatically - let user review and close manually
       // onClose();
     } catch (error) {
       console.error('✗ Error in generateDOs:', error);
-      alert('Failed to create delivery orders. Please try again.');
+      toast.error('Failed to create delivery orders. Please try again.');
       setCreatedOrders([]);
     }
   };

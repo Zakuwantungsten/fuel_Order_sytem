@@ -786,6 +786,22 @@ export const lpoDocumentsAPI = {
 
 };
 
+/**
+ * Named "resource" locks — mutual exclusion over an operation (not a document).
+ * Used for "one-at-a-time" create flows (e.g. DO creation, the LPO detail form).
+ * Keys are validated against a server-side allowlist (`do_create`, `lpo_create`).
+ */
+export const resourceLockAPI = {
+  acquire: async (key: string): Promise<{ lockedUntil: string }> => {
+    const response = await apiClient.post(`/resource-locks/${key}/lock`);
+    return response.data?.data;
+  },
+
+  release: async (key: string): Promise<void> => {
+    await apiClient.delete(`/resource-locks/${key}/lock`);
+  },
+};
+
 // Fuel Record Details Interface
 export interface FuelRecordDetails {
   fuelRecord: FuelRecord;

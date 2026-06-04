@@ -1,16 +1,16 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { 
-  Search, 
-  Filter, 
-  Fuel, 
-  FileText, 
+import { toast } from 'react-toastify';
+import {
+  Search,
+  Filter,
+  Fuel,
+  FileText,
   Truck,
   MapPin,
   DollarSign,
   Eye,
   Building2,
   TrendingUp,
-  AlertCircle,
   X,
   ChevronRight,
   ChevronDown,
@@ -88,7 +88,7 @@ interface LPODisplayEntry extends LPOEntry {
 export function ManagerView({ user }: ManagerViewProps) {
   const [lpoEntries, setLpoEntries] = useState<LPODisplayEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('all');
   const [sortField, setSortField] = useState<'date' | 'lpoNo' | 'ltrs' | 'station'>('date');
@@ -111,7 +111,6 @@ export function ManagerView({ user }: ManagerViewProps) {
   
   // Password change states
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   
   const { toggleTheme, isDark, logout } = useAuth();
@@ -171,8 +170,8 @@ export function ManagerView({ user }: ManagerViewProps) {
     } else {
       setIsRefreshing(true);
     }
-    setError(null);
-    
+    setFetchError(null);
+
     try {
       const response = await lposAPI.getAll({ limit: 10000 });
       const entries = response.data;
@@ -198,7 +197,8 @@ export function ManagerView({ user }: ManagerViewProps) {
     } catch (err: any) {
       console.error('Error fetching LPO entries:', err);
       if (!silent) {
-        setError(err.message || 'Failed to fetch LPO data');
+        setFetchError(err.message || 'Failed to fetch LPO data');
+        toast.error(err.message || 'Failed to fetch LPO data');
       }
     } finally {
       if (!silent) {
@@ -378,13 +378,12 @@ export function ManagerView({ user }: ManagerViewProps) {
   }
 
   // Error state
-  if (error) {
+  if (fetchError) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 transition-colors">
         <div className="flex flex-col items-center space-y-4 text-center max-w-md">
-          <AlertCircle className="w-16 h-16 text-red-500 dark:text-red-400" />
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Error Loading Data</h2>
-          <p className="text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-red-600 dark:text-red-400">{fetchError}</p>
           <button
             onClick={() => fetchLPOEntries()}
             className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium"
@@ -1077,21 +1076,11 @@ export function ManagerView({ user }: ManagerViewProps) {
         <ChangePasswordModal
           onClose={() => setShowChangePassword(false)}
           onSuccess={() => {
-            setSuccessMessage('Password changed successfully!');
-            setTimeout(() => setSuccessMessage(''), 3000);
+            toast.success('Password changed successfully!');
           }}
         />
       )}
 
-      {/* Success Message */}
-      {successMessage && (
-        <div className="fixed top-4 right-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 px-6 py-3 rounded-lg shadow-lg z-50 flex items-center space-x-3">
-          <span>{successMessage}</span>
-          <button onClick={() => setSuccessMessage('')} className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </div>
   );
 }

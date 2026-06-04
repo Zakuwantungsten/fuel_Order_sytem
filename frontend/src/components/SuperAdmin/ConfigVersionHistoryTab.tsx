@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { GitCompare, RefreshCw, AlertTriangle, Loader2, ChevronDown, ChevronRight, Camera } from 'lucide-react';
+import { GitCompare, RefreshCw, Loader2, ChevronDown, ChevronRight, Camera } from 'lucide-react';
+import { toast } from 'react-toastify';
 import Pagination from '../Pagination';
 import apiClient from '../../services/api';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
@@ -15,7 +16,6 @@ interface Snapshot {
 export const ConfigVersionHistoryTab: React.FC = () => {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedData, setExpandedData] = useState<Record<string, unknown> | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -29,14 +29,13 @@ export const ConfigVersionHistoryTab: React.FC = () => {
 
   const fetchSnapshots = async (p = page) => {
     setLoading(true);
-    setError(null);
     try {
       const res = await apiClient.get('/system-admin/config-history', { params: { page: p, limit: 10 } });
       setSnapshots(res.data.data.snapshots || []);
       setTotalPages(res.data.data.pagination?.totalPages || 1);
       setTotalItems(res.data.data.pagination?.total || 0);
     } catch {
-      setError('Failed to load configuration history');
+      toast.error('Failed to load configuration history');
     } finally {
       setLoading(false);
     }
@@ -64,7 +63,7 @@ export const ConfigVersionHistoryTab: React.FC = () => {
       fetchSnapshots(1);
       setPage(1);
     } catch {
-      setError('Failed to take snapshot');
+      toast.error('Failed to take snapshot');
     } finally {
       setTaking(false);
     }
@@ -94,7 +93,6 @@ export const ConfigVersionHistoryTab: React.FC = () => {
         </div>
       </div>
 
-      {error && <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
 
       {loading ? (
         <UnifiedTabLoader label="Loading config history..." heightClassName="py-16" />
