@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI } from '../services/api';
-import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { formatTruckNumber } from '../utils/dataCleanup';
@@ -550,8 +550,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const handleDownloadPDF = async () => {
     setDownloadingPdf(true);
     try {
-      const lpoSummary = convertToLPOSummary();
-      await downloadLPOPDF(lpoSummary, undefined, user?.username, sheet.approvedBy);
+      await lpoDocumentsAPI.downloadPDF(sheet.id!);
       toast.success('LPO PDF downloaded successfully!');
     } catch (error) {
       console.error('Error downloading PDF:', error);

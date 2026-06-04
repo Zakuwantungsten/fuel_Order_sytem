@@ -1,7 +1,6 @@
 import React from 'react';
 import { LPOSummary } from '../types';
 import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { createRoot } from 'react-dom/client';
 import LPOPrint from '../components/LPOPrint';
 
@@ -144,74 +143,3 @@ export const downloadLPOImage = async (data: LPOSummary, filename?: string, prep
   }
 };
 
-/**
- * Download LPO as PDF with multi-page support
- */
-export const downloadLPOPDF = async (data: LPOSummary, filename?: string, preparedBy?: string, approvedBy?: string): Promise<void> => {
-  const element = await createLPOElement(data, preparedBy, approvedBy);
-  
-  try {
-    // Get the actual dimensions of the element
-    const elementHeight = element.scrollHeight;
-    
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      width: 794,
-      height: elementHeight,
-      windowWidth: 794,
-      windowHeight: elementHeight,
-      onclone: (clonedDoc) => {
-        // Ensure proper rendering of the cloned document
-        const clonedElement = clonedDoc.body.querySelector('[data-html2canvas]');
-        if (clonedElement) {
-          (clonedElement as HTMLElement).style.display = 'block';
-        }
-      }
-    });
-
-    // Create PDF with A4 dimensions
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-      compress: true
-    });
-
-    const imgWidth = 210; // A4 width in mm
-    const pageHeight = 297; // A4 height in mm
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    
-    const imgData = canvas.toDataURL('image/png', 1.0);
-    
-    // Check if content fits on one page
-    if (imgHeight <= pageHeight) {
-      // Single page - add directly
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-    } else {
-      // Multi-page - split content across pages with proper margins
-      let heightLeft = imgHeight;
-      let position = 0;
-      
-      // Add first page
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      
-      // Add subsequent pages
-      let page = 1;
-      while (heightLeft > 0) {
-        position = -(pageHeight * page);
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-        page++;
-      }
-    }
-    
-    pdf.save(filename || `LPO-${data.lpoNo}-${data.date}.pdf`);
-  } finally {
-    cleanupElement(element);
-  }
-};

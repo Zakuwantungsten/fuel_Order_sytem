@@ -20,6 +20,9 @@ router.get('/workbooks/years', asyncHandler(lpoSummaryController.getAvailableYea
 router.get('/workbooks/:year', asyncHandler(lpoSummaryController.getWorkbookByYear));
 router.get('/workbooks/:year/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss'), asyncHandler(lpoSummaryController.exportWorkbook));
 
+// LPO PDF download - server-generated PDF
+router.get('/:id/pdf', commonValidation.mongoId, validate, asyncHandler(lpoSummaryController.downloadLPOPDF));
+
 // Get routes - all authenticated users can read
 router.get('/next-number', asyncHandler(lpoSummaryController.getNextLPONumber));
 router.get('/find-at-checkpoint', asyncHandler(lpoSummaryController.findLPOsAtCheckpoint));

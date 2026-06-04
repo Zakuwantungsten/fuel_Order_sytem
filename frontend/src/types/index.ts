@@ -64,6 +64,7 @@ export interface DeliveryOrder {
 // Local Purchase Order (LPO) Types - Summary LPOS structure
 export interface LPOEntry {
   id?: string | number;
+  lpoId?: string; // MongoDB _id of the parent LPOSummary document
   sn: number;
   date: string;
   lpoNo: string;

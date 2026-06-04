@@ -7,10 +7,10 @@ import {
 import { toast } from 'react-toastify';
 import type { DriverAccountEntry, DriverAccountWorkbook, PaymentMode, LPOSummary, FuelStationConfig } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { driverAccountAPI, deliveryOrdersAPI } from '../services/api';
+import { driverAccountAPI, deliveryOrdersAPI, lpoDocumentsAPI } from '../services/api';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
-import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -553,8 +553,8 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
       style: { background: '#0284c7', color: '#fff' },
     });
     try {
-      const lpoSummary = convertToLPOSummary(entry);
-      await downloadLPOPDF(lpoSummary, undefined, user?.username, entry.approvedBy);
+      const lpo = await lpoDocumentsAPI.getByLpoNo(entry.lpoNo);
+      await lpoDocumentsAPI.downloadPDF(lpo.id!);
       toast.update(toastId, {
         render: `PDF downloaded: LPO ${entry.lpoNo}`,
         type: 'success',

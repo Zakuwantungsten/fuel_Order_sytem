@@ -15,7 +15,6 @@ import {
 import FuelRecordInspectModal, { calculateMbeyaReturnBalance } from './FuelRecordInspectModal';
 import ForwardLPOModal from './ForwardLPOModal';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
-import { downloadLPOPDF } from '../utils/lpoImageGenerator';
 import { toast } from 'react-toastify';
 
 // STATIONS array removed - now using dynamic stations from database
@@ -2809,7 +2808,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           style: { background: '#0284c7', color: '#fff' },
         });
         try {
-          await downloadLPOPDF(createdLpo);
+          await lpoDocumentsAPI.downloadPDF(createdLpo.id!);
           toast.update(pdfToastId, {
             render: `LPO #${createdLpo.lpoNo} created & forwarded to #${nextLpoNo} — PDF downloaded`,
             type: 'success',

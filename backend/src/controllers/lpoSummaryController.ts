@@ -2650,3 +2650,50 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     throw new ApiError(500, 'Failed to fetch available filters');
   }
 };
+
+/**
+ * Download a single LPO document as a server-generated PDF.
+ * Matches the layout of the former frontend canvas-based LPO PDF.
+ */
+export const downloadLPOPDF = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const lpoSummary = await LPOSummary.findOne({ _id: id, isDeleted: false }).lean();
+    if (!lpoSummary) {
+      throw new ApiError(404, 'LPO document not found');
+    }
+
+    const { generateLPOPDF, getCompanyBranding } = await import('../utils/pdfGenerator');
+
+    const branding = await getCompanyBranding();
+
+    // Look up approvedBy from DriverAccountEntry (used for driver-account LPOs)
+    let approvedBy: string | undefined;
+    const hasDriverAccount = lpoSummary.entries.some((e: any) => e.isDriverAccount);
+    if (hasDriverAccount) {
+      const daEntry = await DriverAccountEntry.findOne({
+        lpoNo: lpoSummary.lpoNo,
+        approvedBy: { $exists: true, $ne: '' },
+        isDeleted: false,
+      }).select('approvedBy').lean();
+      approvedBy = (daEntry as any)?.approvedBy;
+    }
+
+    const preparedBy = req.user?.username;
+    const doc = generateLPOPDF(lpoSummary as any, branding, preparedBy, approvedBy);
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `LPO-${lpoSummary.lpoNo}-${dateStr}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    doc.pipe(res);
+    doc.end();
+
+    logger.info(`LPO PDF downloaded: ${lpoSummary.lpoNo} by ${req.user?.username}`);
+  } catch (error: any) {
+    throw error;
+  }
+};

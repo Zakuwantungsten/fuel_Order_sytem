@@ -14,7 +14,7 @@ import DriverAccountWorkbook from '../components/DriverAccountWorkbook';
 import ReferWorkbook from '../components/ReferWorkbook';
 import { PermissionGuard } from '../components/ProtectedRoute';
 import { RESOURCES, ACTIONS } from '../utils/permissions';
-import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -609,8 +609,7 @@ const LPOs = () => {
       style: { background: '#0284c7', color: '#fff' },
     });
     try {
-      const lpoSummary = convertToLPOSummary(lpo);
-      await downloadLPOPDF(lpoSummary, undefined, user?.username);
+      await lpoDocumentsAPI.downloadPDF((lpo.lpoId || lpo.id)!);
       toast.update(toastId, {
         render: `PDF downloaded: LPO ${lpo.lpoNo}`,
         type: 'success',
@@ -831,7 +830,7 @@ const LPOs = () => {
           style: { background: '#0284c7', color: '#fff' },
         });
         try {
-          await downloadLPOPDF(createdLpo, undefined, user?.username);
+          await lpoDocumentsAPI.downloadPDF(createdLpo.id!);
           toast.update(pdfToastId, {
             render: `LPO ${createdLpo.lpoNo} created — PDF downloaded`,
             type: 'success',

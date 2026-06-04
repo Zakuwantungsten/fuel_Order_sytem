@@ -688,6 +688,24 @@ export const lpoDocumentsAPI = {
     return response.data.data?.nextLpoNo || '1';
   },
 
+  downloadPDF: async (id: string | number): Promise<void> => {
+    const response = await apiClient.get(`/lpo-documents/${id}/pdf`, { responseType: 'blob' });
+    const contentDisposition = response.headers['content-disposition'] as string | undefined;
+    let filename = 'LPO.pdf';
+    if (contentDisposition) {
+      const m = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (m?.[1]) filename = m[1].replace(/['"]/g, '');
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   // Keep the old method as fallback
   getLastLpoNumber: async (): Promise<string> => {
     try {

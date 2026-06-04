@@ -8,7 +8,7 @@ import type { LPOEntry, LPOSummary } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { lpoDocumentsAPI } from '../services/api';
 import { useReferEntries } from '../hooks/useLPOs';
-import { copyLPOImageToClipboard, downloadLPOPDF, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import XLSX from 'xlsx-js-style';
 
@@ -251,7 +251,7 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
     try {
       const lpo = await fetchFullLPO(entry.lpoNo);
       if (!lpo) throw new Error('LPO not found');
-      await downloadLPOPDF(lpo, undefined, user?.username);
+      await lpoDocumentsAPI.downloadPDF(lpo.id!);
       toast.update(toastId, { render: `PDF downloaded: LPO ${entry.lpoNo}`, type: 'success', isLoading: false, autoClose: 4000, style: undefined });
     } catch (error: any) {
       toast.update(toastId, { render: `PDF download failed: ${error?.message || 'Unknown error'}`, type: 'error', isLoading: false, autoClose: 6000, style: undefined });
