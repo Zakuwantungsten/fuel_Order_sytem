@@ -405,6 +405,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // Ref to prevent double-paste operations
   const isPastingRef = React.useRef(false);
 
+  // Tracks pending paste-triggered timeouts so they can be cancelled on unmount
+  const pasteTimeoutsRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+
   // Map of entry index → debounce timer ID (300ms safety timer for truck fetch)
   const fetchDebounceTimers = React.useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
@@ -454,10 +457,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     };
   }, []);
 
-  // Clean up all pending fetch timers on unmount
+  // Clean up all pending fetch timers and paste timeouts on unmount
   React.useEffect(() => {
     return () => {
       Object.values(fetchDebounceTimers.current).forEach(clearTimeout);
+      pasteTimeoutsRef.current.forEach(clearTimeout);
+      pasteTimeoutsRef.current = [];
     };
   }, []);
 
@@ -1660,6 +1665,160 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         }, i * 250); // Increased stagger time to 250ms for more reliable fetching
       });
     }, 200); // Increased initial delay to 200ms
+  };
+
+  // Handle multi-line paste for numeric fields (liters / rate).
+  // Fills down into existing rows from the focused row — never creates new rows.
+  const handleNumberFieldPaste = (
+    index: number,
+    field: 'liters' | 'rate',
+    event: React.ClipboardEvent<HTMLInputElement>
+  ) => {
+    const pastedText = event.clipboardData.getData('text');
+    const lines = pastedText
+      .split(/[\n\r\t]+/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+
+    if (lines.length <= 1) return; // Single value — let default onChange handle it
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Accept numbers that may be comma-formatted (e.g. "1,500")
+    const values = lines.map(l => parseFloat(l.replace(/,/g, '')) || 0);
+
+    setFormData(prev => {
+      const entries = [...(prev.entries || [])];
+
+      values.forEach((value, i) => {
+        const targetIndex = index + i;
+        if (targetIndex >= entries.length || !entries[targetIndex]) return;
+
+        const liters = field === 'liters' ? value : (entries[targetIndex].liters || 0);
+        const rate   = field === 'rate'   ? value : (entries[targetIndex].rate   || 0);
+
+        entries[targetIndex] = {
+          ...entries[targetIndex],
+          [field]: value,
+          amount: liters * rate,
+        };
+      });
+
+      const total = entries.reduce((sum, e) => sum + (e?.amount || 0), 0);
+      return { ...prev, entries, total };
+    });
+  };
+
+  // Handle multi-line paste for the DO number field.
+  // Fills down into existing rows and triggers handleDONoChange for each, mirroring
+  // the staggered fetch pattern used by handleTruckPaste.
+  // Handle multi-line paste on the DO number field (Excel-style).
+  // Mirrors handleTruckPaste exactly: creates a new row per DO, pushes existing rows
+  // down, then stagger-fires handleDONoChange so each row auto-fetches its journey data.
+  const handleDOPaste = (index: number, event: React.ClipboardEvent<HTMLInputElement>) => {
+    if (isPastingRef.current) return;
+
+    const pastedText = event.clipboardData.getData('text');
+    const lines = pastedText
+      .split(/[\n\r\t]+/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+
+    if (lines.length <= 1) return; // Single value — let default onChange handle it
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    isPastingRef.current = true;
+
+    const doNumbers = lines.map(l => l.toUpperCase());
+
+    // Insert one new row per DO, pushing existing rows below the paste point down
+    setFormData(prev => {
+      const currentEntries = [...(prev.entries || [])];
+
+      if (index > currentEntries.length) {
+        isPastingRef.current = false;
+        return prev;
+      }
+
+      const newEntriesArray: LPODetail[] = [];
+
+      for (let i = 0; i < index; i++) {
+        if (currentEntries[i]) newEntriesArray.push(currentEntries[i]);
+      }
+
+      doNumbers.forEach((doNo) => {
+        const isPasteCustom = prev.station === 'CUSTOM';
+        const isPasteCash   = prev.station === 'CASH';
+        const pasteRate   = isPasteCustom ? customRate   : isPasteCash ? cashRate   : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2);
+        const pasteLiters = isPasteCustom ? customDefaultLiters : isPasteCash ? cashDefaultLiters : 0;
+        newEntriesArray.push({
+          doNo,
+          truckNo: '',
+          liters: pasteLiters,
+          rate: pasteRate,
+          amount: pasteLiters * pasteRate,
+          dest: 'NIL',
+        });
+      });
+
+      // Skip the original entry at paste index (replaced by the first pasted row)
+      for (let i = index + 1; i < currentEntries.length; i++) {
+        if (currentEntries[i]) newEntriesArray.push(currentEntries[i]);
+      }
+
+      return { ...prev, entries: newEntriesArray };
+    });
+
+    // Mirror the auto-fill data re-indexing used by handleTruckPaste
+    setEntryAutoFillData(prev => {
+      const newAutoFillData: Record<number, EntryAutoFillData> = {};
+
+      Object.keys(prev).forEach(key => {
+        const idx = parseInt(key);
+        if (idx < index) newAutoFillData[idx] = prev[idx];
+      });
+
+      for (let i = 0; i < doNumbers.length; i++) {
+        newAutoFillData[index + i] = {
+          direction: 'going',
+          loading: false,
+          fetched: false,
+          fuelRecord: null,
+        };
+      }
+
+      Object.keys(prev).forEach(key => {
+        const idx = parseInt(key);
+        if (idx > index) {
+          newAutoFillData[idx + doNumbers.length - 1] = prev[idx];
+        }
+      });
+
+      return newAutoFillData;
+    });
+
+    // Stagger DO auto-fetch for each new row (same cadence as truck paste)
+    const outerTimer = setTimeout(() => {
+      doNumbers.forEach((doNo, i) => {
+        const innerTimer = setTimeout(() => {
+          handleDONoChange(index + i, doNo);
+
+          if (i === doNumbers.length - 1) {
+            const resetTimer = setTimeout(() => {
+              isPastingRef.current = false;
+            }, 300);
+            pasteTimeoutsRef.current.push(resetTimer);
+          }
+        }, i * 250);
+
+        pasteTimeoutsRef.current.push(innerTimer);
+      });
+    }, 200);
+
+    pasteTimeoutsRef.current.push(outerTimer);
   };
 
   // Handle truck number change with auto-fetch
@@ -3635,7 +3794,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       <div className="relative flex-1 min-w-0">
                         <input type="text" value={autoFill.entryType === 'da' ? 'DA' : (entry?.doNo || '')} onChange={(e) => handleDONoChange(index, e.target.value)}
                           onBlur={(e) => { if (!e.target.value.trim()) handleEntryChange(index, 'doNo', 'NIL'); }}
-                          placeholder="DO#" title="Enter DO number, DA, or REF"
+                          onPaste={(e) => handleDOPaste(index, e)}
+                          placeholder="DO#" title="Enter DO number, DA, or REF — paste multiple (one per line) to fill down"
                           className={`w-full px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
                             autoFill.entryType === 'da' ? 'border-blue-400 dark:border-blue-500' : autoFill.entryType === 'ref' ? 'border-orange-400 dark:border-orange-500' : 'border-gray-300 dark:border-gray-600'
                           }`} />
@@ -3712,12 +3872,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     <div className="grid grid-cols-4 gap-1">
                       <div>
                         <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Ltrs</label>
-                        <input type="number" value={entry?.liters || 0} onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
+                        <input type="number" value={entry?.liters || 0}
+                          onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
+                          onPaste={(e) => handleNumberFieldPaste(index, 'liters', e)}
+                          title="Paste a column of numbers to fill down"
                           className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
                       </div>
                       <div>
                         <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Rate</label>
-                        <input type="number" value={entry?.rate || 0} step="0.01" onChange={(e) => handleEntryChange(index, 'rate', parseFloat(e.target.value) || 0)}
+                        <input type="number" value={entry?.rate || 0} step="0.01"
+                          onChange={(e) => handleEntryChange(index, 'rate', parseFloat(e.target.value) || 0)}
+                          onPaste={(e) => handleNumberFieldPaste(index, 'rate', e)}
+                          title="Paste a column of numbers to fill down"
                           className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
                       </div>
                       <div>
@@ -3867,8 +4033,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                     handleEntryChange(index, 'doNo', 'NIL');
                                   }
                                 }}
+                                onPaste={(e) => handleDOPaste(index, e)}
                                 placeholder="0001/26"
-                                title="Enter DO number, DA, or REF"
+                                title="Enter DO number, DA, or REF — paste multiple (one per line) to fill down"
                                 className={`w-24 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
                                   autoFill.entryType === 'da' ? 'border-blue-400 dark:border-blue-500' : autoFill.entryType === 'ref' ? 'border-orange-400 dark:border-orange-500' : 'border-gray-300 dark:border-gray-600'
                                 }`}
@@ -3939,6 +4106,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               type="number"
                               value={entry?.liters || 0}
                               onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
+                              onPaste={(e) => handleNumberFieldPaste(index, 'liters', e)}
+                              title="Paste a column of numbers to fill down"
                               className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
                           </td>
@@ -3947,6 +4116,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               type="number"
                               value={entry?.rate || 0}
                               onChange={(e) => handleEntryChange(index, 'rate', parseFloat(e.target.value) || 0)}
+                              onPaste={(e) => handleNumberFieldPaste(index, 'rate', e)}
+                              title="Paste a column of numbers to fill down"
                               step="0.01"
                               className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
