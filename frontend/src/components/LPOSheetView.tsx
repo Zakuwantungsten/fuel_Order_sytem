@@ -897,120 +897,148 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           <div className="border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
 
             {/* ===== MOBILE CARD VIEW (lg:hidden) ===== */}
-            <div className="lg:hidden">
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800">
               {visibleEntries.map((entry, index) => {
-                const displayData = formatEntryForDisplay(entry);
                 const isCancelled = entry.isCancelled;
                 const isDriverAccount = entry.isDriverAccount;
-                const cardBg = isCancelled
-                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-                  : isDriverAccount
-                    ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
-                    : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700';
 
                 return (
-                  <div key={index} className={`${cardBg} border-b p-3`}>
-                    {/* Card header: truck + actions */}
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2 min-w-0">
-                        <span className={`font-bold text-sm ${isCancelled ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
-                          {entry.truckNo}
-                        </span>
-                        {isCancelled && <span className="text-xs font-medium text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded">CANCELLED</span>}
-                        {isDriverAccount && <span className="text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/40 px-1.5 py-0.5 rounded">Driver A/C</span>}
-                      </div>
-                      <div className="flex items-center space-x-2 flex-shrink-0">
-                        {isCancelled ? (
-                          <button onClick={() => handleUncancelEntry(index)} className="p-2 text-green-600 hover:text-green-800 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20" title="Restore Entry">
-                            <RotateCcw className="w-4 h-4" />
-                          </button>
-                        ) : editingRow === index ? (
-                          <>
-                            <button onClick={() => handleRowSave(index)} className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20" title="Save">
-                              <Save className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleRowCancel(index)} className="p-2 text-gray-600 hover:text-gray-800 dark:text-gray-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="Cancel Edit">
-                              <X className="w-4 h-4" />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => handleStartRowEdit(index)} className="p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20" title="Edit Entry">
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => openCancelModal(index)} className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20" title="Cancel Entry">
-                              <Ban className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Card body: fields */}
+                  <div key={index} className={`${isCancelled ? 'bg-gray-50 dark:bg-gray-800/60' : 'bg-white dark:bg-gray-900'}`}>
                     {editingRow === index ? (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-xs text-gray-500 dark:text-gray-400">DO No.</label>
-                          <input type="text" value={entry.doNo} onChange={(e) => handleEntryEdit(index, 'doNo', e.target.value)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                      /* Edit mode */
+                      <div className="p-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Editing Entry</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleRowSave(index)}
+                              disabled={isSaving}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium disabled:opacity-50"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              {isSaving ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => handleRowCancel(index)}
+                              className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              Cancel
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <label className="text-xs text-gray-500 dark:text-gray-400">Truck No.</label>
-                          <input type="text" value={entry.truckNo} onChange={(e) => handleEntryEdit(index, 'truckNo', e.target.value)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-500 dark:text-gray-400">Liters</label>
-                          <input type="number" value={entry.liters} onChange={(e) => handleEntryEdit(index, 'liters', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-500 dark:text-gray-400">Rate</label>
-                          <input type="number" step="0.1" value={entry.rate} onChange={(e) => handleEntryEdit(index, 'rate', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                        </div>
-                        <div className="col-span-2">
-                          <label className="text-xs text-gray-500 dark:text-gray-400">Destination</label>
-                          <input type="text" value={entry.dest} onChange={(e) => handleEntryEdit(index, 'dest', e.target.value)} className="w-full px-2 py-1.5 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">Truck No.</label>
+                            <input type="text" value={entry.truckNo} onChange={(e) => handleEntryEdit(index, 'truckNo', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">DO No.</label>
+                            <input type="text" value={entry.doNo} onChange={(e) => handleEntryEdit(index, 'doNo', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">Liters</label>
+                            <input type="number" value={entry.liters} onChange={(e) => handleEntryEdit(index, 'liters', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">Rate</label>
+                            <input type="number" step="0.1" value={entry.rate} onChange={(e) => handleEntryEdit(index, 'rate', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">Destination</label>
+                            <input type="text" value={entry.dest} onChange={(e) => handleEntryEdit(index, 'dest', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                          </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-gray-400">DO:</span>
-                          <span className={displayData.displayClass}>{isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo}</span>
+                      /* View mode */
+                      <div className="p-3">
+                        {/* Header: truck + status badges + total */}
+                        <div className="flex items-start justify-between mb-1.5">
+                          <div className="min-w-0 flex-1 mr-3">
+                            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                              <span className={`font-bold text-base tracking-wide ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-blue-600 dark:text-blue-400'}`}>
+                                {entry.truckNo}
+                              </span>
+                              {!isCancelled && !isDriverAccount && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 tracking-wide uppercase">
+                                  Verified
+                                </span>
+                              )}
+                              {isCancelled && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 tracking-wide uppercase">
+                                  Cancelled
+                                </span>
+                              )}
+                              {isDriverAccount && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 tracking-wide uppercase">
+                                  Driver A/C
+                                </span>
+                              )}
+                            </div>
+                            <p className={`text-xs ${isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                              DO #{isDriverAccount ? 'NIL' : entry.doNo} • {entry.dest}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Total</p>
+                            <p className={`text-base font-bold ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                              ${formatCurrency(entry.amount)}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-gray-400">Dest:</span>
-                          <span className={displayData.displayClass}>{isCancelled ? entry.dest : isDriverAccount ? 'NIL' : entry.dest}</span>
+
+                        {/* Quantity + Rate */}
+                        <div className="grid grid-cols-2 gap-4 mb-3">
+                          <div>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Quantity</p>
+                            <p className={`text-sm font-semibold ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                              {entry.liters.toFixed(2)} L
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Rate</p>
+                            <p className={`text-sm ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                              ${entry.rate} / L
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-gray-400">Liters:</span>
-                          <span className={`font-medium ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.liters}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-gray-400">Rate:</span>
-                          <span className={`${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.rate}</span>
-                        </div>
-                        <div className="col-span-2 flex justify-between pt-1 border-t border-gray-100 dark:border-gray-700/50 mt-1">
-                          <span className="text-gray-500 dark:text-gray-400 font-medium">Amount:</span>
-                          <span className={`font-bold ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{formatCurrency(entry.amount)}</span>
+
+                        {/* Action buttons */}
+                        <div className="flex gap-2">
+                          {isCancelled ? (
+                            <button
+                              onClick={() => handleUncancelEntry(index)}
+                              disabled={isSaving}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                              Restore Entry
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleStartRowEdit(index)}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                                Modify
+                              </button>
+                              <button
+                                onClick={() => openCancelModal(index)}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-red-200 dark:border-red-800 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                              >
+                                <XCircle className="w-4 h-4" />
+                                Void
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
                   </div>
                 );
               })}
-
-              {/* Mobile Locked Notice */}
-              <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-gray-300 dark:border-gray-700">
-                <div className="px-3 py-2.5 flex items-center justify-center text-amber-700 dark:text-amber-300">
-                  <Lock className="w-4 h-4 mr-2 flex-shrink-0" />
-                  <span className="text-xs font-medium text-center">Sheet locked - Only editing existing entries allowed</span>
-                </div>
-              </div>
-
-              {/* Mobile Total */}
-              <div className="bg-blue-100 dark:bg-blue-900/40 px-3 py-3 flex items-center justify-between font-semibold">
-                <span className="text-gray-900 dark:text-gray-100">TOTAL</span>
-                <span className="text-lg font-bold text-blue-900 dark:text-blue-300">{formatCurrency(editedSheet.total)}</span>
-              </div>
             </div>
 
             {/* ===== DESKTOP TABLE VIEW (hidden lg:block) ===== */}
@@ -1216,8 +1244,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             )}
           </div>
 
-          {/* Summary Statistics */}
-          <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+          {/* Summary Statistics - desktop only */}
+          <div className="hidden lg:grid mt-4 sm:mt-6 grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
             <div className="bg-blue-50 dark:bg-blue-900/20 p-3 sm:p-4 rounded-lg">
               <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Entries</div>
               <div className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">{editedSheet.entries.length}</div>
@@ -1236,6 +1264,22 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 {formatCurrency(editedSheet.total)}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Summary Bar */}
+      <div className="lg:hidden flex-shrink-0 bg-gray-900 dark:bg-gray-950 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Summary Metrics</p>
+            <p className="text-sm font-semibold text-white mt-0.5">
+              {editedSheet.entries.length} {editedSheet.entries.length === 1 ? 'Entry' : 'Entries'} • {editedSheet.entries.filter(e => !e.isCancelled).reduce((sum, e) => sum + e.liters, 0).toFixed(0)} L
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Grand</p>
+            <p className="text-xl font-bold text-white mt-0.5">${formatCurrency(editedSheet.total)}</p>
           </div>
         </div>
       </div>
