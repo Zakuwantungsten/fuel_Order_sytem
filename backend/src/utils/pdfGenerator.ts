@@ -837,7 +837,8 @@ export const generateLPOPDF = (
     doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill('#E8E8E8');
     doc.rect(MARGIN, y, CONTENT_W, ROW_H).lineWidth(1).strokeColor('#000000').stroke();
     C.forEach((col, i) => {
-      if (i > 0) doc.save().lineWidth(1).moveTo(col.x, y).lineTo(col.x, y + ROW_H).strokeColor('#000000').stroke().restore();
+      // Skip divider at col 1 — TOTAL label spans cols 0+1
+      if (i > 1) doc.save().lineWidth(1).moveTo(col.x, y).lineTo(col.x, y + ROW_H).strokeColor('#000000').stroke().restore();
     });
     const ty = y + (ROW_H - 11) / 2;
     // TOTAL label spans cols 0+1
@@ -900,6 +901,14 @@ export const generateLPOPDF = (
       y += 15;
     }
 
+    const tableStartY = y;
+    const totalTableH = HDR_H + pageEntries.length * ROW_H + (isLast ? ROW_H : 0);
+    const TABLE_RADIUS = 5;
+
+    // Clip all table fills/borders to rounded rect so corners appear rounded
+    doc.save();
+    doc.roundedRect(MARGIN, tableStartY, CONTENT_W, totalTableH, TABLE_RADIUS).clip();
+
     drawTableHeader(y);
     y += HDR_H;
 
@@ -910,7 +919,17 @@ export const generateLPOPDF = (
 
     if (isLast) {
       drawTotalRow(y);
-      y += ROW_H + 40;
+      y += ROW_H;
+    }
+
+    doc.restore();
+
+    // Draw rounded outer border on top of clipped content
+    doc.roundedRect(MARGIN, tableStartY, CONTENT_W, totalTableH, TABLE_RADIUS)
+      .lineWidth(1).strokeColor('#000000').stroke();
+
+    if (isLast) {
+      y += 40;
 
       // Signature section
       const sigW = CONTENT_W / 3;
