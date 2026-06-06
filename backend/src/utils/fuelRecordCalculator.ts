@@ -245,7 +245,7 @@ export function matchExportRouteLiters(
   const orig = (origin || '').toUpperCase().trim();
   const dest = (destination || '').toUpperCase().trim();
 
-  if (!dest) return { liters: 2200, matched: false, matchType: 'default' };
+  if (!dest) return { liters: 0, matched: false, matchType: 'default' };
 
   // 1. Exact: origin AND destination
   if (orig) {
@@ -295,7 +295,7 @@ export function matchExportRouteLiters(
   }
 
   // 5. Default fallback
-  return { liters: 2200, matched: false, matchType: 'default' };
+  return { liters: 0, matched: false, matchType: 'default' };
 }
 
 /**
