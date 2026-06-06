@@ -814,9 +814,17 @@ const LPOs = () => {
       
       setIsDetailFormOpen(false);
 
-      // Reset month filter to current month so the newly created LPO is visible
+      // Reset month filter to current month so the newly created LPO is visible,
+      // but only if the current month isn't already selected (avoids a new query key
+      // and an unnecessary full loading state).
       const now = new Date();
-      setSelectedPeriods([{ year: now.getFullYear(), month: now.getMonth() + 1 }]);
+      const currentPeriod = { year: now.getFullYear(), month: now.getMonth() + 1 };
+      const alreadyOnCurrentMonth = selectedPeriods.some(
+        p => p.year === currentPeriod.year && p.month === currentPeriod.month
+      );
+      if (!alreadyOnCurrentMonth) {
+        setSelectedPeriods([currentPeriod]);
+      }
 
       queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
       queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
@@ -1611,7 +1619,11 @@ const LPOs = () => {
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg transition-colors">
-        {loading || isFetching ? (
+        {/* Thin progress bar shown during background refetch so the table stays visible */}
+        {isFetching && !loading && (
+          <div className="h-0.5 w-full bg-blue-500/60 dark:bg-blue-400/60 animate-pulse rounded-t-lg" />
+        )}
+        {loading ? (
           <UnifiedTabLoader label="Loading LPO entries..." />
         ) : orders.length === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">

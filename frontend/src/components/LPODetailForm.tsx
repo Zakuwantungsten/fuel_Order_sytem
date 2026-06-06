@@ -3787,42 +3787,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               </div>
             )}
 
-          {/* No-Station Config Panel - shown when no station is selected */}
-          {!formData.station && (
-            <div className="mt-4 p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-              <div className="flex items-center space-x-2 mb-3">
-                <Fuel className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                <span className="font-medium text-gray-700 dark:text-gray-300">Default Entry Values</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">(no station selected)</span>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="w-full sm:w-40">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rate</label>
-                  <input
-                    type="number"
-                    value={noStationRate || ''}
-                    onChange={(e) => setNoStationRate(parseFloat(e.target.value) || 0)}
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                </div>
-                <div className="w-full sm:w-36">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Liters</label>
-                  <input
-                    type="number"
-                    value={noStationDefaultLiters || ''}
-                    onChange={(e) => setNoStationDefaultLiters(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    step="1"
-                    min="0"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* LPO Entries */}
           <div className="mb-6">
