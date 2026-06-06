@@ -1118,7 +1118,7 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           details: `Fuel-record automation SKIPPED for DO ${order.doNumber} — '${fuelAutomationSkipped}' is disabled. Manual fuel-record management required.`,
           ipAddress: req.ip,
           severity: 'high',
-        }).catch(() => {});
+        }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped fuel automation (DO ${order.doNumber}): ${err?.message}`));
       }
     }
 
@@ -1354,7 +1354,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
       details: `Fuel-record automation SKIPPED during bulk DO creation: ${automationSkips.join('; ')}. Manual fuel-record management required.`,
       ipAddress: req.ip,
       severity: 'high',
-    }).catch(() => {});
+    }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped bulk DO automation: ${err?.message}`));
   }
 
   emitDataChange('delivery_orders', 'create');
@@ -1548,7 +1548,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         details: `Fuel-record amendment cascade SKIPPED for DO ${deliveryOrder.doNumber} — automation 'doAmendCascade' is disabled. Manual fuel-record adjustment required.`,
         ipAddress: req.ip,
         severity: 'high',
-      }).catch(() => {});
+      }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped amend cascade (DO ${deliveryOrder.doNumber}): ${err?.message}`));
     }
 
     // Build response message
@@ -1683,7 +1683,7 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         details: `Fuel-record cancellation cascade SKIPPED for DO ${deliveryOrder.doNumber} — automation 'doCancelCascade' is disabled. Manual fuel-record adjustment required.`,
         ipAddress: req.ip,
         severity: 'high',
-      }).catch(() => {});
+      }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped cancel cascade (DO ${deliveryOrder.doNumber}): ${err?.message}`));
     }
 
     logger.info(`Delivery order cancelled: ${deliveryOrder.doNumber} by ${username}. Reason: ${reason}. Fuel action: ${fuelAction}`);

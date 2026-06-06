@@ -7,11 +7,13 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 // Import the Checkpoint model
 import { Checkpoint } from '../models/Checkpoint';
+import { requireMongoUri } from './requireMongoUri';
 
 async function verifyCheckpoints() {
   try {
     // Connect to MongoDB
-    const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/fuel_order_system';
+    // Was reading MONGO_URI (a typo) — the rest of the codebase uses MONGODB_URI.
+    const mongoUri = requireMongoUri();
     console.log('Connecting to MongoDB...');
     await mongoose.connect(mongoUri);
     console.log('Connected to MongoDB\n');

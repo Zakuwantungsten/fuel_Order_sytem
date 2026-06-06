@@ -13,11 +13,12 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
 import { FuelRecord } from '../models';
+import { requireMongoUri } from './requireMongoUri';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fuel_order_system';
+const MONGODB_URI = requireMongoUri();
 
 interface MigrationStats {
   totalRecords: number;

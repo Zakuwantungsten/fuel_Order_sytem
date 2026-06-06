@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { BreakGlassAccount } from '../models/BreakGlassAccount';
 import { AuditService } from '../utils/auditService';
 import { securityAlertService } from '../services/securityAlertService';
+import { logger } from '../utils';
 
 /**
  * Break-Glass Emergency Access Controller
@@ -131,7 +132,7 @@ export const toggleAccount = async (req: Request, res: Response): Promise<void> 
         metadata: { breakGlassUsername: account.username, activatedBy: currentUser.username },
         relatedIP: req.ip || undefined,
         relatedUsername: currentUser.username,
-      }).catch(() => {});
+      }).catch((err: any) => logger.error(`CRITICAL: failed to raise break-glass activation alert for "${account.username}": ${err?.message}`));
     }
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Internal server error' });

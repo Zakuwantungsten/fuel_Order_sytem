@@ -18,6 +18,7 @@ import {
   findAffectedUsers,
   getMigrationStats,
 } from '../utils/userMigration';
+import { requireMongoUri } from './requireMongoUri';
 import { logger } from '../utils';
 
 // Load environment variables
@@ -34,7 +35,7 @@ async function runMigration() {
   try {
     // Connect to database
     console.log('📡 Connecting to MongoDB...');
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/fuel_order');
+    await mongoose.connect(requireMongoUri());
     console.log('✅ Connected to MongoDB\n');
 
     // Get current stats before migration

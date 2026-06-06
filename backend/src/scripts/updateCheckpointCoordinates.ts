@@ -7,6 +7,7 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 // Import the Checkpoint model
 import { Checkpoint } from '../models/Checkpoint';
+import { requireMongoUri } from './requireMongoUri';
 
 // Real GPS coordinates for each checkpoint along the route
 const coordinatesMap: Record<string, { latitude: number; longitude: number }> = {
@@ -95,7 +96,7 @@ const coordinatesMap: Record<string, { latitude: number; longitude: number }> = 
 async function updateCoordinates() {
   try {
     // Connect to MongoDB
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/fuel_order_system';
+    const mongoUri = requireMongoUri();
     console.log('Connecting to MongoDB...');
     await mongoose.connect(mongoUri);
     console.log('✅ Connected to MongoDB\n');

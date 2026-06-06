@@ -38,6 +38,9 @@ import databaseMonitor from './utils/databaseMonitor';
 try {
   validateEnv();
 } catch (err: any) {
+  // logger for structured logs + console as a guaranteed-flush fallback before exit
+  // (matches the crash/exit handlers below).
+  logger.error('Startup error (validateEnv):', err);
   console.error('STARTUP ERROR (validateEnv):', err.message);
   process.exit(1);
 }

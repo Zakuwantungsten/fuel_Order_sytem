@@ -7,6 +7,7 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 // Import the Checkpoint model
 import { Checkpoint } from '../models/Checkpoint';
+import { requireMongoUri } from './requireMongoUri';
 
 const checkpoints = [
   // Tanzania Route - Taveta to Tanga
@@ -90,7 +91,7 @@ const checkpoints = [
 async function seedCheckpoints() {
   try {
     // Connect to MongoDB
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/fuel_order';
+    const mongoUri = requireMongoUri();
     await mongoose.connect(mongoUri);
     console.log('✅ Connected to MongoDB');
 

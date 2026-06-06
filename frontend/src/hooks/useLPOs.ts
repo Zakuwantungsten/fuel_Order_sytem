@@ -127,8 +127,13 @@ export function useReferEntries() {
   return useQuery({
     queryKey: lpoKeys.referEntries(),
     queryFn: async () => {
-      const response = await lposAPI.getAll({ isRefer: 'true', limit: 10000 });
+      // 5000 is the backend's hard cap (getPaginationParams). Requesting more is pointless;
+      // if refer entries ever exceed this, interactive pagination is needed here.
+      const response = await lposAPI.getAll({ isRefer: 'true', limit: 5000 });
       const entries = Array.isArray(response.data) ? response.data : [];
+      if (response.pagination && response.pagination.total > entries.length) {
+        console.warn(`useReferEntries: ${response.pagination.total} refer entries exist but only ${entries.length} loaded — add pagination UI to view the rest.`);
+      }
       return entries.map((entry: any, idx: number) => ({
         id: `ref-${entry.id || entry._id || idx}`,
         sn: idx + 1,

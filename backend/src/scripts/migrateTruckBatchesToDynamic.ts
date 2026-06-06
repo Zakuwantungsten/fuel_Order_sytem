@@ -23,8 +23,9 @@
 import mongoose from 'mongoose';
 import { SystemConfig } from '../models';
 import { logger } from '../utils';
+import { requireMongoUri } from './requireMongoUri';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fuel_order_system';
+const MONGODB_URI = requireMongoUri();
 
 async function migrateTruckBatches() {
   try {

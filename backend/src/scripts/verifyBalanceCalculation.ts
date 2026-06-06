@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { FuelRecord } from '../models';
 import dotenv from 'dotenv';
+import { requireMongoUri } from './requireMongoUri';
 
 dotenv.config();
 
@@ -20,7 +21,7 @@ async function verifyBalanceCalculations(): Promise<void> {
     console.log('🔍 Verifying balance calculations for all fuel records...\n');
 
     // Connect to database
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/fuel_order_system';
+    const mongoUri = requireMongoUri();
     await mongoose.connect(mongoUri);
     console.log('✓ Connected to database\n');
 

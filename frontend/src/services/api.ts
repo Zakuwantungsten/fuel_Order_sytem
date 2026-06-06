@@ -1279,10 +1279,18 @@ export const driverAccountAPI = {
     return response.data.data?.nextLpoNo || '2445';
   },
 
-  // Get all entries with optional filters
-  getAll: async (filters?: { year?: number; month?: string; truckNo?: string; status?: string }): Promise<DriverAccountEntry[]> => {
-    const response = await apiClient.get('/driver-accounts', { params: filters });
+  // Get all entries with optional filters.
+  // NOTE: the backend paginates and defaults to limit=10. Callers that render a full table
+  // must pass an explicit `limit`, otherwise the list is silently truncated to 10 rows.
+  // 5000 is the backend's hard cap (see getPaginationParams); a warning is logged if hit.
+  getAll: async (filters?: { year?: number; month?: string; truckNo?: string; status?: string; page?: number; limit?: number }): Promise<DriverAccountEntry[]> => {
+    const params = { limit: 5000, ...filters };
+    const response = await apiClient.get('/driver-accounts', { params });
     const entries = response.data.data?.data || response.data.data || [];
+    const total = response.data.data?.pagination?.total;
+    if (typeof total === 'number' && total > entries.length) {
+      console.warn(`driverAccountAPI.getAll: ${total} entries exist but only ${entries.length} returned — add pagination UI to view the rest.`);
+    }
     return entries.map((e: any) => ({ ...e, id: e.id || e._id }));
   },
 
