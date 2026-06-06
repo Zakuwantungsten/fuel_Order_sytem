@@ -114,6 +114,8 @@ interface StoredFormData {
   customReturnEnabled: boolean;
   customGoingCheckpoint: string;
   customReturnCheckpoint: string;
+  noStationRate: number;
+  noStationDefaultLiters: number;
   savedAt: string;
 }
 
@@ -386,6 +388,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
     return '';
   });
+  const [noStationRate, setNoStationRate] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.noStationRate ?? 0;
+    }
+    return 0;
+  });
+  const [noStationDefaultLiters, setNoStationDefaultLiters] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.noStationDefaultLiters ?? 0;
+    }
+    return 0;
+  });
 
   // Dropdown state for custom button-based dropdowns (mobile-friendly)
   const [showStationDropdown, setShowStationDropdown] = useState(false);
@@ -523,6 +539,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setCustomReturnEnabled(false);
     setCustomGoingCheckpoint('');
     setCustomReturnCheckpoint('');
+    setNoStationRate(0);
+    setNoStationDefaultLiters(0);
     setHasDraft(false);
     // Clear local storage if requested
     if (clearStorage) {
@@ -594,6 +612,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customRate]);
 
+  // When noStationRate changes and no station is selected, push the new rate to all existing rows
+  useEffect(() => {
+    if (formData.station) return;
+    if (!formData.entries || formData.entries.length === 0) return;
+    if (!noStationRate) return;
+
+    const needsUpdate = formData.entries.some(entry => entry.rate !== noStationRate);
+    if (!needsUpdate) return;
+
+    const updatedEntries = formData.entries.map(entry => {
+      const liters = entry.liters || 0;
+      return { ...entry, rate: noStationRate, amount: liters * noStationRate };
+    });
+    const total = updatedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noStationRate]);
+
   // When cashRate changes for CASH station, push the new rate to all existing rows
   useEffect(() => {
     if (formData.station !== 'CASH') return;
@@ -653,6 +689,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         customReturnEnabled,
         customGoingCheckpoint,
         customReturnCheckpoint,
+        noStationRate,
+        noStationDefaultLiters,
         savedAt: new Date().toISOString(),
       });
       setHasDraft(true);
@@ -677,6 +715,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     customReturnEnabled,
     customGoingCheckpoint,
     customReturnCheckpoint,
+    noStationRate,
+    noStationDefaultLiters,
     initialData
   ]);
 
@@ -1485,8 +1525,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const handleAddEntry = () => {
     const isCustom = formData.station === 'CUSTOM';
     const isCash = formData.station === 'CASH';
-    const entryRate = isCustom ? customRate : isCash ? cashRate : (formData.station ? getStationDefaults(formData.station, 'going').rate : 1.2);
-    const entryLiters = isCustom ? customDefaultLiters : isCash ? cashDefaultLiters : 0;
+    const entryRate = isCustom ? customRate : isCash ? cashRate : (formData.station ? getStationDefaults(formData.station, 'going').rate : noStationRate);
+    const entryLiters = isCustom ? customDefaultLiters : isCash ? cashDefaultLiters : (formData.station ? 0 : noStationDefaultLiters);
     const newEntry: LPODetail = {
       doNo: '',  // Start empty so user can type immediately
       truckNo: '',
@@ -1578,8 +1618,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       formattedTrucks.forEach((truckNo) => {
         const isPasteCustom = prev.station === 'CUSTOM';
         const isPasteCash = prev.station === 'CASH';
-        const pasteRate = isPasteCustom ? customRate : isPasteCash ? cashRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2);
-        const pasteLiters = isPasteCustom ? customDefaultLiters : isPasteCash ? cashDefaultLiters : 0;
+        const pasteRate = isPasteCustom ? customRate : isPasteCash ? cashRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : noStationRate);
+        const pasteLiters = isPasteCustom ? customDefaultLiters : isPasteCash ? cashDefaultLiters : (prev.station ? 0 : noStationDefaultLiters);
         const newEntry: LPODetail = {
           doNo: '',  // Start empty
           truckNo: truckNo,
@@ -1751,8 +1791,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       doNumbers.forEach((doNo) => {
         const isPasteCustom = prev.station === 'CUSTOM';
         const isPasteCash   = prev.station === 'CASH';
-        const pasteRate   = isPasteCustom ? customRate   : isPasteCash ? cashRate   : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2);
-        const pasteLiters = isPasteCustom ? customDefaultLiters : isPasteCash ? cashDefaultLiters : 0;
+        const pasteRate   = isPasteCustom ? customRate   : isPasteCash ? cashRate   : (prev.station ? getStationDefaults(prev.station, 'going').rate : noStationRate);
+        const pasteLiters = isPasteCustom ? customDefaultLiters : isPasteCash ? cashDefaultLiters : (prev.station ? 0 : noStationDefaultLiters);
         newEntriesArray.push({
           doNo,
           truckNo: '',
@@ -1914,7 +1954,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   result.fuelRecord?.extra ?? undefined,
                   result.fuelRecord?.balance ?? undefined
                 )
-              : { liters: 350, rate: 1.2 });
+              : { liters: noStationDefaultLiters, rate: noStationRate });
 
         // Calculate balance info for Mbeya returning (INFINITY station)
         let balanceInfo = undefined;
@@ -2110,7 +2150,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             result.fuelRecord?.extra ?? undefined,
             result.fuelRecord?.balance ?? undefined
           ) 
-        : { liters: 350, rate: 1.2 };
+        : { liters: noStationDefaultLiters, rate: noStationRate };
 
       // Calculate balance info for Mbeya returning
       let balanceInfo = undefined;
@@ -2222,7 +2262,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             fuelRecord.extra ?? undefined,
             fuelRecord.balance ?? undefined
           ) 
-        : { liters: 350, rate: 1.2 };
+        : { liters: noStationDefaultLiters, rate: noStationRate };
 
       let litersToSet = defaults.liters;
       
@@ -3654,6 +3694,43 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 )}
               </div>
             )}
+
+          {/* No-Station Config Panel - shown when no station is selected */}
+          {!formData.station && (
+            <div className="mt-4 p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+              <div className="flex items-center space-x-2 mb-3">
+                <Fuel className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                <span className="font-medium text-gray-700 dark:text-gray-300">Default Entry Values</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">(no station selected)</span>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="w-full sm:w-40">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rate</label>
+                  <input
+                    type="number"
+                    value={noStationRate || ''}
+                    onChange={(e) => setNoStationRate(parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="w-full sm:w-36">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Liters</label>
+                  <input
+                    type="number"
+                    value={noStationDefaultLiters || ''}
+                    onChange={(e) => setNoStationDefaultLiters(parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    step="1"
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* LPO Entries */}
           <div className="mb-6">
