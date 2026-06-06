@@ -222,6 +222,7 @@ router.put(
     body('autoDownloadDOPdf').optional().isBoolean().withMessage('autoDownloadDOPdf must be a boolean'),
     body('autoDownloadLPOPdf').optional().isBoolean().withMessage('autoDownloadLPOPdf must be a boolean'),
     body('fuelAutomation').optional().isObject().withMessage('fuelAutomation must be an object'),
+    body('cashLpoLookbackDays').optional().isInt({ min: 1, max: 365 }).withMessage('cashLpoLookbackDays must be an integer between 1 and 365'),
   ],
   validate,
   asyncHandler(adminController.updateJourneyConfig)

@@ -1209,6 +1209,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
         autoDownloadDOPdf: config.journeyConfig?.autoDownloadDOPdf ?? true,
         autoDownloadLPOPdf: config.journeyConfig?.autoDownloadLPOPdf ?? true,
         fuelAutomation: { ...DEFAULT_FUEL_AUTOMATION, ...(config.journeyConfig?.fuelAutomation || {}) },
+        cashLpoLookbackDays: config.journeyConfig?.cashLpoLookbackDays ?? 40,
       },
     });
   } catch (error: any) {
@@ -1223,15 +1224,16 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
  */
 export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { startColumns, superManagerStations, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation } = req.body;
+    const { startColumns, superManagerStations, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays } = req.body;
 
     const hasStartColumns = startColumns !== undefined;
     const hasSmStations = superManagerStations !== undefined;
     const hasAutoDownloadDO = autoDownloadDOPdf !== undefined;
     const hasAutoDownloadLPO = autoDownloadLPOPdf !== undefined;
     const hasFuelAutomation = fuelAutomation !== undefined;
+    const hasCashLpoLookbackDays = cashLpoLookbackDays !== undefined;
 
-    if (!hasStartColumns && !hasSmStations && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation) {
+    if (!hasStartColumns && !hasSmStations && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays) {
       throw new ApiError(400, 'Provide at least one field to update');
     }
 
@@ -1275,6 +1277,13 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       throw new ApiError(400, 'autoDownloadLPOPdf must be a boolean');
     }
 
+    if (hasCashLpoLookbackDays) {
+      const parsed = Number(cashLpoLookbackDays);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 365) {
+        throw new ApiError(400, 'cashLpoLookbackDays must be an integer between 1 and 365');
+      }
+    }
+
     let config = await SystemConfig.findOne({
       configType: 'journey_config',
       isDeleted: false,
@@ -1295,6 +1304,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         ...(existing.fuelAutomation || {}),
         ...(hasFuelAutomation ? fuelAutomation : {}),
       },
+      cashLpoLookbackDays: hasCashLpoLookbackDays ? Number(cashLpoLookbackDays) : (existing.cashLpoLookbackDays ?? 40),
     };
 
     if (!config) {
@@ -1321,6 +1331,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       const changed = Object.keys(fuelAutomation).map((k) => `${k}=${fuelAutomation[k]}`).join(', ');
       detailParts.push(`fuelAutomation {${changed}}`);
     }
+    if (hasCashLpoLookbackDays) detailParts.push(`cashLpoLookbackDays=${nextJourneyConfig.cashLpoLookbackDays}`);
     logger.info(`Journey config updated by ${req.user?.username}: ${detailParts.join('; ')}`);
 
     await AuditService.log({
@@ -1349,6 +1360,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         autoDownloadDOPdf: nextJourneyConfig.autoDownloadDOPdf,
         autoDownloadLPOPdf: nextJourneyConfig.autoDownloadLPOPdf,
         fuelAutomation: nextJourneyConfig.fuelAutomation,
+        cashLpoLookbackDays: nextJourneyConfig.cashLpoLookbackDays,
       },
     });
   } catch (error: any) {
