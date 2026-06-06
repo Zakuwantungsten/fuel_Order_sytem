@@ -1011,6 +1011,29 @@ export const updateYardFuelTimeLimit = async (req: AuthRequest, res: Response): 
 
     logger.info(`Yard fuel time limit updated by ${req.user?.username}: enabled=${config.yardFuelTimeLimit!.enabled}`);
 
+    const detailParts: string[] = [];
+    if (enabled !== undefined) detailParts.push(`global=${enabled}`);
+    if (perYard) {
+      for (const yardKey of ['darYard', 'tangaYard', 'mmsaYard'] as const) {
+        if (perYard[yardKey]) {
+          const y = perYard[yardKey];
+          const parts: string[] = [];
+          if (y.enabled !== undefined) parts.push(`enabled=${y.enabled}`);
+          if (y.timeLimitDays !== undefined) parts.push(`days=${y.timeLimitDays}`);
+          if (parts.length) detailParts.push(`${yardKey}(${parts.join(', ')})`);
+        }
+      }
+    }
+
+    await AuditLog.create({
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'Config',
+      resourceId: 'yard_fuel_time_limit',
+      details: JSON.stringify({ changes: detailParts.join('; ') }),
+      severity: 'medium',
+    });
+
     emitDataChange('yard_fuel_time_limit', 'update');
     setCacheBustingHeaders(res);
 
