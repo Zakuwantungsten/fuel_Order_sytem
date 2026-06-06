@@ -986,6 +986,7 @@ const applyExportFuelUpdates = async (
   const exportTrucks = [...new Set(exportDOs.map((o: any) => o.truckNo))];
   const goingRecords = await FuelRecord.find({
     truckNo: { $in: exportTrucks },
+    journeyStatus: 'active',
     isDeleted: false,
     $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
   })
@@ -4092,12 +4093,13 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
       return;
     }
 
-    // Find matching fuel record for this truck (one without a return DO yet)
+    // Find the active going journey for this truck (one without a return DO yet)
     const matchingFuelRecord = await FuelRecord.findOne({
       truckNo: deliveryOrder.truckNo,
+      journeyStatus: 'active',
       returnDo: { $in: [null, '', undefined] },
       isDeleted: false,
-    }).sort({ date: -1 }); // Most recent first
+    }).sort({ date: -1 });
 
     if (!matchingFuelRecord) {
       res.status(200).json({
