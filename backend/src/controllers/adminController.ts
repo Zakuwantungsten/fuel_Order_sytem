@@ -1210,6 +1210,13 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
         autoDownloadLPOPdf: config.journeyConfig?.autoDownloadLPOPdf ?? true,
         fuelAutomation: { ...DEFAULT_FUEL_AUTOMATION, ...(config.journeyConfig?.fuelAutomation || {}) },
         cashLpoLookbackDays: config.journeyConfig?.cashLpoLookbackDays ?? 40,
+        searchConfig: {
+          doMonths: config.journeyConfig?.searchConfig?.doMonths ?? 4,
+          doMaxResults: config.journeyConfig?.searchConfig?.doMaxResults ?? 6,
+          lpoMonths: config.journeyConfig?.searchConfig?.lpoMonths ?? 1,
+          lpoMaxResults: config.journeyConfig?.searchConfig?.lpoMaxResults ?? 50,
+          fuelMaxResults: config.journeyConfig?.searchConfig?.fuelMaxResults ?? 3,
+        },
       },
     });
   } catch (error: any) {
@@ -1224,7 +1231,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
  */
 export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { startColumns, superManagerStations, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays } = req.body;
+    const { startColumns, superManagerStations, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays, searchConfig } = req.body;
 
     const hasStartColumns = startColumns !== undefined;
     const hasSmStations = superManagerStations !== undefined;
@@ -1232,8 +1239,9 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     const hasAutoDownloadLPO = autoDownloadLPOPdf !== undefined;
     const hasFuelAutomation = fuelAutomation !== undefined;
     const hasCashLpoLookbackDays = cashLpoLookbackDays !== undefined;
+    const hasSearchConfig = searchConfig !== undefined;
 
-    if (!hasStartColumns && !hasSmStations && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays) {
+    if (!hasStartColumns && !hasSmStations && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays && !hasSearchConfig) {
       throw new ApiError(400, 'Provide at least one field to update');
     }
 
@@ -1284,6 +1292,29 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       }
     }
 
+    if (hasSearchConfig) {
+      if (typeof searchConfig !== 'object' || searchConfig === null || Array.isArray(searchConfig)) {
+        throw new ApiError(400, 'searchConfig must be an object');
+      }
+      const SEARCH_CONFIG_LIMITS: Record<string, [number, number]> = {
+        doMonths: [1, 24],
+        doMaxResults: [1, 100],
+        lpoMonths: [1, 24],
+        lpoMaxResults: [1, 500],
+        fuelMaxResults: [1, 100],
+      };
+      for (const key of Object.keys(searchConfig)) {
+        if (!SEARCH_CONFIG_LIMITS[key]) {
+          throw new ApiError(400, `Unknown searchConfig key: ${key}`);
+        }
+        const val = Number(searchConfig[key]);
+        const [min, max] = SEARCH_CONFIG_LIMITS[key];
+        if (!Number.isInteger(val) || val < min || val > max) {
+          throw new ApiError(400, `searchConfig.${key} must be an integer between ${min} and ${max}`);
+        }
+      }
+    }
+
     let config = await SystemConfig.findOne({
       configType: 'journey_config',
       isDeleted: false,
@@ -1305,6 +1336,13 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         ...(hasFuelAutomation ? fuelAutomation : {}),
       },
       cashLpoLookbackDays: hasCashLpoLookbackDays ? Number(cashLpoLookbackDays) : (existing.cashLpoLookbackDays ?? 40),
+      searchConfig: {
+        doMonths: hasSearchConfig && searchConfig.doMonths !== undefined ? Number(searchConfig.doMonths) : (existing.searchConfig?.doMonths ?? 4),
+        doMaxResults: hasSearchConfig && searchConfig.doMaxResults !== undefined ? Number(searchConfig.doMaxResults) : (existing.searchConfig?.doMaxResults ?? 6),
+        lpoMonths: hasSearchConfig && searchConfig.lpoMonths !== undefined ? Number(searchConfig.lpoMonths) : (existing.searchConfig?.lpoMonths ?? 1),
+        lpoMaxResults: hasSearchConfig && searchConfig.lpoMaxResults !== undefined ? Number(searchConfig.lpoMaxResults) : (existing.searchConfig?.lpoMaxResults ?? 50),
+        fuelMaxResults: hasSearchConfig && searchConfig.fuelMaxResults !== undefined ? Number(searchConfig.fuelMaxResults) : (existing.searchConfig?.fuelMaxResults ?? 3),
+      },
     };
 
     if (!config) {
@@ -1332,6 +1370,10 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       detailParts.push(`fuelAutomation {${changed}}`);
     }
     if (hasCashLpoLookbackDays) detailParts.push(`cashLpoLookbackDays=${nextJourneyConfig.cashLpoLookbackDays}`);
+    if (hasSearchConfig) {
+      const changed = Object.keys(searchConfig).map((k) => `${k}=${searchConfig[k]}`).join(', ');
+      detailParts.push(`searchConfig {${changed}}`);
+    }
     logger.info(`Journey config updated by ${req.user?.username}: ${detailParts.join('; ')}`);
 
     await AuditService.log({
@@ -1361,6 +1403,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         autoDownloadLPOPdf: nextJourneyConfig.autoDownloadLPOPdf,
         fuelAutomation: nextJourneyConfig.fuelAutomation,
         cashLpoLookbackDays: nextJourneyConfig.cashLpoLookbackDays,
+        searchConfig: nextJourneyConfig.searchConfig,
       },
     });
   } catch (error: any) {

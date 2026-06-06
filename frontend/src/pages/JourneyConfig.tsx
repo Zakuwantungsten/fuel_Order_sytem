@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Route, Check, Save, RotateCcw, Loader2, Info, Flag, Fuel, Clock, Gauge, Pencil, X, FileDown, Workflow, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, ChangeEvent } from 'react';
+import { Route, Check, Save, RotateCcw, Loader2, Info, Flag, Fuel, Clock, Gauge, Pencil, X, FileDown, Workflow, AlertTriangle, Search } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { configAPI, JourneyConfig as JourneyConfigData, StandardAllocations, YardFuelTimeLimitConfig, FuelAutomationConfig } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -190,6 +190,7 @@ export default function JourneyConfig() {
         <YardTimeLimitCard />
         <PdfDownloadSettingsCard />
         <CashLpoLookbackCard />
+        <SearchConfigCard />
         <FuelAutomationCard />
       </div>
 
@@ -994,6 +995,190 @@ function SuperManagerStationsCard() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Dashboard Search Configuration ──────────────────────────────────────────
+
+const SEARCH_CONFIG_DEFAULTS = {
+  doMonths: 4,
+  doMaxResults: 6,
+  lpoMonths: 1,
+  lpoMaxResults: 50,
+  fuelMaxResults: 3,
+};
+
+type SearchConfigDraft = {
+  doMonths: string;
+  doMaxResults: string;
+  lpoMonths: string;
+  lpoMaxResults: string;
+  fuelMaxResults: string;
+};
+
+function SearchConfigCard() {
+  const [saved, setSaved] = useState(SEARCH_CONFIG_DEFAULTS);
+  const [draft, setDraft] = useState<SearchConfigDraft>({
+    doMonths: String(SEARCH_CONFIG_DEFAULTS.doMonths),
+    doMaxResults: String(SEARCH_CONFIG_DEFAULTS.doMaxResults),
+    lpoMonths: String(SEARCH_CONFIG_DEFAULTS.lpoMonths),
+    lpoMaxResults: String(SEARCH_CONFIG_DEFAULTS.lpoMaxResults),
+    fuelMaxResults: String(SEARCH_CONFIG_DEFAULTS.fuelMaxResults),
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const cfg = await configAPI.getJourneyConfig();
+      const sc = { ...SEARCH_CONFIG_DEFAULTS, ...cfg.searchConfig };
+      setSaved(sc);
+      setDraft({
+        doMonths: String(sc.doMonths),
+        doMaxResults: String(sc.doMaxResults),
+        lpoMonths: String(sc.lpoMonths),
+        lpoMaxResults: String(sc.lpoMaxResults),
+        fuelMaxResults: String(sc.fuelMaxResults),
+      });
+    } catch {
+      toast.error('Failed to load search configuration');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeSync('journey_config', load, 'rt-search-config');
+
+  const set = (key: keyof SearchConfigDraft) => (e: ChangeEvent<HTMLInputElement>) =>
+    setDraft((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const isDirty = (Object.keys(draft) as (keyof SearchConfigDraft)[]).some(
+    (k) => parseInt(draft[k], 10) !== saved[k]
+  );
+
+  const handleSave = async () => {
+    const parsed = {
+      doMonths: parseInt(draft.doMonths, 10),
+      doMaxResults: parseInt(draft.doMaxResults, 10),
+      lpoMonths: parseInt(draft.lpoMonths, 10),
+      lpoMaxResults: parseInt(draft.lpoMaxResults, 10),
+      fuelMaxResults: parseInt(draft.fuelMaxResults, 10),
+    };
+    const limits: Record<keyof typeof parsed, [number, number]> = {
+      doMonths: [1, 24],
+      doMaxResults: [1, 100],
+      lpoMonths: [1, 24],
+      lpoMaxResults: [1, 500],
+      fuelMaxResults: [1, 100],
+    };
+    for (const [key, [min, max]] of Object.entries(limits) as [keyof typeof parsed, [number, number]][]) {
+      if (isNaN(parsed[key]) || parsed[key] < min || parsed[key] > max) {
+        toast.warn(`${key} must be between ${min} and ${max}`);
+        return;
+      }
+    }
+    setSaving(true);
+    try {
+      const cfg = await configAPI.updateSearchConfig(parsed);
+      const sc = { ...SEARCH_CONFIG_DEFAULTS, ...cfg.searchConfig };
+      setSaved(sc);
+      setDraft({
+        doMonths: String(sc.doMonths),
+        doMaxResults: String(sc.doMaxResults),
+        lpoMonths: String(sc.lpoMonths),
+        lpoMaxResults: String(sc.lpoMaxResults),
+        fuelMaxResults: String(sc.fuelMaxResults),
+      });
+      toast.success('Search configuration saved');
+    } catch {
+      toast.error('Failed to save search configuration');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () =>
+    setDraft({
+      doMonths: String(saved.doMonths),
+      doMaxResults: String(saved.doMaxResults),
+      lpoMonths: String(saved.lpoMonths),
+      lpoMaxResults: String(saved.lpoMaxResults),
+      fuelMaxResults: String(saved.fuelMaxResults),
+    });
+
+  const rows: { key: keyof SearchConfigDraft; label: string; unit: string; min: number; max: number; sub: string }[] = [
+    { key: 'doMonths', label: 'DO date range', unit: 'months', min: 1, max: 24, sub: 'How many months back to search delivery orders' },
+    { key: 'doMaxResults', label: 'DO max results', unit: 'results', min: 1, max: 100, sub: 'Maximum delivery orders returned per search' },
+    { key: 'lpoMonths', label: 'LPO date range', unit: 'months', min: 1, max: 24, sub: 'How many months back to search LPO entries' },
+    { key: 'lpoMaxResults', label: 'LPO max results', unit: 'results', min: 1, max: 500, sub: 'Maximum LPO entries returned per search' },
+    { key: 'fuelMaxResults', label: 'Fuel record max results', unit: 'results', min: 1, max: 100, sub: 'Maximum fuel records returned per search (no date filter)' },
+  ];
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+        <Search className="w-4 h-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+        <h2 className="font-medium text-sm text-gray-900 dark:text-gray-100">Dashboard search limits</h2>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Controls how far back and how many results the unified search bar on the dashboard returns for each record type.
+        </p>
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-10 rounded-lg bg-gray-100 dark:bg-gray-700/50 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rows.map(({ key, label, unit, min, max, sub }) => (
+              <div key={key} className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{label}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{sub}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <input
+                    type="number"
+                    min={min}
+                    max={max}
+                    value={draft[key]}
+                    onChange={set(key)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                    disabled={saving}
+                    className="w-20 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 w-12 shrink-0">{unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {!loading && (
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={!isDirty || saving}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />Reset
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || saving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

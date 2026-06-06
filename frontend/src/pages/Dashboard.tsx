@@ -22,7 +22,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
+import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI, configAPI } from '../services/api';
 import { DashboardStats, FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
@@ -67,6 +67,22 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   });
   const [searching, setSearching] = useState(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [searchConfig, setSearchConfig] = useState({
+    doMonths: 4,
+    doMaxResults: 6,
+    lpoMonths: 1,
+    lpoMaxResults: 50,
+    fuelMaxResults: 3,
+  });
+
+  useEffect(() => {
+    configAPI.getJourneyConfig()
+      .then((cfg) => {
+        if (cfg.searchConfig) setSearchConfig((prev) => ({ ...prev, ...cfg.searchConfig }));
+      })
+      .catch(() => {});
+  }, []);
 
   // Persist search state to sessionStorage whenever it changes
   useEffect(() => {
@@ -145,50 +161,42 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     setSearching(true);
     
     try {
-      // Calculate date restrictions
-      const oneMonthAgo = new Date();
-      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-      
-      const fourMonthsAgo = new Date();
-      fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
-      
+      // Calculate date restrictions from config
+      const doFromDate = new Date();
+      doFromDate.setMonth(doFromDate.getMonth() - searchConfig.doMonths);
+
+      const lpoFromDate = new Date();
+      lpoFromDate.setMonth(lpoFromDate.getMonth() - searchConfig.lpoMonths);
+
       const today = new Date();
 
-      console.log('Search params:', {
-        query,
-        today: today.toISOString().split('T')[0],
-        oneMonthAgo: oneMonthAgo.toISOString().split('T')[0],
-        fourMonthsAgo: fourMonthsAgo.toISOString().split('T')[0]
-      });
-
-      // Search all three types in parallel
-      // DOs: Last 4 months, get 6 most recent | LPOs: Last 30 days, get up to 50 | Fuel Records: No date limit, get 3 most recent
+      // Search all three types in parallel using configurable limits
       const [dosResponse, lposResponse, fuelsResponse] = await Promise.all([
-        deliveryOrdersAPI.getAll({ 
+        deliveryOrdersAPI.getAll({
           search: query,
-          dateFrom: fourMonthsAgo.toISOString().split('T')[0],
+          dateFrom: doFromDate.toISOString().split('T')[0],
           dateTo: today.toISOString().split('T')[0],
-          limit: 6,
+          limit: searchConfig.doMaxResults,
           sortBy: 'date',
           sortOrder: 'desc'
         }).catch((err) => {
           console.error('DO search error:', err);
           return { data: [] };
         }),
-        
-        lposAPI.getAll({ 
+
+        lposAPI.getAll({
           search: query,
-          dateFrom: oneMonthAgo.toISOString().split('T')[0],
+          dateFrom: lpoFromDate.toISOString().split('T')[0],
           dateTo: today.toISOString().split('T')[0],
-          limit: 50
+          limit: searchConfig.lpoMaxResults
         }).catch((err) => {
           console.error('LPO search error:', err);
           return { data: [] };
         }),
-        
-        fuelRecordsAPI.getAll({ 
+
+        fuelRecordsAPI.getAll({
           search: query,
-          limit: 3,
+          limit: searchConfig.fuelMaxResults,
           sortBy: 'date',
           sortOrder: 'desc'
         }).catch((err) => {

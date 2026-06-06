@@ -1496,6 +1496,14 @@ export interface JourneyConfig {
   fuelAutomation?: FuelAutomationConfig;
   // How many days back to search for existing LPOs when creating a CASH LPO (default 40)
   cashLpoLookbackDays?: number;
+  // Dashboard unified-search configuration
+  searchConfig?: {
+    doMonths?: number;       // months back for DO search (default 4)
+    doMaxResults?: number;   // max DO results (default 6)
+    lpoMonths?: number;      // months back for LPO search (default 1)
+    lpoMaxResults?: number;  // max LPO results (default 50)
+    fuelMaxResults?: number; // max fuel record results (default 3)
+  };
 }
 
 export const adminAPI = {
@@ -2106,6 +2114,12 @@ export const configAPI = {
   // Accepts a partial set of keys; unspecified keys are preserved server-side.
   updateFuelAutomation: async (fuelAutomation: Partial<FuelAutomationConfig>): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', { fuelAutomation });
+    return response.data.data;
+  },
+
+  // Update dashboard unified-search configuration (partial journey-config update).
+  updateSearchConfig: async (searchConfig: NonNullable<JourneyConfig['searchConfig']>): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { searchConfig });
     return response.data.data;
   },
 };

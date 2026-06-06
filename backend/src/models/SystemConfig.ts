@@ -81,6 +81,14 @@ export interface IJourneyConfig {
   fuelAutomation?: IFuelAutomationConfig;
   // How many days back to search for existing LPOs when creating a CASH LPO (default 40).
   cashLpoLookbackDays?: number;
+  // Dashboard unified-search configuration.
+  searchConfig?: {
+    doMonths?: number;       // months back to search DOs (default 4)
+    doMaxResults?: number;   // max DO results (default 6)
+    lpoMonths?: number;      // months back to search LPOs (default 1)
+    lpoMaxResults?: number;  // max LPO results (default 50)
+    fuelMaxResults?: number; // max fuel record results (default 3)
+  };
 }
 
 // Canonical default for the fuel-automation flags (all enabled).
@@ -356,6 +364,13 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         doCancelCascade: { type: Boolean, default: true },
       },
       cashLpoLookbackDays: { type: Number, default: 40, min: 1, max: 365 },
+      searchConfig: {
+        doMonths:      { type: Number, default: 4,  min: 1, max: 24 },
+        doMaxResults:  { type: Number, default: 6,  min: 1, max: 100 },
+        lpoMonths:     { type: Number, default: 1,  min: 1, max: 24 },
+        lpoMaxResults: { type: Number, default: 50, min: 1, max: 500 },
+        fuelMaxResults:{ type: Number, default: 3,  min: 1, max: 100 },
+      },
     },
     yardFuelTimeLimit: {
       enabled: { type: Boolean, default: false },
