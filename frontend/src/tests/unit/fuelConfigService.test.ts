@@ -88,9 +88,9 @@ describe('FuelConfigService', () => {
       expect(result.batchName).toBe('batch_60');
     });
 
-    it('should return default 60L for unmatched trucks', () => {
+    it('should return 0L for unmatched trucks (requires manual admin configuration)', () => {
       const result = FuelConfigService.getExtraFuel('T999 ZZZ');
-      expect(result.extraFuel).toBe(60);
+      expect(result.extraFuel).toBe(0);
       expect(result.matched).toBe(false);
     });
 
@@ -102,7 +102,7 @@ describe('FuelConfigService', () => {
 
     it('should handle empty truck number', () => {
       const result = FuelConfigService.getExtraFuel('');
-      expect(result.extraFuel).toBe(60);
+      expect(result.extraFuel).toBe(0);
       expect(result.matched).toBe(false);
     });
   });
@@ -114,31 +114,11 @@ describe('FuelConfigService', () => {
     });
   });
 
-  describe('getLoadingPointExtraFuel', () => {
-    it('should return 40L for KAMOA loading point', () => {
-      expect(FuelConfigService.getLoadingPointExtraFuel('KAMOA')).toBe(40);
-    });
-
-    it('should return 20L for NMI loading point', () => {
-      expect(FuelConfigService.getLoadingPointExtraFuel('NMI')).toBe(20);
-    });
-
-    it('should return 60L for KALONGWE loading point', () => {
-      expect(FuelConfigService.getLoadingPointExtraFuel('KALONGWE')).toBe(60);
-    });
-
-    it('should match with fuzzy logic (lowercase)', () => {
-      expect(FuelConfigService.getLoadingPointExtraFuel('kamoa')).toBe(40);
-      expect(FuelConfigService.getLoadingPointExtraFuel('nmi')).toBe(20);
-      expect(FuelConfigService.getLoadingPointExtraFuel('kalongwe')).toBe(60);
-    });
-
-    it('should match with fuzzy logic (typos)', () => {
-      expect(FuelConfigService.getLoadingPointExtraFuel('KAMOWA')).toBe(40);
-      // NIM is too short (3 chars) and 1 char different from NMI, similarity < 75%
-      // So we test with a closer match instead
-      expect(FuelConfigService.getLoadingPointExtraFuel('NM')).toBe(20); // partial match
-      expect(FuelConfigService.getLoadingPointExtraFuel('KALONGWI')).toBe(60);
+  describe('getLoadingPointExtraFuel (deprecated — always returns 0)', () => {
+    it('should return 0 regardless of input (configure via admin panel RouteConfig)', () => {
+      expect(FuelConfigService.getLoadingPointExtraFuel('KAMOA')).toBe(0);
+      expect(FuelConfigService.getLoadingPointExtraFuel('NMI')).toBe(0);
+      expect(FuelConfigService.getLoadingPointExtraFuel('KALONGWE')).toBe(0);
     });
 
     it('should return 0 for non-matching locations', () => {
@@ -151,18 +131,11 @@ describe('FuelConfigService', () => {
     });
   });
 
-  describe('getDestinationExtraFuel', () => {
-    it('should return 170L for MOSHI destination', () => {
-      expect(FuelConfigService.getDestinationExtraFuel('MOSHI')).toBe(170);
-    });
-
-    it('should return 170L for MSA destination', () => {
-      expect(FuelConfigService.getDestinationExtraFuel('MSA')).toBe(170);
-    });
-
-    it('should match with fuzzy logic (lowercase)', () => {
-      expect(FuelConfigService.getDestinationExtraFuel('moshi')).toBe(170);
-      expect(FuelConfigService.getDestinationExtraFuel('msa')).toBe(170);
+  describe('getDestinationExtraFuel (deprecated — always returns 0)', () => {
+    it('should return 0 regardless of destination (configure via admin panel RouteConfig)', () => {
+      expect(FuelConfigService.getDestinationExtraFuel('MOSHI')).toBe(0);
+      expect(FuelConfigService.getDestinationExtraFuel('MSA')).toBe(0);
+      expect(FuelConfigService.getDestinationExtraFuel('moshi')).toBe(0);
     });
 
     it('should return 0 for non-matching destinations', () => {

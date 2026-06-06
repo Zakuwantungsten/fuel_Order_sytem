@@ -374,7 +374,7 @@ describe('allowMultipleSessions enforcement', () => {
     // With allowMultipleSessions = true, a second login should NOT clear that token
     // (We check by confirming it stays the same in DB after a new login would be issued)
     // The session logic in authController only clears when !allowMultipleSessions
-    dbUser = await User.findById(user._id).select('+refreshToken');
+    dbUser = await User.findById(user._id).select('+refreshToken') as typeof dbUser;
     expect(dbUser?.refreshToken).toBe(savedToken); // unchanged
   });
 

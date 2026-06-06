@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { EnhancedDashboard } from '../../components/EnhancedDashboard';
 
 // Mock the AuthContext
@@ -118,11 +119,18 @@ const mockSuperAdminUser = {
   isActive: true
 };
 
+const createTestQueryClient = () => new QueryClient({
+  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+});
+
 const renderEnhancedDashboard = (user = mockOperatorUser) => {
+  const queryClient = createTestQueryClient();
   return render(
-    <BrowserRouter>
-      <EnhancedDashboard user={user} onLogout={mockLogout} />
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <EnhancedDashboard user={user} onLogout={mockLogout} />
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 };
 
@@ -182,9 +190,10 @@ describe('EnhancedDashboard', () => {
 
     it('should show super admin sections for super_admin role', async () => {
       renderEnhancedDashboard(mockSuperAdminUser);
-      
+
+      // Mock renders: <div data-testid="super-admin-overview">Super Admin: overview</div>
       await waitFor(() => {
-        expect(screen.getByText(/Super Admin Overview/i)).toBeInTheDocument();
+        expect(screen.getByTestId('super-admin-overview')).toBeInTheDocument();
       });
     });
 

@@ -47,8 +47,8 @@ export function OfficerPortal({ user }: OfficerPortalProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  // Params passed from overview search / quick actions to the DO tab
-  const [doTabParams, setDoTabParams] = useState<string | undefined>(undefined);
+  // Value not consumed locally — set by navigation helpers, read by child components via URL params
+  const [_doTabParams, setDoTabParams] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 250);

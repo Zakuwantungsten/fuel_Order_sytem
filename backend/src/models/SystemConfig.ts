@@ -79,6 +79,8 @@ export interface IJourneyConfig {
   autoDownloadLPOPdf?: boolean;
   // Per-operation fuel-record automation switches (see IFuelAutomationConfig).
   fuelAutomation?: IFuelAutomationConfig;
+  // How many days back to search for existing LPOs when creating a CASH LPO (default 40).
+  cashLpoLookbackDays?: number;
 }
 
 // Canonical default for the fuel-automation flags (all enabled).
@@ -353,6 +355,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         doAmendCascade: { type: Boolean, default: true },
         doCancelCascade: { type: Boolean, default: true },
       },
+      cashLpoLookbackDays: { type: Number, default: 40, min: 1, max: 365 },
     },
     yardFuelTimeLimit: {
       enabled: { type: Boolean, default: false },

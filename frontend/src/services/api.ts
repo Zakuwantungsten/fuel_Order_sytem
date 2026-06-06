@@ -768,6 +768,18 @@ export const lpoDocumentsAPI = {
     return response.data.data;
   },
 
+  // Amend (partially reduce) a truck entry in an existing LPO
+  amendTruck: async (lpoId: string | number, truckNo: string, newLiters: number, cancellationPoint?: string, reason?: string): Promise<LPOSummary> => {
+    const response = await apiClient.post('/lpo-documents/amend-truck', {
+      lpoId,
+      truckNo,
+      newLiters,
+      cancellationPoint,
+      reason
+    });
+    return response.data.data;
+  },
+
   // Cancel ALL active entries in an LPO at once
   cancelAll: async (id: string, reason?: string): Promise<{ lpoNo: string; results: any[] }> => {
     const response = await apiClient.post(`/lpo-documents/${id}/cancel-all`, { reason });
@@ -1474,6 +1486,8 @@ export interface JourneyConfig {
   autoDownloadLPOPdf?: boolean;
   // Per-operation fuel-record automation switches
   fuelAutomation?: FuelAutomationConfig;
+  // How many days back to search for existing LPOs when creating a CASH LPO (default 40)
+  cashLpoLookbackDays?: number;
 }
 
 export const adminAPI = {
@@ -2071,6 +2085,12 @@ export const configAPI = {
   // Update PDF auto-download toggles (partial journey-config update)
   updatePdfDownloadSettings: async (settings: { autoDownloadDOPdf?: boolean; autoDownloadLPOPdf?: boolean }): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', settings);
+    return response.data.data;
+  },
+
+  // Update the CASH LPO lookback window (partial journey-config update)
+  updateCashLpoLookbackDays: async (cashLpoLookbackDays: number): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { cashLpoLookbackDays });
     return response.data.data;
   },
 

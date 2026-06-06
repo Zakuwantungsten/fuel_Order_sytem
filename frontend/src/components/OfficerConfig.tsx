@@ -76,7 +76,7 @@ const OfficerConfig = ({ user }: OfficerConfigProps) => {
   );
 
   const OptionRow = ({
-    value,
+    value: _value,
     selected,
     label,
     description,

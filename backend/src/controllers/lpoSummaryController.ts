@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry } from '../models';
+import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry, SystemConfig } from '../models';
 import { ArchivedLPOSummary } from '../models/ArchivedData';
 import { FuelStationConfig } from '../models/FuelStationConfig';
 import { ApiError } from '../middleware/errorHandler';
@@ -55,6 +55,19 @@ async function loadStationMappings() {
  */
 async function getStationToFuelFieldMapping() {
   return await loadStationMappings();
+}
+
+/**
+ * Get the configured CASH LPO lookback window in days (defaults to 40 if not set).
+ */
+async function getCashLpoLookbackDays(): Promise<number> {
+  try {
+    const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false }).lean();
+    const days = (cfg as any)?.journeyConfig?.cashLpoLookbackDays;
+    return typeof days === 'number' && days > 0 ? days : 40;
+  } catch {
+    return 40;
+  }
 }
 
 // Mapping from station to fuel record field for updating
@@ -1780,15 +1793,16 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
 
     // Normalize truck number for case-insensitive matching
     const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
-    
-    // Calculate date limit: 40 days ago (1 month + 10 days)
+
+    // Calculate date limit using configurable lookback window (default 40 days)
+    const lookbackDays = await getCashLpoLookbackDays();
     const dateLimitForLPO = new Date();
-    dateLimitForLPO.setDate(dateLimitForLPO.getDate() - 40);
+    dateLimitForLPO.setDate(dateLimitForLPO.getDate() - lookbackDays);
     const dateLimitString = dateLimitForLPO.toISOString().split('T')[0]; // YYYY-MM-DD format
-    
+
     // Build query to find LPOs at this station with this truck's active entries
     // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
-    // Only search LPOs from the last 40 days to improve performance
+    // Only search LPOs from the configured lookback window to improve performance
     const query: any = {
       isDeleted: false,
       station: { $regex: new RegExp(`^${stationUpper}$`, 'i') },
@@ -1876,20 +1890,21 @@ export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Pro
 
     // Normalize truck number for case-insensitive matching
     const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
-    
-    // Calculate date limit: 40 days ago (1 month + 10 days)
+
+    // Calculate date limit using configurable lookback window (default 40 days)
+    const lookbackDays = await getCashLpoLookbackDays();
     const dateLimitForLPO = new Date();
-    dateLimitForLPO.setDate(dateLimitForLPO.getDate() - 40);
+    dateLimitForLPO.setDate(dateLimitForLPO.getDate() - lookbackDays);
     const dateLimitString = dateLimitForLPO.toISOString().split('T')[0]; // YYYY-MM-DD format
-    
+
     // Find LPOs where this truck has an active (non-cancelled) entry
     // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
-    // Only search LPOs from the last 40 days to improve performance
+    // Only search LPOs within the configured lookback window to improve performance
     const query: any = {
       isDeleted: false,
       'entries.truckNo': { $regex: new RegExp(`^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'), 'i') },
       'entries.isCancelled': { $ne: true },
-      date: { $gte: dateLimitString }, // Only search last 40 days
+      date: { $gte: dateLimitString }, // Only search within the lookback window
       station: { $ne: 'CASH' } // Exclude CASH LPOs from cancellation
     };
 
@@ -2037,6 +2052,114 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
 
     // Notify station manager / super_manager / driver of the cancellation (best-effort).
     createLPOCancelledNotification(lpo, lpo.entries[entryIndex], req.user?.username || 'system').catch(() => {});
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Amend (partially reduce) a truck entry in an LPO.
+ * Used when a truck gets cash fuel near a station and will still collect its
+ * reduced station allocation. Updates liters/amount, adjusts the fuel record by
+ * the delta only, and cascades to the LPO total.
+ */
+export const amendTruckInLPO = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { lpoId, truckNo, newLiters, cancellationPoint, reason } = req.body;
+
+    if (!lpoId || !truckNo || newLiters === undefined || newLiters === null) {
+      throw new ApiError(400, 'LPO ID, truck number, and newLiters are required');
+    }
+
+    const parsedLiters = Number(newLiters);
+    if (isNaN(parsedLiters) || parsedLiters < 0) {
+      throw new ApiError(400, 'newLiters must be a non-negative number');
+    }
+
+    const lpo = await LPOSummary.findOne({ _id: lpoId, isDeleted: false });
+    if (!lpo) {
+      throw new ApiError(404, 'LPO not found');
+    }
+
+    const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
+    const entryIndex = lpo.entries.findIndex((e: any) => {
+      const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
+      return entryTruckNormalized === truckNoNormalized && !e.isCancelled;
+    });
+
+    if (entryIndex === -1) {
+      throw new ApiError(404, 'Active entry for this truck not found in the LPO');
+    }
+
+    const entry = lpo.entries[entryIndex];
+    const oldLiters = entry.liters;
+
+    if (parsedLiters >= oldLiters) {
+      throw new ApiError(400, `newLiters (${parsedLiters}) must be less than the current allocation (${oldLiters})`);
+    }
+
+    const delta = oldLiters - parsedLiters; // positive → restoring this many liters back to fuel record
+
+    // Revert the delta from the fuel record (delta is positive → pass as negative change)
+    const doNoUpper = (entry.doNo || '').toString().trim().toUpperCase();
+    const isNilDO = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A';
+    const isRefEntry = doNoUpper === 'REF';
+
+    if (!isNilDO && !isRefEntry) {
+      await updateFuelRecordForLPOEntry(
+        entry.doNo,
+        -delta,
+        lpo.station,
+        entry.truckNo,
+        cancellationPoint || entry.cancellationPoint,
+        entry.isCustomStation ? {
+          isCustomStation: entry.isCustomStation,
+          customGoingCheckpoint: entry.customGoingCheckpoint,
+          customReturnCheckpoint: entry.customReturnCheckpoint,
+        } : undefined
+      );
+    }
+
+    // Update the entry: store original liters if not already amended, then apply new value
+    if (!lpo.entries[entryIndex].originalLiters) {
+      lpo.entries[entryIndex].originalLiters = oldLiters;
+    }
+    lpo.entries[entryIndex].liters = parsedLiters;
+    lpo.entries[entryIndex].amount = parsedLiters * entry.rate;
+    lpo.entries[entryIndex].amendedAt = new Date();
+    if (cancellationPoint) {
+      lpo.entries[entryIndex].cancellationPoint = cancellationPoint;
+    }
+
+    // Recalculate total (cancelled entries excluded)
+    lpo.total = lpo.entries
+      .filter((e: any) => !e.isCancelled)
+      .reduce((sum: number, e: any) => sum + e.amount, 0);
+
+    await lpo.save();
+
+    logger.info(`Truck ${truckNo} amended in LPO ${lpo.lpoNo}: ${oldLiters}L → ${parsedLiters}L (Δ${delta}L) by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'LPOSummary',
+      resourceId: lpo.lpoNo,
+      details: `Truck "${truckNo}" amended in LPO ${lpo.lpoNo}: ${oldLiters}L → ${parsedLiters}L (reduced by ${delta}L)${reason ? ` — reason: ${reason}` : ''} by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully amended truck ${truckNo} in LPO ${lpo.lpoNo}: ${oldLiters}L → ${parsedLiters}L`,
+      data: lpo,
+    });
+    emitDataChange('lpo_summaries', 'update');
+    emitDataChange('fuel_records', 'update');
+
+    createLPOAmendedNotification(lpo, lpo.entries[entryIndex], req.user?.username || 'system').catch(() => {});
   } catch (error: any) {
     throw error;
   }

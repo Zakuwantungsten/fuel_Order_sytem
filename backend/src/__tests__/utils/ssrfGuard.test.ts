@@ -53,11 +53,10 @@ describe('SSRF Guard — isSafeUrl()', () => {
     });
 
     it('should allow public Class B (172.15.x.x)', async () => {
-      // 172.15.0.0 is not in the private range
+      // 172.15.0.0 is not in the private range (private is 172.16.0.0 - 172.31.255.255)
+      // For a raw IP address the guard does a direct isPrivateIP check, no DNS needed
       const result = await isSafeUrl('https://172.15.0.1');
-      // This will fail in actual test due to DNS, but IP check should pass
-      // In real scenario, this would be a valid public IP
-      expect(result).toBe(false); // Because it won't resolve
+      expect(result).toBe(true); // Public IP — should be allowed
     });
   });
 
@@ -192,7 +191,8 @@ describe('SSRF Guard — Whitelist', () => {
   });
 
   it('should reject non-whitelisted domain', () => {
-    const result = isWhitelistDomain('https://api.example.com/data');
+    // Use a domain that has never been added to the whitelist in any test
+    const result = isWhitelistDomain('https://not-in-whitelist.invalid/data');
     expect(result).toBe(false);
   });
 

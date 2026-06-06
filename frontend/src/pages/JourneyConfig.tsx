@@ -189,6 +189,7 @@ export default function JourneyConfig() {
         <SuperManagerStationsCard />
         <YardTimeLimitCard />
         <PdfDownloadSettingsCard />
+        <CashLpoLookbackCard />
         <FuelAutomationCard />
       </div>
 
@@ -667,6 +668,97 @@ const FUEL_AUTOMATION_GROUPS: {
     ],
   },
 ];
+
+// ── Cash LPO Lookback Window ─────────────────────────────────────────────────
+
+function CashLpoLookbackCard() {
+  const [days, setDays] = useState(40);
+  const [draft, setDraft] = useState('40');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const cfg = await configAPI.getJourneyConfig();
+      const v = cfg.cashLpoLookbackDays ?? 40;
+      setDays(v);
+      setDraft(String(v));
+    } catch {
+      toast.error('Failed to load cash LPO lookback setting');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeSync('journey_config', load, 'rt-cash-lpo-lookback');
+
+  const save = async () => {
+    const parsed = parseInt(draft, 10);
+    if (isNaN(parsed) || parsed < 1 || parsed > 365) {
+      toast.warn('Enter a value between 1 and 365 days');
+      return;
+    }
+    if (parsed === days) return;
+    setSaving(true);
+    try {
+      const cfg = await configAPI.updateCashLpoLookbackDays(parsed);
+      const v = cfg.cashLpoLookbackDays ?? parsed;
+      setDays(v);
+      setDraft(String(v));
+      toast.success(`Cash LPO lookback window updated to ${v} days`);
+    } catch {
+      toast.error('Failed to update lookback setting');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const dirty = parseInt(draft, 10) !== days;
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+        <Clock className="w-4 h-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+        <h2 className="font-medium text-sm text-gray-900 dark:text-gray-100">Cash LPO lookback window</h2>
+      </div>
+      <div className="px-4 py-3">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          When creating a CASH LPO, the system looks back this many days to find existing LPO allocations for
+          each truck at the selected checkpoint. Increase this if trucks take longer than 40 days to complete
+          a journey.
+        </p>
+        {loading ? (
+          <div className="h-10 rounded-lg bg-gray-100 dark:bg-gray-700/50 animate-pulse" />
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-1 max-w-[180px]">
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && save()}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={saving}
+              />
+              <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">days</span>
+            </div>
+            <button
+              onClick={save}
+              disabled={saving || !dirty}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Save
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function FuelAutomationCard() {
   const [flags, setFlags] = useState<FuelAutomationConfig>(FUEL_AUTOMATION_DEFAULTS);

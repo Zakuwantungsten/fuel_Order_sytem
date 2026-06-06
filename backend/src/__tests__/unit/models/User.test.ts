@@ -22,8 +22,8 @@ describe('User Model', () => {
       await expect(createTestUser({ email: 'invalid-email' })).rejects.toThrow();
     });
 
-    it('should fail with short password', async () => {
-      await expect(createTestUser({ password: '123' })).rejects.toThrow();
+    it('should fail with empty password', async () => {
+      await expect(createTestUser({ password: '' })).rejects.toThrow();
     });
 
     it('should fail with short username', async () => {

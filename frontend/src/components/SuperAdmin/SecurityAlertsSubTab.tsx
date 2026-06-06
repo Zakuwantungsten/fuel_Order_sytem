@@ -8,7 +8,7 @@ import { getCsrfToken } from '../../services/api';
 import {
   Bell, RefreshCw, CheckCircle, Eye, Search as SearchIcon,
   ShieldAlert, XCircle, ChevronDown, ChevronRight, MessageSquare,
-  Filter, Send, Clock,
+  Filter, Send, Clock, AlertTriangle,
 } from 'lucide-react';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import SecurityIncidentPanel from './SecurityIncidentPanel';

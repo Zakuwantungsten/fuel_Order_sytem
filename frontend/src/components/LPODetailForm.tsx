@@ -228,6 +228,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   });
   const [existingLPOsForTrucks, setExistingLPOsForTrucks] = useState<Map<string, { lpos: LPOSummary[], direction: string, doNo: string }[]>>(new Map());
   const [selectedLPOsToCancel, setSelectedLPOsToCancel] = useState<Map<string, Set<string>>>(new Map()); // truckNo -> Set of LPO IDs
+  // truckNo::lpoId -> { lpoId, newLiters }
+  const [selectedLPOsToAmend, setSelectedLPOsToAmend] = useState<Map<string, { lpoId: string; newLiters: number }>>(new Map());
   const [trucksWithoutLPOs, setTrucksWithoutLPOs] = useState<Set<string>>(new Set());
   const [isFetchingLPOs, setIsFetchingLPOs] = useState(false);
   
@@ -525,6 +527,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setReturningCheckpoint('');
     setExistingLPOsForTrucks(new Map());
     setSelectedLPOsToCancel(new Map());
+    setSelectedLPOsToAmend(new Map());
     setTrucksWithoutLPOs(new Set());
     setDuplicateWarnings(new Map());
     setLockedEntryRates(new Map());
@@ -841,6 +844,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         setExistingLPOsForTrucks(prev => (prev.size === 0 ? prev : new Map()));
         setTrucksWithoutLPOs(prev => (prev.size === 0 ? prev : new Set()));
         setSelectedLPOsToCancel(prev => (prev.size === 0 ? prev : new Map()));
+        setSelectedLPOsToAmend(prev => (prev.size === 0 ? prev : new Map()));
       }
     };
 
@@ -2713,6 +2717,37 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }
     }
 
+    // Process amends for CASH mode — partially reduce existing LPO entries
+    if (formData.station === 'CASH' && selectedLPOsToAmend.size > 0) {
+      try {
+        for (const [amendKey, { lpoId, newLiters }] of selectedLPOsToAmend) {
+          const [truckNo] = amendKey.split('::');
+          // Determine the checkpoint for this truck's direction
+          const truckDirections = existingLPOsForTrucks.get(truckNo);
+          if (!truckDirections) continue;
+          for (const { lpos, direction, doNo } of truckDirections) {
+            const lpoMatch = lpos.find((l) => {
+              const id = (l as any)._id?.toString() || l.id?.toString();
+              return id === lpoId;
+            });
+            if (!lpoMatch) continue;
+            const checkpoint = direction === 'Going' ? goingCheckpoint : returningCheckpoint;
+            await lpoDocumentsAPI.amendTruck(
+              lpoId,
+              truckNo,
+              newLiters,
+              checkpoint as string,
+              `Cash mode payment - truck received ${newLiters}L cash, reducing station allocation (${direction}, DO: ${doNo})`
+            );
+          }
+        }
+      } catch (error: any) {
+        const msg = error?.response?.data?.message || error?.message || 'Unknown error';
+        toast.error(`Failed to amend existing LPO: ${msg}. Fix the issue and try again. The CASH LPO has NOT been saved.`);
+        return;
+      }
+    }
+
     // For CUSTOM station, use the custom station name as the station value
     // The station field will show the actual custom name (not "CUSTOM")
     const actualStation = formData.station === 'CUSTOM' ? customStationName : formData.station;
@@ -3391,6 +3426,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
                 {!isFetchingLPOs && existingLPOsForTrucks.size > 0 && (
                   <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md space-y-2">
+                    <p className="text-[11px] text-red-600 dark:text-red-400 mb-1">
+                      For each existing LPO: <strong>Cancel</strong> fully reverts the allocation (truck won't collect from station). <strong>Amend</strong> reduces it to a new amount (truck still collects the reduced quantity).
+                    </p>
                     {Array.from(existingLPOsForTrucks.entries()).map(([truckNo, directionLPOs]) => {
                       const selectedForTruck = selectedLPOsToCancel.get(truckNo) || new Set();
                       return (
@@ -3398,30 +3436,84 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           <p className="text-xs font-semibold text-red-800 dark:text-red-300 mb-1">
                             {truckNo}
                           </p>
-                          <div className="space-y-1 pl-2">
+                          <div className="space-y-2 pl-2">
                             {directionLPOs.flatMap(({ lpos }) =>
                               lpos.map((lpo) => {
                                 const lpoId = (lpo as any)._id?.toString() || lpo.id?.toString() || '';
                                 const liters = lpo.entries?.find((e: any) => e.truckNo === truckNo && !e.isCancelled)?.liters ?? 0;
+                                const amendKey = `${truckNo}::${lpoId}`;
+                                const amendEntry = selectedLPOsToAmend.get(amendKey);
+                                const isAmending = !!amendEntry;
+                                const isCancelling = selectedForTruck.has(lpoId);
                                 return (
-                                  <label key={lpoId} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/30 px-1 py-0.5 rounded">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedForTruck.has(lpoId)}
-                                      onChange={(e) => {
-                                        const newSelected = new Map(selectedLPOsToCancel);
-                                        const newSet = new Set(newSelected.get(truckNo));
-                                        if (e.target.checked) newSet.add(lpoId);
-                                        else newSet.delete(lpoId);
-                                        newSelected.set(truckNo, newSet);
-                                        setSelectedLPOsToCancel(newSelected);
-                                      }}
-                                      className="rounded border-red-300 text-red-600 focus:ring-red-500 shrink-0"
-                                    />
-                                    <span className="text-red-700 dark:text-red-300">
-                                      LPO #{lpo.lpoNo} ({lpo.station}, {lpo.date}) — {liters}L
-                                    </span>
-                                  </label>
+                                  <div key={lpoId} className="rounded border border-red-200 dark:border-red-800 bg-white dark:bg-gray-800/50 px-2 py-1.5 space-y-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs text-red-700 dark:text-red-300">
+                                        LPO #{lpo.lpoNo} ({lpo.station}, {lpo.date}) — <strong>{liters}L</strong>
+                                      </span>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        {/* Cancel toggle */}
+                                        <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
+                                          <input
+                                            type="checkbox"
+                                            checked={isCancelling}
+                                            disabled={isAmending}
+                                            onChange={(e) => {
+                                              const newSelected = new Map(selectedLPOsToCancel);
+                                              const newSet = new Set(newSelected.get(truckNo));
+                                              if (e.target.checked) newSet.add(lpoId);
+                                              else newSet.delete(lpoId);
+                                              newSelected.set(truckNo, newSet);
+                                              setSelectedLPOsToCancel(newSelected);
+                                            }}
+                                            className="rounded border-red-300 text-red-600 focus:ring-red-500 disabled:opacity-40"
+                                          />
+                                          <span className={`${isCancelling ? 'text-red-700 dark:text-red-300 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>Cancel</span>
+                                        </label>
+                                        {/* Amend toggle */}
+                                        <button
+                                          type="button"
+                                          disabled={isCancelling}
+                                          onClick={() => {
+                                            const newAmend = new Map(selectedLPOsToAmend);
+                                            if (isAmending) {
+                                              newAmend.delete(amendKey);
+                                            } else {
+                                              newAmend.set(amendKey, { lpoId, newLiters: liters > 0 ? liters - 1 : 0 });
+                                            }
+                                            setSelectedLPOsToAmend(newAmend);
+                                          }}
+                                          className={`text-xs px-2 py-0.5 rounded border transition-colors disabled:opacity-40 ${
+                                            isAmending
+                                              ? 'border-amber-400 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-semibold'
+                                              : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-amber-400 hover:text-amber-600'
+                                          }`}
+                                        >
+                                          Amend
+                                        </button>
+                                      </div>
+                                    </div>
+                                    {/* Amend input row */}
+                                    {isAmending && (
+                                      <div className="flex items-center gap-2 pt-1">
+                                        <span className="text-[11px] text-amber-700 dark:text-amber-400">New allocation:</span>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={liters - 1}
+                                          value={amendEntry!.newLiters}
+                                          onChange={(e) => {
+                                            const val = Number(e.target.value);
+                                            const newAmend = new Map(selectedLPOsToAmend);
+                                            newAmend.set(amendKey, { lpoId, newLiters: val });
+                                            setSelectedLPOsToAmend(newAmend);
+                                          }}
+                                          className="w-24 rounded border border-amber-300 dark:border-amber-600 bg-white dark:bg-gray-900 px-2 py-0.5 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                        />
+                                        <span className="text-[11px] text-gray-500 dark:text-gray-400">L (was {liters}L, reducing by {liters - (amendEntry!.newLiters ?? 0)}L)</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 );
                               })
                             )}

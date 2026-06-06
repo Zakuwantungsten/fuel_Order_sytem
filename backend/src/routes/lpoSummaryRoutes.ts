@@ -51,6 +51,13 @@ router.post(
   asyncHandler(lpoSummaryController.cancelTruckInLPO)
 );
 
+// Amend (partially reduce) a truck entry in an LPO - same permissions as cancel
+router.post(
+  '/amend-truck',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'),
+  asyncHandler(lpoSummaryController.amendTruckInLPO)
+);
+
 // Cancel ALL entries in an LPO route - same permissions as cancel-truck
 router.post(
   '/:id/cancel-all',

@@ -38,9 +38,9 @@ describe('Pagination Utilities', () => {
       expect(getPaginationParams({ limit: '-10' }).limit).toBe(1);
     });
 
-    it('should enforce maximum limit of 100', () => {
-      expect(getPaginationParams({ limit: '500' }).limit).toBe(100);
-      expect(getPaginationParams({ limit: '101' }).limit).toBe(100);
+    it('should enforce maximum limit of 5000', () => {
+      expect(getPaginationParams({ limit: '6000' }).limit).toBe(5000);
+      expect(getPaginationParams({ limit: '5001' }).limit).toBe(5000);
     });
 
     it('should parse sort parameter correctly', () => {

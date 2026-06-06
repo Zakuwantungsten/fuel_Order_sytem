@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MapPin, Fuel, Bell, Navigation, Clock, ArrowRight, Info, LogOut, Sun, Moon, RefreshCw, Truck, Wifi, WifiOff, FileText, Calendar, Key, User, X } from 'lucide-react';
+import { MapPin, Fuel, Bell, Navigation, Clock, ArrowRight, Info, LogOut, Sun, Moon, RefreshCw, Truck, Wifi, WifiOff, FileText, Calendar, Key, User } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
