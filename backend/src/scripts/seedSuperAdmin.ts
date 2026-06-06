@@ -16,7 +16,7 @@ const seedSuperAdmin = async () => {
 
     const superAdminData = {
       username: 'superadmin',
-      email: 'superadmin@tahmeed.com',
+      email: 'zakuwantungsten@gmail.com',
       password: 'admin123',
       firstName: 'Super',
       lastName: 'Admin',
@@ -45,15 +45,9 @@ const seedSuperAdmin = async () => {
       console.log('✅ Super Admin updated successfully!\n');
     } else {
       console.log('📝 Creating Super Admin...');
-      
-      // Hash the password
-      const hashedPassword = await bcrypt.hash(superAdminData.password, 10);
-      
-      // Create super admin
-      await User.create({
-        ...superAdminData,
-        password: hashedPassword,
-      });
+
+      // Create super admin — pre-save hook handles hashing
+      await User.create(superAdminData);
       
       console.log('✅ Super Admin created successfully!\n');
     }

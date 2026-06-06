@@ -84,15 +84,17 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     // { once: true } would stop after the first attempt even if it failed.
     const unlockAudio = () => {
       if (audioUnlockedRef.current) return;
+      audio.muted = true;
       audio.play().then(() => {
         audio.pause();
         audio.currentTime = 0;
+        audio.muted = false;
         audioUnlockedRef.current = true;
         // Self-remove once unlocked so we don't hold references
         document.removeEventListener('click', unlockAudio);
         document.removeEventListener('keydown', unlockAudio);
         document.removeEventListener('touchstart', unlockAudio);
-      }).catch(() => { /* browser hasn't granted autoplay yet — try again next interaction */ });
+      }).catch(() => { audio.muted = false; /* browser hasn't granted autoplay yet — try again next interaction */ });
     };
     document.addEventListener('click', unlockAudio);
     document.addEventListener('keydown', unlockAudio);
