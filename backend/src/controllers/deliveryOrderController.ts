@@ -1994,11 +1994,14 @@ export const getNextDONumber = async (req: AuthRequest, res: Response): Promise<
   try {
     const doType = (req.query.doType as string) || 'DO';
     const currentYear = new Date().getFullYear();
-    
-    // Find the last DO/SDO by sorting by sn (serial number) field - numeric sort, not alphabetical
-    const lastDO = await DeliveryOrder.findOne({ 
+    const yearSuffix = currentYear.toString().slice(-2);
+
+    // Scope the query to the current year so sn resets correctly at year rollover.
+    // doNumber format is XXXX/YY, so filtering on the suffix isolates this year's DOs.
+    const lastDO = await DeliveryOrder.findOne({
       doType,
-      isDeleted: false 
+      isDeleted: false,
+      doNumber: { $regex: `/${yearSuffix}$` },
     })
       .sort({ sn: -1 })
       .select('doNumber sn')
@@ -2008,64 +2011,34 @@ export const getNextDONumber = async (req: AuthRequest, res: Response): Promise<
     let nextSN: number;
 
     if (!lastDO || !lastDO.doNumber) {
-      // No previous DO, start from 1
+      // No DO for this year yet — start from 1
       nextSN = 1;
       nextDONumber = formatDONumber(1, currentYear);
     } else {
-      // Parse the last DO number
       const parsed = parseDONumber(lastDO.doNumber);
-      
-      if (parsed && parsed.year === currentYear) {
-        // Same year, increment the sequential number
-        nextSN = lastDO.sn + 1;
-        nextDONumber = formatDONumber(parsed.sequentialNumber + 1, currentYear);
-      } else if (parsed && parsed.year !== currentYear) {
-        // Year changed, reset to 1
-        nextSN = lastDO.sn + 1;
-        nextDONumber = formatDONumber(1, currentYear);
-      } else {
-        // Legacy format (old number without year) - convert to new format
-        // Try to parse as integer
-        const legacyNumber = parseInt(lastDO.doNumber, 10);
-        if (!isNaN(legacyNumber)) {
-          nextSN = lastDO.sn + 1;
-          nextDONumber = formatDONumber(legacyNumber + 1, currentYear);
-        } else {
-          // Can't parse, start fresh
-          nextSN = lastDO.sn + 1;
-          nextDONumber = formatDONumber(1, currentYear);
-        }
-      }
+      nextSN = lastDO.sn + 1;
+      nextDONumber = formatDONumber((parsed?.sequentialNumber ?? 0) + 1, currentYear);
     }
 
-    // Check if this DO number already exists (safety check like LPO does)
-    let exists = await DeliveryOrder.exists({ doNumber: nextDONumber, doType, isDeleted: false });
+    // Race-condition safety check: if the candidate already exists, derive the true max
+    // from the current year's records via aggregation rather than a full scan.
+    const exists = await DeliveryOrder.exists({ doNumber: nextDONumber, doType, isDeleted: false });
     if (exists) {
-      // If exists, find all DOs for current year and get the max
-      const allCurrentYearDOs = await DeliveryOrder.find({
-        doType,
-        isDeleted: false
-      })
-        .select('doNumber')
-        .lean();
-      
-      let maxSeq = 0;
-      for (const order of allCurrentYearDOs) {
-        const parsed = parseDONumber(order.doNumber);
-        if (parsed && parsed.year === currentYear && parsed.sequentialNumber > maxSeq) {
-          maxSeq = parsed.sequentialNumber;
-        }
-      }
-      nextDONumber = formatDONumber(maxSeq + 1, currentYear);
+      const agg = await DeliveryOrder.aggregate([
+        { $match: { doType, isDeleted: false, doNumber: { $regex: `/${yearSuffix}$` } } },
+        { $group: { _id: null, maxSN: { $max: '$sn' } } },
+      ]);
+      nextSN = (agg[0]?.maxSN ?? 0) + 1;
+      nextDONumber = formatDONumber(nextSN, currentYear);
     }
 
     res.status(200).json({
       success: true,
       message: `Next ${doType} number retrieved successfully`,
-      data: { 
-        nextSN, 
+      data: {
+        nextSN,
         nextDONumber,
-        doType 
+        doType
       },
     });
   } catch (error: any) {

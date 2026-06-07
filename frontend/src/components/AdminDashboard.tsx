@@ -9,9 +9,11 @@ import FuelPriceTab from './SuperAdmin/FuelPriceTab';
 interface AdminDashboardProps {
   user: any;
   section?: 'users' | 'fuel_stations' | 'fuel_prices' | 'routes' | 'reports';
+  initialDestination?: string;
+  onDestinationConsumed?: () => void;
 }
 
-export default function AdminDashboard({ user, section = 'users' }: AdminDashboardProps) {
+export default function AdminDashboard({ user, section = 'users', initialDestination, onDestinationConsumed }: AdminDashboardProps) {
   const showMessage = (type: 'success' | 'error', message: string) => {
     if (type === 'success') {
       toast.success(message);
@@ -54,7 +56,7 @@ export default function AdminDashboard({ user, section = 'users' }: AdminDashboa
         {section === 'users' && <UserSupportTab user={user} showMessage={showMessage} />}
         {section === 'fuel_stations' && <FuelStationsTab onMessage={showMessage} />}
         {section === 'fuel_prices' && <FuelPriceTab onMessage={(msg, type) => showMessage(type === 'info' ? 'success' : (type ?? 'success'), msg)} />}
-        {section === 'routes' && <RoutesTab onMessage={showMessage} />}
+        {section === 'routes' && <RoutesTab onMessage={showMessage} initialDestination={initialDestination} onDestinationConsumed={onDestinationConsumed} />}
         {section === 'reports' && <BasicReportsTab user={user} showMessage={showMessage} />}
       </div>
     </div>

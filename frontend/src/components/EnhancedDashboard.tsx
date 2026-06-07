@@ -169,6 +169,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [saNavSearch, setSaNavSearch] = useState('');
   const [editDoId, setEditDoId] = useState<string | null>(null);
   const [pendingTruckSuffix, setPendingTruckSuffix] = useState<string>('');
+  const [pendingDestination, setPendingDestination] = useState<string>('');
   const [, setHighlightParam] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const { logout, toggleTheme, isDark } = useAuth();
@@ -183,6 +184,14 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
   }, [queryClient]);
   useRealtimeSync('truck_batches', invalidateTruckBatchDependents, 'dashboard-truck-batches');
+
+  // Global listener: when a route is created/updated, auto-fill may have updated fuel
+  // records. Invalidate the fuel records cache so any tab switch shows fresh data
+  // without a manual refresh.
+  const invalidateRouteDependents = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+  }, [queryClient]);
+  useRealtimeSync('routes', invalidateRouteDependents, 'dashboard-routes');
 
   // The "home" tab for this role — pressing back beyond this triggers exit confirm
   const getHomeTab = (): string => {
@@ -485,7 +494,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       case 'sa_fuel_stations':
         return <SuperAdminDashboard user={user} section="fuel_stations" onNavigate={setActiveTab} />;
       case 'sa_routes':
-        return <SuperAdminDashboard user={user} section="routes" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="routes" onNavigate={setActiveTab} initialDestination={pendingDestination} onDestinationConsumed={() => setPendingDestination('')} />;
       case 'sa_system':
         return <SuperAdminDashboard user={user} section="system" onNavigate={setActiveTab} />;
       // sa_config, sa_config_history, sa_config_diff, sa_feature_flags, sa_cron_jobs,
@@ -521,7 +530,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       case 'admin_fuel_prices':
         return <AdminDashboard user={user} section="fuel_prices" />;
       case 'admin_routes':
-        return <AdminDashboard user={user} section="routes" />;
+        return <AdminDashboard user={user} section="routes" initialDestination={pendingDestination} onDestinationConsumed={() => setPendingDestination('')} />;
       case 'admin_reports':
         return <AdminDashboard user={user} section="reports" />;
       
@@ -771,6 +780,12 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                 ) {
                   setPendingTruckSuffix(notification.metadata.truckSuffix);
                   navigateToTab('truck_batches');
+                } else if (
+                  (notification.type === 'missing_total_liters' || notification.type === 'both') &&
+                  notification.metadata?.destination
+                ) {
+                  setPendingDestination(notification.metadata.destination);
+                  navigateToTab(user.role === 'super_admin' ? 'sa_routes' : 'admin_routes');
                 } else if (notification.metadata?.fuelRecordId) {
                   navigateToTab('fuel_records');
                 }
@@ -903,6 +918,12 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   ) {
                     setPendingTruckSuffix(notification.metadata.truckSuffix);
                     navigateToTab('truck_batches');
+                  } else if (
+                    (notification.type === 'missing_total_liters' || notification.type === 'both') &&
+                    notification.metadata?.destination
+                  ) {
+                    setPendingDestination(notification.metadata.destination);
+                    navigateToTab(user.role === 'super_admin' ? 'sa_routes' : 'admin_routes');
                   } else if (notification.metadata?.fuelRecordId) {
                     navigateToTab('fuel_records');
                   }
@@ -1064,8 +1085,20 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           <NotificationsPage 
             onClose={() => setShowNotificationsPage(false)}
             onNotificationClick={(notification) => {
-              if (notification.metadata?.fuelRecordId) {
-                setShowNotificationsPage(false);
+              setShowNotificationsPage(false);
+              if (
+                notification.type === 'missing_extra_fuel' &&
+                notification.metadata?.truckSuffix
+              ) {
+                setPendingTruckSuffix(notification.metadata.truckSuffix);
+                navigateToTab('truck_batches');
+              } else if (
+                (notification.type === 'missing_total_liters' || notification.type === 'both') &&
+                notification.metadata?.destination
+              ) {
+                setPendingDestination(notification.metadata.destination);
+                navigateToTab(user.role === 'super_admin' ? 'sa_routes' : 'admin_routes');
+              } else if (notification.metadata?.fuelRecordId) {
                 navigateToTab('fuel_records');
               }
             }}

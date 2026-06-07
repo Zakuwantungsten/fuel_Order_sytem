@@ -685,7 +685,7 @@ export const lpoDocumentsAPI = {
 
   getNextLpoNumber: async (): Promise<string> => {
     const response = await apiClient.get('/lpo-documents/next-number');
-    return response.data.data?.nextLpoNo || '1';
+    return response.data.data?.nextLpoNo || `0001/${new Date().getFullYear().toString().slice(-2)}`;
   },
 
   downloadPDF: async (id: string | number): Promise<void> => {
@@ -1276,7 +1276,7 @@ export const driverAccountAPI = {
   // Get next LPO number
   getNextLPONumber: async (): Promise<string> => {
     const response = await apiClient.get('/driver-accounts/next-lpo-number');
-    return response.data.data?.nextLpoNo || '2445';
+    return response.data.data?.nextLpoNo || `0001/${new Date().getFullYear().toString().slice(-2)}`;
   },
 
   // Get all entries with optional filters.

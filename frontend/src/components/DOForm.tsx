@@ -137,17 +137,6 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   ) => {
     const { name, value } = e.target;
     
-    // Special handling for DO number - only numbers, pad with zeros
-    if (name === 'doNumber') {
-      const numericValue = value.replace(/\D/g, '');
-      const paddedValue = numericValue.padStart(4, '0');
-      setFormData((prev) => ({
-        ...prev,
-        [name]: paddedValue,
-      }));
-      return;
-    }
-    
     // Auto-uppercase text fields for consistency
     const uppercaseFields = ['truckNo', 'trailerNo', 'destination', 'loadingPoint', 'clientName', 'haulier', 'containerNo', 'driverName', 'invoiceNos', 'borderEntryDRC'];
     const finalValue = ['tonnages', 'ratePerTon'].includes(name) 
@@ -365,18 +354,13 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   value={formData.doNumber || ''}
                   onChange={handleChange}
                   required
-                  readOnly={isEditMode}
+                  readOnly
                   disabled={isEditMode}
-                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                    isEditMode ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''
-                  }`}
-                  placeholder="e.g., 0001/26"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-gray-100 cursor-not-allowed"
                 />
-                {isEditMode && (
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    DO number cannot be changed after creation
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {isEditMode ? 'DO number cannot be changed after creation' : 'Auto-assigned'}
+                </p>
               </div>
 
               <div>

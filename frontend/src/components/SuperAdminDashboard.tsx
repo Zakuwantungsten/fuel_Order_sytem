@@ -51,9 +51,11 @@ interface SuperAdminDashboardProps {
   user: any;
   section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'storage' | 'alert_thresholds' | 'email_logs' | 'performance_metrics' | 'db_indexes' | 'config_history' | 'custom_report' | 'notification_config' | 'siem_export' | 'monitoring' | 'system';
   onNavigate?: (section: string) => void;
+  initialDestination?: string;
+  onDestinationConsumed?: () => void;
 }
 
-export default function SuperAdminDashboard({ section = 'overview', onNavigate }: SuperAdminDashboardProps) {
+export default function SuperAdminDashboard({ section = 'overview', onNavigate, initialDestination, onDestinationConsumed }: SuperAdminDashboardProps) {
   const [loading, setLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewData, setOverviewData] = useState<OverviewStats | null>(null);
@@ -181,7 +183,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate }
               <FuelStationsTab onMessage={showMessage} />
             )}
             {section === 'routes' && (
-              <RoutesTab onMessage={showMessage} />
+              <RoutesTab onMessage={showMessage} initialDestination={initialDestination} onDestinationConsumed={onDestinationConsumed} />
             )}
             {section === 'system' && (
               <SystemUnifiedTab onMessage={showMessage} onNavigate={onNavigate} />

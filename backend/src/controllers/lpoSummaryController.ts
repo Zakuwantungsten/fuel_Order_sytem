@@ -11,6 +11,7 @@ import unifiedExportService from '../services/unifiedExportService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
 import { checkAndPromoteStartedJourney, getFuelAutomationFlags } from '../services/journeyService';
+import { formatDONumber, parseDONumber } from '../utils/doNumberFormatter';
 import {
   createLPOCreatedNotification,
   createLPOCancelledNotification,
@@ -707,28 +708,55 @@ export const getLPOSummaryByLPONo = async (req: AuthRequest, res: Response): Pro
 };
 
 /**
- * Get the next available LPO number
+ * Get the next available LPO number.
+ * Format: XXXX/YY (e.g. 0001/26) — same convention as DO numbers.
+ * Resets to 0001/YY each new year. Handles legacy plain-integer LPOs during transition.
  */
 export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const currentYear = new Date().getFullYear();
+    const yearSuffix = currentYear.toString().slice(-2);
 
-    // Use aggregation to find the true numeric max in one query — avoids
-    // lexicographic string sort ("9" > "2444") and the while-loop of exists() calls.
-    const result = await LPOSummary.aggregate([
-      { $match: { isDeleted: false, year: currentYear } },
-      { $project: { lpoNoInt: { $toInt: '$lpoNo' } } },
-      { $group: { _id: null, maxLpoNo: { $max: '$lpoNoInt' } } },
+    // Try new XXXX/YY format first. Split on "/" and cast the left part to int.
+    const newFmtResult = await LPOSummary.aggregate([
+      { $match: { isDeleted: false, year: currentYear, lpoNo: { $regex: `/${yearSuffix}$` } } },
+      { $project: { seq: { $toInt: { $arrayElemAt: [{ $split: ['$lpoNo', '/'] }, 0] } } } },
+      { $group: { _id: null, maxSeq: { $max: '$seq' } } },
     ]);
 
-    const maxNumber =
-      result.length > 0 && result[0].maxLpoNo != null ? result[0].maxLpoNo : 0;
-    const nextNumber = maxNumber + 1;
+    let nextSeq: number;
+
+    if (newFmtResult.length > 0 && newFmtResult[0].maxSeq != null) {
+      nextSeq = newFmtResult[0].maxSeq + 1;
+    } else {
+      // No new-format LPOs for this year yet — fall back to legacy plain-int format
+      // so we don't restart from 1 mid-year during the transition.
+      const legacyResult = await LPOSummary.aggregate([
+        { $match: { isDeleted: false, year: currentYear } },
+        { $project: { lpoNoInt: { $toInt: '$lpoNo' } } },
+        { $group: { _id: null, maxLpoNo: { $max: '$lpoNoInt' } } },
+      ]);
+      nextSeq = (legacyResult[0]?.maxLpoNo ?? 0) + 1;
+    }
+
+    let nextLpoNo = formatDONumber(nextSeq, currentYear);
+
+    // Race-condition safety check
+    const exists = await LPOSummary.exists({ lpoNo: nextLpoNo, isDeleted: false });
+    if (exists) {
+      const agg = await LPOSummary.aggregate([
+        { $match: { isDeleted: false, year: currentYear, lpoNo: { $regex: `/${yearSuffix}$` } } },
+        { $project: { seq: { $toInt: { $arrayElemAt: [{ $split: ['$lpoNo', '/'] }, 0] } } } },
+        { $group: { _id: null, maxSeq: { $max: '$seq' } } },
+      ]);
+      nextSeq = (agg[0]?.maxSeq ?? 0) + 1;
+      nextLpoNo = formatDONumber(nextSeq, currentYear);
+    }
 
     res.status(200).json({
       success: true,
       message: 'Next LPO number retrieved successfully',
-      data: { nextLpoNo: nextNumber.toString() },
+      data: { nextLpoNo },
     });
   } catch (error: any) {
     throw error;

@@ -8,9 +8,11 @@ import UnifiedTabLoader from './common/UnifiedTabLoader';
 
 interface RoutesTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
+  initialDestination?: string;
+  onDestinationConsumed?: () => void;
 }
 
-export default function RoutesTab({ onMessage }: RoutesTabProps) {
+export default function RoutesTab({ onMessage, initialDestination, onDestinationConsumed }: RoutesTabProps) {
   const [routes, setRoutes] = useState<RouteConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRouteModal, setShowRouteModal] = useState(false);
@@ -37,6 +39,13 @@ export default function RoutesTab({ onMessage }: RoutesTabProps) {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!initialDestination) return;
+    setRouteForm(f => ({ ...f, destination: initialDestination.toUpperCase() }));
+    setShowRouteModal(true);
+    onDestinationConsumed?.();
+  }, [initialDestination]);
 
   // Click outside detection
   useEffect(() => {

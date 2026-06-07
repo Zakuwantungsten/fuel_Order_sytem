@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { DriverAccountEntry, LPOSummary } from '../models';
+import { formatDONumber } from '../utils/doNumberFormatter';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger } from '../utils';
@@ -9,63 +10,34 @@ import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
 
 /**
- * Get the next available LPO number by checking both LPOSummary and DriverAccountEntry
- * Resets to 1 every new year
+ * Get the next available LPO number in XXXX/YY format (e.g. 0001/26).
+ * Cross-checks both LPOSummary and DriverAccountEntry to find the true max.
+ * Handles both legacy plain-integer lpoNo values and the new XXXX/YY format.
  */
 async function getNextAvailableLPONumber(): Promise<string> {
   const currentYear = new Date().getFullYear();
-  
-  // Get the highest LPO number from LPOSummary for current year
-  const lastLpoSummary = await LPOSummary.findOne({ 
-    isDeleted: false,
-    year: currentYear 
-  })
-    .sort({ lpoNo: -1 })
-    .select('lpoNo')
-    .lean();
 
-  // Get the highest LPO number from DriverAccountEntry for current year
-  const lastDriverAccount = await DriverAccountEntry.findOne({ 
-    isDeleted: false,
-    year: currentYear 
-  })
-    .sort({ lpoNo: -1 })
-    .select('lpoNo')
-    .lean();
+  // Split lpoNo on "/" and cast the left part — works for both "0001/26" and legacy "100".
+  const seqExpr = { $toInt: { $arrayElemAt: [{ $split: ['$lpoNo', '/'] }, 0] } };
 
-  // Get the highest LPO number from LPOSummary for current year
-  const lastLpoEntry = await LPOSummary.findOne({
-    isDeleted: false,
-    year: currentYear,
-  })
-    .sort({ lpoNo: -1 })
-    .select('lpoNo')
-    .lean();
+  const [lpoResult, daResult] = await Promise.all([
+    LPOSummary.aggregate([
+      { $match: { isDeleted: false, year: currentYear } },
+      { $project: { seq: seqExpr } },
+      { $group: { _id: null, maxSeq: { $max: '$seq' } } },
+    ]),
+    DriverAccountEntry.aggregate([
+      { $match: { isDeleted: false, year: currentYear } },
+      { $project: { seq: seqExpr } },
+      { $group: { _id: null, maxSeq: { $max: '$seq' } } },
+    ]),
+  ]);
 
-  let maxNumber = 0; // Start from 0 (will become 1)
+  const maxLpo = lpoResult[0]?.maxSeq ?? 0;
+  const maxDa = daResult[0]?.maxSeq ?? 0;
+  const nextSeq = Math.max(maxLpo, maxDa) + 1;
 
-  if (lastLpoSummary?.lpoNo) {
-    const num = parseInt(lastLpoSummary.lpoNo, 10);
-    if (!isNaN(num) && num > maxNumber) {
-      maxNumber = num;
-    }
-  }
-
-  if (lastDriverAccount?.lpoNo) {
-    const num = parseInt(lastDriverAccount.lpoNo, 10);
-    if (!isNaN(num) && num > maxNumber) {
-      maxNumber = num;
-    }
-  }
-
-  if (lastLpoEntry?.lpoNo) {
-    const num = parseInt(lastLpoEntry.lpoNo, 10);
-    if (!isNaN(num) && num > maxNumber) {
-      maxNumber = num;
-    }
-  }
-
-  return (maxNumber + 1).toString();
+  return formatDONumber(nextSeq, currentYear);
 }
 
 /**

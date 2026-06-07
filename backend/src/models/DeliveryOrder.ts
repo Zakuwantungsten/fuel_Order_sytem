@@ -224,6 +224,8 @@ deliveryOrderSchema.index({ isCancelled: 1 });
 deliveryOrderSchema.index({ truckNo: 1, date: -1 });
 deliveryOrderSchema.index({ date: -1, importOrExport: 1 });
 deliveryOrderSchema.index({ isDeleted: 1, isCancelled: 1 });
+// Covers the most common list filter: { isDeleted: false, date: { $gte, $lte } }
+deliveryOrderSchema.index({ isDeleted: 1, date: 1 });
 
 export const DeliveryOrder = mongoose.model<IDeliveryOrderDocument>(
   'DeliveryOrder',
