@@ -31,6 +31,10 @@ export const config = {
 
   // Cloudflare R2 (S3-compatible storage)
   r2Endpoint: process.env.R2_ENDPOINT || '',
+  // Region for the primary destination. Cloudflare R2 uses 'auto'. Make it
+  // configurable so the primary client can be repointed at another S3 provider
+  // (e.g. Backblaze B2 'us-west-004') as a last-resort manual failover.
+  r2Region: process.env.R2_REGION || 'auto',
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || '',
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
   // Assets bucket — stores public files such as company logos
@@ -40,6 +44,20 @@ export const config = {
   // Backups bucket — private, encrypted database backups (separate from assets)
   // Falls back to r2BucketName only as a last resort so existing single-bucket setups still work.
   r2BackupBucketName: process.env.R2_BACKUP_BUCKET_NAME || process.env.R2_BUCKET_NAME || 'fuel-order-backups',
+
+  // Secondary backup destination (geo/provider redundancy). Optional — leave the
+  // bucket name blank to disable. If the secondary endpoint/creds are blank, the
+  // primary R2 endpoint+creds are reused (same account, different bucket). Set
+  // them to mirror to a different account/region/provider for stronger isolation.
+  r2BackupBucketNameSecondary: process.env.R2_BACKUP_BUCKET_NAME_SECONDARY || '',
+  r2SecondaryEndpoint: process.env.R2_SECONDARY_ENDPOINT || '',
+  r2SecondaryAccessKeyId: process.env.R2_SECONDARY_ACCESS_KEY_ID || '',
+  r2SecondarySecretAccessKey: process.env.R2_SECONDARY_SECRET_ACCESS_KEY || '',
+  // Region for the secondary destination. Cloudflare R2 uses 'auto', but
+  // Backblaze B2 (and most S3 providers) require the real region baked into the
+  // endpoint — e.g. 'us-west-004' for s3.us-west-004.backblazeb2.com — or SigV4
+  // signature validation fails.
+  r2SecondaryRegion: process.env.R2_SECONDARY_REGION || 'auto',
 
   // Email Configuration
   emailHost: process.env.EMAIL_HOST || process.env.SMTP_HOST || '',

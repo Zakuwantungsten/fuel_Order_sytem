@@ -1812,7 +1812,7 @@ export const systemAdminAPI = {
 export const backupAPI = {
   // Get all backups
   getBackups: async (params?: {
-    status?: 'in_progress' | 'completed' | 'failed' | 'deleted';
+    status?: 'in_progress' | 'completed' | 'failed' | 'deleted' | 'restoring';
     type?: 'manual' | 'scheduled';
     page?: number;
     limit?: number;
@@ -1896,6 +1896,13 @@ export const backupAPI = {
     return response.data;
   },
 
+  // Sync local MongoDB backup catalog from the R2 manifest.
+  // Call this when the local DB is missing backup records that exist in R2.
+  syncFromR2: async (): Promise<{ restored: number; source: 'manifest' | 'listing' }> => {
+    const response = await apiClient.post('/backup/sync-from-r2');
+    return response.data.data;
+  },
+
   // Backup schedules
   getSchedules: async () => {
     const response = await apiClient.get('/backup/backup-schedules');
@@ -1909,7 +1916,7 @@ export const backupAPI = {
 
   createSchedule: async (data: {
     name: string;
-    frequency: 'daily' | 'weekly' | 'monthly';
+    frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
     time: string;
     dayOfWeek?: number;
     dayOfMonth?: number;

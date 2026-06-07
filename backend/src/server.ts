@@ -173,7 +173,9 @@ import './jobs/securityEventRetention';
 import './jobs/securityScoreSnapshot';
 import './jobs/fleetDailyCleanup';
 import './jobs/backupTrashCleanup'; // LE-3: purge soft-deleted backups after retention window
+import './jobs/disasterRecoveryDrill'; // Chaos: weekly automated backup-restore verification
 import { jobRegistry } from './jobs/jobRegistry';
+import backupService from './services/backupService';
 
 // Enforce HTTPS only in production
 if (config.nodeEnv === 'production') {
@@ -336,6 +338,10 @@ const startServer = async () => {
 
     // Start backup scheduler (polls every minute for due user-defined schedules)
     startBackupScheduler();
+
+    // DR: refresh the R2-side backup catalog (metadata stored separately from
+    // MongoDB) so the backup list survives a total database loss. Fire-and-forget.
+    backupService.writeManifestSafe().catch(() => { /* non-fatal */ });
 
     // Start all registered cron jobs via central registry
     jobRegistry.startAll();

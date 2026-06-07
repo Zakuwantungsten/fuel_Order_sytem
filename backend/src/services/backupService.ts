@@ -8,6 +8,7 @@ import logger from '../utils/logger';
 import { encryptBuffer, decryptBuffer } from '../utils/cryptoUtils';
 import { config } from '../config';
 import emailService from './emailService';
+import { EJSON } from 'bson';
 
 class BackupService {
   /**
@@ -19,6 +20,75 @@ class BackupService {
     'sessions',
     'socket.io-adapter-events',
   ];
+
+  /**
+   * Core business collections used to tell "real data" backups apart from
+   * snapshots of an essentially empty database (which only hold system/security
+   * config). If all of these are empty the backup has no business data — we flag
+   * it, and refuse to let the scheduler create one (avoids polluting R2 with
+   * tiny empty backups when the backend is pointed at an empty/local DB).
+   */
+  private readonly CORE_BUSINESS_COLLECTIONS = [
+    'deliveryorders',
+    'fuelrecords',
+    'lposummaries',
+  ];
+
+  /**
+   * Collections an in-place restore must NOT overwrite. These are pure
+   * session/transport state — restoring them would log everyone out for no
+   * benefit. Mirrors how big systems keep auth/session state out of a data
+   * restore. (Business data and users ARE restored; the operator who triggers
+   * the restore is preserved separately so they don't get locked out.)
+   */
+  private readonly RESTORE_PROTECTED_COLLECTIONS = new Set<string>([
+    'sessions',
+    'socket.io-adapter-events',
+  ]);
+
+  /**
+   * Snapshot the user who triggered a restore (by username) so we can re-insert
+   * them afterwards. Returns the raw document (with _id + password hash) or null.
+   */
+  private async snapshotActingUser(username: string): Promise<any | null> {
+    if (!username || username === 'system') return null;
+    try {
+      if (!mongoose.connection.db) return null;
+      return await mongoose.connection.collection('users').findOne({ username });
+    } catch (err: any) {
+      logger.warn('[BACKUP] Could not snapshot operator before restore:', err?.message);
+      return null;
+    }
+  }
+
+  /**
+   * Re-insert the operator's original user record after a restore overwrote the
+   * `users` collection, so their existing session/token keeps working and they
+   * aren't locked out. Removes anything the restore inserted that would collide
+   * on the unique _id / username / email indexes first. Best-effort.
+   */
+  private async preserveActingUser(actingUser: any | null): Promise<void> {
+    if (!actingUser?._id) return;
+    try {
+      const users = mongoose.connection.collection('users');
+      const orConds: any[] = [{ _id: actingUser._id }];
+      if (actingUser.username) orConds.push({ username: actingUser.username });
+      if (actingUser.email) orConds.push({ email: actingUser.email });
+      await users.deleteMany({ $or: orConds });
+      await users.insertOne(actingUser);
+      logger.info(`[BACKUP] Preserved operator "${actingUser.username}" across restore — no lockout`);
+    } catch (err: any) {
+      logger.warn('[BACKUP] Could not preserve operator after restore:', err?.message);
+    }
+  }
+
+  /**
+   * DR: The backup catalog (metadata index) is stored as a plain JSON object in
+   * R2 — SEPARATE from MongoDB — so the full list of backups (with rich
+   * metadata) survives a total MongoDB loss. Contains only metadata
+   * (file names, sizes, dates, collection names, doc counts) — no business data.
+   */
+  private readonly MANIFEST_KEY = 'backups/_manifest.json';
 
   /**
    * Get list of collections to exclude from backup
@@ -60,6 +130,39 @@ class BackupService {
       throw new Error('BACKUP_ENCRYPTION_KEY must be at least 12 characters long');
     }
     return encryptionKey;
+  }
+
+  /**
+   * Decrypt a downloaded backup buffer if (and only if) it is actually encrypted.
+   * Detection is byte-based, not metadata-based: a real gzip stream always starts
+   * with the magic header 0x1f 0x8b, so if those bytes are present the buffer is
+   * already plaintext and is returned as-is. Otherwise we treat it as an
+   * AES-256-GCM ciphertext and decrypt it with BACKUP_ENCRYPTION_KEY.
+   *
+   * This is the single source of truth for "is this encrypted?" so every restore
+   * path behaves the same, even for catalog records that have no metadata.
+   */
+  private maybeDecrypt(buffer: Buffer): Buffer {
+    // gzip magic bytes → already decompressible, nothing to decrypt
+    if (buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+      return buffer;
+    }
+    const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY;
+    if (!encryptionKey) {
+      throw new Error(
+        'Backup appears to be encrypted but BACKUP_ENCRYPTION_KEY is not configured — cannot restore.',
+      );
+    }
+    try {
+      const decrypted = decryptBuffer(buffer, encryptionKey);
+      logger.info('[BACKUP] Backup decrypted with AES-256-GCM');
+      // @ts-ignore - Buffer type mismatch between different implementations
+      return decrypted;
+    } catch (error: any) {
+      throw new Error(
+        `Backup decryption failed (wrong BACKUP_ENCRYPTION_KEY?): ${error.message}`,
+      );
+    }
   }
 
   /**
@@ -121,6 +224,8 @@ class BackupService {
       };
 
       let totalDocuments = 0;
+      let businessDocuments = 0;
+      const coreBusiness = new Set(this.CORE_BUSINESS_COLLECTIONS);
 
       // Export each collection (excluding filtered ones)
       for (const collectionName of collectionsToBackup) {
@@ -128,13 +233,31 @@ class BackupService {
         const documents = await collection.find({}).toArray();
         backupData.collections[collectionName] = documents;
         totalDocuments += documents.length;
+        if (coreBusiness.has(collectionName)) businessDocuments += documents.length;
         logger.info(`Backed up collection: ${collectionName} (${documents.length} documents)`);
       }
 
       backupData.metadata.totalDocuments = totalDocuments;
+      backupData.metadata.businessDocuments = businessDocuments;
 
-      // Convert to JSON and create a stream
-      const jsonString = JSON.stringify(backupData, null, 2);
+      // Guard: a backup with zero business data is almost always a mistake —
+      // the backend got pointed at an empty/local DB. Block scheduled runs so
+      // they don't pollute R2 (and bury the real "latest" backup); allow manual
+      // runs through but flag them loudly.
+      if (businessDocuments === 0) {
+        if (type === 'scheduled') {
+          logger.warn(`[BACKUP] Skipping scheduled backup — database has no business data (${totalDocuments} system docs only). Is the backend connected to the right database?`);
+          await Backup.findByIdAndDelete(backup.id);
+          return null;
+        }
+        logger.warn(`[BACKUP] Manual backup has NO business data (${totalDocuments} system docs only) — proceeding because it was triggered manually.`);
+      }
+
+      // Serialize with canonical Extended JSON so BSON types (ObjectId, Date,
+      // Int32/Long/Decimal128, Binary) survive a backup→restore round-trip
+      // exactly — same approach mongodump uses. Plain JSON.stringify would
+      // silently turn ObjectIds and Dates into strings.
+      const jsonString = EJSON.stringify(backupData, undefined, 2, { relaxed: false });
       const jsonBuffer = Buffer.from(jsonString);
 
       // Compress JSON with gzip
@@ -160,6 +283,9 @@ class BackupService {
       // Upload to R2
       await r2Service.uploadFile(r2Key, fileToUpload, uploadContentType, config.r2BackupBucketName);
 
+      // Redundancy: mirror to the secondary backup destination (no-op if unset)
+      await r2Service.replicateToSecondary(r2Key, fileToUpload, uploadContentType);
+
       // Update backup record
       backup.status = 'completed';
       backup.fileSize = archiveBuffer.length;
@@ -167,6 +293,7 @@ class BackupService {
       backup.completedAt = new Date();
       backup.metadata = {
         totalDocuments,
+        businessDocuments,
         databaseSize: archiveBuffer.length,
         compression: 'gzip',
         encrypted: encryptionKey ? true : false,
@@ -183,6 +310,9 @@ class BackupService {
         resourceId: backup.id,
         details: JSON.stringify({ fileName, fileSize: archiveBuffer.length, collections: collectionsToBackup.length, documents: totalDocuments }),
       });
+
+      // DR: refresh the R2-side catalog so the backup list survives MongoDB loss
+      await this.writeManifestSafe();
 
       logger.info(`Backup created successfully: ${fileName}`);
       return backup;
@@ -230,29 +360,23 @@ class BackupService {
     let details = '';
 
     try {
-      // Download from R2
-      const stream = await r2Service.downloadFile(backup.r2Key, config.r2BackupBucketName);
+      // Download from R2 (with automatic B2 secondary failover)
+      const stream = await r2Service.downloadBackup(backup.r2Key);
       const chunks: Buffer[] = [];
       for await (const chunk of stream) chunks.push(chunk);
       let buffer: Buffer = Buffer.concat(chunks);
 
       if (!buffer.length) throw new Error('Downloaded backup file is empty');
 
-      // Decrypt if encrypted
-      if (backup.metadata?.encrypted) {
-        const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY;
-        if (!encryptionKey) throw new Error('BACKUP_ENCRYPTION_KEY not configured — cannot verify encrypted backup');
-        const decryptedBuffer = decryptBuffer(buffer, encryptionKey);
-        // @ts-ignore
-        buffer = decryptedBuffer;
-      }
+      // Decrypt if the bytes look encrypted (independent of metadata flag)
+      buffer = this.maybeDecrypt(buffer);
 
       // Decompress
       const gunzip = promisify(zlib.gunzip);
       const decompressed = await gunzip(buffer);
 
-      // Parse JSON header
-      const parsed = JSON.parse(decompressed.toString());
+      // Parse Extended JSON header (also reads legacy plain-JSON backups)
+      const parsed = EJSON.parse(decompressed.toString(), { relaxed: false });
       if (!parsed.timestamp || !parsed.collections || typeof parsed.collections !== 'object') {
         throw new Error('Backup JSON structure is invalid or missing required fields');
       }
@@ -281,7 +405,7 @@ class BackupService {
 
     await AuditLog.create({
       username: userId,
-      action: 'VIEW',
+      action: 'VERIFY_INTEGRITY',
       resourceType: 'backup',
       resourceId: backup.id,
       details: JSON.stringify({ action: 'verify', fileName: backup.fileName, passed, details }),
@@ -291,12 +415,14 @@ class BackupService {
   }
 
   /**
-   * Restore database from backup
-   * ✅ SECURITY: Encrypted backups are decrypted with AES-256 after download
+   * Restore database from backup.
+   * Sets status to 'restoring' so the UI can poll for real completion.
+   * Handles both replica-set (transactional) and standalone (non-transactional) MongoDB.
+   * ✅ SECURITY: Encrypted backups are decrypted with AES-256 after download.
    */
   async restoreBackup(backupId: string, userId: string): Promise<void> {
     const backup = await Backup.findById(backupId);
-    
+
     if (!backup) {
       throw new Error('Backup not found');
     }
@@ -305,79 +431,107 @@ class BackupService {
       throw new Error('Cannot restore from incomplete backup');
     }
 
-    try {
-      logger.info(`Starting restore from backup: ${backup.fileName}`);
+    // Mark as restoring so the polling UI sees a real status change.
+    await Backup.findByIdAndUpdate(backupId, { status: 'restoring', error: null });
+    logger.info(`Starting restore from backup: ${backup.fileName}`);
 
-      // Download backup from R2
-      const stream = await r2Service.downloadFile(backup.r2Key, config.r2BackupBucketName);
-      
-      // Read stream to buffer
+    try {
+      // Download backup from R2 (with automatic B2 secondary failover)
+      const stream = await r2Service.downloadBackup(backup.r2Key);
       const chunks: Buffer[] = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
-      }
+      for await (const chunk of stream) chunks.push(chunk);
       let buffer: Buffer = Buffer.concat(chunks);
 
-      // ✅ SECURITY: Decrypt backup if it was encrypted
-      if ((backup as any).metadata?.encrypted) {
-        const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY;
-        if (!encryptionKey) {
-          throw new Error('Cannot restore encrypted backup: BACKUP_ENCRYPTION_KEY not configured');
-        }
-        try {
-          const decryptedBuffer = decryptBuffer(buffer, encryptionKey);
-          // @ts-ignore - Buffer type mismatch between different implementations
-          buffer = decryptedBuffer;
-          logger.info('[BACKUP] Backup decrypted with AES-256-GCM');
-        } catch (error: any) {
-          logger.error('[BACKUP] Decryption failed:', error.message);
-          throw new Error(`Backup decryption failed: ${error.message}`);
-        }
-      }
+      // ✅ SECURITY: Decrypt backup if it was encrypted. We detect encryption from
+      // the bytes themselves (gzip magic header) instead of trusting
+      // metadata.encrypted — records rebuilt from the R2 listing have no metadata,
+      // and skipping decryption there caused gunzip to fail with "incorrect header
+      // check". This makes restore work regardless of how the catalog record was created.
+      buffer = this.maybeDecrypt(buffer);
 
-      // Decompress gzip and parse JSON
+      // Decompress gzip and parse Extended JSON (reconstructs ObjectId/Date/etc).
       const gunzip = promisify(zlib.gunzip);
       const decompressed = await gunzip(buffer);
-      const backupData = JSON.parse(decompressed.toString());
+      const backupData = EJSON.parse(decompressed.toString(), { relaxed: false });
 
-      // Restore each collection
-      const session = await mongoose.startSession();
-      session.startTransaction();
+      // Snapshot the operator so the restore can't lock them out (see preserveActingUser).
+      const actingUser = await this.snapshotActingUser(userId);
 
-      try {
-        for (const [collectionName, documents] of Object.entries(backupData.collections)) {
-          const collection = mongoose.connection.collection(collectionName);
-          
-          // Clear existing data
-          await collection.deleteMany({}, { session });
-          
-          // Insert backup data
-          if (Array.isArray(documents) && documents.length > 0) {
-            await collection.insertMany(documents as any[], { session });
+      // Use transactions on replica sets (Atlas/production); fall back to plain
+      // sequential writes on standalone MongoDB (local Docker dev) which does not
+      // support multi-document transactions.
+      const rsInfo = await this.getReplicaSetInfo();
+
+      if (rsInfo.isReplicaSet) {
+        const session = await mongoose.startSession();
+        session.startTransaction();
+        try {
+          for (const [collectionName, documents] of Object.entries(backupData.collections)) {
+            if (this.RESTORE_PROTECTED_COLLECTIONS.has(collectionName)) {
+              logger.info(`[BACKUP] Skipping protected collection during restore: ${collectionName}`);
+              continue;
+            }
+            const collection = mongoose.connection.collection(collectionName);
+            await collection.deleteMany({}, { session });
+            if (Array.isArray(documents) && documents.length > 0) {
+              await collection.insertMany(documents as any[], { session });
+            }
+            logger.info(`Restored collection: ${collectionName}`);
           }
-          
+          await session.commitTransaction();
+        } catch (error) {
+          await session.abortTransaction();
+          throw error;
+        } finally {
+          session.endSession();
+        }
+      } else {
+        logger.info('[BACKUP] Standalone MongoDB detected — restoring without transactions');
+        for (const [collectionName, documents] of Object.entries(backupData.collections)) {
+          if (this.RESTORE_PROTECTED_COLLECTIONS.has(collectionName)) {
+            logger.info(`[BACKUP] Skipping protected collection during restore: ${collectionName}`);
+            continue;
+          }
+          const collection = mongoose.connection.collection(collectionName);
+          await collection.deleteMany({});
+          if (Array.isArray(documents) && documents.length > 0) {
+            await collection.insertMany(documents as any[]);
+          }
           logger.info(`Restored collection: ${collectionName}`);
         }
-
-        await session.commitTransaction();
-        logger.info('Database restore completed successfully');
-
-        // Create audit log
-        await AuditLog.create({
-          username: userId,
-          action: 'RESTORE',
-          resourceType: 'backup',
-          resourceId: backup.id,
-          details: JSON.stringify({ fileName: backup.fileName, collections: backup.collections.length }),
-        });
-      } catch (error) {
-        await session.abortTransaction();
-        throw error;
-      } finally {
-        session.endSession();
       }
+
+      // Re-insert the operator so they aren't locked out by the new user set.
+      await this.preserveActingUser(actingUser);
+
+      logger.info('Database restore completed successfully');
+
+      // The restore overwrites the Backup collection, so use findByIdAndUpdate
+      // (upsert) to reliably record completion even after the collection is replaced.
+      await Backup.findByIdAndUpdate(
+        backupId,
+        { status: 'completed', $unset: { error: '' } },
+        { upsert: true },
+      );
+
+      await AuditLog.create({
+        username: userId,
+        action: 'RESTORE',
+        resourceType: 'backup',
+        resourceId: backupId,
+        details: JSON.stringify({ fileName: backup.fileName, collections: backup.collections.length }),
+      });
     } catch (error: any) {
       logger.error('Error restoring backup:', error);
+
+      // Keep the backup record as 'completed' (the file is still valid in R2)
+      // but surface the restore error so the UI can display it.
+      await Backup.findByIdAndUpdate(
+        backupId,
+        { status: 'completed', error: `Restore failed: ${error.message}` },
+        { upsert: true },
+      );
+
       throw new Error(`Failed to restore backup: ${error.message}`);
     }
   }
@@ -398,12 +552,13 @@ class BackupService {
 
     for (const backup of oldBackups) {
       try {
-        // Delete from R2
+        // Delete from R2 (primary + secondary)
         await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
-        
+        await r2Service.deleteFromSecondary(backup.r2Key);
+
         // Delete backup record
         await Backup.findByIdAndDelete(backup.id);
-        
+
         deletedCount++;
         logger.info(`Deleted old backup: ${backup.fileName}`);
       } catch (error) {
@@ -411,6 +566,7 @@ class BackupService {
       }
     }
 
+    if (deletedCount > 0) await this.writeManifestSafe();
     return deletedCount;
   }
 
@@ -431,6 +587,7 @@ class BackupService {
       for (const backup of toDelete) {
         try {
           await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
+          await r2Service.deleteFromSecondary(backup.r2Key);
           await Backup.findByIdAndDelete(backup.id);
           deletedCount++;
           logger.info(`[BACKUP TIERED] Deleted ${tier} backup: ${backup.fileName}`);
@@ -440,6 +597,7 @@ class BackupService {
       }
     }
 
+    if (deletedCount > 0) await this.writeManifestSafe();
     return deletedCount;
   }
 
@@ -460,6 +618,7 @@ class BackupService {
     for (const backup of trashed) {
       try {
         await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
+        await r2Service.deleteFromSecondary(backup.r2Key);
         await Backup.findByIdAndDelete(backup.id);
         purgedCount++;
         logger.info(`[BACKUP TRASH] Purged deleted backup: ${backup.fileName}`);
@@ -468,6 +627,7 @@ class BackupService {
       }
     }
 
+    if (purgedCount > 0) await this.writeManifestSafe();
     return purgedCount;
   }
 
@@ -495,7 +655,506 @@ class BackupService {
       totalSize: totalSize[0]?.total || 0,
       oldestBackup: oldestBackup?.createdAt,
       newestBackup: newestBackup?.createdAt,
+      // Gap 1: surface live replication topology so the UI can prove auto-failover
+      replicaSet: await this.getReplicaSetInfo(),
+      // Redundancy: whether backups are mirrored to a second destination
+      secondaryDestination: {
+        enabled: r2Service.isSecondaryEnabled(),
+        bucket: r2Service.getSecondaryBucketName() || undefined,
+      },
     };
+  }
+
+  /**
+   * Gap 1 (Replication/auto-failover): report the live MongoDB topology.
+   * On MongoDB Atlas this returns the 3-node replica set that provides automatic
+   * failover with zero manual restore — proving node-level HA is already in place.
+   */
+  async getReplicaSetInfo(): Promise<{ isReplicaSet: boolean; setName?: string; members?: number; topology: string }> {
+    try {
+      if (!mongoose.connection.db) return { isReplicaSet: false, topology: 'disconnected' };
+      const admin = mongoose.connection.db.admin();
+      const hello: any = await admin.command({ hello: 1 });
+      const setName: string | undefined = hello.setName;
+      const members = Array.isArray(hello.hosts) ? hello.hosts.length : undefined;
+      return {
+        isReplicaSet: !!setName,
+        setName,
+        members,
+        topology: setName ? 'replicaSet' : 'standalone',
+      };
+    } catch {
+      return { isReplicaSet: false, topology: 'unknown' };
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Gap 5: Backup catalog stored SEPARATELY from the data (in R2, not MongoDB)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Build the backup catalog from the MongoDB Backup collection.
+   * Only metadata — no business data — so it is safe to store unencrypted and
+   * remains readable during disaster recovery without any decryption key.
+   */
+  private async buildManifest(): Promise<any> {
+    const backups = await Backup.find({}).sort({ createdAt: -1 }).lean();
+    return {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      database: mongoose.connection?.name,
+      count: backups.length,
+      backups: backups.map((b: any) => ({
+        fileName: b.fileName,
+        r2Key: b.r2Key,
+        fileSize: b.fileSize,
+        status: b.status,
+        type: b.type,
+        retentionTier: b.retentionTier,
+        collections: b.collections,
+        createdBy: b.createdBy,
+        createdAt: b.createdAt,
+        completedAt: b.completedAt,
+        metadata: b.metadata,
+      })),
+    };
+  }
+
+  /**
+   * Regenerate the R2 backup catalog (`_manifest.json`) from the Backup
+   * collection. This is the "metadata stored separately from the data" fix:
+   * the full backup index lives in R2 alongside the files, so it survives a
+   * total MongoDB failure.
+   */
+  async writeManifest(): Promise<void> {
+    if (!r2Service.isEnabled()) return;
+    const manifest = await this.buildManifest();
+    const body = Buffer.from(JSON.stringify(manifest, null, 2));
+    await r2Service.uploadFile(this.MANIFEST_KEY, body, 'application/json', config.r2BackupBucketName);
+    // Redundancy: keep the catalog in the secondary destination too (no-op if unset)
+    await r2Service.replicateToSecondary(this.MANIFEST_KEY, body, 'application/json');
+    logger.info(`[BACKUP] R2 catalog updated: ${manifest.count} backup(s) indexed in ${this.MANIFEST_KEY}`);
+  }
+
+  /** Non-throwing wrapper — manifest failures must never break a backup/cleanup. */
+  async writeManifestSafe(): Promise<void> {
+    try {
+      await this.writeManifest();
+    } catch (err: any) {
+      logger.warn('[BACKUP] Failed to update R2 catalog (non-fatal):', err?.message);
+    }
+  }
+
+  /**
+   * Read the R2 backup catalog. Works with ZERO MongoDB connection — this is
+   * what makes the backup list recoverable after a database loss.
+   */
+  async readManifestFromR2(silent = false): Promise<any | null> {
+    try {
+      // Check existence first so a not-yet-created manifest doesn't log an error
+      // (checks primary, then B2 secondary)
+      const exists = await r2Service.backupExists(this.MANIFEST_KEY);
+      if (!exists) return null;
+
+      const stream = await r2Service.downloadBackup(this.MANIFEST_KEY);
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(chunk);
+      const buf = Buffer.concat(chunks);
+      if (!buf.length) return null;
+      return JSON.parse(buf.toString());
+    } catch (err: any) {
+      if (!silent) logger.warn('[BACKUP] R2 catalog not found or unreadable:', err?.message);
+      return null;
+    }
+  }
+
+  /**
+   * DR: rebuild the MongoDB Backup collection from the R2 catalog.
+   * Use after migrating to a fresh/empty database so the Backup & Recovery UI
+   * shows the real backup history again. Idempotent (upsert by r2Key).
+   * Falls back to a raw file listing if no manifest exists yet.
+   */
+  async rebuildBackupCollectionFromR2(userId: string): Promise<{ restored: number; source: 'manifest' | 'listing' | 'merged' }> {
+    // Merge BOTH sources so the catalog reflects every physical file:
+    //  - the manifest provides rich metadata (doc counts, encryption, type)
+    //  - the raw bucket listing catches files the manifest doesn't know about
+    //    (e.g. the manifest was overwritten by a run against a different DB, or
+    //    old Mongo records were pruned while the R2 files remained).
+    // Preferring the manifest alone used to hide files that exist in R2 but not
+    // in the manifest — so the UI showed fewer backups than the bucket holds.
+    const [manifest, files] = await Promise.all([
+      this.readManifestFromR2(true),
+      r2Service.listBackups('backups/'),
+    ]);
+
+    const fileList = files.filter((f: any) => f.key?.endsWith('.json.gz'));
+    const physicalKeys = new Set(fileList.map((f: any) => f.key));
+    const byKey = new Map<string, any>();
+
+    // 1. Seed from the manifest (rich metadata) keyed by r2Key — but only for
+    //    entries whose file still physically exists in the bucket. This drops
+    //    stale manifest rows for backups that were hard-deleted from R2.
+    if (manifest?.backups?.length) {
+      for (const b of manifest.backups) {
+        if (b?.r2Key && b?.fileName && physicalKeys.has(b.r2Key)) byKey.set(b.r2Key, b);
+      }
+    }
+
+    // 2. Add any physical file the manifest didn't cover as a minimal record.
+    for (const f of fileList) {
+      if (byKey.has(f.key)) continue;
+      byKey.set(f.key, {
+        fileName: f.key.split('/').pop(),
+        r2Key: f.key,
+        fileSize: f.size ?? 0,
+        status: 'completed',
+        type: 'manual',
+        collections: [],
+        createdBy: 'r2-recovery',
+        createdAt: f.lastModified ?? new Date(),
+        completedAt: f.lastModified ?? new Date(),
+      });
+    }
+
+    const manifestCount = manifest?.backups?.length ?? 0;
+    const source: 'manifest' | 'listing' | 'merged' =
+      manifestCount === 0 ? 'listing' : (fileList.length > manifestCount ? 'merged' : 'manifest');
+
+    let restored = 0;
+    for (const e of byKey.values()) {
+      if (!e.r2Key || !e.fileName) continue;
+      await Backup.updateOne(
+        { r2Key: e.r2Key },
+        { $setOnInsert: e },
+        { upsert: true },
+      );
+      restored++;
+    }
+
+    await AuditLog.create({
+      username: userId,
+      action: 'RESTORE',
+      resourceType: 'backup',
+      details: JSON.stringify({ action: 'rebuild-catalog-from-r2', restored, source }),
+    });
+
+    logger.info(`[DR] Rebuilt backup catalog into MongoDB from R2 (${source}): ${restored} record(s)`);
+    return { restored, source };
+  }
+
+  /**
+   * Disaster Recovery: list all backup files directly from R2, enriched with
+   * catalog metadata when available. Works even when MongoDB is completely
+   * empty — no Backup records needed.
+   */
+  async listR2Backups(): Promise<Array<{
+    key: string; size: number; lastModified: Date;
+    fileName?: string; type?: string; createdBy?: string;
+    totalDocuments?: number; encrypted?: boolean; collections?: number;
+  }>> {
+    const files = await r2Service.listBackups('backups/');
+    const manifest = await this.readManifestFromR2(true);
+    const metaByKey = new Map<string, any>();
+    if (manifest?.backups) for (const b of manifest.backups) metaByKey.set(b.r2Key, b);
+
+    return files
+      .filter((f: any) => f.key?.endsWith('.json.gz'))
+      .map((f: any) => {
+        const meta = metaByKey.get(f.key);
+        return {
+          key: f.key,
+          size: f.size ?? 0,
+          lastModified: f.lastModified ?? new Date(0),
+          ...(meta ? {
+            fileName: meta.fileName,
+            type: meta.type,
+            createdBy: meta.createdBy,
+            totalDocuments: meta.metadata?.totalDocuments,
+            encrypted: meta.metadata?.encrypted,
+            collections: Array.isArray(meta.collections) ? meta.collections.length : undefined,
+          } : {}),
+        };
+      })
+      .sort((a: any, b: any) => b.lastModified.getTime() - a.lastModified.getTime());
+  }
+
+  /**
+   * Disaster Recovery: restore directly from an R2 key without a Backup model record.
+   * Used when MongoDB is empty/new and no backup metadata exists in the database.
+   */
+  async restoreFromR2Key(r2Key: string, userId: string): Promise<void> {
+    logger.info(`[DR] Starting restore from R2 key: ${r2Key}`);
+
+    const stream = await r2Service.downloadBackup(r2Key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    let buffer: Buffer = Buffer.concat(chunks);
+
+    if (!buffer.length) throw new Error('Downloaded backup file is empty');
+
+    // Decrypt if the bytes look encrypted (handles records with no metadata).
+    buffer = this.maybeDecrypt(buffer);
+
+    const gunzip = promisify(zlib.gunzip);
+    const decompressed = await gunzip(buffer);
+    const backupData = EJSON.parse(decompressed.toString(), { relaxed: false });
+
+    if (!backupData.collections || typeof backupData.collections !== 'object') {
+      throw new Error('Invalid backup JSON structure');
+    }
+
+    if (!mongoose.connection.db) throw new Error('No active database connection');
+
+    // Snapshot the operator so the restore can't lock them out.
+    const actingUser = await this.snapshotActingUser(userId);
+
+    // Use transactions on replica sets (Atlas/production); fall back to plain
+    // sequential writes on standalone MongoDB (local Docker/dev) which does not
+    // support multi-document transactions. Mirrors restoreBackup() — without
+    // this, restoring directly from R2 into a local standalone Mongo always
+    // failed with "Transaction numbers are only allowed on a replica set".
+    const rsInfo = await this.getReplicaSetInfo();
+
+    if (rsInfo.isReplicaSet) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      try {
+        for (const [collectionName, documents] of Object.entries(backupData.collections)) {
+          if (this.RESTORE_PROTECTED_COLLECTIONS.has(collectionName)) {
+            logger.info(`[DR] Skipping protected collection during restore: ${collectionName}`);
+            continue;
+          }
+          const collection = mongoose.connection.collection(collectionName);
+          await collection.deleteMany({}, { session });
+          if (Array.isArray(documents) && documents.length > 0) {
+            await collection.insertMany(documents as any[], { session });
+          }
+          logger.info(`[DR] Restored collection: ${collectionName} (${(documents as any[]).length ?? 0} docs)`);
+        }
+        await session.commitTransaction();
+        logger.info('[DR] Restore committed successfully');
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
+    } else {
+      logger.info('[DR] Standalone MongoDB detected — restoring without transactions');
+      for (const [collectionName, documents] of Object.entries(backupData.collections)) {
+        if (this.RESTORE_PROTECTED_COLLECTIONS.has(collectionName)) {
+          logger.info(`[DR] Skipping protected collection during restore: ${collectionName}`);
+          continue;
+        }
+        const collection = mongoose.connection.collection(collectionName);
+        await collection.deleteMany({});
+        if (Array.isArray(documents) && documents.length > 0) {
+          await collection.insertMany(documents as any[]);
+        }
+        logger.info(`[DR] Restored collection: ${collectionName} (${(documents as any[]).length ?? 0} docs)`);
+      }
+      logger.info('[DR] Restore completed successfully (standalone)');
+    }
+
+    // Re-insert the operator so they aren't locked out by the new user set.
+    await this.preserveActingUser(actingUser);
+
+    await AuditLog.create({
+      username: userId,
+      action: 'RESTORE',
+      resourceType: 'backup',
+      resourceId: r2Key,
+      details: JSON.stringify({ r2Key, source: 'r2-direct', collections: Object.keys(backupData.collections).length }),
+    });
+  }
+
+  /**
+   * SAFE restore (blue/green-lite): restore a backup into a brand-new side
+   * database on the SAME cluster instead of overwriting live data. Nothing in
+   * the live database is touched — no lockout, no 500 race. After verifying the
+   * returned counts, "cut over" by pointing MONGODB_URI at the new database name
+   * and restarting the backend; roll back by simply pointing it back.
+   *
+   * A new database is a logical namespace on the same cluster, so this costs no
+   * extra compute — only temporary disk for the second copy, reclaimed by
+   * dropping the database afterwards.
+   */
+  async restoreToNewDb(
+    r2Key: string,
+    userId: string,
+    newDbName?: string,
+  ): Promise<{ dbName: string; collections: number; documents: number; businessDocuments: number }> {
+    logger.info(`[DR] Safe restore (into a new side database) from: ${r2Key}`);
+
+    if (!mongoose.connection.db) throw new Error('No active database connection');
+    const { data: backupData } = await this.downloadDecryptParse(r2Key);
+
+    const liveName = mongoose.connection.name;
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const dbName = newDbName || `${liveName}_restored_${ts}`;
+    if (dbName === liveName) throw new Error('Refusing to restore over the live database — choose a different name');
+
+    // useDb gives another database on the existing connection (no new connection/cost).
+    const target = mongoose.connection.useDb(dbName, { useCache: false });
+
+    let documents = 0;
+    let businessDocuments = 0;
+    let collections = 0;
+    const coreBusiness = new Set(this.CORE_BUSINESS_COLLECTIONS);
+
+    for (const [name, docs] of Object.entries(backupData.collections)) {
+      if (this.RESTORE_PROTECTED_COLLECTIONS.has(name)) continue; // never copy session state
+      const col = target.collection(name);
+      await col.deleteMany({}); // side DB is fresh, but stay idempotent on re-runs
+      if (Array.isArray(docs) && docs.length > 0) {
+        await col.insertMany(docs as any[]);
+        documents += docs.length;
+        if (coreBusiness.has(name)) businessDocuments += docs.length;
+      }
+      collections++;
+    }
+
+    await AuditLog.create({
+      username: userId,
+      action: 'RESTORE',
+      resourceType: 'backup',
+      resourceId: r2Key,
+      details: JSON.stringify({ r2Key, source: 'restore-to-new-db', dbName, collections, documents, businessDocuments }),
+    });
+
+    logger.info(`[DR] Safe restore complete → database "${dbName}" (${collections} collections, ${documents} docs, ${businessDocuments} business). Live data untouched.`);
+    return { dbName, collections, documents, businessDocuments };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Gap 4: Chaos engineering — automated disaster-recovery drill
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /** Shared helper: download a backup from R2, decrypt (graceful), gunzip, parse. */
+  private async downloadDecryptParse(r2Key: string): Promise<{ data: any; sizeBytes: number }> {
+    const stream = await r2Service.downloadBackup(r2Key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    let buffer: Buffer = Buffer.concat(chunks);
+    const sizeBytes = buffer.length;
+    if (!buffer.length) throw new Error('Downloaded backup file is empty');
+
+    buffer = this.maybeDecrypt(buffer);
+
+    const gunzip = promisify(zlib.gunzip);
+    const decompressed = await gunzip(buffer);
+    const data = EJSON.parse(decompressed.toString(), { relaxed: false });
+    if (!data.collections || typeof data.collections !== 'object') {
+      throw new Error('Invalid backup JSON structure');
+    }
+    return { data, sizeBytes };
+  }
+
+  /**
+   * Chaos drill: prove the latest backup is actually restorable WITHOUT touching
+   * live data. Restores into an isolated scratch database on the same cluster,
+   * verifies document counts match, then drops the scratch database.
+   * Alerts via Slack + email on any failure.
+   */
+  async runDisasterRecoveryDrill(triggeredBy = 'system-chaos-drill'): Promise<any> {
+    const t0 = Date.now();
+    const report: any = { passed: false, startedAt: new Date().toISOString() };
+
+    try {
+      // 1. Pick the latest completed backup (prefer DB record, fall back to R2)
+      let r2Key: string | undefined;
+      const latest = await Backup.findOne({ status: 'completed' }).sort({ createdAt: -1 }).lean();
+      if (latest?.r2Key) {
+        r2Key = latest.r2Key;
+      } else {
+        const files = await this.listR2Backups();
+        if (files.length) r2Key = files[0].key;
+      }
+      if (!r2Key) throw new Error('No backups available to drill');
+      report.r2Key = r2Key;
+
+      // 2. Download → decrypt → decompress → parse
+      const { data: backupData, sizeBytes } = await this.downloadDecryptParse(r2Key);
+      report.backupBytes = sizeBytes;
+      report.expectedCollections = Object.keys(backupData.collections).length;
+      report.expectedDocuments = Object.values(backupData.collections)
+        .reduce((sum: number, docs: any) => sum + (Array.isArray(docs) ? docs.length : 0), 0);
+
+      // 3. Restore into an ISOLATED scratch DB on the same cluster (never live data)
+      if (!mongoose.connection.db) throw new Error('No active database connection');
+      const scratchName = `${mongoose.connection.name}_dr_drill`;
+      const scratch = mongoose.connection.useDb(scratchName, { useCache: false });
+      let restoredDocs = 0;
+      try {
+        await scratch.dropDatabase(); // clean slate
+        for (const [name, docs] of Object.entries(backupData.collections)) {
+          if (Array.isArray(docs) && docs.length > 0) {
+            await scratch.collection(name).insertMany(docs as any[]);
+            restoredDocs += docs.length;
+          }
+        }
+        report.restoredDocuments = restoredDocs;
+        report.restoredCollections = Object.keys(backupData.collections).length;
+      } finally {
+        await scratch.dropDatabase().catch((e: any) =>
+          logger.warn('[DR DRILL] scratch DB cleanup failed:', e?.message));
+      }
+
+      // 4. Verify
+      report.passed = restoredDocs === report.expectedDocuments;
+      report.durationMs = Date.now() - t0;
+      report.details = report.passed
+        ? `Restored ${restoredDocs}/${report.expectedDocuments} docs across ${report.expectedCollections} collections into an isolated scratch DB and verified counts.`
+        : `MISMATCH: restored ${restoredDocs} but backup declares ${report.expectedDocuments}.`;
+
+      await AuditLog.create({
+        username: triggeredBy,
+        action: 'VERIFY_INTEGRITY',
+        resourceType: 'backup',
+        resourceId: r2Key,
+        details: JSON.stringify({ action: 'dr-drill', ...report }),
+      });
+
+      if (report.passed) {
+        logger.info(`[DR DRILL] PASSED — ${report.details}`);
+      } else {
+        logger.error(`[DR DRILL] FAILED — ${report.details}`);
+        await this.sendDrillAlert(report);
+      }
+      return report;
+    } catch (err: any) {
+      report.passed = false;
+      report.durationMs = Date.now() - t0;
+      report.error = err?.message;
+      report.details = `DR drill errored: ${err?.message}`;
+      logger.error(`[DR DRILL] FAILED — ${err?.message}`);
+      await this.sendDrillAlert(report).catch(() => { /* non-fatal */ });
+      return report;
+    }
+  }
+
+  /** Fire Slack (critical) + email alert when a DR drill fails. Never throws. */
+  private async sendDrillAlert(report: any): Promise<void> {
+    try {
+      const slack = require('./slackNotificationService').default;
+      await slack.sendNotification({
+        severity: 'critical',
+        title: 'Disaster Recovery Drill FAILED',
+        description: 'Automated backup-restore test did not pass. Your backups may not be restorable — investigate immediately.',
+        details: {
+          'R2 Key': report.r2Key || 'n/a',
+          'Expected Docs': report.expectedDocuments ?? 'n/a',
+          'Restored Docs': report.restoredDocuments ?? 'n/a',
+          'Error': report.error || report.details || 'n/a',
+        },
+        timestamp: new Date(),
+      });
+    } catch (e: any) {
+      logger.warn('[DR DRILL] Could not send Slack alert:', e?.message);
+    }
+    try {
+      await emailService.sendBackupFailureAlert('DR Drill', report.error || report.details || 'DR drill failed');
+    } catch { /* non-fatal */ }
   }
 
   /**

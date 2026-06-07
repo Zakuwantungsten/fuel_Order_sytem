@@ -19,7 +19,7 @@ let schedulerJob: cron.ScheduledTask | null = null;
  * fields to step one period forward from the current time.
  */
 function computeNextRun(schedule: {
-  frequency: 'daily' | 'weekly' | 'monthly';
+  frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
   time: string;
   dayOfWeek?: number;
   dayOfMonth?: number;
@@ -29,7 +29,13 @@ function computeNextRun(schedule: {
   const next = new Date();
   next.setSeconds(0, 0);
 
-  if (schedule.frequency === 'daily') {
+  if (schedule.frequency === 'hourly') {
+    // Run every hour at the configured minute (only the mm of `time` matters).
+    next.setMinutes(minutes, 0, 0);
+    if (next <= new Date()) {
+      next.setHours(next.getHours() + 1);
+    }
+  } else if (schedule.frequency === 'daily') {
     // Advance to the next occurrence of the configured time (always tomorrow or
     // later to prevent immediate re-runs right after a backup completes).
     next.setDate(next.getDate() + 1);
@@ -65,8 +71,10 @@ async function runDueBackups() {
 
       try {
         // LE-1: pass the schedule's frequency as the retentionTier so we can
-        // apply tiered cleanup later
-        await backupService.createBackup('system-scheduler', 'scheduled', undefined, schedule.frequency as 'daily' | 'weekly' | 'monthly');
+        // apply tiered cleanup later. Hourly backups aren't a retention tier —
+        // they're pruned by the simple retentionDays policy instead.
+        const tier = (['daily', 'weekly', 'monthly'] as const).find(t => t === schedule.frequency);
+        await backupService.createBackup('system-scheduler', 'scheduled', undefined, tier);
         logger.info(`[BACKUP SCHEDULER] Backup completed for schedule: "${schedule.name}"`);
       } catch (err: any) {
         logger.error(`[BACKUP SCHEDULER] Backup failed for schedule "${schedule.name}": ${String(err?.message ?? err)}`);

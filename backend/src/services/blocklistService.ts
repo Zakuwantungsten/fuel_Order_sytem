@@ -70,14 +70,23 @@ async function syncFromDB(): Promise<void> {
       ],
     }).lean();
 
+    // Coerce to epoch millis defensively: some persisted/restored docs may store
+    // dates as strings rather than BSON Date, which would make `.getTime()` throw
+    // and break the whole sync. Returns null for missing/invalid values.
+    const toMillis = (v: any): number | null => {
+      if (v == null) return null;
+      const t = v instanceof Date ? v.getTime() : new Date(v).getTime();
+      return Number.isNaN(t) ? null : t;
+    };
+
     // Merge DB blocks into memory (don't remove memory-only blocks)
     for (const block of activeBlocks) {
       const ip = normalizeIP(block.ip);
       if (!blockedIPs.has(ip)) {
         blockedIPs.set(ip, {
-          expiresAt: block.expiresAt ? block.expiresAt.getTime() : null,
+          expiresAt: toMillis(block.expiresAt),
           reason: block.reason,
-          blockedAt: block.blockedAt.getTime(),
+          blockedAt: toMillis(block.blockedAt) ?? Date.now(),
         });
       }
     }

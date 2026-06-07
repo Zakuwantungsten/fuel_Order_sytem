@@ -806,7 +806,7 @@ export interface Backup {
   _id?: string;
   fileName: string;
   fileSize: number;
-  status: 'in_progress' | 'completed' | 'failed' | 'deleted';
+  status: 'in_progress' | 'completed' | 'failed' | 'deleted' | 'restoring';
   type: 'manual' | 'scheduled';
   collections: string[];
   r2Key: string;
@@ -820,6 +820,7 @@ export interface Backup {
   retentionTier?: 'daily' | 'weekly' | 'monthly';
   metadata?: {
     totalDocuments: number;
+    businessDocuments?: number;
     databaseSize: number;
     compression: string;
     encrypted?: boolean;
@@ -833,7 +834,7 @@ export interface BackupSchedule {
   id: string;
   name: string;
   enabled: boolean;
-  frequency: 'daily' | 'weekly' | 'monthly';
+  frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
   time: string;
   dayOfWeek?: number;
   dayOfMonth?: number;

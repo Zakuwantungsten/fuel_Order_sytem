@@ -10,14 +10,19 @@ class R2Service {
   private bucketName: string;
   private enabled: boolean;
 
+  // Secondary backup destination (geo/provider redundancy)
+  private secondaryClient: S3Client | null = null;
+  private secondaryBucket: string;
+  private secondaryEnabled: boolean;
+
   constructor() {
     this.bucketName = config.r2BucketName;
     this.enabled = !!(config.r2Endpoint && config.r2AccessKeyId && config.r2SecretAccessKey);
-    
+
     if (this.enabled) {
       try {
         this.client = new S3Client({
-          region: 'auto',
+          region: config.r2Region,
           endpoint: config.r2Endpoint,
           credentials: {
             accessKeyId: config.r2AccessKeyId,
@@ -32,6 +37,32 @@ class R2Service {
     } else {
       logger.debug('R2 service is not configured. Backup functionality will be limited.');
     }
+
+    // Optional secondary backup destination. If endpoint/creds are blank, reuse
+    // the primary R2 account (same account, different bucket).
+    this.secondaryBucket = config.r2BackupBucketNameSecondary;
+    const secEndpoint = config.r2SecondaryEndpoint || config.r2Endpoint;
+    const secKeyId = config.r2SecondaryAccessKeyId || config.r2AccessKeyId;
+    const secSecret = config.r2SecondarySecretAccessKey || config.r2SecretAccessKey;
+    this.secondaryEnabled = !!(this.secondaryBucket && secEndpoint && secKeyId && secSecret);
+
+    if (this.secondaryEnabled) {
+      try {
+        this.secondaryClient = new S3Client({
+          // R2 uses 'auto'; Backblaze B2 and other S3 providers require the real
+          // region (e.g. 'us-west-004') to match the SigV4 signature.
+          region: config.r2SecondaryRegion,
+          endpoint: secEndpoint,
+          credentials: { accessKeyId: secKeyId, secretAccessKey: secSecret },
+        });
+        const sameAccount = !config.r2SecondaryEndpoint;
+        const provider = /backblazeb2\.com/i.test(secEndpoint) ? 'Backblaze B2' : (sameAccount ? 'same account' : 'separate account/provider');
+        logger.info(`Secondary backup destination enabled: bucket "${this.secondaryBucket}" (${provider}, region: ${config.r2SecondaryRegion})`);
+      } catch (error) {
+        logger.warn('Failed to initialize R2 secondary destination:', error);
+        this.secondaryEnabled = false;
+      }
+    }
   }
 
   /**
@@ -39,6 +70,172 @@ class R2Service {
    */
   isEnabled(): boolean {
     return this.enabled && this.client !== null;
+  }
+
+  /**
+   * Whether a secondary backup destination is configured (geo/provider redundancy).
+   */
+  isSecondaryEnabled(): boolean {
+    return this.secondaryEnabled && this.secondaryClient !== null;
+  }
+
+  getSecondaryBucketName(): string {
+    return this.secondaryBucket;
+  }
+
+  /**
+   * Replicate an object to the secondary backup destination. No-op (returns false)
+   * if no secondary is configured. Never throws — replication failures must not
+   * break the primary backup.
+   */
+  async replicateToSecondary(key: string, body: Buffer, contentType?: string): Promise<boolean> {
+    if (!this.isSecondaryEnabled()) return false;
+    try {
+      const upload = new Upload({
+        client: this.secondaryClient!,
+        params: {
+          Bucket: this.secondaryBucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType || 'application/octet-stream',
+          ACL: 'private',
+        },
+      });
+      await upload.done();
+      logger.info(`[R2] Replicated to secondary backup destination: ${key}`);
+      return true;
+    } catch (error) {
+      logger.error('[R2] Secondary replication failed (non-fatal):', error);
+      return false;
+    }
+  }
+
+  /**
+   * Delete an object from the secondary destination (best-effort, never throws).
+   */
+  async deleteFromSecondary(key: string): Promise<void> {
+    if (!this.isSecondaryEnabled()) return;
+    try {
+      await this.secondaryClient!.send(new DeleteObjectCommand({
+        Bucket: this.secondaryBucket,
+        Key: key,
+      }));
+      logger.info(`[R2] Deleted from secondary backup destination: ${key}`);
+    } catch (error) {
+      logger.warn('[R2] Secondary delete failed (non-fatal):', error);
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Secondary destination READ methods (used for disaster-recovery failover).
+  // These mirror the primary read methods but use the secondary client/bucket.
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Download an object from the secondary backup destination.
+   */
+  async downloadFromSecondary(key: string): Promise<Readable> {
+    if (!this.isSecondaryEnabled()) {
+      throw new Error('Secondary backup destination is not configured');
+    }
+    const command = new GetObjectCommand({ Bucket: this.secondaryBucket, Key: key });
+    const response = await this.secondaryClient!.send(command);
+    if (!response.Body) {
+      throw new Error('No body in secondary response');
+    }
+    return response.Body as Readable;
+  }
+
+  /**
+   * List objects in the secondary backup destination.
+   */
+  async listSecondary(prefix?: string): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
+    if (!this.isSecondaryEnabled()) {
+      throw new Error('Secondary backup destination is not configured');
+    }
+    const command = new ListObjectsV2Command({ Bucket: this.secondaryBucket, Prefix: prefix });
+    const response = await this.secondaryClient!.send(command);
+    return (response.Contents || []).map(item => ({
+      key: item.Key!,
+      size: item.Size!,
+      lastModified: item.LastModified!,
+    }));
+  }
+
+  /**
+   * Check whether an object exists in the secondary backup destination.
+   */
+  async fileExistsSecondary(key: string): Promise<boolean> {
+    if (!this.isSecondaryEnabled()) return false;
+    try {
+      await this.secondaryClient!.send(new GetObjectCommand({ Bucket: this.secondaryBucket, Key: key }));
+      return true;
+    } catch (error: any) {
+      if (error.name === 'NoSuchKey') return false;
+      throw error;
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Failover-aware backup read methods: try primary R2 first, transparently
+  // fall back to the secondary destination (B2) if the primary errors or the
+  // object is missing. These are what backup restore/list/verify paths use so
+  // the existing "Restore" flow keeps working even during a primary outage.
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Download a backup object with automatic primary→secondary failover.
+   */
+  async downloadBackup(key: string): Promise<Readable> {
+    let primaryErr: any;
+    if (this.isEnabled()) {
+      try {
+        return await this.downloadFile(key, config.r2BackupBucketName);
+      } catch (error: any) {
+        primaryErr = error;
+        logger.warn(`[R2] Primary download failed for ${key} — attempting secondary failover: ${error?.message}`);
+      }
+    }
+    if (this.isSecondaryEnabled()) {
+      logger.warn(`[R2] Failing over to secondary destination (B2) for ${key}`);
+      return await this.downloadFromSecondary(key);
+    }
+    throw new Error(`Failed to download backup "${key}": primary unavailable${primaryErr ? ` (${primaryErr.message})` : ''} and no secondary configured`);
+  }
+
+  /**
+   * List backup objects with automatic primary→secondary failover.
+   */
+  async listBackups(prefix?: string): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
+    if (this.isEnabled()) {
+      try {
+        return await this.listFiles(prefix, config.r2BackupBucketName);
+      } catch (error: any) {
+        logger.warn(`[R2] Primary list failed for prefix "${prefix}" — attempting secondary failover: ${error?.message}`);
+      }
+    }
+    if (this.isSecondaryEnabled()) {
+      logger.warn(`[R2] Failing over to secondary destination (B2) for list "${prefix}"`);
+      return await this.listSecondary(prefix);
+    }
+    throw new Error('Failed to list backups: primary unavailable and no secondary configured');
+  }
+
+  /**
+   * Check backup existence across primary then secondary.
+   */
+  async backupExists(key: string): Promise<boolean> {
+    if (this.isEnabled()) {
+      try {
+        if (await this.fileExists(key, config.r2BackupBucketName)) return true;
+      } catch (error: any) {
+        logger.warn(`[R2] Primary existence check failed for ${key} — checking secondary: ${error?.message}`);
+      }
+    }
+    if (this.isSecondaryEnabled()) {
+      return await this.fileExistsSecondary(key);
+    }
+    return false;
   }
 
   /**

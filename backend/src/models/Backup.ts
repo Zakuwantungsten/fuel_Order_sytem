@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IBackup extends Document {
   fileName: string;
   fileSize: number; // in bytes
-  status: 'in_progress' | 'completed' | 'failed' | 'deleted';
+  status: 'in_progress' | 'completed' | 'failed' | 'deleted' | 'restoring';
   type: 'manual' | 'scheduled';
   collections: string[];
   r2Key: string; // Cloudflare R2 object key
@@ -19,6 +19,7 @@ export interface IBackup extends Document {
   retentionTier?: 'daily' | 'weekly' | 'monthly';
   metadata?: {
     totalDocuments: number;
+    businessDocuments?: number; // docs in core business collections (0 ⇒ empty-data backup)
     databaseSize: number;
     compression: string;
     encrypted?: boolean;
@@ -41,7 +42,7 @@ const BackupSchema: Schema = new Schema(
     },
     status: {
       type: String,
-      enum: ['in_progress', 'completed', 'failed', 'deleted'],
+      enum: ['in_progress', 'completed', 'failed', 'deleted', 'restoring'],
       default: 'in_progress',
     },
     type: {
@@ -83,6 +84,7 @@ const BackupSchema: Schema = new Schema(
     },
     metadata: {
       totalDocuments: Number,
+      businessDocuments: Number,
       databaseSize: Number,
       compression: String,
       encrypted: Boolean,

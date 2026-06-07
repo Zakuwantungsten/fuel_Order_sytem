@@ -18,7 +18,7 @@ interface BackupRecoveryTabProps {
 
 interface ScheduleFormState {
   name: string;
-  frequency: 'daily' | 'weekly' | 'monthly';
+  frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
   time: string;
   dayOfWeek?: number;
   dayOfMonth?: number;
@@ -61,7 +61,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
   const restorePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Backup settings (from system config)
-  const [backupFrequency, setBackupFrequency] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [backupFrequency, setBackupFrequency] = useState<'hourly' | 'daily' | 'weekly' | 'monthly'>('daily');
   const [backupRetention, setBackupRetention] = useState<number>(30);
   const [settingsSaving, setSettingsSaving] = useState(false);
 
@@ -72,6 +72,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [togglingScheduleId, setTogglingScheduleId] = useState<string | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   // Confirm modal
   const [confirmState, setConfirmState] = useState<{
@@ -90,7 +91,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     };
   }, []);
 
-  // â”€â”€ Data loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Data loading ──────────────────────────────────────────────────────────
 
   const loadData = async () => {
     try {
@@ -116,11 +117,11 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
       setBackupFrequency(settings.data.backupFrequency ?? 'daily');
       setBackupRetention(settings.data.backupRetention ?? 30);
     } catch {
-      // non-blocking â€” settings default values remain
+      // non-blocking — settings default values remain
     }
   };
 
-  // â”€â”€ Backup settings save â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Backup settings save ──────────────────────────────────────────────────
 
   const saveBackupSettings = async () => {
     try {
@@ -134,7 +135,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     }
   };
 
-  // â”€â”€ Backup actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Backup actions ────────────────────────────────────────────────────────
 
   const handleCreateBackup = async () => {
     try {
@@ -165,14 +166,16 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     restorePollRef.current = setInterval(async () => {
       try {
         const updated = await backupAPI.getBackupById(id);
-        if (updated?.status !== 'in_progress') {
+        // 'restoring' means the backend is still working — keep polling.
+        // Any other status (completed, failed, etc.) means it's done.
+        if (updated?.status !== 'restoring') {
           clearInterval(restorePollRef.current!);
           restorePollRef.current = null;
           setRestoringId(null);
-          if (updated?.status === 'completed') {
+          if (updated?.status === 'completed' && !updated?.error) {
             onMessage('success', 'Restore completed successfully');
           } else {
-            onMessage('error', `Restore failed${updated?.error ? ': ' + updated.error : ''}`);
+            onMessage('error', updated?.error || 'Restore failed');
           }
           loadData();
         }
@@ -185,10 +188,24 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
   };
 
   const handleRestore = (backup: Backup) => {
+    const total = backup.metadata?.totalDocuments;
+    const business = backup.metadata?.businessDocuments;
+    const noBusinessData = business === 0;
+
+    const countLine = total !== undefined
+      ? `\n\nThis backup contains ${total.toLocaleString()} document(s)` +
+        (business !== undefined ? ` (${business.toLocaleString()} business record(s))` : '') +
+        `, taken ${formatDate(backup.createdAt)}.`
+      : '';
+
+    const emptyWarning = noBusinessData
+      ? `\n\n⚠ WARNING: this backup has NO business data — restoring it will leave your delivery orders, fuel records and LPOs EMPTY. This is almost certainly a snapshot of an empty database. Are you sure?`
+      : '';
+
     setConfirmState({
       title: 'Restore Backup',
-      message: `Restore from "${backup.fileName}"? This will overwrite all current data and cannot be undone.`,
-      variant: 'warning',
+      message: `Restore from "${backup.fileName}"?${countLine}${emptyWarning}\n\nThis will overwrite all current data and cannot be undone.`,
+      variant: noBusinessData ? 'danger' : 'warning',
       onConfirm: async () => {
         setConfirming(true);
         try {
@@ -242,7 +259,20 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     }
   };
 
-  // â”€â”€ Schedule CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const handleSyncFromR2 = async () => {
+    setSyncing(true);
+    try {
+      const result = await backupAPI.syncFromR2();
+      onMessage('success', `Synced ${result.restored} backup record(s) from R2 into local database`);
+      loadData();
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Failed to sync from R2');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // ── Schedule CRUD ─────────────────────────────────────────────────────────
 
   const openCreateSchedule = () => {
     setEditingScheduleId(null);
@@ -321,7 +351,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     });
   };
 
-  // â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Utility ───────────────────────────────────────────────────────────────
 
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -352,6 +382,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     switch (status) {
       case 'completed': return <CheckCircle className="w-4 h-4 text-green-500" />;
       case 'in_progress': return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />;
+      case 'restoring': return <RefreshCw className="w-4 h-4 text-amber-500 animate-spin" />;
       case 'failed': return <AlertCircle className="w-4 h-4 text-red-500" />;
       default: return <Clock className="w-4 h-4 text-gray-500" />;
     }
@@ -362,7 +393,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
   const quotaBarColor =
     quotaPct >= 90 ? 'bg-red-500' : quotaPct >= 70 ? 'bg-amber-500' : 'bg-green-500';
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -373,17 +404,31 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
           <Database className="w-6 h-6 text-cyan-600 dark:text-cyan-400" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Backup & Recovery</h2>
         </div>
-        <button
-          onClick={handleCreateBackup}
-          disabled={creating}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          {creating ? (
-            <><RefreshCw className="w-4 h-4 animate-spin" />Creating...</>
-          ) : (
-            <><Download className="w-4 h-4" />Create Backup Now</>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSyncFromR2}
+            disabled={syncing}
+            title="Pull backup records from R2 into local database (use when local DB is missing entries that exist in R2)"
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
+          >
+            {syncing ? (
+              <><RefreshCw className="w-4 h-4 animate-spin" />Syncing…</>
+            ) : (
+              <><RefreshCw className="w-4 h-4" />Sync from R2</>
+            )}
+          </button>
+          <button
+            onClick={handleCreateBackup}
+            disabled={creating}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {creating ? (
+              <><RefreshCw className="w-4 h-4 animate-spin" />Creating...</>
+            ) : (
+              <><Download className="w-4 h-4" />Create Backup Now</>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -459,7 +504,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
             </div>
             {quotaPct >= 70 && (
               <p className={`mt-1.5 text-xs ${quotaPct >= 90 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                {quotaPct >= 90 ? 'Critical: storage almost full â€” delete old backups or increase quota.' : 'Warning: storage above 70% â€” consider cleaning up old backups.'}
+                {quotaPct >= 90 ? 'Critical: storage almost full — delete old backups or increase quota.' : 'Warning: storage above 70% — consider cleaning up old backups.'}
               </p>
             )}
           </div>
@@ -554,9 +599,11 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                               ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                               : backup.status === 'failed'
                               ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                              : backup.status === 'restoring'
+                              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
                               : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                           }`}>
-                            {isRestoring ? 'restoringâ€¦' : backup.status}
+                            {isRestoring || backup.status === 'restoring' ? 'restoring…' : backup.status}
                           </span>
 
                           {/* Encryption badge */}
@@ -564,6 +611,14 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 flex-shrink-0">
                               <Lock className="w-3 h-3" />
                               {backup.metadata.encryptionAlgorithm ?? 'Encrypted'}
+                            </span>
+                          )}
+
+                          {/* Empty-data warning badge */}
+                          {backup.metadata?.businessDocuments === 0 && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 flex-shrink-0">
+                              <AlertCircle className="w-3 h-3" />
+                              No business data
                             </span>
                           )}
 
@@ -582,11 +637,11 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                         {/* Row 2: metadata line */}
                         <div className="flex flex-wrap items-center gap-3 mt-1.5">
                           <span className="text-xs text-gray-500 dark:text-gray-400">{formatBytes(backup.fileSize)}</span>
-                          <span className="text-xs text-gray-400 dark:text-gray-500">Â·</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
                           <span className="text-xs text-gray-500 dark:text-gray-400">{formatDate(backup.createdAt)}</span>
                           {backup.metadata && (
                             <>
-                              <span className="text-xs text-gray-400 dark:text-gray-500">Â·</span>
+                              <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
                               <span className="text-xs text-gray-500 dark:text-gray-400">
                                 {backup.metadata.totalDocuments.toLocaleString()} docs
                               </span>
@@ -594,14 +649,14 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                           )}
                           {backup.metadata?.compression && (
                             <>
-                              <span className="text-xs text-gray-400 dark:text-gray-500">Â·</span>
+                              <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
                               <span className="text-xs text-gray-500 dark:text-gray-400">
                                 {backup.metadata.compression}
                                 {compressionRatio && ` (${compressionRatio})`}
                               </span>
                             </>
                           )}
-                          <span className="text-xs text-gray-400 dark:text-gray-500">Â·</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
                           <span className="text-xs text-gray-500 dark:text-gray-400">by {backup.createdBy}</span>
                         </div>
 
@@ -622,7 +677,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                         {isRestoring && (
                           <p className="mt-1.5 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
                             <RefreshCw className="w-3 h-3 animate-spin" />
-                            Restore in progress â€” polling for completionâ€¦
+                            Restore in progress — polling for completion…
                           </p>
                         )}
 
@@ -711,9 +766,10 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
             </label>
             <select
               value={backupFrequency}
-              onChange={e => setBackupFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
+              onChange={e => setBackupFrequency(e.target.value as 'hourly' | 'daily' | 'weekly' | 'monthly')}
               className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             >
+              <option value="hourly">Hourly</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
@@ -739,7 +795,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
             disabled={settingsSaving}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-60"
           >
-            {settingsSaving ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Savingâ€¦</> : 'Save Settings'}
+            {settingsSaving ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Saving…</> : 'Save Settings'}
           </button>
         </div>
       </div>
@@ -789,9 +845,10 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                 <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Frequency</label>
                 <select
                   value={scheduleForm.frequency}
-                  onChange={e => setScheduleForm(f => ({ ...f, frequency: e.target.value as 'daily' | 'weekly' | 'monthly' }))}
+                  onChange={e => setScheduleForm(f => ({ ...f, frequency: e.target.value as 'hourly' | 'daily' | 'weekly' | 'monthly' }))}
                   className="px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
+                  <option value="hourly">Hourly (~1h RPO)</option>
                   <option value="daily">Daily</option>
                   <option value="weekly">Weekly</option>
                   <option value="monthly">Monthly</option>
@@ -856,7 +913,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                 disabled={savingSchedule}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-60"
               >
-                {savingSchedule ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Savingâ€¦</> : (editingScheduleId ? 'Update Schedule' : 'Create Schedule')}
+                {savingSchedule ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Saving…</> : (editingScheduleId ? 'Update Schedule' : 'Create Schedule')}
               </button>
             </div>
           </div>
@@ -889,9 +946,9 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         {schedule.frequency} at {schedule.time}
                         {schedule.frequency === 'weekly' && schedule.dayOfWeek !== undefined &&
-                          ` Â· ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][schedule.dayOfWeek]}`}
+                          ` · ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][schedule.dayOfWeek]}`}
                         {schedule.frequency === 'monthly' && schedule.dayOfMonth !== undefined &&
-                          ` Â· day ${schedule.dayOfMonth}`}
+                          ` · day ${schedule.dayOfMonth}`}
                       </span>
                       <span className="text-xs text-gray-400 dark:text-gray-500">
                         Retention: {schedule.retentionDays}d

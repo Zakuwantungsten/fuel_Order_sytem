@@ -77,6 +77,15 @@ export const errorHandler = (
     isOperational = true;
   }
 
+  // Handle Mongoose "document vanished/changed under us" — happens when a record
+  // is deleted or replaced mid-request (e.g. a database restore swapping data, or
+  // a concurrent write). Surface a retryable 503 instead of a scary 500.
+  else if (err.name === 'DocumentNotFoundError' || err.name === 'VersionError') {
+    statusCode = 503;
+    message = 'The system is briefly busy (data is being updated). Please retry in a moment.';
+    isOperational = true;
+  }
+
   // Handle JWT errors
   else if (err.name === 'JsonWebTokenError') {
     statusCode = 401;

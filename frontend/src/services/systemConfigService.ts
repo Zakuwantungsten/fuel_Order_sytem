@@ -65,7 +65,7 @@ export interface SystemSettings {
     auditLogRetention: number;
     trashRetention: number;
     autoCleanupEnabled: boolean;
-    backupFrequency: 'daily' | 'weekly' | 'monthly';
+    backupFrequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
     backupRetention: number;
     collectionArchivalSettings?: {
       [collectionName: string]: {

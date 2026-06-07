@@ -153,7 +153,7 @@ export interface ISystemSettings {
     auditLogRetention: number; // months
     trashRetention: number; // days
     autoCleanupEnabled: boolean;
-    backupFrequency: 'daily' | 'weekly' | 'monthly';
+    backupFrequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
     backupRetention: number; // days
     // Per-collection archival settings
     collectionArchivalSettings?: {

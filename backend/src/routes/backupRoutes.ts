@@ -22,6 +22,13 @@ router.delete('/backups/:id', backupController.deleteBackup);              // LE
 router.delete('/backups/:id/permanent', backupController.permanentlyDeleteBackup); // LE-3: hard delete
 router.post('/backups/cleanup', backupController.cleanupBackups);
 
+// Disaster Recovery: list/restore directly from R2 (works on empty/new MongoDB)
+router.get('/r2-backups', backupController.listR2Backups);
+router.post('/restore-from-r2', backupController.restoreFromR2Key);
+router.post('/restore-to-new-db', backupController.restoreToNewDb);  // safe restore: into a new DB, live data untouched
+router.post('/sync-from-r2', backupController.syncBackupsFromR2);   // rebuild catalog from R2 after DB migration
+router.post('/dr-drill', backupController.runDrill);               // chaos drill: verify backups are restorable
+
 // Backup schedule routes
 router.get('/backup-schedules', backupController.getBackupSchedules);
 router.post('/backup-schedules', backupController.createBackupSchedule);

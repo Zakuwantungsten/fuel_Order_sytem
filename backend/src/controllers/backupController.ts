@@ -8,6 +8,106 @@ import { AuditLog } from '../models/AuditLog';
 import { config } from '../config';
 
 /**
+ * Disaster Recovery: list all backup files directly from R2.
+ * Works even when the MongoDB backup-metadata collection is empty (e.g. after
+ * migrating to a new database).
+ * GET /backup/r2-backups
+ */
+export const listR2Backups = async (req: AuthRequest, res: Response) => {
+  try {
+    const files = await backupService.listR2Backups();
+    res.json({ success: true, data: { backups: files, total: files.length } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to list R2 backups' });
+  }
+};
+
+/**
+ * Disaster Recovery: restore directly from an R2 key without a Backup model record.
+ * POST /backup/restore-from-r2  body: { r2Key: "backups/backup_xxx.json.gz" }
+ */
+export const restoreFromR2Key = async (req: AuthRequest, res: Response) => {
+  try {
+    const { r2Key } = req.body;
+    if (!r2Key || typeof r2Key !== 'string') {
+      res.status(400).json({ success: false, message: 'r2Key is required' });
+      return;
+    }
+    const userId = req.user?.username || 'system';
+    await backupService.restoreFromR2Key(r2Key, userId);
+    res.json({ success: true, message: `Database restored from ${r2Key}` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Restore failed' });
+  }
+};
+
+/**
+ * SAFE restore (blue/green-lite): restore a backup into a NEW database on the
+ * same cluster instead of overwriting live data. Live data is untouched.
+ * POST /backup/restore-to-new-db  body: { r2Key, newDbName? }
+ */
+export const restoreToNewDb = async (req: AuthRequest, res: Response) => {
+  try {
+    const { r2Key, newDbName } = req.body;
+    if (!r2Key || typeof r2Key !== 'string') {
+      res.status(400).json({ success: false, message: 'r2Key is required' });
+      return;
+    }
+    const userId = req.user?.username || 'system';
+    const result = await backupService.restoreToNewDb(r2Key, userId, newDbName);
+    res.json({
+      success: true,
+      message:
+        `Restored into new database "${result.dbName}" (${result.documents} docs, ${result.businessDocuments} business). ` +
+        `Live data was NOT touched. To go live: point MONGODB_URI at "${result.dbName}" and restart the backend.`,
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Safe restore failed' });
+  }
+};
+
+/**
+ * Disaster Recovery: rebuild the MongoDB backup catalog from the R2 manifest.
+ * Run this after migrating to a fresh/empty database so the Backup & Recovery
+ * UI shows the real backup history again.
+ * POST /backup/sync-from-r2
+ */
+export const syncBackupsFromR2 = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.username || 'system';
+    const result = await backupService.rebuildBackupCollectionFromR2(userId);
+    res.json({
+      success: true,
+      message: `Rebuilt backup catalog from R2 (${result.source}): ${result.restored} record(s)`,
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to sync from R2' });
+  }
+};
+
+/**
+ * Chaos engineering: run an on-demand disaster-recovery drill that restores the
+ * latest backup into an isolated scratch database and verifies it — without
+ * touching live data.
+ * POST /backup/dr-drill
+ */
+export const runDrill = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.username || 'system';
+    const report = await backupService.runDisasterRecoveryDrill(userId);
+    res.status(report.passed ? 200 : 500).json({
+      success: report.passed,
+      message: report.details,
+      data: report,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'DR drill failed' });
+  }
+};
+
+/**
  * Create a manual backup
  * POST /api/system-admin/backups
  */
@@ -37,13 +137,36 @@ export const createBackup = async (req: AuthRequest, res: Response) => {
  */
 export const getBackups = async (req: AuthRequest, res: Response) => {
   try {
-  const { status, type, page = 1, limit = 20 } = req.query;
+    const { status, type, page = 1, limit = 20 } = req.query;
 
-  const query: any = {};
-  if (status) query.status = status;
-  if (type) query.type = type;
+    const query: any = {};
+    if (status) query.status = status;
+    if (type) query.type = type;
 
-  const skip = (Number(page) - 1) * Number(limit);
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Auto-sync: on the first unfiltered page load, compare local MongoDB count
+    // against the R2 file count. If R2 has more backup files than local MongoDB
+    // has records, silently rebuild the catalog. This handles both the completely
+    // fresh local DB (0 records) and the partially-synced case (e.g. 1 local
+    // record vs 18 in R2). The rebuild is idempotent (upsert by r2Key).
+    const isFirstUnfilteredPage = Number(page) === 1 && !status && !type;
+    if (isFirstUnfilteredPage && r2Service.isEnabled()) {
+      try {
+        const [localCount, r2Files] = await Promise.all([
+          Backup.countDocuments({ status: { $ne: 'deleted' } }),
+          r2Service.listBackups('backups/'),
+        ]);
+        const r2Count = r2Files.filter((f: any) => f.key?.endsWith('.json.gz')).length;
+        if (r2Count > localCount) {
+          const userId = (req as AuthRequest).user?.username || 'system';
+          await backupService.rebuildBackupCollectionFromR2(userId);
+        }
+      } catch (err: any) {
+        // Non-fatal — if R2 is unreachable just return whatever is in local DB.
+        console.warn('[BACKUP] Auto-sync from R2 failed (non-fatal):', err?.message);
+      }
+    }
 
     const [backups, total] = await Promise.all([
       Backup.find(query)
@@ -221,6 +344,9 @@ export const deleteBackup = async (req: AuthRequest, res: Response): Promise<voi
         details: JSON.stringify({ backupId: backup.id, fileName: backup.fileName, softDelete: true }),
       });
 
+      // Keep the R2 catalog in sync with the new status
+      await backupService.writeManifestSafe();
+
       res.json({
         success: true,
         message: 'Backup moved to trash. It will be permanently deleted after 7 days.',
@@ -330,6 +456,8 @@ export const undeleteBackup = async (req: AuthRequest, res: Response): Promise<v
       details: JSON.stringify({ action: 'undelete', fileName: backup.fileName }),
     });
 
+    await backupService.writeManifestSafe();
+
     res.json({ success: true, message: 'Backup restored from trash', data: backup });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to restore backup from trash' });
@@ -352,10 +480,11 @@ export const permanentlyDeleteBackup = async (req: AuthRequest, res: Response): 
       return;
     }
 
-    // Delete from R2
+    // Delete from R2 (primary + secondary)
     if (backup.r2Key) {
       try {
         await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
+        await r2Service.deleteFromSecondary(backup.r2Key);
       } catch (r2Err) {
         console.error('[BACKUP] Failed to delete from R2 during permanent delete:', r2Err);
       }
@@ -370,6 +499,8 @@ export const permanentlyDeleteBackup = async (req: AuthRequest, res: Response): 
       resourceId: backup.id,
       details: JSON.stringify({ action: 'permanent_delete', fileName: backup.fileName }),
     });
+
+    await backupService.writeManifestSafe();
 
     res.json({ success: true, message: 'Backup permanently deleted' });
   } catch (error: any) {

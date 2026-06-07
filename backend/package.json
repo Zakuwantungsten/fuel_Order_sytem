@@ -32,7 +32,17 @@
     "db:clear": "ts-node src/scripts/clearDatabase.ts",
     "db:clear:force": "ts-node src/scripts/clearDatabase.ts --force",
     "import:excel": "ts-node --transpile-only src/scripts/importExcelData.ts",
-    "import:excel:dry": "ts-node --transpile-only src/scripts/importExcelData.ts --dry-run"
+    "import:excel:dry": "ts-node --transpile-only src/scripts/importExcelData.ts --dry-run",
+    "dr:list": "ts-node --transpile-only src/scripts/restoreFromR2.ts --list",
+    "dr:restore": "ts-node --transpile-only src/scripts/restoreFromR2.ts",
+    "dr:restore:local": "ts-node --transpile-only src/scripts/restoreFromR2.ts --latest --target-uri mongodb://localhost:27017/fuel-order",
+    "dr:dry-run": "ts-node --transpile-only src/scripts/restoreFromR2.ts --latest --dry-run",
+    "dr:drill": "ts-node --transpile-only src/scripts/drDrill.ts",
+    "dr:sync": "ts-node --transpile-only src/scripts/syncBackupCatalog.ts",
+    "dr:manifest": "ts-node --transpile-only src/scripts/writeManifest.ts",
+    "dr:delete": "ts-node --transpile-only src/scripts/deleteR2Backup.ts",
+    "dr:restore-new": "ts-node --transpile-only src/scripts/restoreToNewDb.ts",
+    "dr:drop-db": "ts-node --transpile-only src/scripts/dropDatabase.ts"
   },
   "keywords": [
     "fuel",

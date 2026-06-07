@@ -9,8 +9,8 @@ export interface IRetentionPolicy {
 export interface IBackupSchedule extends Document {
   name: string;
   enabled: boolean;
-  frequency: 'daily' | 'weekly' | 'monthly';
-  time: string; // HH:mm format
+  frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  time: string; // HH:mm format (for hourly, only the mm is used)
   dayOfWeek?: number; // 0-6 for weekly (0 = Sunday)
   dayOfMonth?: number; // 1-31 for monthly
   retentionDays: number;
@@ -34,7 +34,7 @@ const BackupScheduleSchema: Schema = new Schema(
     },
     frequency: {
       type: String,
-      enum: ['daily', 'weekly', 'monthly'],
+      enum: ['hourly', 'daily', 'weekly', 'monthly'],
       required: true,
     },
     time: {
