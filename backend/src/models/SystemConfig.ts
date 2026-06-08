@@ -247,6 +247,9 @@ export interface ISystemConfig {
   truckBatches?: {
     [extraLiters: string]: ITruckBatch[];  // Dynamic keys for any liter amount
   };
+  batchDestinationRules?: {
+    [extraLiters: string]: IDestinationFuelRule[];  // Batch-level destination overrides
+  };
   standardAllocations?: IStandardAllocations;
   journeyConfig?: IJourneyConfig;
   yardFuelTimeLimit?: IYardFuelTimeLimitConfig;
@@ -334,6 +337,10 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     routes: [routeConfigSchema],
     truckBatches: {
       type: Schema.Types.Mixed,  // Allow dynamic keys
+      default: {},
+    },
+    batchDestinationRules: {
+      type: Schema.Types.Mixed,  // Allow dynamic keys: { "120": [{destination, extraLiters}] }
       default: {},
     },
     standardAllocations: standardAllocationsSchema,

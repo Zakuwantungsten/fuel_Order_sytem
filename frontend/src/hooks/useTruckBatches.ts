@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminAPI, TruckBatches } from '../services/api';
+import { adminAPI, TruckBatches, BatchDestinationRule } from '../services/api';
 
 // Query keys for cache management
 export const truckBatchKeys = {
@@ -20,15 +20,15 @@ export function useTruckBatches() {
   return useQuery({
     queryKey: truckBatchKeys.all,
     queryFn: async () => {
-      const batches = await adminAPI.getTruckBatches();
-      const batchSummary = Object.entries(batches).reduce((acc, [key, trucks]) => {
+      const config = await adminAPI.getTruckBatches();
+      const batchSummary = Object.entries(config.truckBatches).reduce((acc, [key, trucks]) => {
         acc[key] = Array.isArray(trucks) ? trucks.length : 0;
         return acc;
       }, {} as Record<string, number>);
       console.log('✓ Fetched truck batches from API:', batchSummary);
-      return batches;
+      return config;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -195,13 +195,70 @@ export function useDeleteDestinationRule() {
 }
 
 /**
- * Helper function to get extra fuel from batches data (now supports dynamic batches)
- * This replaces FuelConfigService.getExtraFuel() but accepts data as parameter
+ * Add batch-level destination rule
+ */
+export function useAddBatchDestinationRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { extraLiters: number; destination: string; extraLitersOverride: number }) => {
+      return adminAPI.addBatchDestinationRule(data);
+    },
+    onSuccess: (_, variables) => {
+      console.log(`✓ Batch destination rule added: ${variables.extraLiters}L → ${variables.destination} = ${variables.extraLitersOverride}L`);
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to add batch destination rule:', error);
+    },
+  });
+}
+
+/**
+ * Update batch-level destination rule
+ */
+export function useUpdateBatchDestinationRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { extraLiters: number; oldDestination: string; newDestination?: string; extraLitersOverride: number }) => {
+      return adminAPI.updateBatchDestinationRule(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to update batch destination rule:', error);
+    },
+  });
+}
+
+/**
+ * Delete batch-level destination rule
+ */
+export function useDeleteBatchDestinationRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { extraLiters: number; destination: string }) => {
+      return adminAPI.deleteBatchDestinationRule(data.extraLiters, data.destination);
+    },
+    onSuccess: (_data, variables) => {
+      console.log(`✓ Batch destination rule deleted: ${variables.extraLiters}L → ${variables.destination}`);
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to delete batch destination rule:', error);
+    },
+  });
+}
+
+/**
+ * Helper function to get extra fuel from batches data.
+ * Priority: truck-level rule → batch-level rule → batch default.
  */
 export function getExtraFuelFromBatches(
   truckNo: string,
   batches: TruckBatches | undefined,
-  destination?: string
+  destination?: string,
+  batchDestinationRules?: { [extraLiters: string]: BatchDestinationRule[] }
 ): {
   extraFuel: number;
   matched: boolean;
@@ -219,32 +276,51 @@ export function getExtraFuelFromBatches(
     return { extraFuel: 0, matched: false, truckSuffix: '' };
   }
 
-  // Search dynamically across all batches
   for (const [extraLitersStr, trucks] of Object.entries(batches)) {
     if (!Array.isArray(trucks)) continue;
-    
+
     const truck = trucks.find(t => t.truckSuffix === truckSuffix);
     if (truck) {
-      // Check destination rules if destination provided
-      if (destination && truck.destinationRules && truck.destinationRules.length > 0) {
+      if (destination) {
         const normalizedDest = destination.toLowerCase().trim();
-        const matchingRule = truck.destinationRules.find((rule: any) => {
-          const ruleDestination = rule.destination.toLowerCase().trim();
-          return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
-        });
 
-        if (matchingRule) {
-          return {
-            extraFuel: matchingRule.extraLiters,
-            matched: true,
-            batchName: `batch_${extraLitersStr}`,
-            truckSuffix,
-            destinationOverride: true,
-          };
+        // 1. Truck-level destination rules (highest priority)
+        if (truck.destinationRules && truck.destinationRules.length > 0) {
+          const matchingRule = truck.destinationRules.find((rule: any) => {
+            const ruleDestination = rule.destination.toLowerCase().trim();
+            return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+          });
+          if (matchingRule) {
+            return {
+              extraFuel: matchingRule.extraLiters,
+              matched: true,
+              batchName: `batch_${extraLitersStr}`,
+              truckSuffix,
+              destinationOverride: true,
+            };
+          }
+        }
+
+        // 2. Batch-level destination rules (middle priority)
+        const batchRules = batchDestinationRules?.[extraLitersStr];
+        if (batchRules && batchRules.length > 0) {
+          const matchingBatchRule = batchRules.find((rule) => {
+            const ruleDestination = rule.destination.toLowerCase().trim();
+            return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+          });
+          if (matchingBatchRule) {
+            return {
+              extraFuel: matchingBatchRule.extraLiters,
+              matched: true,
+              batchName: `batch_${extraLitersStr}`,
+              truckSuffix,
+              destinationOverride: true,
+            };
+          }
         }
       }
 
-      // Return batch default
+      // 3. Batch default
       return {
         extraFuel: parseInt(extraLitersStr),
         matched: true,
@@ -254,6 +330,5 @@ export function getExtraFuelFromBatches(
     }
   }
 
-  // Not found in any batch
   return { extraFuel: 0, matched: false, truckSuffix };
 }

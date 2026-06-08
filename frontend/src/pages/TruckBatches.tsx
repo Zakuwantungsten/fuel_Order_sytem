@@ -11,6 +11,8 @@ import {
   useCreateBatch,
   useUpdateBatch,
   useDeleteBatch,
+  useAddBatchDestinationRule,
+  useDeleteBatchDestinationRule,
   truckBatchKeys,
 } from '../hooks/useTruckBatches';
 import { useQueryClient } from '@tanstack/react-query';
@@ -29,7 +31,9 @@ interface TruckBatchesProps {
 
 export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckBatchesProps) {
   // Use React Query hooks
-  const { data: batches, isLoading: loading } = useTruckBatches();
+  const { data: batchConfig, isLoading: loading } = useTruckBatches();
+  const batches = batchConfig?.truckBatches;
+  const batchDestinationRules = batchConfig?.batchDestinationRules ?? {};
   const queryClient = useQueryClient();
   const addTruckMutation = useAddTruckBatch();
   const removeTruckMutation = useRemoveTruckBatch();
@@ -38,6 +42,8 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
   const createBatchMutation = useCreateBatch();
   const updateBatchMutation = useUpdateBatch();
   const deleteBatchMutation = useDeleteBatch();
+  const addBatchRuleMutation = useAddBatchDestinationRule();
+  const deleteBatchRuleMutation = useDeleteBatchDestinationRule();
 
   // Real-time sync: refresh when other users modify truck batches
   const invalidateBatches = useCallback(() => {
@@ -63,10 +69,16 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
     onSuffixConsumed?.();
   }, [initialSuffix]);
 
-  // Destination rules modal state
+  // Truck-level destination rules modal state
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [selectedTruck, setSelectedTruck] = useState<{ suffix: string; batch: number; rules: DestinationRule[] } | null>(null);
   const [newRule, setNewRule] = useState({ destination: '', extraLiters: 0 });
+
+  // Batch-level destination rules modal state
+  const [showBatchRulesModal, setShowBatchRulesModal] = useState(false);
+  const [selectedBatchForRules, setSelectedBatchForRules] = useState<{ extraLiters: number; rules: DestinationRule[] } | null>(null);
+  const [newBatchRule, setNewBatchRule] = useState({ destination: '', extraLiters: 0 });
+  const [deleteBatchRuleTarget, setDeleteBatchRuleTarget] = useState<string | null>(null);
 
   // Confirmation modal state
   const [moveTarget, setMoveTarget] = useState<{ suffix: string; newBatch: number } | null>(null);
@@ -80,6 +92,11 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
 
     if (!suffix) {
       toast.error('Please enter a truck suffix (e.g., DNH, EAG)');
+      return;
+    }
+
+    if (!/^[a-z0-9]+$/i.test(suffix)) {
+      toast.error('Suffix must contain only letters and numbers (e.g., DNH, EAG, ABC123)');
       return;
     }
 
@@ -151,7 +168,54 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
     const rules = typeof truck === 'string' ? [] : (truck.destinationRules || []);
     setSelectedTruck({ suffix, batch, rules });
     setShowRulesModal(true);
-    setNewRule({ destination: '', extraLiters: batch }); // Default to batch size
+    setNewRule({ destination: '', extraLiters: batch });
+  };
+
+  const handleManageBatchRules = (batchSize: number) => {
+    const rules = (batchDestinationRules[batchSize.toString()] ?? []) as DestinationRule[];
+    setSelectedBatchForRules({ extraLiters: batchSize, rules: [...rules] });
+    setShowBatchRulesModal(true);
+    setNewBatchRule({ destination: '', extraLiters: batchSize });
+  };
+
+  const handleAddBatchRule = async () => {
+    if (!selectedBatchForRules || !newBatchRule.destination.trim()) {
+      toast.error('Please enter a destination');
+      return;
+    }
+    try {
+      await addBatchRuleMutation.mutateAsync({
+        extraLiters: selectedBatchForRules.extraLiters,
+        destination: newBatchRule.destination.trim(),
+        extraLitersOverride: newBatchRule.extraLiters,
+      });
+      setSelectedBatchForRules({
+        ...selectedBatchForRules,
+        rules: [...selectedBatchForRules.rules, { destination: newBatchRule.destination.trim(), extraLiters: newBatchRule.extraLiters }],
+      });
+      setNewBatchRule({ destination: '', extraLiters: selectedBatchForRules.extraLiters });
+    } catch (error: any) {
+      toast.error(`Failed to add rule: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const confirmDeleteBatchRule = async () => {
+    if (!selectedBatchForRules || !deleteBatchRuleTarget) return;
+    const destination = deleteBatchRuleTarget;
+    try {
+      await deleteBatchRuleMutation.mutateAsync({
+        extraLiters: selectedBatchForRules.extraLiters,
+        destination,
+      });
+      setSelectedBatchForRules({
+        ...selectedBatchForRules,
+        rules: selectedBatchForRules.rules.filter(r => r.destination !== destination),
+      });
+    } catch (error: any) {
+      toast.error(`Failed to delete rule: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setDeleteBatchRuleTarget(null);
+    }
   };
 
   const handleCreateBatch = async () => {
@@ -344,6 +408,20 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => handleManageBatchRules(batchSize)}
+              className={`${labelButtonBase} border-gray-300 dark:border-gray-600 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-300 dark:hover:border-purple-700 focus-visible:ring-purple-500`}
+              aria-label={`Manage batch rules for ${batchSize}L`}
+              title="Manage batch destination rules"
+            >
+              <MapPin className="w-4 h-4" />
+              Batch Rules
+              {(batchDestinationRules[batchSize.toString()] ?? []).length > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center w-4 h-4 text-xs font-bold bg-purple-600 text-white rounded-full">
+                  {(batchDestinationRules[batchSize.toString()] ?? []).length}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => {
                 setEditingBatch({ extraLiters: batchSize, trucks });
                 setNewBatchLiters(batchSize);
@@ -407,19 +485,25 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
                         <MapPin className="w-3 h-3" />
                         Rules
                       </button>
-                      {batchList.slice(0, 3).map((batch) => {
-                        if (batch.extraLiters === batchSize) return null;
-                        return (
-                          <button
-                            key={batch.extraLiters}
-                            onClick={() => setMoveTarget({ suffix, newBatch: batch.extraLiters })}
-                            className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600/60 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
-                            title={`Move to ${batch.extraLiters}L batch`}
-                          >
-                            → {batch.extraLiters}L
-                          </button>
-                        );
-                      })}
+                      {batchList.filter(b => b.extraLiters !== batchSize).length > 0 && (
+                        <select
+                          defaultValue=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              setMoveTarget({ suffix, newBatch: parseInt(e.target.value) });
+                              e.target.value = '';
+                            }
+                          }}
+                          className="px-1.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600/60 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 cursor-pointer"
+                          title="Move to batch"
+                          aria-label={`Move truck ${suffix.toUpperCase()} to another batch`}
+                        >
+                          <option value="" disabled>→ Move</option>
+                          {batchList.filter(b => b.extraLiters !== batchSize).map(b => (
+                            <option key={b.extraLiters} value={b.extraLiters}>{b.extraLiters}L</option>
+                          ))}
+                        </select>
+                      )}
                       <button
                         onClick={() => setDeleteTruckTarget(suffix)}
                         className={deleteButtonClass}
@@ -439,7 +523,7 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
     );
   };
 
-  if (loading || !batches) {
+  if (loading || !batchConfig) {
     return (
       <UnifiedTabLoader label="Loading truck batches..." heightClassName="h-96" />
     );
@@ -661,6 +745,120 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
               <p className="text-xs text-gray-600 dark:text-gray-400">
                 💡 <strong>Tip:</strong> Destination matching is case-insensitive and uses partial matching.
                 For example, a rule for "LUBUMBASHI" will match "lubumbashi", "LUBUMBASHI YARD", etc.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch-Level Destination Rules Modal */}
+      {showBatchRulesModal && selectedBatchForRules && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Batch Rules — {selectedBatchForRules.extraLiters}L
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Applies to all trucks in this batch unless a truck has its own rule
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowBatchRulesModal(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Add Destination Rule</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination</label>
+                    <input
+                      type="text"
+                      value={newBatchRule.destination}
+                      onChange={(e) => setNewBatchRule({ ...newBatchRule, destination: e.target.value })}
+                      placeholder="e.g., LUBUMBASHI"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-gray-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Extra Liters</label>
+                    <input
+                      type="number"
+                      value={newBatchRule.extraLiters}
+                      onChange={(e) => setNewBatchRule({ ...newBatchRule, extraLiters: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-gray-100"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleAddBatchRule}
+                  disabled={addBatchRuleMutation.isPending}
+                  className="mt-3 w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {addBatchRuleMutation.isPending ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                  {addBatchRuleMutation.isPending ? 'Adding...' : 'Add Rule'}
+                </button>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                  Current Rules ({selectedBatchForRules.rules.length})
+                </h3>
+                {selectedBatchForRules.rules.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <MapPin className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No batch destination rules configured</p>
+                    <p className="text-sm mt-1">All trucks default to {selectedBatchForRules.extraLiters}L unless they have their own rule</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedBatchForRules.rules.map((rule, index) => (
+                      <div
+                        key={index}
+                        className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <MapPin className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                          <div>
+                            <div className="font-medium text-gray-900 dark:text-gray-100">{rule.destination}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">{rule.extraLiters}L extra fuel</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setDeleteBatchRuleTarget(rule.destination)}
+                          disabled={deleteBatchRuleMutation.isPending}
+                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 rounded-lg transition-colors"
+                          title="Delete rule"
+                        >
+                          {deleteBatchRuleMutation.isPending ? (
+                            <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                💡 <strong>Priority:</strong> Truck-level rules override batch rules. Batch rules override the default {selectedBatchForRules.extraLiters}L.
+                Matching is case-insensitive and partial (e.g. "LUBUMBASHI" matches "lubumbashi yard").
               </p>
             </div>
           </div>
@@ -944,6 +1142,16 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
         loading={updateBatchMutation.isPending}
         onConfirm={confirmUpdateBatchAction}
         onCancel={() => setConfirmUpdateBatch(false)}
+      />
+      <ConfirmModal
+        open={deleteBatchRuleTarget !== null}
+        title="Remove Batch Rule"
+        message={deleteBatchRuleTarget ? `Remove the batch-level rule for "${deleteBatchRuleTarget}"?` : ''}
+        confirmLabel="Remove"
+        variant="danger"
+        loading={deleteBatchRuleMutation.isPending}
+        onConfirm={confirmDeleteBatchRule}
+        onCancel={() => setDeleteBatchRuleTarget(null)}
       />
     </div>
   );

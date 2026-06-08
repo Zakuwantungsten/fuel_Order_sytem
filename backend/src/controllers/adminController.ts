@@ -517,7 +517,10 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
     res.status(200).json({
       success: true,
       message: 'Truck batches retrieved successfully',
-      data: config.truckBatches,
+      data: {
+        truckBatches: config.truckBatches || {},
+        batchDestinationRules: config.batchDestinationRules || {},
+      },
     });
   } catch (error: any) {
     throw error;
@@ -609,7 +612,7 @@ export const addTruckToBatch = async (req: AuthRequest, res: Response): Promise<
     res.status(201).json({
       success: true,
       message: `Truck added to ${extraLiters}L batch successfully`,
-      data: config.truckBatches,
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules || {} },
     });
     emitDataChange('truck_batches', 'update');
   } catch (error: any) {
@@ -674,7 +677,7 @@ export const removeTruckFromBatch = async (req: AuthRequest, res: Response): Pro
     res.status(200).json({
       success: true,
       message: 'Truck removed from batch successfully',
-      data: config.truckBatches,
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules || {} },
     });
     emitDataChange('truck_batches', 'update');
   } catch (error: any) {
@@ -813,7 +816,7 @@ export const updateDestinationRule = async (req: AuthRequest, res: Response): Pr
     res.status(200).json({
       success: true,
       message: 'Destination rule updated successfully',
-      data: config.truckBatches,
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules || {} },
     });
     emitDataChange('truck_batches', 'update');
   } catch (error: any) {
@@ -882,7 +885,7 @@ export const deleteDestinationRule = async (req: AuthRequest, res: Response): Pr
     res.status(200).json({
       success: true,
       message: 'Destination rule deleted successfully',
-      data: config.truckBatches,
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules || {} },
     });
     emitDataChange('truck_batches', 'update');
   } catch (error: any) {
@@ -925,7 +928,10 @@ export const createBatch = async (req: AuthRequest, res: Response): Promise<void
     }
 
     config.truckBatches[batchKey] = [];
+    if (!config.batchDestinationRules) config.batchDestinationRules = {};
+    config.batchDestinationRules[batchKey] = [];
     config.markModified('truckBatches');
+    config.markModified('batchDestinationRules');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
 
@@ -948,7 +954,7 @@ export const createBatch = async (req: AuthRequest, res: Response): Promise<void
     res.status(201).json({
       success: true,
       message: `Batch ${extraLiters}L created successfully`,
-      data: config.truckBatches,
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules || {} },
     });
     emitDataChange('truck_batches', 'create');
   } catch (error: any) {
@@ -999,7 +1005,13 @@ export const updateBatch = async (req: AuthRequest, res: Response): Promise<void
     config.truckBatches[newKey] = trucks;
     delete config.truckBatches[oldKey];
 
+    // Migrate batch-level destination rules to the new key
+    if (!config.batchDestinationRules) config.batchDestinationRules = {};
+    config.batchDestinationRules[newKey] = config.batchDestinationRules[oldKey] || [];
+    delete config.batchDestinationRules[oldKey];
+
     config.markModified('truckBatches');
+    config.markModified('batchDestinationRules');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
 
@@ -1022,7 +1034,7 @@ export const updateBatch = async (req: AuthRequest, res: Response): Promise<void
     res.status(200).json({
       success: true,
       message: `Batch updated from ${oldExtraLiters}L to ${newExtraLiters}L successfully`,
-      data: config.truckBatches,
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules || {} },
     });
     emitDataChange('truck_batches', 'update');
   } catch (error: any) {
@@ -1061,6 +1073,10 @@ export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void
     }
 
     delete config.truckBatches[batchKey];
+    if (config.batchDestinationRules) {
+      delete config.batchDestinationRules[batchKey];
+      config.markModified('batchDestinationRules');
+    }
     config.markModified('truckBatches');
     config.lastUpdatedBy = req.user?.username || 'system';
     await config.save();
@@ -1084,9 +1100,172 @@ export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void
     res.status(200).json({
       success: true,
       message: `Batch ${extraLiters}L deleted successfully`,
-      data: config.truckBatches,
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules || {} },
     });
     emitDataChange('truck_batches', 'delete');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Add a destination rule at the batch level (applies to all trucks in the batch)
+ */
+export const addBatchDestinationRule = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { extraLiters, destination, extraLitersOverride } = req.body;
+
+    if (!destination || extraLitersOverride === undefined) {
+      throw new ApiError(400, 'Missing required fields: destination, extraLitersOverride');
+    }
+
+    let config = await SystemConfig.findOne({ configType: 'truck_batches', isDeleted: false });
+    if (!config || !config.truckBatches) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const batchKey = extraLiters.toString();
+    if (!config.truckBatches[batchKey]) {
+      throw new ApiError(404, `Batch ${extraLiters}L not found`);
+    }
+
+    if (!config.batchDestinationRules) config.batchDestinationRules = {};
+    if (!config.batchDestinationRules[batchKey]) config.batchDestinationRules[batchKey] = [];
+
+    const existing = config.batchDestinationRules[batchKey].find((r: any) => r.destination === destination);
+    if (existing) {
+      throw new ApiError(400, `Rule for destination "${destination}" already exists on this batch`);
+    }
+
+    config.batchDestinationRules[batchKey].push({ destination, extraLiters: extraLitersOverride });
+    config.markModified('batchDestinationRules');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Batch destination rule added: ${extraLiters}L batch, ${destination} -> ${extraLitersOverride}L by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'TruckBatch',
+      resourceId: batchKey,
+      details: `Batch destination rule added: ${extraLiters}L batch, "${destination}" -> ${extraLitersOverride}L by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
+
+    setCacheBustingHeaders(res);
+    res.status(200).json({
+      success: true,
+      message: 'Batch destination rule added successfully',
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules },
+    });
+    emitDataChange('truck_batches', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Update a batch-level destination rule
+ */
+export const updateBatchDestinationRule = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { extraLiters, oldDestination, newDestination, extraLitersOverride } = req.body;
+
+    if (!oldDestination || extraLitersOverride === undefined) {
+      throw new ApiError(400, 'Missing required fields: oldDestination, extraLitersOverride');
+    }
+
+    let config = await SystemConfig.findOne({ configType: 'truck_batches', isDeleted: false });
+    if (!config || !config.batchDestinationRules) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const batchKey = extraLiters.toString();
+    const rules = config.batchDestinationRules[batchKey];
+    if (!rules) throw new ApiError(404, `No batch rules for ${extraLiters}L batch`);
+
+    const ruleIndex = rules.findIndex((r: any) => r.destination === oldDestination);
+    if (ruleIndex === -1) throw new ApiError(404, `Rule for "${oldDestination}" not found`);
+
+    rules[ruleIndex] = { destination: newDestination || oldDestination, extraLiters: extraLitersOverride };
+    config.markModified('batchDestinationRules');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Batch destination rule updated: ${extraLiters}L batch, "${oldDestination}" -> "${newDestination || oldDestination}" ${extraLitersOverride}L by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'TruckBatch',
+      resourceId: batchKey,
+      details: `Batch destination rule updated: ${extraLiters}L batch, "${oldDestination}" -> "${newDestination || oldDestination}" (${extraLitersOverride}L) by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
+
+    setCacheBustingHeaders(res);
+    res.status(200).json({
+      success: true,
+      message: 'Batch destination rule updated successfully',
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules },
+    });
+    emitDataChange('truck_batches', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Delete a batch-level destination rule
+ */
+export const deleteBatchDestinationRule = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { extraLiters, destination } = req.params;
+
+    let config = await SystemConfig.findOne({ configType: 'truck_batches', isDeleted: false });
+    if (!config || !config.batchDestinationRules) {
+      throw new ApiError(404, 'Truck batches configuration not found');
+    }
+
+    const batchKey = extraLiters;
+    const rules = config.batchDestinationRules[batchKey];
+    if (!rules) throw new ApiError(404, `No batch rules for ${extraLiters}L batch`);
+
+    const originalLength = rules.length;
+    config.batchDestinationRules[batchKey] = rules.filter((r: any) => r.destination !== destination);
+    if (config.batchDestinationRules[batchKey].length === originalLength) {
+      throw new ApiError(404, `Rule for "${destination}" not found`);
+    }
+
+    config.markModified('batchDestinationRules');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    logger.info(`Batch destination rule deleted: ${extraLiters}L batch, "${destination}" by ${req.user?.username}`);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'TruckBatch',
+      resourceId: batchKey,
+      details: `Batch destination rule deleted: ${extraLiters}L batch, "${destination}" by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    });
+
+    setCacheBustingHeaders(res);
+    res.status(200).json({
+      success: true,
+      message: 'Batch destination rule deleted successfully',
+      data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules },
+    });
+    emitDataChange('truck_batches', 'update');
   } catch (error: any) {
     throw error;
   }

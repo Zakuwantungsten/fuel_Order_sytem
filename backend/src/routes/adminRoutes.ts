@@ -182,6 +182,42 @@ router.delete(
 );
 
 // =====================
+// Batch-Level Destination Rules
+// =====================
+router.post(
+  '/truck-batches/batch-destination-rules',
+  [
+    body('extraLiters').isNumeric().withMessage('extraLiters is required'),
+    body('destination').notEmpty().withMessage('Destination is required'),
+    body('extraLitersOverride').isNumeric().withMessage('extraLitersOverride must be a number'),
+  ],
+  validate,
+  asyncHandler(adminController.addBatchDestinationRule)
+);
+
+router.put(
+  '/truck-batches/batch-destination-rules',
+  [
+    body('extraLiters').isNumeric().withMessage('extraLiters is required'),
+    body('oldDestination').notEmpty().withMessage('oldDestination is required'),
+    body('newDestination').optional().isString(),
+    body('extraLitersOverride').isNumeric().withMessage('extraLitersOverride must be a number'),
+  ],
+  validate,
+  asyncHandler(adminController.updateBatchDestinationRule)
+);
+
+router.delete(
+  '/truck-batches/batch-destination-rules/:extraLiters/:destination',
+  [
+    param('extraLiters').isNumeric().withMessage('extraLiters is required'),
+    param('destination').notEmpty().withMessage('Destination is required'),
+  ],
+  validate,
+  asyncHandler(adminController.deleteBatchDestinationRule)
+);
+
+// =====================
 // Standard Allocations
 // =====================
 router.get('/standard-allocations', asyncHandler(adminController.getStandardAllocations));

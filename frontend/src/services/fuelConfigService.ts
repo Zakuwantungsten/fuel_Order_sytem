@@ -277,16 +277,16 @@ export class FuelConfigService {
    */
   static async syncTruckBatchesFromBackend(): Promise<void> {
     try {
-      const backendBatches = await adminAPI.getTruckBatches();
-      
-      // Transform backend format (objects) to frontend format (strings)
+      const batchConfig = await adminAPI.getTruckBatches();
+      // Build a legacy-compatible shape: { batch_<N>: [suffix, ...] }
       const config = this.loadConfig();
-      config.truckBatches = {
-        batch_100: backendBatches.batch_100.map(t => t.truckSuffix),
-        batch_80: backendBatches.batch_80.map(t => t.truckSuffix),
-        batch_60: backendBatches.batch_60.map(t => t.truckSuffix),
-      };
-      
+      const legacyBatches: Record<string, string[]> = {};
+      Object.entries(batchConfig.truckBatches).forEach(([liters, trucks]) => {
+        if (Array.isArray(trucks)) {
+          legacyBatches[`batch_${liters}`] = trucks.map((t: any) => t.truckSuffix);
+        }
+      });
+      config.truckBatches = legacyBatches as any;
       this.saveConfig(config);
       console.log('✓ Truck batches synced from backend');
     } catch (error) {

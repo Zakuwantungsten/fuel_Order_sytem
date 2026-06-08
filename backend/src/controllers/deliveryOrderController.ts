@@ -854,7 +854,7 @@ type UnlinkedExportNotif = {
 };
 
 /** Load active routes + truck-batch config once. Shared by single + bulk paths. */
-const loadFuelConfig = async (): Promise<{ routes: RouteLike[]; truckBatches: Record<string, any> }> => {
+const loadFuelConfig = async (): Promise<{ routes: RouteLike[]; truckBatches: Record<string, any>; batchDestinationRules: Record<string, any> }> => {
   const { SystemConfig } = await import('../models/SystemConfig');
   const [routeDocs, batchConfig] = await Promise.all([
     RouteConfig.find({ isActive: true }).lean(),
@@ -863,6 +863,7 @@ const loadFuelConfig = async (): Promise<{ routes: RouteLike[]; truckBatches: Re
   return {
     routes: routeDocs as unknown as RouteLike[],
     truckBatches: (batchConfig?.truckBatches as Record<string, any>) || {},
+    batchDestinationRules: (batchConfig?.batchDestinationRules as Record<string, any>) || {},
   };
 };
 
@@ -879,6 +880,7 @@ const applyImportFuelRecords = async (
   routes: RouteLike[],
   truckBatches: Record<string, any>,
   username: string,
+  batchDestinationRules: Record<string, any> = {},
 ): Promise<{ queuedCount: number; lockedNotifs: LockedFuelNotif[] }> => {
   let queuedCount = 0;
   const lockedNotifs: LockedFuelNotif[] = [];
@@ -909,7 +911,7 @@ const applyImportFuelRecords = async (
     const routeMatch = matchRouteLiters(routes, order.destination);
     const totalLiters = routeMatch.matched ? routeMatch.liters : null;
 
-    const batchMatch = matchExtraFuel(order.truckNo, truckBatches, order.destination);
+    const batchMatch = matchExtraFuel(order.truckNo, truckBatches, order.destination, batchDestinationRules);
     // Mirror the client: unmatched batch → null extra → record is locked
     const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
 
@@ -1075,8 +1077,8 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       try {
         if (order.importOrExport === 'IMPORT') {
           if (fuelFlags.doImportCreate) {
-            const { routes, truckBatches } = await loadFuelConfig();
-            const { lockedNotifs } = await applyImportFuelRecords([order], routes, truckBatches, username);
+            const { routes, truckBatches, batchDestinationRules: bdr } = await loadFuelConfig();
+            const { lockedNotifs } = await applyImportFuelRecords([order], routes, truckBatches, username, bdr);
             if (lockedNotifs.length > 0) {
               const { createMissingConfigNotification } = await import('./notificationController');
               for (const n of lockedNotifs) {
@@ -1273,6 +1275,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
 
   let routes: RouteLike[] = [];
   let truckBatches: Record<string, any> = {};
+  let batchDestinationRules: Record<string, any> = {};
   if ((importDOs.length > 0 && fuelFlags.doImportCreate) || (exportDOs.length > 0 && fuelFlags.doExportUpdate)) {
     const { SystemConfig } = await import('../models/SystemConfig');
     const [routeDocs, batchConfig] = await Promise.all([
@@ -1281,6 +1284,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
     ]);
     routes = routeDocs as unknown as RouteLike[];
     truckBatches = (batchConfig?.truckBatches as Record<string, any>) || {};
+    batchDestinationRules = (batchConfig?.batchDestinationRules as Record<string, any>) || {};
   }
 
   let queuedCount = 0;
@@ -1289,7 +1293,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
 
   // ── 5. IMPORT: build + insert going-journey fuel records (shared helper) ────
   if (importDOs.length > 0 && fuelFlags.doImportCreate) {
-    const importResult = await applyImportFuelRecords(importDOs, routes, truckBatches, username);
+    const importResult = await applyImportFuelRecords(importDOs, routes, truckBatches, username, batchDestinationRules);
     queuedCount = importResult.queuedCount;
     lockedNotifs.push(...importResult.lockedNotifs);
   } else if (importDOs.length > 0) {

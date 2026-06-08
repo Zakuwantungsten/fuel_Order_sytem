@@ -837,11 +837,10 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
     }).lean();
 
     if (!config) {
-      // Return empty batches if not configured yet
       res.status(200).json({
         success: true,
         message: 'Truck batches retrieved successfully',
-        data: {},
+        data: { truckBatches: {}, batchDestinationRules: {} },
       });
       return;
     }
@@ -849,7 +848,10 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
     res.status(200).json({
       success: true,
       message: 'Truck batches retrieved successfully',
-      data: config.truckBatches || {},
+      data: {
+        truckBatches: config.truckBatches || {},
+        batchDestinationRules: config.batchDestinationRules || {},
+      },
     });
   } catch (error: any) {
     res.status(500).json({

@@ -30,6 +30,9 @@ export interface TruckBatchEntry {
 /** truckBatches map: { "100": [{truckSuffix,...}], "80": [...] } */
 export type TruckBatchesMap = Record<string, TruckBatchEntry[] | unknown>;
 
+/** batch-level destination rules map: { "100": [{destination, extraLiters}], ... } */
+export type BatchDestinationRulesMap = Record<string, Array<{ destination: string; extraLiters: number }> | unknown>;
+
 export interface DeliveryOrderLike {
   date: string;
   truckNo: string;
@@ -113,7 +116,8 @@ export function matchRouteLiters(
 export function matchExtraFuel(
   truckNo: string,
   batches: TruckBatchesMap | undefined,
-  destination?: string
+  destination?: string,
+  batchDestinationRules?: BatchDestinationRulesMap
 ): { extraFuel: number; matched: boolean; batchName?: string; truckSuffix: string; destinationOverride?: boolean } {
   if (!batches) return { extraFuel: 0, matched: false, truckSuffix: '' };
 
@@ -125,24 +129,48 @@ export function matchExtraFuel(
 
     const truck = (trucks as TruckBatchEntry[]).find((t) => t.truckSuffix === truckSuffix);
     if (truck) {
-      // Destination override rules take precedence over the batch default
-      if (destination && truck.destinationRules && truck.destinationRules.length > 0) {
+      if (destination) {
         const normalizedDest = destination.toLowerCase().trim();
-        const matchingRule = truck.destinationRules.find((rule) => {
-          const ruleDestination = rule.destination.toLowerCase().trim();
-          return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
-        });
-        if (matchingRule) {
-          return {
-            extraFuel: matchingRule.extraLiters,
-            matched: true,
-            batchName: `batch_${extraLitersStr}`,
-            truckSuffix,
-            destinationOverride: true,
-          };
+
+        // 1. Truck-level destination rules (highest priority)
+        if (truck.destinationRules && truck.destinationRules.length > 0) {
+          const matchingRule = truck.destinationRules.find((rule) => {
+            const ruleDestination = rule.destination.toLowerCase().trim();
+            return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+          });
+          if (matchingRule) {
+            return {
+              extraFuel: matchingRule.extraLiters,
+              matched: true,
+              batchName: `batch_${extraLitersStr}`,
+              truckSuffix,
+              destinationOverride: true,
+            };
+          }
+        }
+
+        // 2. Batch-level destination rules (middle priority)
+        if (batchDestinationRules) {
+          const batchRules = batchDestinationRules[extraLitersStr];
+          if (Array.isArray(batchRules) && batchRules.length > 0) {
+            const matchingBatchRule = batchRules.find((rule) => {
+              const ruleDestination = rule.destination.toLowerCase().trim();
+              return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+            });
+            if (matchingBatchRule) {
+              return {
+                extraFuel: matchingBatchRule.extraLiters,
+                matched: true,
+                batchName: `batch_${extraLitersStr}`,
+                truckSuffix,
+                destinationOverride: true,
+              };
+            }
+          }
         }
       }
 
+      // 3. Batch default (lowest priority)
       return { extraFuel: parseInt(extraLitersStr, 10), matched: true, batchName: `batch_${extraLitersStr}`, truckSuffix };
     }
   }

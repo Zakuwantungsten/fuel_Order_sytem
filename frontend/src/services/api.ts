@@ -1437,6 +1437,16 @@ export interface TruckBatches {
   [extraLiters: string]: TruckBatch[];  // Dynamic keys for any liter amount
 }
 
+export interface BatchDestinationRule {
+  destination: string;
+  extraLiters: number;
+}
+
+export interface TruckBatchConfig {
+  truckBatches: TruckBatches;
+  batchDestinationRules: { [extraLiters: string]: BatchDestinationRule[] };
+}
+
 export interface StandardAllocations {
   mmsaYard: number;
   tangaYardToDar: number;
@@ -1550,63 +1560,91 @@ export const adminAPI = {
   },
 
   // Truck Batches (read-only from public config endpoint)
-  getTruckBatches: async (): Promise<TruckBatches> => {
+  getTruckBatches: async (): Promise<TruckBatchConfig> => {
     const response = await apiClient.get('/config/truck-batches');
-    return response.data.data || {};
+    const raw = response.data.data || {};
+    // Normalise: old API returned just the truckBatches map; new API returns { truckBatches, batchDestinationRules }
+    if (raw.truckBatches !== undefined) return raw as TruckBatchConfig;
+    return { truckBatches: raw, batchDestinationRules: {} };
   },
 
   // Create new batch with custom liters
-  createBatch: async (data: { extraLiters: number }): Promise<TruckBatches> => {
+  createBatch: async (data: { extraLiters: number }): Promise<TruckBatchConfig> => {
     const response = await apiClient.post('/admin/truck-batches/batches', data);
     return response.data.data;
   },
 
   // Update batch allocation
-  updateBatch: async (data: { oldExtraLiters: number; newExtraLiters: number }): Promise<TruckBatches> => {
+  updateBatch: async (data: { oldExtraLiters: number; newExtraLiters: number }): Promise<TruckBatchConfig> => {
     const response = await apiClient.put('/admin/truck-batches/batches', data);
     return response.data.data;
   },
 
   // Delete batch (only if empty)
-  deleteBatch: async (extraLiters: number): Promise<TruckBatches> => {
+  deleteBatch: async (extraLiters: number): Promise<TruckBatchConfig> => {
     const response = await apiClient.delete(`/admin/truck-batches/batches/${extraLiters}`);
     return response.data.data;
   },
 
   // Add truck to batch (supports any liter amount now)
-  addTruckToBatch: async (data: { truckSuffix: string; extraLiters: number; truckNumber?: string }): Promise<TruckBatches> => {
+  addTruckToBatch: async (data: { truckSuffix: string; extraLiters: number; truckNumber?: string }): Promise<TruckBatchConfig> => {
     const response = await apiClient.post('/admin/truck-batches', data);
     return response.data.data;
   },
 
   // Remove truck from batches
-  removeTruckFromBatch: async (truckSuffix: string): Promise<TruckBatches> => {
+  removeTruckFromBatch: async (truckSuffix: string): Promise<TruckBatchConfig> => {
     const response = await apiClient.delete(`/admin/truck-batches/${truckSuffix}`);
     return response.data.data;
   },
 
-  // Destination Rules for Truck Batches
-  addDestinationRule: async (data: { 
-    truckSuffix: string; 
-    destination: string; 
-    extraLiters: number 
+  // Truck-level Destination Rules
+  addDestinationRule: async (data: {
+    truckSuffix: string;
+    destination: string;
+    extraLiters: number
   }): Promise<any> => {
     const response = await apiClient.post('/admin/truck-batches/destination-rules', data);
     return response.data.data;
   },
 
-  updateDestinationRule: async (data: { 
-    truckSuffix: string; 
-    oldDestination: string; 
-    newDestination?: string; 
-    extraLiters: number 
-  }): Promise<TruckBatches> => {
+  updateDestinationRule: async (data: {
+    truckSuffix: string;
+    oldDestination: string;
+    newDestination?: string;
+    extraLiters: number
+  }): Promise<TruckBatchConfig> => {
     const response = await apiClient.put('/admin/truck-batches/destination-rules', data);
     return response.data.data;
   },
 
-  deleteDestinationRule: async (truckSuffix: string, destination: string): Promise<TruckBatches> => {
+  deleteDestinationRule: async (truckSuffix: string, destination: string): Promise<TruckBatchConfig> => {
     const response = await apiClient.delete(`/admin/truck-batches/${truckSuffix}/destination-rules/${destination}`);
+    return response.data.data;
+  },
+
+  // Batch-level Destination Rules
+  addBatchDestinationRule: async (data: {
+    extraLiters: number;
+    destination: string;
+    extraLitersOverride: number;
+  }): Promise<TruckBatchConfig> => {
+    const response = await apiClient.post('/admin/truck-batches/batch-destination-rules', data);
+    return response.data.data;
+  },
+
+  updateBatchDestinationRule: async (data: {
+    extraLiters: number;
+    oldDestination: string;
+    newDestination?: string;
+    extraLitersOverride: number;
+  }): Promise<TruckBatchConfig> => {
+    const response = await apiClient.put('/admin/truck-batches/batch-destination-rules', data);
+    return response.data.data;
+  },
+
+  deleteBatchDestinationRule: async (extraLiters: number, destination: string): Promise<TruckBatchConfig> => {
+    const response = await apiClient.delete(`/admin/truck-batches/batch-destination-rules/${extraLiters}/${destination}`);
     return response.data.data;
   },
 
