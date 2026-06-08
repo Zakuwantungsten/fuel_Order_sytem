@@ -7,23 +7,13 @@ import Webhook, { WEBHOOK_EVENTS } from '../models/Webhook';
 import type { AuthRequest } from '../middleware/auth';
 import { AuditService } from '../utils/auditService';
 import logger from '../utils/logger';
+import { isSafeUrl } from '../utils/ssrfGuard';
 
-// Validate URL is http/https only (no internal IPs or metadata endpoints)
-function isAllowedUrl(rawUrl: string): boolean {
-  try {
-    const parsed = new URL(rawUrl);
-    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
-    const host = parsed.hostname.toLowerCase();
-    // Block private/loopback ranges and cloud metadata endpoints
-    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') return false;
-    if (/^169\.254\./.test(host)) return false; // link-local / AWS metadata
-    if (/^10\./.test(host) || /^192\.168\./.test(host)) return false;
-    if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
+// URL safety is enforced via isSafeUrl() from ../utils/ssrfGuard, which performs
+// real DNS resolution and blocks private/loopback/link-local/metadata targets.
+// The previous string/regex denylist here was bypassable with decimal/octal/hex
+// IP encodings (e.g. http://2130706433), IPv6 loopback (http://[::1]), and DNS
+// rebinding, so it was replaced.
 
 export const listWebhooks = async (req: AuthRequest, res: Response): Promise<void> => {
   const webhooks = await Webhook.find().sort({ createdAt: -1 }).lean();
@@ -42,7 +32,7 @@ export const createWebhook = async (req: AuthRequest, res: Response): Promise<vo
     res.status(400).json({ success: false, message: 'name, url, and events are required' });
     return;
   }
-  if (!isAllowedUrl(url)) {
+  if (!(await isSafeUrl(url))) {
     res.status(400).json({ success: false, message: 'URL must be a public http/https endpoint' });
     return;
   }
@@ -81,7 +71,7 @@ export const updateWebhook = async (req: AuthRequest, res: Response): Promise<vo
   const { id } = req.params;
   const { name, url, events, headers, isEnabled } = req.body;
 
-  if (url && !isAllowedUrl(url)) {
+  if (url && !(await isSafeUrl(url))) {
     res.status(400).json({ success: false, message: 'URL must be a public http/https endpoint' });
     return;
   }
@@ -197,6 +187,15 @@ export async function dispatchWebhookPayload(
   secret: string,
   headers: Record<string, string> = {}
 ): Promise<{ success: boolean; statusCode: number; durationMs: number; error?: string }> {
+  const start0 = Date.now();
+  // SECURITY (SSRF): re-resolve and validate the target at dispatch time, not only
+  // when the webhook was saved. This closes the DNS-rebinding window where a hostname
+  // that resolved to a public IP at save time later points at an internal/metadata IP.
+  if (!(await isSafeUrl(url))) {
+    logger.warn(`Webhook dispatch blocked by SSRF guard: ${url}`);
+    return { success: false, statusCode: 0, durationMs: Date.now() - start0, error: 'Blocked: URL resolves to a private/disallowed address' };
+  }
+
   const body = JSON.stringify({ event, payload, timestamp: new Date().toISOString() });
   const sig = crypto.createHmac('sha256', secret).update(body).digest('hex');
 

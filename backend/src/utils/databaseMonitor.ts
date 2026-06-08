@@ -224,7 +224,7 @@ export class DatabaseMonitor extends EventEmitter {
       const stats: ICollectionStats[] = [];
 
       // Limit to main collections only for speed
-      const mainCollections = ['users', 'deliveryorders', 'lpoentries', 'fuelrecords', 'yardfueldispenses', 'driveraccountentries', 'auditlogs'];
+      const mainCollections = ['users', 'deliveryorders', 'lposummaries', 'fuelrecords', 'yardfueldispenses', 'driveraccountentries', 'auditlogs'];
       
       for (const col of collectionNames) {
         // Skip system collections and only process main ones

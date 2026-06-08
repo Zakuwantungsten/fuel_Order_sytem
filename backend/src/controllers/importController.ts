@@ -98,7 +98,7 @@ const DELIVERY_ORDER_COLUMNS: Record<string, string> = {
 };
 
 const LPO_COLUMNS: Record<string, string> = {
-  sn: 'sn', 's/n': 'sn', serial: 'sn', no: 'sn',
+  sn: 'sn', 's/n': 'sn', 's/no.': 'sn', 's/no': 'sn', serial: 'sn', no: 'sn',
   // date — full and truncated variants
   date: 'date', dat: 'date',
   // LPO number — full and truncated (Excel often cuts off trailing chars)
@@ -506,6 +506,12 @@ async function importFuelRecords(
     }
 
     const doc = mapToFuelRecord(row, year, sheetMonth);
+
+    // If date is still empty but year is known, fall back to Jan 1 of that year so
+    // the record is not silently dropped — the user can correct exact dates later.
+    if (!doc.date && year) {
+      doc.date = `${year}-01-01`;
+    }
 
     if (!doc.truckNo || !doc.date || !doc.goingDo) { result.skipped++; continue; }
     if (!doc.start) doc.start = 'DSM';

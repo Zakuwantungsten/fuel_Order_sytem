@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 import { JWTPayload, UserRole } from '../types';
-import { User } from '../models';
+import { User, DriverCredential } from '../models';
 import logger from '../utils/logger';
 import { activeSessionTracker } from '../utils/activeSessionTracker';
 import SecurityEventLogger from '../utils/securityEventLogger';
@@ -109,6 +109,19 @@ function ipInRange(ip: string, range: string): boolean {
   return false;
 }
 
+/**
+ * Resolve the real client IP.
+ *
+ * Trusts Express's proxy-aware `req.ip` (the app sets `trust proxy`), which
+ * derives the client address from the trusted hop in X-Forwarded-For. The
+ * previous code read `req.headers['x-forwarded-for'].split(',')[0]` — the
+ * *left-most*, fully client-controlled value — which let an attacker spoof
+ * their source IP to satisfy/evade IP-based conditional-access policies.
+ */
+function getClientIp(req: Request): string {
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+}
+
 // Extend Express Request type
 export interface AuthRequest extends Request {
   user?: {
@@ -131,10 +144,7 @@ export const authenticate = async (
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      const ip =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-        req.socket?.remoteAddress ||
-        'unknown';
+      const ip = getClientIp(req);
       
       // Log unauthorized access to audit trail
       SecurityEventLogger.logUnauthorized({
@@ -163,10 +173,7 @@ export const authenticate = async (
     if (decoded.userId.startsWith('driver_')) {
       // Virtual driver user - validate role and attach to request
       if (decoded.role !== 'driver') {
-        const driverIp =
-          (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-          req.socket?.remoteAddress ||
-          'unknown';
+        const driverIp = getClientIp(req);
         
         SecurityEventLogger.logUnauthorized({
           username: decoded.username,
@@ -184,6 +191,34 @@ export const authenticate = async (
         return;
       }
 
+      // SECURITY: re-validate the driver credential against the DB on every request.
+      // Driver access tokens carry no DB-backed identity, so without this check a
+      // deactivated/deleted driver would keep API access until the access token
+      // expires. Mirror the truckNo derivation used in the refresh-token path.
+      const rawTruck = decoded.userId.replace(/^driver_/, '').replace(/_/g, '-');
+      const driverCredential = await DriverCredential.findOne({
+        $or: [{ truckNo: rawTruck }, { truckNo: rawTruck.replace(/-/g, ' ') }],
+        isActive: true,
+      }).select('_id truckNo');
+
+      if (!driverCredential) {
+        const driverIp = getClientIp(req);
+        SecurityEventLogger.logUnauthorized({
+          username: decoded.username,
+          ipAddress: driverIp,
+          userAgent: req.get('user-agent'),
+          endpoint: req.path,
+          method: req.method,
+          errorReason: 'Driver account inactive or no longer exists',
+        }).catch(() => {});
+
+        res.status(401).json({
+          success: false,
+          message: 'Driver account is inactive or no longer exists.',
+        });
+        return;
+      }
+
       // Attach virtual driver user to request
       req.user = {
         userId: decoded.userId,
@@ -191,10 +226,7 @@ export const authenticate = async (
         role: decoded.role,
       };
 
-      const driverIp =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-        req.socket?.remoteAddress ||
-        'unknown';
+      const driverIp = getClientIp(req);
       activeSessionTracker.touch(decoded.userId, decoded.username, decoded.role, driverIp);
 
       next();
@@ -203,10 +235,7 @@ export const authenticate = async (
 
     // Regular user - validate userId format before DB lookup
     if (!mongoose.Types.ObjectId.isValid(decoded.userId)) {
-      const ip =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-        req.socket?.remoteAddress ||
-        'unknown';
+      const ip = getClientIp(req);
 
       SecurityEventLogger.logUnauthorized({
         userId: decoded.userId,
@@ -229,10 +258,7 @@ export const authenticate = async (
     const user = await User.findById(decoded.userId);
     
     if (!user || !user.isActive || user.isDeleted) {
-      const ip =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-        req.socket?.remoteAddress ||
-        'unknown';
+      const ip = getClientIp(req);
       
       const reason = !user ? 'User not found' : !user.isActive ? 'User inactive' : 'User deleted';
       
@@ -253,23 +279,23 @@ export const authenticate = async (
       return;
     }
 
-    // Attach user info to request
+    // Attach user info to request.
+    // SECURITY: role/username are taken from the freshly-loaded DB record, not the
+    // JWT payload, so an admin demotion (or rename) takes effect immediately instead
+    // of persisting until the access token expires.
     req.user = {
       userId: decoded.userId,
-      username: decoded.username,
-      role: decoded.role,
+      username: user.username,
+      role: user.role,
     };
 
-    const ip =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-      req.socket?.remoteAddress ||
-      'unknown';
+    const ip = getClientIp(req);
 
     // ── Conditional access policy evaluation ──
     try {
       const policies = await getActivePolicies();
       if (policies.length > 0) {
-        const result = evaluatePolicies(policies, { role: decoded.role, ip });
+        const result = evaluatePolicies(policies, { role: user.role, ip });
         if (result) {
           if (result.action === 'block') {
             res.status(403).json({
@@ -298,7 +324,7 @@ export const authenticate = async (
     if (!shouldSkipExpiry) {
       try {
         const pwPolicy = await getPasswordExpirationPolicy();
-        if (pwPolicy.expirationDays > 0 && !pwPolicy.expirationExemptRoles.includes(decoded.role)) {
+        if (pwPolicy.expirationDays > 0 && !pwPolicy.expirationExemptRoles.includes(user.role)) {
           const changedAt = user.passwordResetAt || (user as any).createdAt;
           if (changedAt) {
             const ageMs = Date.now() - new Date(changedAt).getTime();
@@ -340,14 +366,11 @@ export const authenticate = async (
       return;
     }
 
-    activeSessionTracker.touch(decoded.userId, decoded.username, decoded.role, ip);
+    activeSessionTracker.touch(decoded.userId, user.username, user.role, ip);
 
     next();
   } catch (error: any) {
-    const ip =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-      req.socket?.remoteAddress ||
-      'unknown';
+    const ip = getClientIp(req);
     
     logger.error('Authentication error:', error);
     
@@ -406,10 +429,7 @@ export const authenticate = async (
 export const authorize = (...roles: UserRole[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      const ip =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-        req.socket?.remoteAddress ||
-        'unknown';
+      const ip = getClientIp(req);
       
       SecurityEventLogger.logUnauthorized({
         username: 'unknown',
@@ -428,10 +448,7 @@ export const authorize = (...roles: UserRole[]) => {
     }
 
     if (!roles.includes(req.user.role)) {
-      const ip =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-        req.socket?.remoteAddress ||
-        'unknown';
+      const ip = getClientIp(req);
       
       logger.warn(
         `Unauthorized access attempt by user ${req.user.username} with role ${req.user.role}`

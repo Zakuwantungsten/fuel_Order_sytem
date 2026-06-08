@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { SIEMConfig } from '../models/SIEMConfig';
 import { AuditService } from '../utils/auditService';
+import { isSafeUrl } from '../utils/ssrfGuard';
 
 /**
  * SIEM Export / Audit Event Streaming Controller
@@ -30,6 +31,12 @@ export const createConfig = async (req: Request, res: Response): Promise<void> =
         success: false,
         message: 'name and destination are required',
       });
+      return;
+    }
+
+    // SECURITY (SSRF): block private/loopback/metadata webhook targets at save time.
+    if (destination === 'webhook' && webhookUrl && !(await isSafeUrl(webhookUrl))) {
+      res.status(400).json({ success: false, message: 'Webhook URL must be a public http/https endpoint' });
       return;
     }
 
@@ -80,6 +87,12 @@ export const updateConfig = async (req: Request, res: Response): Promise<void> =
     const currentUser = (req as any).user;
     const { id } = req.params;
     const updates = req.body;
+
+    // SECURITY (SSRF): re-validate the webhook target if it is being changed.
+    if (updates.webhookUrl && !(await isSafeUrl(updates.webhookUrl))) {
+      res.status(400).json({ success: false, message: 'Webhook URL must be a public http/https endpoint' });
+      return;
+    }
 
     const config = await SIEMConfig.findByIdAndUpdate(id, updates, { new: true, runValidators: true })
       .select('-splunkToken');
@@ -192,6 +205,13 @@ export const testConnection = async (req: Request, res: Response): Promise<void>
 
     // For webhook destinations, make a test POST
     if (config.destination === 'webhook' && config.webhookUrl) {
+      // SECURITY (SSRF): resolve the host and reject private/loopback/metadata
+      // targets before making the outbound request. Re-checked here (not only at
+      // save time) to defeat DNS-rebinding between configuration and dispatch.
+      if (!(await isSafeUrl(config.webhookUrl))) {
+        res.status(400).json({ success: false, message: 'Webhook URL must be a public http/https endpoint' });
+        return;
+      }
       try {
         const response = await fetch(config.webhookUrl, {
           method: 'POST',

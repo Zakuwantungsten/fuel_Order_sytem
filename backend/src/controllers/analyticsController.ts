@@ -611,7 +611,7 @@ async function getRecentActivity(limit: number) {
 }
 
 async function getCollectionStatistics() {
-  const collections = ['deliveryorders', 'fuelrecords', 'lpoentries', 'users', 'auditlogs'];
+  const collections = ['deliveryorders', 'fuelrecords', 'lposummaries', 'users', 'auditlogs'];
   const stats = await Promise.all(
     collections.map(async (name) => {
       try {
