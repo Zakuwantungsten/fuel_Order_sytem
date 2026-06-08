@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
-import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI } from '../services/api';
+import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, configAPI, FuelAutomationConfig } from '../services/api';
 import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
@@ -47,6 +47,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [showCancelAllModal, setShowCancelAllModal] = useState(false);
   const [isCancellingAll, setIsCancellingAll] = useState(false);
   const [entrySearch, setEntrySearch] = useState('');
+  const [fuelAutomation, setFuelAutomation] = useState<FuelAutomationConfig | null>(null);
 
   useEffect(() => {
     setEditedSheet(sheet);
@@ -88,6 +89,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
     fetchFreshSheet();
   }, [lpoNo]);
+
+  useEffect(() => {
+    configAPI.getJourneyConfig()
+      .then(cfg => { if (cfg?.fuelAutomation) setFuelAutomation(cfg.fuelAutomation); })
+      .catch(() => {});
+  }, []);
 
   // Refresh sheet from server (used after save/cancel operations)
   const refreshSheet = async () => {
@@ -1398,20 +1405,32 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     </div>
                   </div>
 
-                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      <strong>What will happen:</strong>{' '}
-                      {entryType === 'driver-account' && (
-                        `This LPO entry will be marked as cancelled. No fuel record will be affected since Driver Account entries don't create fuel records.`
-                      )}
-                      {entryType === 'regular' && (
-                        `The fuel deduction of ${editedSheet.entries[cancellingEntryIndex].liters}L will be reverted from the ${detectedDirection} checkpoint (${detectedCancellationPoint ? getCancellationPointDisplayName(detectedCancellationPoint) : 'Unknown'}).`
-                      )}
-                      {entryType === 'nil-do' && (
-                        `This LPO entry will be marked as cancelled. No fuel record reversal will occur since no fuel record was found for this entry.`
-                      )}
-                    </p>
-                  </div>
+                  {entryType === 'regular' && fuelAutomation?.lpoCancelRevert === false ? (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <p className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>
+                          <strong>Automation OFF — Revert on LPO cancellation:</strong>{' '}
+                          The fuel deduction of {editedSheet.entries[cancellingEntryIndex].liters}L will <strong>not</strong> be automatically reverted from the {detectedDirection} checkpoint ({detectedCancellationPoint ? getCancellationPointDisplayName(detectedCancellationPoint) : 'Unknown'}). Reconcile this fuel record manually after cancelling.
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        <strong>What will happen:</strong>{' '}
+                        {entryType === 'driver-account' && (
+                          `This LPO entry will be marked as cancelled. No fuel record will be affected since Driver Account entries don't create fuel records.`
+                        )}
+                        {entryType === 'regular' && (
+                          `The fuel deduction of ${editedSheet.entries[cancellingEntryIndex].liters}L will be reverted from the ${detectedDirection} checkpoint (${detectedCancellationPoint ? getCancellationPointDisplayName(detectedCancellationPoint) : 'Unknown'}).`
+                        )}
+                        {entryType === 'nil-do' && (
+                          `This LPO entry will be marked as cancelled. No fuel record reversal will occur since no fuel record was found for this entry.`
+                        )}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
