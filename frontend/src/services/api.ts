@@ -71,6 +71,38 @@ fetchCsrfToken().catch(err => {
   console.error('[CSRF] Initial token fetch failed:', err);
 });
 
+// ── Single-flight refresh ──────────────────────────────────────────────────
+// The backend uses ROTATING refresh tokens with reuse detection: every call to
+// POST /auth/refresh issues a brand-new token, stores its hash, and resets the
+// cookie. If two refreshes run concurrently (e.g. several requests 401 at once on
+// app load, plus AuthContext's session-restore), they each rotate the token — the
+// browser keeps one cookie while the server's stored hash is from another, so the
+// NEXT refresh is flagged as "token reuse" and the entire session is revoked
+// (user gets logged out on reopen). Funnelling every refresh through one shared
+// in-flight promise guarantees a single rotation: concurrent callers await the
+// same result and the cookie stays in sync with the server.
+let refreshPromise: Promise<string | null> | null = null;
+
+export const performTokenRefresh = (): Promise<string | null> => {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const res = await apiClient.post('/auth/refresh');
+      const newAccessToken: string | null =
+        res.data?.data?.accessToken || res.data?.data?.token || null;
+      if (newAccessToken) {
+        sessionStorage.setItem('fuel_order_token', newAccessToken);
+      }
+      return newAccessToken;
+    } finally {
+      // Clear AFTER settle so any callers that joined during the in-flight window
+      // share this result; the next refresh after this one starts fresh.
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+};
+
 // Request interceptor to add auth token and CSRF token
 apiClient.interceptors.request.use(
   async (config) => {
@@ -143,10 +175,10 @@ apiClient.interceptors.response.use(
         if (hasRememberMe && !originalRequest._authRetry) {
           originalRequest._authRetry = true;
           try {
-            const refreshRes = await apiClient.post('/auth/refresh');
-            const newAccessToken = refreshRes.data?.data?.accessToken || refreshRes.data?.data?.token;
+            // Shared single-flight: a 401-storm on load triggers ONE refresh, not one
+            // per request — preventing the rotating-token reuse false-positive.
+            const newAccessToken = await performTokenRefresh();
             if (newAccessToken) {
-              sessionStorage.setItem('fuel_order_token', newAccessToken);
               // Retry the original request with the new token
               originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
               return apiClient(originalRequest);
@@ -1035,9 +1067,11 @@ export const authAPI = {
     await apiClient.post('/auth/logout');
   },
 
-  refreshToken: async (): Promise<{ token: string }> => {
-    const response = await apiClient.post('/auth/refresh');
-    return response.data.data;
+  refreshToken: async (): Promise<{ accessToken: string | null }> => {
+    // Shares the single-flight promise with the 401 interceptor so the session
+    // restore on page load can't race a concurrent refresh into a reuse revoke.
+    const accessToken = await performTokenRefresh();
+    return { accessToken };
   },
 
   getCurrentUser: async (): Promise<AuthUser> => {

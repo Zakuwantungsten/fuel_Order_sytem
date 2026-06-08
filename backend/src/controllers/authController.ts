@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { User, DriverCredential, SystemConfig, IDriverCredential } from '../models';
+import { User, DriverCredential, SystemConfig, IDriverCredential, IUserDocument } from '../models';
 import { MFA } from '../models/MFA';
 import UserMFA from '../models/UserMFA';
 import LoginActivity from '../models/LoginActivity';
@@ -54,6 +54,48 @@ function parseUA(ua: string) {
   else if (ua.includes('Tablet') || ua.includes('iPad')) deviceType = 'tablet';
   else if (ua.includes('Windows') || ua.includes('Mac') || ua.includes('Linux')) deviceType = 'desktop';
   return { browser, os, deviceType };
+}
+
+/**
+ * Heal a *stale* `mustChangePassword` flag on an established account.
+ *
+ * The "Set Your Password" gate fires whenever `mustChangePassword` is true.
+ * Legacy/established accounts — created before the temp-password feature, or whose
+ * flag was re-introduced by a backup/restore or a re-seed — can carry a stale `true`
+ * even though they set a real password long ago. login() already heals on its own
+ * path, but the remember-me session-restore path (POST /auth/refresh → GET /auth/me)
+ * never goes through login, so /me must heal too — otherwise a returning user is
+ * wrongly forced back into the first-login screen on a new tab / browser restart.
+ *
+ * We only clear a flag we can prove is stale; a genuine pending account (recent
+ * admin reset, or a live temporary-credential expiry) is left untouched so it still
+ * completes first-login setup. Conditions mirror the login handler:
+ *   • no `passwordResetAt`                              → legacy data, clear
+ *   • `passwordResetAt` older than 5 minutes AND no live
+ *     `tempPasswordExpiresAt`                           → working creds reset long ago, clear
+ *
+ * Mutates `user` in place; the caller persists with `user.save()` when this returns true.
+ * @returns true if the flag was cleared (a save is needed), false otherwise.
+ */
+function healStaleMustChangePassword(user: IUserDocument): boolean {
+  if (!user.mustChangePassword) return false;
+
+  let shouldClear = false;
+  if (!user.passwordResetAt) {
+    shouldClear = true;
+  } else if (!user.tempPasswordExpiresAt) {
+    const minutesSincePwdReset =
+      (Date.now() - new Date(user.passwordResetAt).getTime()) / (1000 * 60);
+    if (minutesSincePwdReset > 5) shouldClear = true;
+  }
+
+  if (shouldClear) {
+    user.mustChangePassword = false;
+    user.passwordResetAt = undefined;
+    // Legacy accounts may also carry a stale pendingActivation; clear it together.
+    user.pendingActivation = false;
+  }
+  return shouldClear;
 }
 
 /**
@@ -388,32 +430,11 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         );
       }
 
-      let shouldClear = false;
-      let clearReason = '';
-
-      // Rule 1: No passwordResetAt = stale data from before the feature was deployed
-      if (!user.passwordResetAt) {
-        shouldClear = true;
-        clearReason = 'no passwordResetAt set (legacy data)';
-      }
-      // Rule 2: passwordResetAt is older than 5 minutes AND no live expiry is set —
-      // admin reset happened a while ago and the user is logging in with working
-      // credentials, so the flag is stale.
-      else if (!user.tempPasswordExpiresAt) {
-        const minutesSincePwdReset = (Date.now() - new Date(user.passwordResetAt).getTime()) / (1000 * 60);
-        if (minutesSincePwdReset > 5) {
-          shouldClear = true;
-          clearReason = `passwordResetAt is ${minutesSincePwdReset.toFixed(0)} min old and no expiry set (stale legacy)`;
-        }
-      }
-
-      if (shouldClear) {
-        user.mustChangePassword = false;
-        user.passwordResetAt = undefined;
-        // Also clear pendingActivation for legacy accounts that never had it cleared
-        user.pendingActivation = false;
+      // Heal a provably-stale flag (legacy/established account). A genuine pending
+      // account — recent reset or a live temp-credential expiry — is left untouched.
+      if (healStaleMustChangePassword(user)) {
         await user.save();
-        logger.info(`[AUTO-CLEAR] Cleared stale mustChangePassword flag for user: ${username} (reason: ${clearReason})`);
+        logger.info(`[AUTO-CLEAR] Cleared stale mustChangePassword flag for user: ${username} during login`);
       }
     }
     
@@ -1524,6 +1545,18 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
 
     if (!user) {
       throw new ApiError(404, 'User not found');
+    }
+
+    // Heal a stale mustChangePassword flag here too. The remember-me restore path
+    // (POST /auth/refresh → GET /auth/me) never goes through login(), so /me — the
+    // value the frontend's "Set Your Password" gate reads — must heal an established
+    // account itself; otherwise a returning user is wrongly forced into first-login
+    // setup on a new tab / browser restart. Genuine pending accounts are untouched.
+    // The doc was loaded without +password, so save() won't re-hash (pre-save hook
+    // guards on isModified('password')).
+    if (healStaleMustChangePassword(user)) {
+      await user.save();
+      logger.info(`[AUTO-CLEAR] Cleared stale mustChangePassword flag for user: ${user.username} during /me`);
     }
 
     res.status(200).json({
