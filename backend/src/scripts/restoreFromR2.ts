@@ -153,6 +153,8 @@ function fromEJSON(val: any): any {
     const d = val.$date;
     return new Date(typeof d === 'object' && '$numberLong' in d ? parseInt(d.$numberLong, 10) : d);
   }
+  if ('$numberInt' in val) return parseInt(String(val.$numberInt), 10);
+  if ('$numberDouble' in val) return parseFloat(String(val.$numberDouble));
   if ('$numberLong' in val) return Long.fromString(String(val.$numberLong));
   if ('$numberDecimal' in val) return Decimal128.fromString(String(val.$numberDecimal));
   if ('$binary' in val && val.$binary && typeof val.$binary === 'object') {
