@@ -51,19 +51,29 @@ export const getCsrfToken = (): string | null => {
   return stored;
 };
 
-// Function to fetch CSRF token from server and store it
+// Single-flight CSRF fetch: if a fetch is already in-flight, return the same
+// promise instead of firing a second concurrent request. This prevents the
+// app-load fetch (line below) and the request-interceptor fetch from racing
+// when the user submits a form before the initial fetch completes.
+let csrfFetchPromise: Promise<void> | null = null;
+
 const fetchCsrfToken = async (): Promise<void> => {
-  try {
-    const response = await apiClient.get('/csrf-token');
-    // Server returns token in body for cross-origin clients
-    const token = response.data?.csrfToken;
-    if (token) {
-      sessionStorage.setItem(CSRF_STORAGE_KEY, token);
+  if (csrfFetchPromise) return csrfFetchPromise;
+  csrfFetchPromise = (async () => {
+    try {
+      const response = await apiClient.get('/csrf-token');
+      const token = response.data?.csrfToken;
+      if (token) {
+        sessionStorage.setItem(CSRF_STORAGE_KEY, token);
+      }
+    } catch (error) {
+      console.error('[CSRF] Failed to fetch CSRF token:', error);
+      throw error;
+    } finally {
+      csrfFetchPromise = null;
     }
-  } catch (error) {
-    console.error('[CSRF] Failed to fetch CSRF token:', error);
-    throw error;
-  }
+  })();
+  return csrfFetchPromise;
 };
 
 // Initialize CSRF token on app load

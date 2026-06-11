@@ -55,22 +55,39 @@ interface SuperAdminDashboardProps {
   onDestinationConsumed?: () => void;
 }
 
+// Module-level cache survives tab-switch remounts. Data older than 60 s
+// triggers a background refresh; real-time sync events force an immediate one.
+let _overviewCache: { data: OverviewStats; ts: number } | null = null;
+const OVERVIEW_CACHE_TTL = 60_000;
+
 export default function SuperAdminDashboard({ section = 'overview', onNavigate, initialDestination, onDestinationConsumed }: SuperAdminDashboardProps) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() =>
+    section === 'overview' && !(_overviewCache && Date.now() - _overviewCache.ts < OVERVIEW_CACHE_TTL)
+  );
   const [overviewError, setOverviewError] = useState<string | null>(null);
-  const [overviewData, setOverviewData] = useState<OverviewStats | null>(null);
+  const [overviewData, setOverviewData] = useState<OverviewStats | null>(() =>
+    section === 'overview' && _overviewCache && Date.now() - _overviewCache.ts < OVERVIEW_CACHE_TTL
+      ? _overviewCache.data
+      : null
+  );
 
   useEffect(() => {
     if (section === 'overview') {
-      loadData();
+      loadData(false);
     }
   }, [section]);
 
-  const loadData = async () => {
+  const loadData = async (forceRefresh: boolean) => {
+    if (!forceRefresh && _overviewCache && Date.now() - _overviewCache.ts < OVERVIEW_CACHE_TTL) {
+      setOverviewData(_overviewCache.data);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setOverviewError(null);
     try {
       const data = await systemAdminAPI.getOverviewStats();
+      _overviewCache = { data, ts: Date.now() };
       setOverviewData(data);
     } catch (err: any) {
       setOverviewError(err.response?.data?.message || 'Failed to load overview');
@@ -81,7 +98,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate, 
 
   useRealtimeSync(
     ['fuel_records', 'delivery_orders', 'lpo_summaries', 'users', 'yard_fuel'],
-    loadData
+    () => loadData(true)
   );
 
   const showMessage = (type: 'success' | 'error', message: string) => {

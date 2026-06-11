@@ -147,6 +147,18 @@ function MaintenancePage({ message, onLogout }: { message: string; onLogout: () 
   );
 }
 
+// Maintenance status is cached in sessionStorage so repeated logins and page
+// reloads can show the dashboard immediately while the background re-check runs.
+// The cache is cleared on logout, so a logged-out user always gets a fresh check.
+const MAINTENANCE_CACHE_KEY = 'fuel_order_maintenance_status';
+
+const readMaintenanceCache = (): { enabled: boolean; message: string; allowedRoles: string[] } | null => {
+  try {
+    const raw = sessionStorage.getItem(MAINTENANCE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+};
+
 // App content with authentication
 function AppContent() {
   const { isAuthenticated, isRestoringSession, user, logout, clearMustChangePassword } = useAuth();
@@ -155,11 +167,13 @@ function AppContent() {
     enabled: boolean;
     message: string;
     allowedRoles: string[];
-  } | null>(null);
-  // True from the start so the dashboard NEVER renders before we know the
-  // maintenance status. Unauthenticated users are unaffected because the guard
-  // is `isAuthenticated && maintenanceChecking`, which stays false when logged out.
-  const [maintenanceChecking, setMaintenanceChecking] = useState(true);
+  } | null>(() => readMaintenanceCache());
+  // Only block rendering when there is no cached status to fall back on.
+  // On repeat logins / page reloads the cached value is used immediately and
+  // the live check runs silently in the background.
+  const [maintenanceChecking, setMaintenanceChecking] = useState(
+    () => !readMaintenanceCache()
+  );
 
   // App-level real-time sync. Page components also subscribe (for nicer in-place
   // row patching while mounted), but this always-mounted subscription guarantees
@@ -174,9 +188,10 @@ function AppContent() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      // Logged out — clear state and stop checking.
+      // Logged out — clear state, cache, and stop checking.
       setMaintenanceMode(null);
       setMaintenanceChecking(false);
+      sessionStorage.removeItem(MAINTENANCE_CACHE_KEY);
       return;
     }
     if (!user) {
@@ -185,12 +200,19 @@ function AppContent() {
       return;
     }
 
-    // Fetch current maintenance status. maintenanceChecking is already true
-    // (initial state), so the dashboard stays hidden until we have the answer.
-    setMaintenanceChecking(true);
+    // If we have no cached status yet, show the loading gate while we fetch.
+    // If we DO have a cached status, leave maintenanceChecking=false so the
+    // dashboard renders immediately and the re-check runs silently in the background.
+    if (!readMaintenanceCache()) {
+      setMaintenanceChecking(true);
+    }
+
     systemAdminAPI
       .getMaintenanceStatus()
-      .then((status) => setMaintenanceMode(status))
+      .then((status) => {
+        sessionStorage.setItem(MAINTENANCE_CACHE_KEY, JSON.stringify(status));
+        setMaintenanceMode(status);
+      })
       .catch(() => {
         // On failure, treat as not in maintenance so we don't permanently block users.
         setMaintenanceMode({ enabled: false, message: '', allowedRoles: ['super_admin'] });
