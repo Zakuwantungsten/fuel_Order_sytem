@@ -10,6 +10,7 @@ import {
   getSecurityAlerts,
   getUnresolvedAlertCount,
   acknowledgeAlert,
+  acknowledgeAllAlerts,
   investigateAlert,
   resolveAlert,
   markFalsePositive,
@@ -22,6 +23,7 @@ router.use(authenticate, authorize('super_admin'));
 
 router.get('/', getSecurityAlerts);
 router.get('/count', getUnresolvedAlertCount);
+router.patch('/acknowledge-all', acknowledgeAllAlerts);
 router.patch('/:id/acknowledge', acknowledgeAlert);
 router.patch('/:id/investigate', investigateAlert);
 router.patch('/:id/resolve', resolveAlert);

@@ -389,16 +389,27 @@ class SecurityAlertService {
   }
 
   /**
-   * Count unresolved alerts (for badge display).
+   * Count unread (new) alerts for the badge — only 'new' status so that
+   * opening the Alerts tab (which bulk-acknowledges them) drives the badge to 0.
    */
   async getUnresolvedCount(): Promise<{ total: number; critical: number; high: number }> {
-    const unresolvedStatuses = ['new', 'acknowledged', 'investigating'];
     const [total, critical, high] = await Promise.all([
-      SecurityAlert.countDocuments({ status: { $in: unresolvedStatuses } }),
-      SecurityAlert.countDocuments({ status: { $in: unresolvedStatuses }, severity: 'critical' }),
-      SecurityAlert.countDocuments({ status: { $in: unresolvedStatuses }, severity: 'high' }),
+      SecurityAlert.countDocuments({ status: 'new' }),
+      SecurityAlert.countDocuments({ status: 'new', severity: 'critical' }),
+      SecurityAlert.countDocuments({ status: 'new', severity: 'high' }),
     ]);
     return { total, critical, high };
+  }
+
+  /**
+   * Bulk-acknowledge all 'new' alerts — called when the Alerts tab is opened.
+   */
+  async acknowledgeAllNew(username: string): Promise<number> {
+    const result = await SecurityAlert.updateMany(
+      { status: 'new' },
+      { status: 'acknowledged', acknowledgedBy: username, acknowledgedAt: new Date() },
+    );
+    return result.modifiedCount;
   }
 
   /**

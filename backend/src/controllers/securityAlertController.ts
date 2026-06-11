@@ -105,6 +105,18 @@ export async function markFalsePositive(req: AuthRequest, res: Response, _next: 
 }
 
 /**
+ * PATCH /acknowledge-all — bulk-acknowledge all 'new' alerts (called on tab open)
+ */
+export async function acknowledgeAllAlerts(req: AuthRequest, res: Response, _next: NextFunction) {
+  try {
+    const count = await securityAlertService.acknowledgeAllNew(req.user?.username || 'unknown');
+    return res.json({ success: true, data: { acknowledged: count } });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: 'Failed to acknowledge alerts', error: error.message });
+  }
+}
+
+/**
  * PATCH /:id/note — add investigation note
  */
 export async function addAlertNote(req: AuthRequest, res: Response, _next: NextFunction) {

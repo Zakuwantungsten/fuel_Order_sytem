@@ -99,7 +99,7 @@ const SEVERITY_COLORS: Record<string, string> = {
   low: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
 };
 
-const API_BASE = '/api/v1/system-admin/security-events';
+const API_BASE = `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/system-admin/security-events`;
 
 /* ───────── Helpers ───────── */
 

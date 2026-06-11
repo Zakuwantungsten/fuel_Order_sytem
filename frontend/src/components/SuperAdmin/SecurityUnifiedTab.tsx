@@ -144,7 +144,7 @@ export default function SecurityUnifiedTab({ onMessage }: SecurityUnifiedTabProp
         {subTab === 'access_control' && <SecurityAccessControlSubTab onMessage={onMessage} />}
         {subTab === 'sessions'       && <SecuritySessionsSubTab onMessage={onMessage} />}
         {subTab === 'threats'        && <SecurityThreatMonitorSubTab />}
-        {subTab === 'alerts'         && <SecurityAlertsSubTab />}
+        {subTab === 'alerts'         && <SecurityAlertsSubTab onAllAcknowledged={() => setAlertBadge(0)} />}
       </div>
     </div>
   );

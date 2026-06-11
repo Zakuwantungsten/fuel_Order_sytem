@@ -81,7 +81,7 @@ const STATUS_CONFIG: Record<IncidentStatus, { label: string; icon: React.ReactNo
   false_positive: { label: 'False Positive', icon: <Target className="w-3.5 h-3.5" />, color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' },
 };
 
-const API_BASE = '/api/v1/system-admin/incidents';
+const API_BASE = `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/system-admin/incidents`;
 
 /* ───────── Helpers ───────── */
 

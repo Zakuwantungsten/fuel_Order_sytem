@@ -81,7 +81,7 @@ const TYPE_LABELS: Record<string, string> = {
   mfa_bypass: 'MFA Bypass',
 };
 
-const API_BASE = '/api/v1/system-admin/security-alerts';
+const API_BASE = `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/system-admin/security-alerts`;
 
 /* ───────── Helpers ───────── */
 
@@ -117,7 +117,11 @@ function relativeTime(iso: string): string {
 
 /* ───────── Component ───────── */
 
-export default function SecurityAlertsSubTab() {
+interface SecurityAlertsSubTabProps {
+  onAllAcknowledged?: () => void;
+}
+
+export default function SecurityAlertsSubTab({ onAllAcknowledged }: SecurityAlertsSubTabProps) {
   const [section, setSection] = useState<'alerts' | 'incidents'>('alerts');
   const [loading, setLoading] = useState(true);
   const [alertsPage, setAlertsPage] = useState<AlertsPage | null>(null);
@@ -128,6 +132,14 @@ export default function SecurityAlertsSubTab() {
   const [noteText, setNoteText] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Bulk-acknowledge all 'new' alerts on mount so the badge resets to 0.
+  useEffect(() => {
+    apiFetch('/acknowledge-all', { method: 'PATCH' })
+      .then(() => onAllAcknowledged?.())
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
