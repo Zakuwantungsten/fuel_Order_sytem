@@ -8,7 +8,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self' https://tahfuelorder.dev wss://tahfuelorder.dev https://www.tahfuelorder.dev wss://www.tahfuelorder.dev https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' https://tahfuelorder.dev data: blob: https://*.tile.openstreetmap.org; connect-src 'self' https://tahfuelorder.dev wss://tahfuelorder.dev https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         },
         {
           "key": "X-Content-Type-Options",
@@ -61,14 +61,6 @@
           "value": "no-cache, no-store, must-revalidate"
         }
       ]
-    }
-  ],
-  "redirects": [
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.tahfuelorder.dev" }],
-      "destination": "https://tahfuelorder.dev/$1",
-      "permanent": true
     }
   ],
   "rewrites": [
