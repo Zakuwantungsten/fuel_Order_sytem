@@ -13,13 +13,8 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  // Network-only: pass through, but catch failures so the SW doesn't log
-  // "network error response" for every failed fetch (e.g. push-subscribe timeouts).
-  event.respondWith(
-    fetch(event.request).catch(() => Response.error())
-  );
-});
+// No fetch handler — network-only strategy; browser handles all requests directly.
+// Calling respondWith(Response.error()) was what triggered the "network error response" console warning.
 
 // ── Web Push: show notification received from the backend ──
 self.addEventListener('push', (event) => {
