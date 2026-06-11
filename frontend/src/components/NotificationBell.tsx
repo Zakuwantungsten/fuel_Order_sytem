@@ -245,8 +245,9 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       }
     };
 
-    // Force-sync on first mount
-    tryRegister(true);
+    // Defer push registration so it doesn't block dashboard rendering on login.
+    // A 3-second delay gives the page time to paint and load critical data first.
+    const initTimer = setTimeout(() => tryRegister(true), 3000);
 
     // Re-sync on tab focus, but respect the 5-minute throttle so switching
     // tabs quickly doesn't generate a burst of API requests.
@@ -254,7 +255,10 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
       if (document.visibilityState === 'visible') tryRegister();
     };
     document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearTimeout(initTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   // Play notification sound using the pre-loaded audio element

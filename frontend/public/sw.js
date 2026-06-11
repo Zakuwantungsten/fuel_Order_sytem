@@ -14,8 +14,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network-only: no caching at all
-  event.respondWith(fetch(event.request));
+  // Network-only: pass through, but catch failures so the SW doesn't log
+  // "network error response" for every failed fetch (e.g. push-subscribe timeouts).
+  event.respondWith(
+    fetch(event.request).catch(() => Response.error())
+  );
 });
 
 // ── Web Push: show notification received from the backend ──
