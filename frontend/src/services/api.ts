@@ -2096,6 +2096,11 @@ export const configAPI = {
     formulaGoing?: string;
     formulaReturning?: string;
     currency?: 'USD' | 'TZS';
+    supplierName?: string;
+    supplierAddress?: string;
+    supplierPlotNo?: string;
+    supplierPoBox?: string;
+    description?: string;
   }) => {
     const response = await apiClient.post('/system-config/stations', data);
     return response.data;

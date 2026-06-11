@@ -6,6 +6,7 @@ import axios from 'axios';
 export interface CompanyBranding {
   companyName: string;
   companyWebsite: string;
+  companyAddress: string; // e.g., "P.O Box 3559, Dar Es Salaam"
   companyEmail: string;
   companyPhone: string;
   /** base64 data URL "data:image/png;base64,..." or empty string */
@@ -15,6 +16,7 @@ export interface CompanyBranding {
 const DEFAULT_BRANDING: CompanyBranding = {
   companyName: '',
   companyWebsite: '',
+  companyAddress: '',
   companyEmail: '',
   companyPhone: '',
   logoUrl: '',
@@ -687,44 +689,56 @@ export const getCompanyBranding = async (): Promise<CompanyBranding> => {
     return {
       companyName: g?.companyName || '',
       companyWebsite: g?.companyWebsite || '',
+      companyAddress: g?.companyAddress || '',
       companyEmail: g?.companyEmail || '',
       companyPhone: g?.companyPhone || '',
       logoUrl,
     };
   } catch {
-    return { companyName: '', companyWebsite: '', companyEmail: '', companyPhone: '', logoUrl: '' };
+    return { companyName: '', companyWebsite: '', companyAddress: '', companyEmail: '', companyPhone: '', logoUrl: '' };
   }
 };
 
+export interface LPOStationInfo {
+  supplierName?: string;
+  supplierAddress?: string;
+  supplierPlotNo?: string;
+  supplierPoBox?: string;
+  description?: string;
+}
+
 /**
- * Generate a PDF for an LPO Summary document.
- * Matches the layout of the former frontend LPOPrint component with logo watermark.
+ * Generate a PDF for an LPO Summary document matching the Tahmeed LPO image format.
  */
 export const generateLPOPDF = (
   lpo: ILPOSummary,
   branding: CompanyBranding = DEFAULT_BRANDING,
   preparedBy?: string,
-  approvedBy?: string
+  approvedBy?: string,
+  stationInfo?: LPOStationInfo
 ): PDFKit.PDFDocument => {
   const MARGIN = 40;
   const PAGE_W = 595;
   const PAGE_H = 842;
   const CONTENT_W = PAGE_W - 2 * MARGIN; // 515
   const FOOTER_Y = PAGE_H - MARGIN - 18;  // 784
-  const ROWS_PER_PAGE = 20;
+  const TABLE_R = MARGIN + CONTENT_W;     // 555
   const ROW_H = 22;
   const HDR_H = 24;
+  // First page has a larger header, so fewer rows fit
+  const ROWS_PER_FIRST_PAGE = 15;
+  const ROWS_PER_PAGE = 20;
 
-  // Column x-positions and widths (sum = 515)
+  // 7 columns: D.O NO | TRUCK NO | DESTINATION | DESCRIPTION | QTY | RATE | AMOUNT  (sum = 515)
   const C = [
-    { x: MARGIN,       w: 90  }, // DO No.
-    { x: MARGIN + 90,  w: 85  }, // Truck No.
-    { x: MARGIN + 175, w: 70  }, // Liters
-    { x: MARGIN + 245, w: 70  }, // Rate
-    { x: MARGIN + 315, w: 95  }, // Amount
-    { x: MARGIN + 410, w: 105 }, // Dest.
+    { x: MARGIN,       w: 52  }, // D.O NO
+    { x: MARGIN + 52,  w: 65  }, // TRUCK NO
+    { x: MARGIN + 117, w: 65  }, // DESTINATION
+    { x: MARGIN + 182, w: 148 }, // DESCRIPTION
+    { x: MARGIN + 330, w: 50  }, // QTY
+    { x: MARGIN + 380, w: 55  }, // RATE
+    { x: MARGIN + 435, w: 80  }, // AMOUNT
   ];
-  const TABLE_R = MARGIN + CONTENT_W; // 555
 
   const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: `LPO-${lpo.lpoNo}`, Author: 'Fuel Order Management System' } });
 
@@ -735,15 +749,15 @@ export const generateLPOPDF = (
     return (u.startsWith('LAKE') && !u.includes('TUNDUMA')) ? 'USD' : 'TZS';
   })();
 
-  const totalLiters = lpo.entries.filter(e => !e.isCancelled).reduce((s, e) => s + e.liters, 0);
   const totalAmount = lpo.entries.filter(e => !e.isCancelled).reduce((s, e) => s + e.amount, 0);
 
-  // Pre-split entries into pages of 20
+  // Split entries: first page gets fewer rows due to larger header
   const pages: ILPODetail[][] = [];
   if (lpo.entries.length === 0) {
     pages.push([]);
   } else {
-    for (let i = 0; i < lpo.entries.length; i += ROWS_PER_PAGE) {
+    pages.push(lpo.entries.slice(0, ROWS_PER_FIRST_PAGE));
+    for (let i = ROWS_PER_FIRST_PAGE; i < lpo.entries.length; i += ROWS_PER_PAGE) {
       pages.push(lpo.entries.slice(i, i + ROWS_PER_PAGE));
     }
   }
@@ -756,11 +770,15 @@ export const generateLPOPDF = (
 
   const fmtAmount = (n: number): string =>
     currency === 'USD'
-      ? `$ ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      ? `USD ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : `TZS ${n.toLocaleString('en-US')}`;
 
   const hline = (y: number, x1 = MARGIN, x2 = TABLE_R, lw = 0.5, color = '#000000') => {
     doc.save().lineWidth(lw).moveTo(x1, y).lineTo(x2, y).strokeColor(color).stroke().restore();
+  };
+
+  const vline = (x: number, y1: number, y2: number, lw = 0.5, color = '#000000') => {
+    doc.save().lineWidth(lw).moveTo(x, y1).lineTo(x, y2).strokeColor(color).stroke().restore();
   };
 
   const drawWatermarks = () => {
@@ -781,16 +799,18 @@ export const generateLPOPDF = (
   };
 
   const drawTableHeader = (y: number) => {
+    doc.save().fillOpacity(0.82);
     doc.rect(MARGIN, y, CONTENT_W, HDR_H).fill('#F5F5F5');
+    doc.restore();
     doc.rect(MARGIN, y, CONTENT_W, HDR_H).lineWidth(1).strokeColor('#000000').stroke();
     C.forEach((col, i) => {
-      if (i > 0) doc.save().lineWidth(1).moveTo(col.x, y).lineTo(col.x, y + HDR_H).strokeColor('#000000').stroke().restore();
+      if (i > 0) vline(col.x, y, y + HDR_H, 1);
     });
-    const labels = ['DO No.', 'Truck No.', 'Liters', `Rate (${currency})`, `Amount (${currency})`, 'Dest.'];
-    const ty = y + (HDR_H - 10) / 2;
+    const labels = ['D.O NO', 'TRUCK NO', 'DESTINATION', 'DESCRIPTION', 'QTY', 'RATE', 'AMOUNT'];
+    const ty = y + (HDR_H - 9) / 2;
     labels.forEach((lbl, i) => {
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000')
-        .text(lbl, C[i].x + 3, ty, { width: C[i].w - 6, align: 'center', lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000')
+        .text(lbl, C[i].x + 2, ty, { width: C[i].w - 4, align: 'center', lineBreak: false });
     });
   };
 
@@ -800,54 +820,49 @@ export const generateLPOPDF = (
     const isRef = !!entry.isRefer;
 
     const bg = cancelled ? '#FFE6E6' : isRef ? '#FFF7ED' : isDA ? '#FFF3E6' : rowIdx % 2 === 0 ? '#FFFFFF' : '#FAFAFA';
+    doc.save().fillOpacity(0.78);
     doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill(bg);
+    doc.restore();
     doc.rect(MARGIN, y, CONTENT_W, ROW_H).lineWidth(0.5).strokeColor('#000000').stroke();
     C.forEach((col, i) => {
-      if (i > 0) doc.save().lineWidth(0.5).moveTo(col.x, y).lineTo(col.x, y + ROW_H).strokeColor('#000000').stroke().restore();
+      if (i > 0) vline(col.x, y, y + ROW_H, 0.5);
     });
 
     const doNo = cancelled ? 'CANCELLED' : isRef ? 'REF' : isDA ? (entry.referenceDoNo ? `DA(NIL)-${entry.referenceDoNo}` : 'DA(NIL)') : entry.doNo;
     const dest = isDA ? 'NIL' : isRef ? (entry.dest || 'REFER') : entry.dest;
+    const descText = stationInfo?.description || '';
     const doColor = cancelled ? '#CC0000' : isRef ? '#C2410C' : isDA ? '#CC6600' : '#000000';
     const destColor = cancelled ? '#CC0000' : isDA ? '#CC6600' : '#333333';
     const stdColor = cancelled ? '#CC0000' : '#000000';
     const rateColor = cancelled ? '#CC0000' : '#333333';
 
-    const ty = y + (ROW_H - 10) / 2;
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(doColor)
-      .text(doNo, C[0].x + 3, ty, { width: C[0].w - 6, align: 'center', lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(stdColor)
-      .text(entry.truckNo, C[1].x + 3, ty, { width: C[1].w - 6, align: 'center', lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(stdColor)
-      .text(entry.liters.toLocaleString('en-US'), C[2].x + 3, ty, { width: C[2].w - 6, align: 'center', lineBreak: false });
-    doc.font('Helvetica').fontSize(10).fillColor(rateColor)
-      .text(entry.rate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }), C[3].x + 3, ty, { width: C[3].w - 6, align: 'center', lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(stdColor)
-      .text(entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), C[4].x + 3, ty, { width: C[4].w - 6, align: 'center', lineBreak: false });
-    doc.font('Helvetica').fontSize(10).fillColor(destColor)
-      .text(dest, C[5].x + 3, ty, { width: C[5].w - 6, align: 'center', lineBreak: false });
+    const ty = y + (ROW_H - 9) / 2;
+    // D.O NO
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(doColor)
+      .text(doNo, C[0].x + 2, ty, { width: C[0].w - 4, align: 'center', lineBreak: false });
+    // TRUCK NO
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(stdColor)
+      .text(entry.truckNo, C[1].x + 2, ty, { width: C[1].w - 4, align: 'center', lineBreak: false });
+    // DESTINATION
+    doc.font('Helvetica').fontSize(9).fillColor(destColor)
+      .text(dest, C[2].x + 2, ty, { width: C[2].w - 4, align: 'center', lineBreak: false });
+    // DESCRIPTION
+    doc.font('Helvetica').fontSize(9).fillColor(stdColor)
+      .text(descText, C[3].x + 4, ty, { width: C[3].w - 8, align: 'left', lineBreak: false });
+    // QTY
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(stdColor)
+      .text(entry.liters.toLocaleString('en-US'), C[4].x + 2, ty, { width: C[4].w - 4, align: 'center', lineBreak: false });
+    // RATE
+    doc.font('Helvetica').fontSize(9).fillColor(rateColor)
+      .text(entry.rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), C[5].x + 2, ty, { width: C[5].w - 4, align: 'center', lineBreak: false });
+    // AMOUNT
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(stdColor)
+      .text(entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), C[6].x + 2, ty, { width: C[6].w - 4, align: 'right', lineBreak: false });
 
     if (cancelled) {
       const midY = y + ROW_H / 2;
       doc.save().lineWidth(0.5).moveTo(MARGIN + 2, midY).lineTo(TABLE_R - 2, midY).strokeColor('#CC0000').stroke().restore();
     }
-  };
-
-  const drawTotalRow = (y: number) => {
-    doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill('#E8E8E8');
-    doc.rect(MARGIN, y, CONTENT_W, ROW_H).lineWidth(1).strokeColor('#000000').stroke();
-    C.forEach((col, i) => {
-      // Skip divider at col 1 — TOTAL label spans cols 0+1
-      if (i > 1) doc.save().lineWidth(1).moveTo(col.x, y).lineTo(col.x, y + ROW_H).strokeColor('#000000').stroke().restore();
-    });
-    const ty = y + (ROW_H - 11) / 2;
-    // TOTAL label spans cols 0+1
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000')
-      .text('TOTAL', C[0].x + 3, ty, { width: C[0].w + C[1].w - 6, align: 'center', lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000')
-      .text(totalLiters.toLocaleString('en-US'), C[2].x + 3, ty, { width: C[2].w - 6, align: 'center', lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000')
-      .text(fmtAmount(totalAmount), C[4].x + 3, ty, { width: C[4].w - 6, align: 'center', lineBreak: false });
   };
 
   pages.forEach((pageEntries, pageIdx) => {
@@ -860,52 +875,112 @@ export const generateLPOPDF = (
     let y = MARGIN;
 
     if (isFirst) {
-      // Title row
+      // ── HEADER: Logo (left) + Company name/address/email (right of logo) ──
+      const LOGO_W = 115;
+      const LOGO_H = 95;
+      if (logoBuffer) {
+        try {
+          doc.image(logoBuffer, MARGIN, y, { width: LOGO_W, height: LOGO_H, fit: [LOGO_W, LOGO_H] });
+        } catch { /* ignore */ }
+      }
+      const companyX = MARGIN + LOGO_W + 12;
+      const companyW = TABLE_R - companyX - 20;
+      doc.font('Helvetica-Bold').fontSize(24).fillColor('#000000')
+        .text(branding.companyName || 'TAHMEED COACH TZ LTD', companyX, y + 4, { width: companyW, align: 'center', lineBreak: false });
+      const addressLine = (branding as any).companyAddress || branding.companyWebsite || '';
+      if (addressLine) {
+        doc.font('Helvetica').fontSize(13).fillColor('#333333')
+          .text(addressLine, companyX, y + 40, { width: companyW, align: 'center', lineBreak: false });
+      }
+      if (branding.companyEmail) {
+        doc.font('Helvetica').fontSize(13).fillColor('#333333')
+          .text(`Email: ${branding.companyEmail}`, companyX, y + 58, { width: companyW, align: 'center', lineBreak: false });
+      }
+
+      y = MARGIN + LOGO_H + 8; // ≈ 143
+
+      // Thin separator
+      hline(y, MARGIN, TABLE_R, 0.5, '#CCCCCC');
+      y += 10;
+
+      // ── THREE-COLUMN SECTION ──
+      // Left col: SUPPLIER info (width 160)
+      // Center col: "Diesel Order" title (width 195)
+      // Right col: Order No + LPO number (width 160)
+      const leftW = 160;
+      const centerW = 195;
+      const rightW = CONTENT_W - leftW - centerW; // 160
+
+      const sectionStartY = y;
+
+      // Left: SUPPLIER
+      doc.font('Helvetica-Bold').fontSize(8).fillColor('#000000')
+        .text('SUPPLIER', MARGIN, sectionStartY, { lineBreak: false });
+      const suppNameY = sectionStartY + 14;
+      const supplierDisplayName = stationInfo?.supplierName || lpo.station || '';
+      if (supplierDisplayName) {
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000')
+          .text(supplierDisplayName, MARGIN, suppNameY, { width: leftW, lineBreak: false });
+      }
+      if (stationInfo?.supplierAddress) {
+        doc.font('Helvetica').fontSize(9).fillColor('#333333')
+          .text(stationInfo.supplierAddress, MARGIN, suppNameY + 15, { width: leftW, lineBreak: true });
+      }
+      if (stationInfo?.supplierPlotNo) {
+        doc.font('Helvetica').fontSize(9).fillColor('#333333')
+          .text(stationInfo.supplierPlotNo, MARGIN, suppNameY + 40, { width: leftW, lineBreak: false });
+      }
+      if (stationInfo?.supplierPoBox) {
+        doc.font('Helvetica').fontSize(9).fillColor('#333333')
+          .text(stationInfo.supplierPoBox, MARGIN, suppNameY + 54, { width: leftW, lineBreak: false });
+      }
+
+      // Center: "Diesel Order" title
+      const centerX = MARGIN + leftW;
       doc.font('Helvetica-Bold').fontSize(22).fillColor('#000000')
-        .text('LOCAL PURCHASE ORDER', MARGIN, y, { lineBreak: false });
-      doc.font('Helvetica-Bold').fontSize(15).fillColor('#000000')
-        .text(`LPO No. ${lpo.lpoNo}`, MARGIN, y, { width: CONTENT_W, align: 'right', lineBreak: false });
-      y += 28;
+        .text('Diesel Order', centerX, sectionStartY + 18, { width: centerW, align: 'center', lineBreak: false });
 
-      doc.font('Helvetica').fontSize(11).fillColor('#444444').text('FUEL SUPPLY', MARGIN, y, { lineBreak: false });
-      doc.font('Helvetica').fontSize(10).fillColor('#555555')
-        .text(`Date: ${fmtDate(lpo.date)}`, MARGIN, y, { width: CONTENT_W, align: 'right', lineBreak: false });
-      y += 20;
+      // Right: Order No + LPO number
+      const rightX = MARGIN + leftW + centerW;
+      doc.font('Helvetica').fontSize(8).fillColor('#333333')
+        .text('Order No', rightX, sectionStartY, { width: rightW, align: 'right', lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(17).fillColor('#000000')
+        .text(`LPO ${lpo.lpoNo}`, rightX, sectionStartY + 14, { width: rightW, align: 'right', lineBreak: false });
 
-      // Station / Order Of
-      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000').text('Station: ', MARGIN, y, { continued: true, lineBreak: false });
-      doc.font('Helvetica').fillColor('#333333').text(lpo.station, { lineBreak: false });
-      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000').text('Order of: ', MARGIN + CONTENT_W / 2, y, { continued: true, lineBreak: false });
-      doc.font('Helvetica').fillColor('#333333').text(lpo.orderOf, { lineBreak: false });
-      y += 20;
+      y = sectionStartY + 85; // enough for supplier block (4 detail lines)
 
-      hline(y, MARGIN, TABLE_R, 2.5, '#000000');
-      y += 12;
+      // Tax Date box — right-aligned
+      const TAX_BOX_W = 200;
+      const TAX_LABEL_W = 80;
+      const TAX_VAL_W = TAX_BOX_W - TAX_LABEL_W;
+      const TAX_H = 22;
+      const taxBoxX = TABLE_R - TAX_BOX_W;
+      doc.rect(taxBoxX, y, TAX_BOX_W, TAX_H).lineWidth(0.5).strokeColor('#000000').stroke();
+      vline(taxBoxX + TAX_LABEL_W, y, y + TAX_H, 0.5);
+      const taxTy = y + (TAX_H - 9) / 2;
+      doc.font('Helvetica').fontSize(9).fillColor('#000000')
+        .text('Tax Date', taxBoxX + 3, taxTy, { width: TAX_LABEL_W - 6, align: 'center', lineBreak: false });
+      doc.font('Helvetica').fontSize(9).fillColor('#000000')
+        .text(fmtDate(lpo.date), taxBoxX + TAX_LABEL_W + 3, taxTy, { width: TAX_VAL_W - 6, align: 'center', lineBreak: false });
 
-      // Instructions band
-      hline(y, MARGIN, TABLE_R, 0.5, '#DDDDDD');
-      y += 8;
-      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000')
-        .text('KINDLY SUPPLY THE FOLLOWING LITERS', MARGIN, y, { lineBreak: false });
-      y += 18;
-      hline(y, MARGIN, TABLE_R, 0.5, '#DDDDDD');
-      y += 12;
+      y += TAX_H + 10;
+
     } else {
-      // Continuation header
-      doc.font('Helvetica-Bold').fontSize(16).fillColor('#000000')
-        .text(`LPO No. ${lpo.lpoNo} (Continued)`, MARGIN, y, { lineBreak: false });
-      doc.font('Helvetica').fontSize(10).fillColor('#555555')
-        .text(`Date: ${fmtDate(lpo.date)}`, MARGIN, y, { width: CONTENT_W, align: 'right', lineBreak: false });
-      y += 24;
-      hline(y, MARGIN, TABLE_R, 2, '#000000');
-      y += 15;
+      // Continuation header (minimal — just LPO number + date)
+      doc.font('Helvetica-Bold').fontSize(14).fillColor('#000000')
+        .text(`LPO ${lpo.lpoNo} (Continued)`, MARGIN, y, { lineBreak: false });
+      doc.font('Helvetica').fontSize(9).fillColor('#555555')
+        .text(fmtDate(lpo.date), MARGIN, y, { width: CONTENT_W, align: 'right', lineBreak: false });
+      y += 22;
+      hline(y, MARGIN, TABLE_R, 1, '#000000');
+      y += 12;
     }
 
+    // ── TABLE ──
     const tableStartY = y;
-    const totalTableH = HDR_H + pageEntries.length * ROW_H + (isLast ? ROW_H : 0);
-    const TABLE_RADIUS = 5;
+    const totalTableH = HDR_H + pageEntries.length * ROW_H;
+    const TABLE_RADIUS = 4;
 
-    // Clip all table fills/borders to rounded rect so corners appear rounded
     doc.save();
     doc.roundedRect(MARGIN, tableStartY, CONTENT_W, totalTableH, TABLE_RADIUS).clip();
 
@@ -917,52 +992,72 @@ export const generateLPOPDF = (
       y += ROW_H;
     });
 
-    if (isLast) {
-      drawTotalRow(y);
-      y += ROW_H;
-    }
-
     doc.restore();
 
-    // Draw rounded outer border on top of clipped content
+    // Rounded outer border
     doc.roundedRect(MARGIN, tableStartY, CONTENT_W, totalTableH, TABLE_RADIUS)
       .lineWidth(1).strokeColor('#000000').stroke();
 
     if (isLast) {
-      y += 40;
+      y += 20;
 
-      // Signature section
-      const sigW = CONTENT_W / 3;
-      [0, 1, 2].forEach(i => {
-        hline(y, MARGIN + i * sigW + 5, MARGIN + (i + 1) * sigW - 5, 2, '#000000');
-      });
+      // ── FOOTER ROW: Prepared by | Approved By | Total | Amount ──
+      const FOOTER_H = 58;
+      const prepW = 155;
+      const approW = 185;
+      const totalSecW = CONTENT_W - prepW - approW; // 175
+      const totalLabelW = 55;
+      const totalAmtW = totalSecW - totalLabelW;    // 120
 
-      const sigLabels = ['Prepared By', 'Approved By', 'Received By'];
-      const sigNames = [preparedBy || '', approvedBy || '', ''];
-      const sigSubs = ['Signature', approvedBy ? 'Signature' : 'Name & Signature', 'Station Attendant'];
+      const ftrY = y;
 
-      sigLabels.forEach((lbl, i) => {
-        const sx = MARGIN + i * sigW;
-        doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text(lbl, sx + 5, y + 10, { width: sigW - 10, lineBreak: false });
-        if (sigNames[i]) {
-          doc.font('Helvetica').fontSize(10).fillColor('#000000').text(sigNames[i], sx + 5, y + 24, { width: sigW - 10, lineBreak: false });
-        }
-        doc.font('Helvetica').fontSize(9).fillColor('#666666').text(sigSubs[i], sx + 5, y + (sigNames[i] ? 38 : 28), { width: sigW - 10, lineBreak: false });
-      });
+      // Outer box
+      doc.rect(MARGIN, ftrY, CONTENT_W, FOOTER_H).lineWidth(0.5).strokeColor('#000000').stroke();
 
-      y += 70;
+      // Vertical dividers
+      const div1X = MARGIN + prepW;
+      const div2X = MARGIN + prepW + approW;
+      const div3X = div2X + totalLabelW;
+      vline(div1X, ftrY, ftrY + FOOTER_H);
+      vline(div2X, ftrY, ftrY + FOOTER_H);
+      vline(div3X, ftrY, ftrY + FOOTER_H);
+
+      // Prepared by
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000')
+        .text('Prepared by:', MARGIN + 6, ftrY + 10, { width: prepW - 12, lineBreak: false });
+      if (preparedBy) {
+        doc.font('Helvetica').fontSize(9).fillColor('#000000')
+          .text(preparedBy, MARGIN + 6, ftrY + 24, { width: prepW - 12, lineBreak: false });
+      }
+
+      // Approved By
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000')
+        .text('Approved By :', div1X + 6, ftrY + 10, { width: approW - 12, lineBreak: false });
+      const approvedByName = approvedBy || '';
+      if (approvedByName) {
+        doc.font('Helvetica').fontSize(9).fillColor('#000000')
+          .text(approvedByName, div1X + 6, ftrY + 24, { width: approW - 12, lineBreak: false });
+      }
+
+      // Total label
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000')
+        .text('Total', div2X + 3, ftrY + (FOOTER_H - 12) / 2, { width: totalLabelW - 6, align: 'center', lineBreak: false });
+
+      // Total amount
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000')
+        .text(fmtAmount(totalAmount), div3X + 3, ftrY + (FOOTER_H - 12) / 2, { width: totalAmtW - 6, align: 'center', lineBreak: false });
+
+      y += FOOTER_H + 10;
+
       hline(y, MARGIN, TABLE_R, 0.5, '#CCCCCC');
       y += 8;
-      doc.font('Helvetica').fontSize(9).fillColor('#666666')
-        .text('This is a computer-generated document. No signature is required.', MARGIN, y, { lineBreak: false });
-      y += 14;
-      doc.font('Helvetica').fontSize(9).fillColor('#666666')
-        .text('For any queries, please contact the logistics department.', MARGIN, y, { lineBreak: false });
+      doc.font('Helvetica').fontSize(8).fillColor('#888888')
+        .text('This is a computer-generated document.', MARGIN, y, { lineBreak: false });
     }
 
-    // Page footer
+    // Page number footer
     hline(FOOTER_Y - 6, MARGIN, TABLE_R, 0.5, '#DDDDDD');
-    doc.font('Helvetica').fontSize(9).fillColor('#666666')
+    doc.font('Helvetica').fontSize(8).fillColor('#888888')
       .text(`Page ${pageIdx + 1} of ${totalPages}`, MARGIN, FOOTER_Y, { width: CONTENT_W, align: 'center', lineBreak: false });
   });
 

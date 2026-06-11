@@ -246,6 +246,12 @@ export const createFuelStation = async (req: AuthRequest, res: Response): Promis
       fuelRecordFieldReturning,
       formulaGoing,
       formulaReturning,
+      currency,
+      supplierName,
+      supplierAddress,
+      supplierPlotNo,
+      supplierPoBox,
+      description,
     } = req.body;
 
     // Validate required fields
@@ -309,6 +315,12 @@ export const createFuelStation = async (req: AuthRequest, res: Response): Promis
       fuelRecordFieldReturning: fuelRecordFieldReturning && fuelRecordFieldReturning.trim() !== '' ? fuelRecordFieldReturning : undefined,
       formulaGoing: formulaGoing && formulaGoing.trim() !== '' ? formulaGoing : undefined,
       formulaReturning: formulaReturning && formulaReturning.trim() !== '' ? formulaReturning : undefined,
+      currency: currency || 'TZS',
+      supplierName: supplierName?.trim() || undefined,
+      supplierAddress: supplierAddress?.trim() || undefined,
+      supplierPlotNo: supplierPlotNo?.trim() || undefined,
+      supplierPoBox: supplierPoBox?.trim() || undefined,
+      description: description?.trim() || undefined,
       createdBy: req.user?.username || 'system',
     });
 

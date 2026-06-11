@@ -2906,9 +2906,28 @@ export const downloadLPOPDF = async (req: AuthRequest, res: Response): Promise<v
       }).select('approvedBy').lean();
       approvedBy = (daEntry as any)?.approvedBy;
     }
+    // Fall back to LPO's own approvedBy if not from driver account
+    if (!approvedBy && (lpoSummary as any).approvedBy) {
+      approvedBy = (lpoSummary as any).approvedBy;
+    }
+
+    // Fetch station supplier info for PDF
+    let stationInfo: { supplierName?: string; supplierAddress?: string; supplierPlotNo?: string; supplierPoBox?: string; description?: string } | undefined;
+    if (lpoSummary.station && lpoSummary.station !== 'CASH' && lpoSummary.station !== 'CUSTOM') {
+      const stationConfig = await FuelStationConfig.findOne({ stationName: lpoSummary.station, isActive: true }).select('supplierName supplierAddress supplierPlotNo supplierPoBox description').lean();
+      if (stationConfig) {
+        stationInfo = {
+          supplierName: (stationConfig as any).supplierName,
+          supplierAddress: (stationConfig as any).supplierAddress,
+          supplierPlotNo: (stationConfig as any).supplierPlotNo,
+          supplierPoBox: (stationConfig as any).supplierPoBox,
+          description: (stationConfig as any).description,
+        };
+      }
+    }
 
     const preparedBy = req.user?.username;
-    const doc = generateLPOPDF(lpoSummary as any, branding, preparedBy, approvedBy);
+    const doc = generateLPOPDF(lpoSummary as any, branding, preparedBy, approvedBy, stationInfo);
 
     const dateStr = new Date().toISOString().split('T')[0];
     const filename = `LPO-${lpoSummary.lpoNo}-${dateStr}.pdf`;

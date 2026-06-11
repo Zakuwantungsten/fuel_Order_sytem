@@ -72,6 +72,7 @@ const getCompanyBranding = async (): Promise<CompanyBranding> => {
     return {
       companyName: g?.companyName || '',
       companyWebsite: g?.companyWebsite || '',
+      companyAddress: (g as any)?.companyAddress || '',
       companyEmail: g?.companyEmail || '',
       companyPhone: g?.companyPhone || '',
       logoUrl,
@@ -80,6 +81,7 @@ const getCompanyBranding = async (): Promise<CompanyBranding> => {
     return {
       companyName: '',
       companyWebsite: '',
+      companyAddress: '',
       companyEmail: '',
       companyPhone: '',
       logoUrl: '',

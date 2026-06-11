@@ -30,6 +30,11 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
     formulaGoing: '',
     formulaReturning: '',
     currency: 'TZS' as 'USD' | 'TZS',
+    supplierName: '',
+    supplierAddress: '',
+    supplierPlotNo: '',
+    supplierPoBox: '',
+    description: '',
   });
   
   // Dropdown states
@@ -134,6 +139,11 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         formulaGoing: stationForm.formulaGoing?.trim() || undefined,
         formulaReturning: stationForm.formulaReturning?.trim() || undefined,
         currency: stationForm.currency,
+        supplierName: stationForm.supplierName.trim() || undefined,
+        supplierAddress: stationForm.supplierAddress.trim() || undefined,
+        supplierPlotNo: stationForm.supplierPlotNo.trim() || undefined,
+        supplierPoBox: stationForm.supplierPoBox.trim() || undefined,
+        description: stationForm.description.trim() || undefined,
       });
       onMessage('success', 'Fuel station created successfully');
       setShowStationModal(false);
@@ -188,6 +198,11 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         formulaGoing: stationForm.formulaGoing?.trim() || undefined,
         formulaReturning: stationForm.formulaReturning?.trim() || undefined,
         currency: stationForm.currency,
+        supplierName: stationForm.supplierName.trim() || undefined,
+        supplierAddress: stationForm.supplierAddress.trim() || undefined,
+        supplierPlotNo: stationForm.supplierPlotNo.trim() || undefined,
+        supplierPoBox: stationForm.supplierPoBox.trim() || undefined,
+        description: stationForm.description.trim() || undefined,
       });
       onMessage('success', 'Fuel station updated successfully');
       setShowStationModal(false);
@@ -231,6 +246,11 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         formulaGoing: station.formulaGoing || '',
         formulaReturning: station.formulaReturning || '',
         currency: station.currency || 'TZS',
+        supplierName: station.supplierName || '',
+        supplierAddress: station.supplierAddress || '',
+        supplierPlotNo: station.supplierPlotNo || '',
+        supplierPoBox: station.supplierPoBox || '',
+        description: station.description || '',
       });
     }
     setShowStationModal(true);
@@ -247,6 +267,11 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
       formulaGoing: '',
       formulaReturning: '',
       currency: 'TZS',
+      supplierName: '',
+      supplierAddress: '',
+      supplierPlotNo: '',
+      supplierPoBox: '',
+      description: '',
     });
   };
 
@@ -562,6 +587,43 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                   <input type="text" value={stationForm.formulaReturning} onChange={(e) => setStationForm({ ...stationForm, formulaReturning: e.target.value })}
                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono text-sm" placeholder="totalLiters * 0.8" />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Custom formula for return allocation</p>
+                </div>
+
+                {/* Supplier / PDF Details */}
+                <div className="border-t dark:border-gray-600 pt-4">
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Supplier Info (shown on LPO PDF)</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supplier Name</label>
+                        <input type="text" value={stationForm.supplierName} onChange={(e) => setStationForm({ ...stationForm, supplierName: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., LAKE PETROLEUM LTD" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (PDF column)</label>
+                        <input type="text" value={stationForm.description} onChange={(e) => setStationForm({ ...stationForm, description: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Diesel Lake Petroleum" />
+                        <p className="mt-1 text-xs text-gray-500">Fills the DESCRIPTION column in each LPO row</p>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supplier Address</label>
+                      <input type="text" value={stationForm.supplierAddress} onChange={(e) => setStationForm({ ...stationForm, supplierAddress: e.target.value })}
+                        className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Corner of Lima/Luanshya Road" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Plot No</label>
+                        <input type="text" value={stationForm.supplierPlotNo} onChange={(e) => setStationForm({ ...stationForm, supplierPlotNo: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., Plot No 10958" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">P.O Box</label>
+                        <input type="text" value={stationForm.supplierPoBox} onChange={(e) => setStationForm({ ...stationForm, supplierPoBox: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g., P.O Box 71030" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="flex gap-3 mt-6">

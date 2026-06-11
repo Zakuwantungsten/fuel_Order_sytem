@@ -1102,6 +1102,11 @@ export interface FuelStationConfig {
   formulaGoing?: string;
   formulaReturning?: string;
   currency?: 'USD' | 'TZS'; // USD for Zambia stations, TZS for Tanzania stations
+  supplierName?: string;
+  supplierAddress?: string;
+  supplierPlotNo?: string;
+  supplierPoBox?: string;
+  description?: string;
   isActive: boolean;
   createdBy: string;
   updatedBy?: string;

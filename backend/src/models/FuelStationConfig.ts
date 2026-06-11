@@ -10,6 +10,11 @@ export interface IFuelStationConfig extends Document {
   formulaGoing?: string; // e.g., "totalLiters + extraLiters - 900"
   formulaReturning?: string;
   currency: 'USD' | 'TZS'; // USD for Zambia stations, TZS for Tanzania stations
+  supplierName?: string;    // e.g., "LAKE PETROLEUM LTD"
+  supplierAddress?: string; // e.g., "Corner of Lima/Luanshya Road"
+  supplierPlotNo?: string;  // e.g., "Plot No 10958"
+  supplierPoBox?: string;   // e.g., "P.O Box 71030"
+  description?: string;     // e.g., "Diesel Lake Petroleum" — shown in PDF DESCRIPTION column
   isActive: boolean;
   createdBy: string;
   updatedBy?: string;
@@ -64,6 +69,26 @@ const FuelStationConfigSchema = new Schema<IFuelStationConfig>(
       type: String,
       enum: ['USD', 'TZS'],
       default: 'TZS',
+    },
+    supplierName: {
+      type: String,
+      trim: true,
+    },
+    supplierAddress: {
+      type: String,
+      trim: true,
+    },
+    supplierPlotNo: {
+      type: String,
+      trim: true,
+    },
+    supplierPoBox: {
+      type: String,
+      trim: true,
+    },
+    description: {
+      type: String,
+      trim: true,
     },
     isActive: {
       type: Boolean,
