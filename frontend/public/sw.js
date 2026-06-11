@@ -1,4 +1,4 @@
-// Service worker — minimal caching + Web Push notification support
+// Service worker v2 — minimal caching + Web Push notification support
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
