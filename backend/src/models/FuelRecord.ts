@@ -265,6 +265,13 @@ fuelRecordSchema.index({ truckNo: 1, date: -1, isDeleted: 1, isCancelled: 1 });
 // sorted by date desc
 fuelRecordSchema.index({ monthKey: 1, isDeleted: 1, date: -1 });
 
+// Dashboard stats/chart queries filter on isDeleted + isCancelled without truckNo.
+// Without these, { isCancelled: { $ne: true } } forces a collection scan since the
+// existing compound indexes all start with truckNo and can't be used here.
+fuelRecordSchema.index({ isDeleted: 1, isCancelled: 1, date: -1 });        // chart-data date range + recent activity sort
+fuelRecordSchema.index({ isDeleted: 1, isCancelled: 1, journeyStatus: 1 }); // active-trips countDocuments
+fuelRecordSchema.index({ isDeleted: 1, isCancelled: 1, month: 1 });         // stats month-label filter
+
 // Keep monthKey in sync whenever a record is created or its date/month changes.
 fuelRecordSchema.pre('save', function (this: IFuelRecordDocument, next) {
   if (this.isNew || this.isModified('date') || this.isModified('month') || !this.monthKey) {

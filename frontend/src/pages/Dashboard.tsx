@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -45,12 +46,26 @@ interface DashboardProps {
   onNavigate?: (tab: string, highlight?: string) => void;
 }
 
+const DEFAULT_CHART_DATA = { monthlyFuel: [], doTrends: [], stationDistribution: [], journeyStatus: [] };
+
 const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   const navigate = useNavigate();
   const { isDark } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: stats = null, isLoading: loading, error: statsError } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => dashboardAPI.getStats(),
+    staleTime: 2 * 60 * 1000,
+  });
+  const error: string | null = statsError ? 'Failed to load dashboard data' : null;
+
+  const { data: chartData = DEFAULT_CHART_DATA } = useQuery({
+    queryKey: ['dashboard-chart-data'],
+    queryFn: () => dashboardAPI.getChartData().then(d => d ?? DEFAULT_CHART_DATA),
+    staleTime: 2 * 60 * 1000,
+    placeholderData: DEFAULT_CHART_DATA,
+  });
   
   // Unified search states — persisted in sessionStorage so results survive tab navigation
   const [searchQuery, setSearchQuery] = useState<string>(() => {
@@ -91,68 +106,14 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     try { sessionStorage.setItem('dashboard_search_results', JSON.stringify(searchResults)); } catch {}
   }, [searchResults]);
 
-  // Chart data
-  const [chartData, setChartData] = useState<any>({
-    monthlyFuel: [],
-    doTrends: [],
-    stationDistribution: [],
-    journeyStatus: []
-  });
-
-  useEffect(() => {
-    fetchStats();
-    fetchChartData();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      setLoading(true);
-      const data = await dashboardAPI.getStats();
-      setStats(data);
-      setError(null);
-    } catch (err: any) {
-      console.error('Failed to fetch dashboard stats:', err);
-      setError('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchChartData = async () => {
-    try {
-      // Fetch chart data from backend with proper date filtering
-      const data = await dashboardAPI.getChartData();
-      console.log('Chart data received:', data);
-      if (data) {
-        setChartData({
-          monthlyFuel: data.monthlyFuel || [],
-          doTrends: data.doTrends || [],
-          stationDistribution: data.stationDistribution || [],
-          journeyStatus: data.journeyStatus || []
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch chart data:', err);
-      // Set empty arrays to avoid undefined errors
-      setChartData({
-        monthlyFuel: [],
-        doTrends: [],
-        stationDistribution: [],
-        journeyStatus: []
-      });
-    }
-  };
-
-  // Debounced realtime refresh. The dashboard stays mounted (hidden) behind
-  // other tabs, so without a debounce every single record edit by any user
-  // re-fired the stats + chart aggregation endpoints — a burst of N changes
-  // (e.g. a bulk DO create) now triggers one refetch instead of N.
+  // Debounced realtime refresh — a burst of N changes (e.g. bulk DO create)
+  // triggers one invalidation instead of N parallel refetches.
   const statsRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_summaries', 'yard_fuel'], () => {
     if (statsRefreshTimer.current) clearTimeout(statsRefreshTimer.current);
     statsRefreshTimer.current = setTimeout(() => {
-      fetchStats();
-      fetchChartData();
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-chart-data'] });
     }, 2500);
   });
   useEffect(() => () => {
@@ -567,7 +528,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           </p>
         </div>
         <button
-          onClick={fetchStats}
+          onClick={() => { queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }); queryClient.invalidateQueries({ queryKey: ['dashboard-chart-data'] }); }}
           className="flex items-center gap-2 px-3 py-1.5 text-sm text-white rounded-lg transition-colors"
           style={{ background: '#2563EB', width: 'fit-content', alignSelf: 'center', flexShrink: 0 }}
           onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}

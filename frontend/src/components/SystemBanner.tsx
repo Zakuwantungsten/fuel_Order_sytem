@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Info, AlertTriangle, AlertCircle, CheckCircle, Megaphone } from 'lucide-react';
 import announcementService, { SystemAnnouncement } from '../services/announcementService';
 import { subscribeToAnnouncementEvents, unsubscribeFromAnnouncementEvents } from '../services/websocket';
@@ -58,34 +59,28 @@ interface SystemBannerProps {
 }
 
 export default function SystemBanner({ userRole: _userRole }: SystemBannerProps) {
-  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([]);
+  const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState<Set<string>>(getDismissed);
 
-  const load = async () => {
-    try {
-      const data = await announcementService.getActive();
-      setAnnouncements(data);
-    } catch {
-      // silently fail — banners are non-critical
-    }
-  };
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['system-announcements'],
+    queryFn: () => announcementService.getActive(),
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
-    load();
-
     subscribeToAnnouncementEvents((event) => {
       if (event.action === 'deleted') {
-        setAnnouncements((prev) => prev.filter((a) => a._id !== event.announcement._id));
-      } else if (event.action === 'created') {
-        // Re-fetch so we respect the server-side role/date filtering
-        load();
-      } else if (event.action === 'updated') {
-        load();
+        queryClient.setQueryData(['system-announcements'], (old: SystemAnnouncement[] = []) =>
+          old.filter((a) => a._id !== event.announcement._id)
+        );
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['system-announcements'] });
       }
     });
 
     return () => unsubscribeFromAnnouncementEvents();
-  }, []);
+  }, [queryClient]);
 
   const dismiss = (id: string) => {
     const next = new Set(dismissed);
