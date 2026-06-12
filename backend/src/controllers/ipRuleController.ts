@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { IPRule } from '../models/IPRule';
 import { ApiError } from '../middleware/errorHandler';
-import { isValidIPv4, evaluateIP, refreshIPRuleCache } from '../middleware/ipFilter';
+import { isValidIP, evaluateIP, refreshIPRuleCache } from '../middleware/ipFilter';
 import logger from '../utils/logger';
 import AuditService from '../utils/auditService';
 
@@ -31,8 +31,8 @@ export const createRule = async (req: AuthRequest, res: Response): Promise<void>
     if (!ip || typeof ip !== 'string') {
       throw new ApiError(400, 'IP address or CIDR is required');
     }
-    if (!isValidIPv4(ip.trim())) {
-      throw new ApiError(400, 'Invalid IP address or CIDR notation (IPv4 only, e.g. 198.51.100.1 or 203.0.113.0/24)');
+    if (!isValidIP(ip.trim())) {
+      throw new ApiError(400, 'Invalid IP address or CIDR notation (e.g. 198.51.100.1, 203.0.113.0/24, 2001:db8::1, 2001:db8::/32)');
     }
     if (!type || !['allow', 'block'].includes(type)) {
       throw new ApiError(400, 'Type must be "allow" or "block"');
@@ -81,7 +81,7 @@ export const updateRule = async (req: AuthRequest, res: Response): Promise<void>
     if (!rule) throw new ApiError(404, 'IP rule not found');
 
     if (ip !== undefined) {
-      if (!isValidIPv4(ip.trim())) {
+      if (!isValidIP(ip.trim())) {
         throw new ApiError(400, 'Invalid IP address or CIDR notation');
       }
       rule.ip = ip.trim();
@@ -189,8 +189,8 @@ export const testIP = async (req: AuthRequest, res: Response): Promise<void> => 
     if (!ip || typeof ip !== 'string') {
       throw new ApiError(400, 'IP address is required');
     }
-    if (!isValidIPv4(ip.trim())) {
-      throw new ApiError(400, 'Invalid IPv4 address');
+    if (!isValidIP(ip.trim())) {
+      throw new ApiError(400, 'Invalid IP address');
     }
 
     const result = await evaluateIP(ip.trim());

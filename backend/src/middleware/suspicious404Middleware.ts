@@ -13,6 +13,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
+import { getClientIP } from '../utils/getClientIP';
 import logger from '../utils/logger';
 import BlocklistService from '../services/blocklistService';
 import { securityLogService } from '../services/securityLogService';
@@ -40,16 +41,6 @@ function cleanupStaleEntries(): void {
     }
   }
   _lastCleanup = Date.now();
-}
-
-// ─── Helper ──────────────────────────────────────────────────────────────────
-
-function getClientIP(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  const raw = typeof forwarded === 'string'
-    ? forwarded.split(',')[0].trim()
-    : req.socket.remoteAddress || '0.0.0.0';
-  return raw.startsWith('::ffff:') ? raw.slice(7) : raw;
 }
 
 // ─── Middleware ──────────────────────────────────────────────────────────────

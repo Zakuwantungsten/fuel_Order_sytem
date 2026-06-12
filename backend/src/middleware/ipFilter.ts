@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import * as net from 'net';
 import { IPRule } from '../models/IPRule';
+import { getClientIP } from '../utils/getClientIP';
 import logger from '../utils/logger';
 
 // ─── IP / CIDR Helpers ────────────────────────────────────────────────────────
@@ -12,23 +14,81 @@ export function isValidIPv4(value: string): boolean {
   return addr.split('.').every((part) => parseInt(part, 10) <= 255);
 }
 
+/** Validate IPv6 address (optionally with /prefix) */
+export function isValidIPv6(value: string): boolean {
+  const parts = value.split('/');
+  if (parts.length > 2) return false;
+  if (!net.isIPv6(parts[0])) return false;
+  if (parts.length === 2) {
+    const prefix = parseInt(parts[1], 10);
+    if (isNaN(prefix) || prefix < 0 || prefix > 128) return false;
+  }
+  return true;
+}
+
+/** Validate IPv4 or IPv6 address (optionally with CIDR prefix) */
+export function isValidIP(value: string): boolean {
+  return isValidIPv4(value) || isValidIPv6(value);
+}
+
 function ipToInt(ip: string): number {
   return ip.split('.').reduce((acc, octet) => ((acc << 8) + parseInt(octet, 10)) >>> 0, 0) >>> 0;
 }
 
-/** Check if `ip` matches a rule entry (exact IP or CIDR) */
-export function matchesRule(ip: string, ruleIP: string): boolean {
+/** Expand :: shorthand and zero-pad all groups to produce a full 8-group IPv6 string */
+function expandIPv6(ip: string): string {
+  if (ip.includes('::')) {
+    const [left, right] = ip.split('::');
+    const leftGroups = left ? left.split(':') : [];
+    const rightGroups = right ? right.split(':') : [];
+    const missing = 8 - leftGroups.length - rightGroups.length;
+    return [...leftGroups, ...Array(missing).fill('0'), ...rightGroups]
+      .map((g) => g.padStart(4, '0'))
+      .join(':');
+  }
+  return ip.split(':').map((g) => g.padStart(4, '0')).join(':');
+}
+
+function ipv6ToBigInt(ip: string): bigint {
+  return expandIPv6(ip)
+    .split(':')
+    .reduce((acc, group) => (acc << 16n) + BigInt(parseInt(group, 16)), 0n);
+}
+
+function matchesIPv6Rule(ip: string, ruleIP: string): boolean {
   try {
     if (!ruleIP.includes('/')) {
-      return ip === ruleIP;
+      // Compare as BigInt so different shorthand forms of the same address match
+      return ipv6ToBigInt(ip) === ipv6ToBigInt(ruleIP);
     }
+    const [network, prefixStr] = ruleIP.split('/');
+    const prefix = parseInt(prefixStr, 10);
+    if (isNaN(prefix) || prefix < 0 || prefix > 128) return false;
+    const mask = prefix === 0 ? 0n : ((2n ** 128n - 1n) << BigInt(128 - prefix));
+    return (ipv6ToBigInt(ip) & mask) === (ipv6ToBigInt(network) & mask);
+  } catch {
+    return false;
+  }
+}
+
+/** Check if `ip` matches a rule entry (exact IP or CIDR, IPv4 or IPv6) */
+export function matchesRule(ip: string, ruleIP: string): boolean {
+  try {
+    const isIPv6Address = ip.includes(':');
+    const isIPv6Rule = ruleIP.includes(':');
+
+    // Address family mismatch — never a match
+    if (isIPv6Address !== isIPv6Rule) return false;
+
+    if (isIPv6Rule) return matchesIPv6Rule(ip, ruleIP);
+
+    // IPv4 path (unchanged)
+    if (!ruleIP.includes('/')) return ip === ruleIP;
     const [network, prefixStr] = ruleIP.split('/');
     const prefix = parseInt(prefixStr, 10);
     if (isNaN(prefix) || prefix < 0 || prefix > 32) return false;
     const mask = prefix === 0 ? 0 : ((0xffffffff << (32 - prefix)) >>> 0);
-    const networkInt = ipToInt(network) & mask;
-    const ipInt = ipToInt(ip) & mask;
-    return networkInt === ipInt;
+    return (ipToInt(ip) & mask) === (ipToInt(network) & mask);
   } catch {
     return false;
   }
@@ -102,15 +162,12 @@ export const ipFilterMiddleware = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const ip = req.ip || req.socket.remoteAddress || '';
+    const normalizedIP = getClientIP(req);
 
     // Always allow loopback
-    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
+    if (normalizedIP === '127.0.0.1' || normalizedIP === '::1') {
       return next();
     }
-
-    // Normalize ::ffff: prefix for IPv4-mapped IPv6 addresses
-    const normalizedIP = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
 
     const { verdict } = await evaluateIP(normalizedIP);
 

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
+import { getClientIP } from '../utils/getClientIP';
 import logger from '../utils/logger';
 import BlocklistService from '../services/blocklistService';
 import { securityLogService } from '../services/securityLogService';
@@ -138,17 +139,6 @@ function isBlockedPath(requestPath: string): boolean {
     if (pattern.test(lowerPath)) return true;
   }
   return false;
-}
-
-// ─── Extract client IP ──────────────────────────────────────────────────────
-
-function getClientIP(req: Request): string {
-  // trust proxy is set in server.ts
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 // ─── Middleware ──────────────────────────────────────────────────────────────

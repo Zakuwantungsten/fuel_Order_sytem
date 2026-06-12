@@ -1,18 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 import BlocklistService from '../services/blocklistService';
+import { getClientIP } from '../utils/getClientIP';
 import logger from '../utils/logger';
 import { securityLogService } from '../services/securityLogService';
-
-// ─── Extract client IP ──────────────────────────────────────────────────────
-
-function getClientIP(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.ip || req.socket.remoteAddress || 'unknown';
-}
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
 
