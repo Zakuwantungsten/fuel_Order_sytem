@@ -25,7 +25,7 @@ import {
 import { BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
-import { DashboardStats, FuelRecord } from '../types';
+import { FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';

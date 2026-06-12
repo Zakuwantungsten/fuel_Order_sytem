@@ -7,6 +7,8 @@ import { User, DriverCredential } from '../models';
 import logger from '../utils/logger';
 import { activeSessionTracker } from '../utils/activeSessionTracker';
 import SecurityEventLogger from '../utils/securityEventLogger';
+import BlocklistService from '../services/blocklistService';
+import { getClientIP as resolveBlocklistIP } from '../utils/getClientIP';
 import { ConditionalAccessPolicy, IConditionalAccessPolicyDocument } from '../models/ConditionalAccessPolicy';
 import { SystemConfig } from '../models/SystemConfig';
 
@@ -276,6 +278,11 @@ export const authenticate = async (
 
       const driverIp = getClientIp(req);
       activeSessionTracker.touch(decoded.userId, decoded.username, decoded.role, driverIp);
+      // A successfully authenticated request marks this IP as trusted so the
+      // auto-blocklist never escalates strikes from an IP real users are on.
+      // Resolved with the same helper the blocklist middlewares use
+      // (CF-Connecting-IP first) so the marked IP matches the checked IP.
+      BlocklistService.markTrusted(resolveBlocklistIP(req));
 
       next();
       return;
@@ -415,6 +422,11 @@ export const authenticate = async (
     }
 
     activeSessionTracker.touch(decoded.userId, user.username, user.role, ip);
+    // A successfully authenticated request marks this IP as trusted so the
+    // auto-blocklist never escalates strikes from an IP real users are on.
+    // Resolved with the same helper the blocklist middlewares use
+    // (CF-Connecting-IP first) so the marked IP matches the checked IP.
+    BlocklistService.markTrusted(resolveBlocklistIP(req));
 
     next();
   } catch (error: any) {

@@ -8,8 +8,9 @@ RUN npm ci
 
 COPY . .
 
-# Use relative /api so nginx can proxy — works in any Docker environment
-ARG VITE_API_BASE_URL=/api
+# Use relative /api/v1 so nginx can proxy — works in any Docker environment
+# (/api/v1 avoids the backend's deprecated legacy /api mount)
+ARG VITE_API_BASE_URL=/api/v1
 ARG VITE_APP_NAME="Tahmeed Fuel Order"
 ARG VITE_APP_VERSION=1.0.0
 

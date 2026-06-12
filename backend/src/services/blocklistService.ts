@@ -27,9 +27,26 @@ const blockedIPs = new Map<string, BlockRecord>();
 // Suspicious event counts per IP (sliding window)
 const suspiciousIPs = new Map<string, SuspiciousRecord>();
 
+// IPs that recently completed a successful authentication (ip → expiry epoch ms).
+// Strikes from these IPs are ignored so the firewall can never auto-block its own
+// active users: an office/CGNAT egress IP is shared by every legitimate user, and
+// their ordinary 404s (deleted records, stale deep-links) were accumulating
+// strikes that blocked the whole site for everyone behind that IP.
+const trustedIPs = new Map<string, number>();
+const TRUSTED_IP_TTL_MS = 60 * 60 * 1000; // 1 hour after last successful auth
+
+// Auto-escalation blocks must always expire. A DB-configured duration of 0/null
+// means "permanent" in block(), which for *automatic* blocks turns one bad
+// 10-minute window into a forever-outage for a shared IP. Manual admin blocks
+// can still be permanent.
+const AUTO_BLOCK_FALLBACK_MS = 10 * 60 * 1000;
+
 // Track when we last synced from DB
 let _lastDbSync = 0;
 const DB_SYNC_INTERVAL_MS = 60_000; // Re-sync from DB every 60s
+
+// Memory-only blocks (DB persist failed) are kept across syncs for this long
+const MEMORY_BLOCK_GRACE_MS = 5 * 60 * 1000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -79,16 +96,29 @@ async function syncFromDB(): Promise<void> {
       return Number.isNaN(t) ? null : t;
     };
 
-    // Merge DB blocks into memory (don't remove memory-only blocks)
+    // Rebuild from DB authoritatively so unblocks done outside this process
+    // (Security tab on another instance, the unblock-ips script, manual DB
+    // edits) take effect within one sync interval instead of requiring a
+    // restart. Memory-only blocks (whose DB persist failed) are kept for a
+    // short grace period so they aren't silently dropped.
+    const fresh = new Map<string, BlockRecord>();
     for (const block of activeBlocks) {
       const ip = normalizeIP(block.ip);
-      if (!blockedIPs.has(ip)) {
-        blockedIPs.set(ip, {
-          expiresAt: toMillis(block.expiresAt),
-          reason: block.reason,
-          blockedAt: toMillis(block.blockedAt) ?? Date.now(),
-        });
+      fresh.set(ip, {
+        expiresAt: toMillis(block.expiresAt),
+        reason: block.reason,
+        blockedAt: toMillis(block.blockedAt) ?? Date.now(),
+      });
+    }
+    const memoryCutoff = Date.now() - MEMORY_BLOCK_GRACE_MS;
+    for (const [ip, record] of blockedIPs) {
+      if (!fresh.has(ip) && record.blockedAt > memoryCutoff) {
+        fresh.set(ip, record);
       }
+    }
+    blockedIPs.clear();
+    for (const [ip, record] of fresh) {
+      blockedIPs.set(ip, record);
     }
 
     _lastDbSync = Date.now();
@@ -139,6 +169,35 @@ const BlocklistService = {
   },
 
   /**
+   * Mark an IP as trusted after a successful authentication. Trusted IPs do not
+   * accumulate suspicious-event strikes (see recordSuspiciousEvent) for
+   * TRUSTED_IP_TTL_MS. Manual blocks and IP rules still apply to trusted IPs.
+   */
+  markTrusted(ip: string): void {
+    const normalized = normalizeIP(ip);
+    trustedIPs.set(normalized, Date.now() + TRUSTED_IP_TTL_MS);
+
+    // Opportunistic sweep so the map can't grow unbounded
+    if (trustedIPs.size > 5000) {
+      const now = Date.now();
+      for (const [key, expiry] of trustedIPs) {
+        if (expiry <= now) trustedIPs.delete(key);
+      }
+    }
+  },
+
+  /** True if the IP completed a successful authentication recently. */
+  isTrusted(ip: string): boolean {
+    const expiry = trustedIPs.get(normalizeIP(ip));
+    if (!expiry) return false;
+    if (expiry <= Date.now()) {
+      trustedIPs.delete(normalizeIP(ip));
+      return false;
+    }
+    return true;
+  },
+
+  /**
    * Record a suspicious event from an IP.
    * After N events within the sliding window → auto-block.
    */
@@ -149,6 +208,14 @@ const BlocklistService = {
 
     const normalized = normalizeIP(ip);
     const now = Date.now();
+
+    // Never escalate against an IP that real users are actively logged in from.
+    // The individual offending requests are still rejected by their middleware
+    // (403/404); this only prevents the IP-wide auto-block.
+    if (this.isTrusted(normalized)) {
+      logger.info(`BlocklistService: Suspicious event from trusted (authenticated) IP ${normalized} ignored (${reason})`);
+      return { blocked: false };
+    }
 
     // Get or create suspicious record
     let record = suspiciousIPs.get(normalized);
@@ -170,11 +237,16 @@ const BlocklistService = {
       threshold: config.securitySuspiciousThreshold,
     });
 
-    // Check threshold for auto-block
+    // Check threshold for auto-block. Duration is clamped to a finite value:
+    // a 0/null configured duration would create a PERMANENT block, which for
+    // automatic escalation means one noisy window locks an IP out forever.
     if (record.count >= config.securitySuspiciousThreshold) {
+      const durationMs = config.securityBlockDurationMs > 0
+        ? config.securityBlockDurationMs
+        : AUTO_BLOCK_FALLBACK_MS;
       await this.block(
         normalized,
-        config.securityBlockDurationMs,
+        durationMs,
         'auto_escalation',
         `Auto-blocked after ${record.count} suspicious events. Last reason: ${reason}. ${details || ''}`
       );
@@ -495,6 +567,7 @@ const BlocklistService = {
   _clearMemory(): void {
     blockedIPs.clear();
     suspiciousIPs.clear();
+    trustedIPs.clear();
     _lastDbSync = 0;
   },
 

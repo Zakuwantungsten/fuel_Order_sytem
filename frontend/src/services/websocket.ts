@@ -36,17 +36,26 @@ const _reconnectCallbacks = new Map<string, () => void>();
  * Initialize WebSocket connection
  */
 export const initializeWebSocket = (token: string): Socket => {
-  // Derive backend origin from the same env var used by the API client.
-  // In production: VITE_API_BASE_URL is an absolute URL like
-  //   "https://fuelordersytem-production.up.railway.app/api/v1"
-  //   so we strip the path to get just the origin.
-  // In development: VITE_API_BASE_URL is a relative path like "/api" (Vite proxy),
-  //   so we fall back to the backend dev server directly.
+  // Resolve the WebSocket origin:
+  //   1. VITE_WS_URL — explicit override. In production this points at the apex
+  //      (https://tahfuelorder.dev) because the SPA is on Vercel and Vercel
+  //      rewrites cannot proxy WebSocket upgrades, so the socket must connect
+  //      to the backend origin directly even though HTTP API calls are
+  //      same-origin (/api/v1).
+  //   2. Absolute VITE_API_BASE_URL — strip the /api path to get the origin.
+  //   3. Dev: the Vite dev server only proxies /api (not /socket.io), so
+  //      connect straight to the local backend.
+  //   4. Fallback: same origin as the page.
+  const wsOverride = import.meta.env.VITE_WS_URL as string | undefined;
   const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
   const WS_URL =
-    apiBase && !apiBase.startsWith('/')
-      ? apiBase.replace(/\/api(?:\/v1)?\/?$/, '')
-      : 'http://localhost:5000';
+    wsOverride && wsOverride.trim()
+      ? wsOverride.trim()
+      : apiBase && !apiBase.startsWith('/')
+        ? apiBase.replace(/\/api(?:\/v1)?\/?$/, '')
+        : import.meta.env.DEV
+          ? 'http://localhost:5000'
+          : window.location.origin;
 
   // Guard against creating multiple socket instances.
   // Check for ANY existing socket (connected OR still connecting) so that
