@@ -14,7 +14,17 @@ import {
   Package,
 } from 'lucide-react';
 import { dashboardAPI, doWorkbookAPI, lpoWorkbookAPI, fuelRecordsAPI } from '../../services/api';
-import XLSXStyle from 'xlsx-js-style';
+import type * as XLSXTypes from 'xlsx-js-style';
+
+// xlsx-js-style is ~870 KB — loaded on demand by ensureXLSX() before any
+// export handler runs. The styled-sheet helpers below read this variable.
+let XLSXStyle: typeof XLSXTypes;
+const ensureXLSX = async (): Promise<void> => {
+  if (!XLSXStyle) {
+    const mod: any = await import('xlsx-js-style');
+    XLSXStyle = mod.default ?? mod;
+  }
+};
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import UnifiedTabLoader from '../SuperAdmin/common/UnifiedTabLoader';
 
@@ -41,7 +51,7 @@ const borderAll = (color = COLORS.border) => ({
   right:  { style: 'thin', color: { rgb: color } },
 });
 
-const headerCell = (value: string): XLSXStyle.CellObject => ({
+const headerCell = (value: string): XLSXTypes.CellObject => ({
   v: value, t: 's',
   s: {
     font:      { bold: true, color: { rgb: COLORS.headerFont }, sz: 11 },
@@ -51,7 +61,7 @@ const headerCell = (value: string): XLSXStyle.CellObject => ({
   },
 });
 
-const sectionCell = (value: string): XLSXStyle.CellObject => ({
+const sectionCell = (value: string): XLSXTypes.CellObject => ({
   v: value, t: 's',
   s: {
     font:      { bold: true, color: { rgb: COLORS.sectionFont }, sz: 10 },
@@ -61,7 +71,7 @@ const sectionCell = (value: string): XLSXStyle.CellObject => ({
   },
 });
 
-const dataCell = (value: any, type: 's'|'n'|'b' = 's', numFmt?: string, altRow = false, alignRight = false, color?: string): XLSXStyle.CellObject => ({
+const dataCell = (value: any, type: 's'|'n'|'b' = 's', numFmt?: string, altRow = false, alignRight = false, color?: string): XLSXTypes.CellObject => ({
   v: value, t: type,
   s: {
     font:      color ? { color: { rgb: color } } : {},
@@ -72,7 +82,7 @@ const dataCell = (value: any, type: 's'|'n'|'b' = 's', numFmt?: string, altRow =
   },
 });
 
-const titleCell = (value: string): XLSXStyle.CellObject => ({
+const titleCell = (value: string): XLSXTypes.CellObject => ({
   v: value, t: 's',
   s: {
     font:      { bold: true, color: { rgb: COLORS.titleFont }, sz: 14 },
@@ -89,16 +99,16 @@ const NUM_FMT_COUNT    = '#,##0';
 
 /** Write a fully styled sheet and append it to the workbook. */
 function appendStyledSheet(
-  wb: XLSXStyle.WorkBook,
+  wb: XLSXTypes.WorkBook,
   sheetName: string,
   headers: { label: string; key: string; width: number; numFmt?: string; alignRight?: boolean }[],
   rows: Record<string, any>[],
   titleText?: string,
 ) {
-  const ws: XLSXStyle.WorkSheet = {};
+  const ws: XLSXTypes.WorkSheet = {};
   let r = 0;
 
-  const setCell = (row: number, col: number, cell: XLSXStyle.CellObject) => {
+  const setCell = (row: number, col: number, cell: XLSXTypes.CellObject) => {
     const addr = XLSXStyle.utils.encode_cell({ r: row, c: col });
     ws[addr] = cell;
   };
@@ -149,15 +159,15 @@ function appendStyledSheet(
 
 /** Append a two-column key→value summary sheet (used for Executive Summary). */
 function appendKeyValueSheet(
-  wb: XLSXStyle.WorkBook,
+  wb: XLSXTypes.WorkBook,
   sheetName: string,
   titleText: string,
   sections: { heading?: string; rows: { label: string; value: any; numFmt?: string }[] }[],
 ) {
-  const ws: XLSXStyle.WorkSheet = {};
+  const ws: XLSXTypes.WorkSheet = {};
   let r = 0;
 
-  const setCell = (row: number, col: number, cell: XLSXStyle.CellObject) => {
+  const setCell = (row: number, col: number, cell: XLSXTypes.CellObject) => {
     const addr = XLSXStyle.utils.encode_cell({ r: row, c: col });
     ws[addr] = cell;
   };
@@ -288,6 +298,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
   const exportExcel = async (type: 'do' | 'lpo' | 'fuel') => {
     setExporting(true);
     try {
+      await ensureXLSX();
       if (type === 'do') {
         const years = await doWorkbookAPI.getAvailableYears();
         if (!years.length) { showMessage('error', 'No delivery order data available'); return; }
@@ -341,6 +352,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
     if (!reportData) { showMessage('error', 'Load report data first'); return; }
     setExporting(true);
     try {
+      await ensureXLSX();
       const wb = XLSXStyle.utils.book_new();
       const periodLabel = DATE_RANGES.find(d => d.value === dateRange)?.label ?? dateRange;
       const today = new Date().toLocaleDateString('en-TZ');
@@ -454,6 +466,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
     if (!reportData) { showMessage('error', 'Load report data first'); return; }
     setExporting(true);
     try {
+      await ensureXLSX();
       const wb        = XLSXStyle.utils.book_new();
       const period    = DATE_RANGES.find(d => d.value === dateRange)?.label ?? dateRange;
       const today     = new Date().toLocaleDateString('en-TZ');

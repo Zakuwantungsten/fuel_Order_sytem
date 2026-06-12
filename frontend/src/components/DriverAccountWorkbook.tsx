@@ -12,7 +12,6 @@ import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations
 import { useQueryClient } from '@tanstack/react-query';
 import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
-import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface DriverAccountWorkbookProps {
@@ -333,8 +332,9 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     }
   }, [filteredEntries, loading, availablePeriods, workbook]);
 
-  // Helper function to apply borders and center alignment to worksheet
-  const applyExcelStyles = (ws: XLSX.WorkSheet) => {
+  // Helper function to apply borders and center alignment to worksheet.
+  // Receives the lazily-imported xlsx-js-style module from the caller.
+  const applyExcelStyles = (XLSX: any, ws: any) => {
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
     
     const borderStyle = {
@@ -386,8 +386,10 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
   };
 
   // Export functions
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (!workbook || filteredEntries.length === 0) return;
+    // xlsx-js-style is loaded on demand — it's ~870 KB and only needed here
+    const XLSX = (await import('xlsx-js-style')).default;
 
     const data = filteredEntries.map((entry, index) => ({
       'S/N': index + 1,
@@ -407,7 +409,7 @@ const DriverAccountWorkbookComponent: React.FC<DriverAccountWorkbookProps> = ({
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
-    applyExcelStyles(ws);
+    applyExcelStyles(XLSX, ws);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Driver Accounts ${selectedYear}`);
     XLSX.writeFile(wb, `DRIVER_ACCOUNTS_${selectedYear}.xlsx`);

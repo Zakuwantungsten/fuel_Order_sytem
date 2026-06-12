@@ -9,7 +9,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { generateTokens, verifyRefreshToken, logger, createDriverUserId } from '../utils';
 import { AuditService } from '../utils/auditService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, invalidateAuthUserCache } from '../middleware/auth';
 import { LoginRequest, RegisterRequest, AuthResponse, JWTPayload } from '../types';
 import * as crypto from 'crypto';
 import emailService from '../services/emailService';
@@ -1670,6 +1670,9 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     user.pendingActivation = false; // Belt-and-suspenders: ensure pending clears on any password change
     await user.save();
 
+    // Drop the cached auth snapshot so the expiry check sees the new state immediately
+    invalidateAuthUserCache(user._id);
+
     logger.info(`Password changed for user: ${user.username}`);
 
     // Send confirmation email
@@ -1781,6 +1784,9 @@ export const firstLoginPassword = async (req: AuthRequest, res: Response): Promi
     user.tempPasswordExpiresAt = undefined; // Credentials no longer temporary
     // User has officially activated their account by setting their own password.
     user.pendingActivation = false;
+
+    // Drop the cached auth snapshot so the expiry check sees the new state immediately
+    invalidateAuthUserCache(user._id);
 
     logger.info(`First-login password set for user: ${user.username}`);
 

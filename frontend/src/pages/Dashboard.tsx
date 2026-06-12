@@ -145,10 +145,21 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     }
   };
 
+  // Debounced realtime refresh. The dashboard stays mounted (hidden) behind
+  // other tabs, so without a debounce every single record edit by any user
+  // re-fired the stats + chart aggregation endpoints — a burst of N changes
+  // (e.g. a bulk DO create) now triggers one refetch instead of N.
+  const statsRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_summaries', 'yard_fuel'], () => {
-    fetchStats();
-    fetchChartData();
+    if (statsRefreshTimer.current) clearTimeout(statsRefreshTimer.current);
+    statsRefreshTimer.current = setTimeout(() => {
+      fetchStats();
+      fetchChartData();
+    }, 2500);
   });
+  useEffect(() => () => {
+    if (statsRefreshTimer.current) clearTimeout(statsRefreshTimer.current);
+  }, []);
 
   // Unified search functionality
   const performUnifiedSearch = async (queryOverride?: string) => {

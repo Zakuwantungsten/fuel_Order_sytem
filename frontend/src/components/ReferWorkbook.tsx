@@ -10,7 +10,6 @@ import { lpoDocumentsAPI } from '../services/api';
 import { useReferEntries } from '../hooks/useLPOs';
 import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
-import XLSX from 'xlsx-js-style';
 
 interface ReferWorkbookProps {
   onNavigateToSheet?: (lpoNo: string, year: number) => void;
@@ -272,8 +271,10 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
     } finally { setDownloadingImage(null); }
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (filteredEntries.length === 0) return;
+    // xlsx-js-style is loaded on demand — it's ~870 KB and only needed here
+    const XLSX = (await import('xlsx-js-style')).default;
     const data = filteredEntries.map((entry, index) => ({
       'S/N': index + 1,
       'Date': entry.date || formatEntryDate(entry.createdAt),

@@ -234,6 +234,8 @@ lpoSummarySchema.index({ year: 1, lpoNo: 1 });
 lpoSummarySchema.index({ year: 1, isDeleted: 1 });
 // Covers the flat-entry aggregation's first $match stage: { isDeleted: false, date: { $gte, $lte } }
 lpoSummarySchema.index({ isDeleted: 1, date: 1 });
+// Covers the LPO list's default view: filter { isDeleted, createdAt range } sorted by createdAt desc
+lpoSummarySchema.index({ isDeleted: 1, createdAt: -1 });
 
 // Pre-save hook to calculate total and extract year from date
 lpoSummarySchema.pre('save', function (this: ILPOSummaryDocument, next) {

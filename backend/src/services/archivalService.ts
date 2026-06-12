@@ -446,6 +446,33 @@ class ArchivalService {
     return { recordsRestored: restoredDocs.length };
   }
 
+  private resolveArchiveModel(collectionName: string): any {
+    switch (collectionName) {
+      case 'FuelRecord':
+        return ArchivedFuelRecord;
+      case 'LPOSummary':
+        return ArchivedLPOSummary;
+      case 'YardFuelDispense':
+        return ArchivedYardFuelDispense;
+      case 'DeliveryOrder':
+        return ArchivedDeliveryOrder;
+      case 'AuditLog':
+        return ArchivedAuditLog;
+      default:
+        throw new Error(`Unknown collection: ${collectionName}`);
+    }
+  }
+
+  /**
+   * Count archived documents matching a query. Lets list endpoints decide
+   * whether the slow merged active+archived path is needed at all — for recent
+   * date ranges (the default current-month view) this is almost always 0.
+   */
+  async countArchivedData(collectionName: string, query: any): Promise<number> {
+    const ArchiveModel = this.resolveArchiveModel(collectionName);
+    return ArchiveModel.countDocuments(query);
+  }
+
   /**
    * Query archived data (for reference/reports)
    */
@@ -459,27 +486,7 @@ class ArchivalService {
       select?: string;
     } = {}
   ): Promise<any[]> {
-    let ArchiveModel: any;
-
-    switch (collectionName) {
-      case 'FuelRecord':
-        ArchiveModel = ArchivedFuelRecord;
-        break;
-      case 'LPOSummary':
-        ArchiveModel = ArchivedLPOSummary;
-        break;
-      case 'YardFuelDispense':
-        ArchiveModel = ArchivedYardFuelDispense;
-        break;
-      case 'DeliveryOrder':
-        ArchiveModel = ArchivedDeliveryOrder;
-        break;
-      case 'AuditLog':
-        ArchiveModel = ArchivedAuditLog;
-        break;
-      default:
-        throw new Error(`Unknown collection: ${collectionName}`);
-    }
+    const ArchiveModel = this.resolveArchiveModel(collectionName);
 
     const { limit = 100, skip = 0, sort = { archivedAt: -1 }, select } = options;
 

@@ -731,8 +731,24 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
       filter.importOrExport = importOrExport;
     }
 
-    // If date filter is applied, include archived data
-    const includeArchived = !!(dateFrom || dateTo);
+    // A date filter used to force the slow "merged" path below, which loads
+    // every matching active + archived row into memory and paginates in JS.
+    // The DO page filters by the current month by default, so that was the
+    // path taken on every load and every page click. Only take it when the
+    // archive actually contains matching rows (a cheap indexed count) —
+    // otherwise the normal indexed skip/limit query handles the date range.
+    let includeArchived = false;
+    if (dateFrom || dateTo) {
+      try {
+        const archivedCount = await ArchivedDeliveryOrder.countDocuments({
+          ...filter,
+          isDeleted: { $ne: true },
+        });
+        includeArchived = archivedCount > 0;
+      } catch (archErr: any) {
+        logger.warn(`Archived DO count failed — using active-only path: ${archErr.message}`);
+      }
+    }
     let deliveryOrders: any[];
     let total: number;
 

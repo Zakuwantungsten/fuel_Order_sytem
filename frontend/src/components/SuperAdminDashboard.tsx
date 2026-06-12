@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { toast } from 'react-toastify';
 import {
   BarChart3,
@@ -18,24 +18,27 @@ import { systemAdminAPI } from '../services/api';
 import { OverviewStats } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 // DatabaseMonitorTab merged into MonitoringUnifiedTab
-import { UserManagementPage } from './SuperAdmin/UserManagement';
-import FuelStationsTab from './SuperAdmin/FuelStationsTab';
-import RoutesTab from './SuperAdmin/RoutesTab';
-import AuditLogsTab from './SuperAdmin/AuditLogsTab';
-import SecurityUnifiedTab from './SuperAdmin/SecurityUnifiedTab';
-import BackupRecoveryTab from './SuperAdmin/BackupRecoveryTab';
-import AnalyticsTab from './SuperAdmin/AnalyticsTab';
-import TrashManagementTab from './SuperAdmin/TrashManagementTab';
-import ArchivalManagementTab from './SuperAdmin/ArchivalManagementTab';
+// Each section is lazy-loaded so opening the super-admin dashboard only
+// downloads the section being viewed — previously every tab below shipped in
+// one ~900 KB chunk that had to load before anything rendered.
+const UserManagementPage = lazy(() => import('./SuperAdmin/UserManagement').then(m => ({ default: m.UserManagementPage })));
+const FuelStationsTab = lazy(() => import('./SuperAdmin/FuelStationsTab'));
+const RoutesTab = lazy(() => import('./SuperAdmin/RoutesTab'));
+const AuditLogsTab = lazy(() => import('./SuperAdmin/AuditLogsTab'));
+const SecurityUnifiedTab = lazy(() => import('./SuperAdmin/SecurityUnifiedTab'));
+const BackupRecoveryTab = lazy(() => import('./SuperAdmin/BackupRecoveryTab'));
+const AnalyticsTab = lazy(() => import('./SuperAdmin/AnalyticsTab'));
+const TrashManagementTab = lazy(() => import('./SuperAdmin/TrashManagementTab'));
+const ArchivalManagementTab = lazy(() => import('./SuperAdmin/ArchivalManagementTab'));
 // ConfigDiffTab, ConfigVersionHistoryTab, CronJobsTab, MaintenanceModeTab,
 // RateLimitConfigTab, DbIndexExplorerTab, WebhookManagerTab, FeatureFlagsTab, NotificationCenterConfigTab,
 // AnnouncementsTab, ExcelImport, SystemConfigDashboard, ConfigurationTab merged into SystemUnifiedTab
-import SystemUnifiedTab from './SuperAdmin/SystemUnifiedTab';
-import FuelPriceTab from './SuperAdmin/FuelPriceTab';
-import DataExportTab from './SuperAdmin/DataExportTab';
-import StorageManagerTab from './SuperAdmin/StorageManagerTab';
-import MonitoringUnifiedTab from './SuperAdmin/MonitoringUnifiedTab';
-import CustomReportBuilderTab from './SuperAdmin/CustomReportBuilderTab';
+const SystemUnifiedTab = lazy(() => import('./SuperAdmin/SystemUnifiedTab'));
+const FuelPriceTab = lazy(() => import('./SuperAdmin/FuelPriceTab'));
+const DataExportTab = lazy(() => import('./SuperAdmin/DataExportTab'));
+const StorageManagerTab = lazy(() => import('./SuperAdmin/StorageManagerTab'));
+const MonitoringUnifiedTab = lazy(() => import('./SuperAdmin/MonitoringUnifiedTab'));
+const CustomReportBuilderTab = lazy(() => import('./SuperAdmin/CustomReportBuilderTab'));
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 // SecurityScoreTab merged into SecurityUnifiedTab
 // PrivilegeElevationTab merged into UserManagement module
@@ -65,6 +68,13 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate, 
     section === 'overview' && !(_overviewCache && Date.now() - _overviewCache.ts < OVERVIEW_CACHE_TTL)
   );
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  // SecurityUnifiedTab stays mounted (hidden) after its first visit so policy
+  // form state survives tab switches — but it must not load its chunk until
+  // the user actually opens the Security section.
+  const [securityVisited, setSecurityVisited] = useState(section === 'security');
+  useEffect(() => {
+    if (section === 'security') setSecurityVisited(true);
+  }, [section]);
   const [overviewData, setOverviewData] = useState<OverviewStats | null>(() =>
     section === 'overview' && _overviewCache && Date.now() - _overviewCache.ts < OVERVIEW_CACHE_TTL
       ? _overviewCache.data
@@ -182,7 +192,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate, 
         {loading && section === 'overview' ? (
           <UnifiedTabLoader label="Loading overview..." />
         ) : (
-          <>
+          <Suspense fallback={<UnifiedTabLoader label="Loading..." />}>
             {section === 'overview' && (
               <OverviewTab
                 data={overviewData}
@@ -210,10 +220,12 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate, 
             {section === 'audit' && (
               <AuditLogsTab onMessage={showMessage} />
             )}
-            {/* SecurityUnifiedTab is always mounted so security policy form state survives main-tab switches */}
-            <div className={section === 'security' ? undefined : 'hidden'}>
-              <SecurityUnifiedTab onMessage={showMessage} />
-            </div>
+            {/* SecurityUnifiedTab stays mounted after first visit so security policy form state survives main-tab switches */}
+            {securityVisited && (
+              <div className={section === 'security' ? undefined : 'hidden'}>
+                <SecurityUnifiedTab onMessage={showMessage} />
+              </div>
+            )}
             {section === 'trash' && (
               <TrashManagementTab onMessage={showMessage} onNavigate={onNavigate} />
             )}
@@ -253,7 +265,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate, 
             {/* security_score, dlp_controls, break_glass, threat_detection merged into 'security' tab */}
             {/* siem_export merged into 'monitoring' tab */}
             {/* security_blocklist and security_events merged into 'security' tab */}
-          </>
+          </Suspense>
         )}
       </div>
     </div>

@@ -125,8 +125,18 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
         .limit(5)
         .select('truckNo goingDo date journeyStatus totalLts')
         .lean(),
-      // Yard fuel dispenses
-      YardFuelDispense.find({ isDeleted: false }).select('liters yard status').lean(),
+      // Yard fuel dispenses — grouped in the DB instead of loading every
+      // dispense document into memory just to sum liters and count pending.
+      YardFuelDispense.aggregate([
+        { $match: { isDeleted: false } },
+        {
+          $group: {
+            _id: { $toUpper: { $ifNull: ['$yard', ''] } },
+            liters: { $sum: { $ifNull: ['$liters', 0] } },
+            pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+          },
+        },
+      ]),
       // Previous month data for trend calculation
       DeliveryOrder.find(prevDOFilter).select('tonnages date').lean(),
       FuelRecord.find(prevFRFilter).select('totalLts date month').lean(),
@@ -190,38 +200,40 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       { $limit: 5 },
     ]);
 
-    // Get fuel summary by yard (all-time)
-    const allFuelRecords = await FuelRecord.find({ 
-      isDeleted: false,
-      isCancelled: { $ne: true }
-    }).select('mmsaYard tangaYard darYard').lean();
-
-    const yardFuelSummary = allFuelRecords.reduce(
-      (acc, record) => {
-        acc.mmsa += record.mmsaYard || 0;
-        acc.tanga += record.tangaYard || 0;
-        acc.dar += record.darYard || 0;
-        return acc;
+    // Get fuel summary by yard (all-time) — a single $group instead of
+    // streaming every fuel record into Node just to add three fields.
+    const [fuelYardTotals] = await FuelRecord.aggregate([
+      { $match: { isDeleted: false, isCancelled: { $ne: true } } },
+      {
+        $group: {
+          _id: null,
+          mmsa: { $sum: { $ifNull: ['$mmsaYard', 0] } },
+          tanga: { $sum: { $ifNull: ['$tangaYard', 0] } },
+          dar: { $sum: { $ifNull: ['$darYard', 0] } },
+        },
       },
-      { mmsa: 0, tanga: 0, dar: 0 }
-    );
+    ]);
 
-    // Add yard dispenses to yard fuel summary
-    yardDispenses.forEach((dispense) => {
-      const yard = dispense.yard?.toUpperCase();
+    const yardFuelSummary = {
+      mmsa: fuelYardTotals?.mmsa || 0,
+      tanga: fuelYardTotals?.tanga || 0,
+      dar: fuelYardTotals?.dar || 0,
+    };
+
+    // Add yard dispenses (pre-grouped by uppercased yard name in the DB)
+    // and tally pending dispenses in the same pass.
+    let pendingYardFuel = 0;
+    for (const group of yardDispenses as Array<{ _id: string; liters: number; pending: number }>) {
+      pendingYardFuel += group.pending || 0;
+      const yard = group._id;
       if (yard === 'MMSA YARD' || yard === 'MMSA') {
-        yardFuelSummary.mmsa += dispense.liters || 0;
+        yardFuelSummary.mmsa += group.liters || 0;
       } else if (yard === 'TANGA YARD' || yard === 'TANGA') {
-        yardFuelSummary.tanga += dispense.liters || 0;
+        yardFuelSummary.tanga += group.liters || 0;
       } else if (yard === 'DAR YARD' || yard === 'DAR' || yard === 'DAR ES SALAAM') {
-        yardFuelSummary.dar += dispense.liters || 0;
+        yardFuelSummary.dar += group.liters || 0;
       }
-    });
-
-    // Get pending yard fuel
-    const pendingYardFuel = yardDispenses.filter(
-      (d) => d.status === 'pending'
-    ).length;
+    }
 
     const stats = {
       totalDOs,

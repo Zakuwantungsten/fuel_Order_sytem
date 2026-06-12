@@ -1,6 +1,8 @@
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx-js-style';
 import { DeliveryOrder, LPOEntry, FuelRecord } from '../types';
+
+// xlsx-js-style is ~870 KB — loaded on demand inside the export functions so
+// merely opening a tab that imports this module doesn't download it.
 
 export const parseCSV = <T>(csvText: string): Promise<T[]> => {
   return new Promise((resolve, reject) => {
@@ -130,11 +132,12 @@ interface ExportToXLSXOptions {
   strikethroughCancelledRows?: boolean; // Apply red strikethrough to cancelled rows (uses _isCancelled field)
 }
 
-export const exportToXLSX = (
-  data: any[], 
-  filename: string, 
+export const exportToXLSX = async (
+  data: any[],
+  filename: string,
   options: ExportToXLSXOptions = {}
 ) => {
+  const XLSX = await import('xlsx-js-style');
   const {
     sheetName = 'Sheet1',
     headerColor = '4472C4',
@@ -281,11 +284,12 @@ interface SheetData {
 }
 
 // Helper to export data as XLSX with multiple sheets (one per month)
-export const exportToXLSXMultiSheet = (
+export const exportToXLSXMultiSheet = async (
   sheets: SheetData[],
   filename: string,
   options: ExportToXLSXOptions = {}
 ) => {
+  const XLSX = await import('xlsx-js-style');
   const {
     headerColor = '4472C4',
     headerTextColor = 'FFFFFF',

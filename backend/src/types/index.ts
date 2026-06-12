@@ -488,6 +488,8 @@ export type JourneyStatus = 'queued' | 'active' | 'completed' | 'cancelled';
 export interface IFuelRecord {
   date: string;
   month?: string;
+  /** Canonical "YYYY-MM" derived from date/month — indexed for month filtering */
+  monthKey?: string;
   truckNo: string;
   goingDo: string;
   returnDo?: string;

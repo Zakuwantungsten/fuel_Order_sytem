@@ -1,10 +1,14 @@
+import { lazy, Suspense } from 'react';
 import { Activity } from 'lucide-react';
 import { toast } from 'react-toastify';
-import UserSupportTab from './StandardAdmin/UserSupportTab';
-import BasicReportsTab from './StandardAdmin/BasicReportsTab';
-import FuelStationsTab from './SuperAdmin/FuelStationsTab';
-import RoutesTab from './SuperAdmin/RoutesTab';
-import FuelPriceTab from './SuperAdmin/FuelPriceTab';
+import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
+
+// Lazy-loaded so each admin section only downloads when opened
+const UserSupportTab = lazy(() => import('./StandardAdmin/UserSupportTab'));
+const BasicReportsTab = lazy(() => import('./StandardAdmin/BasicReportsTab'));
+const FuelStationsTab = lazy(() => import('./SuperAdmin/FuelStationsTab'));
+const RoutesTab = lazy(() => import('./SuperAdmin/RoutesTab'));
+const FuelPriceTab = lazy(() => import('./SuperAdmin/FuelPriceTab'));
 
 interface AdminDashboardProps {
   user: any;
@@ -53,11 +57,13 @@ export default function AdminDashboard({ user, section = 'users', initialDestina
 
       {/* Content */}
       <div className="p-6">
-        {section === 'users' && <UserSupportTab user={user} showMessage={showMessage} />}
-        {section === 'fuel_stations' && <FuelStationsTab onMessage={showMessage} />}
-        {section === 'fuel_prices' && <FuelPriceTab onMessage={(msg, type) => showMessage(type === 'info' ? 'success' : (type ?? 'success'), msg)} />}
-        {section === 'routes' && <RoutesTab onMessage={showMessage} initialDestination={initialDestination} onDestinationConsumed={onDestinationConsumed} />}
-        {section === 'reports' && <BasicReportsTab user={user} showMessage={showMessage} />}
+        <Suspense fallback={<UnifiedTabLoader label="Loading..." />}>
+          {section === 'users' && <UserSupportTab user={user} showMessage={showMessage} />}
+          {section === 'fuel_stations' && <FuelStationsTab onMessage={showMessage} />}
+          {section === 'fuel_prices' && <FuelPriceTab onMessage={(msg, type) => showMessage(type === 'info' ? 'success' : (type ?? 'success'), msg)} />}
+          {section === 'routes' && <RoutesTab onMessage={showMessage} initialDestination={initialDestination} onDestinationConsumed={onDestinationConsumed} />}
+          {section === 'reports' && <BasicReportsTab user={user} showMessage={showMessage} />}
+        </Suspense>
       </div>
     </div>
   );

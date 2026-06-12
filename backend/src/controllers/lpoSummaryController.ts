@@ -560,8 +560,24 @@ export const getAllLPOSummaries = async (req: AuthRequest, res: Response): Promi
       }
     }
 
-    // If date or year filter is applied, include archived data
-    const includeArchived = !!(dateFrom || dateTo || year);
+    // A date/year filter used to force the slow "merged" path below, which
+    // loads every matching active + archived LPO into memory and paginates in
+    // JS. The LPO page filters by the current month by default, so that was
+    // the path taken on every load and every page click. Only take it when
+    // the archive actually contains matching rows (a cheap indexed count) —
+    // otherwise the normal indexed skip/limit query handles the filter.
+    let includeArchived = false;
+    if (dateFrom || dateTo || year) {
+      try {
+        const archivedCount = await ArchivedLPOSummary.countDocuments({
+          ...filter,
+          isDeleted: { $ne: true },
+        });
+        includeArchived = archivedCount > 0;
+      } catch (archErr: any) {
+        logger.warn(`Archived LPO count failed — using active-only path: ${archErr.message}`);
+      }
+    }
     let lpoSummaries: any[];
     let total: number;
 

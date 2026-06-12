@@ -232,7 +232,7 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       const monthStr = (month as string).trim();
       const parts = monthStr.split(/\s+/);
       const rawMonth = (parts[0] || '').toLowerCase();
-      const year = parts[1] || '';
+      const yearPart = parts[1] || '';
       const monthAbbrs: Record<string, string> = {
         'january': 'jan', 'february': 'feb', 'march': 'mar', 'april': 'apr',
         'may': 'may', 'june': 'jun', 'july': 'jul', 'august': 'aug',
@@ -244,35 +244,24 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       };
       const abbr = monthAbbrs[rawMonth] || rawMonth.substring(0, 3);
       const num = monthNums[abbr] || '';
-      const sanitized = sanitizeRegexInput(monthStr);
 
-      if (year && abbr && num) {
-        // Match any of:
-        // 1. month field "February 2026" (records created via UI)
-        // 2. date field "7-Jan-2025" style (imported records — abbr + year both present in string)
-        // 3. date field ISO "2025-12-07" style
-        const monthConditions: any[] = [];
-        if (sanitized) monthConditions.push({ month: { $regex: sanitized, $options: 'i' } });
-        monthConditions.push(
-          { $and: [{ date: { $regex: abbr, $options: 'i' } }, { date: { $regex: year } }] },
-          { date: { $regex: `^${year}-${num}-` } },
-        );
-        if (!filter.$and) filter.$and = [];
-        (filter.$and as any[]).push({ $or: monthConditions });
-      } else if (sanitized) {
-        filter.month = { $regex: sanitized, $options: 'i' };
+      if (/^\d{4}$/.test(yearPart) && num) {
+        // Indexed equality on the canonical monthKey ("YYYY-MM"), which the
+        // model hooks maintain and the boot backfill guarantees for old rows.
+        // This replaced a set of case-insensitive $regex conditions over the
+        // two historical string date formats that forced a collection scan.
+        filter.monthKey = `${yearPart}-${num}`;
+      } else {
+        const sanitized = sanitizeRegexInput(monthStr);
+        if (sanitized) {
+          filter.month = { $regex: sanitized, $options: 'i' };
+        }
       }
     }
 
-    // Year filter — handles both ISO "YYYY-MM-DD" and "D-Mon-YYYY" stored dates
-    if (year && /^\d{4}$/.test(year as string)) {
-      const yearStr = year as string;
-      const yearConditions = [
-        { date: { $regex: `^${yearStr}-` } },          // ISO format: "2026-01-15"
-        { date: { $regex: `-${yearStr}$` } },           // D-Mon-YYYY format: "7-Jan-2026"
-      ];
-      if (!filter.$and) filter.$and = [];
-      (filter.$and as any[]).push({ $or: yearConditions });
+    // Year filter — anchored prefix regex on the indexed monthKey
+    if (year && /^\d{4}$/.test(year as string) && !filter.monthKey) {
+      filter.monthKey = { $regex: `^${year}-` };
     }
 
     // Get data with pagination

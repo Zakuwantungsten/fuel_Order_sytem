@@ -28,6 +28,54 @@ async function getActivePolicies(): Promise<IConditionalAccessPolicyDocument[]> 
 let cachedPasswordPolicy: { expirationDays: number; expirationWarningDays: number; expirationGraceDays: number; expirationExemptRoles: string[] } | null = null;
 let passwordPolicyCacheExpiry = 0;
 
+/* ────────── Per-request user lookup cache ──────────
+ * authenticate() runs on every API request; an uncached User.findById adds a DB
+ * round trip across the board. Cache only the fields auth needs, for a short TTL.
+ * Forced session termination stays immediate (activeSessionTracker is checked on
+ * every request, in memory); role changes / deactivation propagate within the TTL
+ * or instantly when the mutating endpoint calls invalidateAuthUserCache().
+ */
+interface CachedAuthUser {
+  username: string;
+  role: UserRole;
+  isActive: boolean;
+  isDeleted: boolean;
+  passwordResetAt?: Date;
+  createdAt?: Date;
+}
+
+const USER_CACHE_TTL = 30_000;
+const userCache = new Map<string, { user: CachedAuthUser | null; expiry: number }>();
+
+/** Drop a user (or all users) from the auth cache after a role/status change. */
+export function invalidateAuthUserCache(userId?: string | { toString(): string }): void {
+  if (userId !== undefined && userId !== null) userCache.delete(String(userId));
+  else userCache.clear();
+}
+
+async function getAuthUser(userId: string): Promise<CachedAuthUser | null> {
+  const hit = userCache.get(userId);
+  if (hit && Date.now() < hit.expiry) return hit.user;
+
+  const user = await User.findById(userId)
+    .select('username role isActive isDeleted passwordResetAt createdAt')
+    .lean<(CachedAuthUser & { _id: unknown }) | null>();
+
+  // Negative results are cached too, so a revoked token doesn't hit the DB on
+  // every retry for the rest of its lifetime.
+  userCache.set(userId, { user: user ?? null, expiry: Date.now() + USER_CACHE_TTL });
+
+  // Opportunistic sweep so the map can't grow unbounded.
+  if (userCache.size > 5000) {
+    const now = Date.now();
+    for (const [key, value] of userCache) {
+      if (value.expiry <= now) userCache.delete(key);
+    }
+  }
+
+  return user ?? null;
+}
+
 async function getPasswordExpirationPolicy() {
   if (Date.now() < passwordPolicyCacheExpiry && cachedPasswordPolicy) return cachedPasswordPolicy;
   try {
@@ -254,9 +302,9 @@ export const authenticate = async (
       return;
     }
 
-    // Verify existence in database
-    const user = await User.findById(decoded.userId);
-    
+    // Verify existence in database (short-TTL cached — see getAuthUser above)
+    const user = await getAuthUser(decoded.userId);
+
     if (!user || !user.isActive || user.isDeleted) {
       const ip = getClientIp(req);
       

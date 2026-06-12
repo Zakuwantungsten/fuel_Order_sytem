@@ -1,6 +1,5 @@
 import React from 'react';
 import { LPOSummary } from '../types';
-import html2canvas from 'html2canvas';
 import { createRoot } from 'react-dom/client';
 import LPOPrint from '../components/LPOPrint';
 
@@ -69,6 +68,9 @@ const cleanupElement = (element: HTMLElement) => {
  * Generate LPO as image blob using html2canvas
  */
 export const generateLPOImage = async (data: LPOSummary, preparedBy?: string, approvedBy?: string): Promise<Blob> => {
+  // html2canvas is ~580 KB — loaded on demand so tabs that import this module
+  // don't pay for it until an image is actually generated.
+  const { default: html2canvas } = await import('html2canvas');
   const element = await createLPOElement(data, preparedBy, approvedBy);
   
   try {

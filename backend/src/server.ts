@@ -32,6 +32,7 @@ import { initNotificationQueue, closeNotificationQueue } from './services/notifi
 import BlocklistService from './services/blocklistService';
 import { requestId } from './middleware/requestId';
 import { runFirewallSeed } from './scripts/seedFirewallDefaults';
+import { backfillFuelMonthKeys } from './scripts/backfillFuelMonthKeys';
 import databaseMonitor from './utils/databaseMonitor';
 
 // Validate environment variables
@@ -314,6 +315,15 @@ const startServer = async () => {
       await runFirewallSeed();
     } catch (seedErr) {
       logger.warn('Firewall seed failed (non-fatal):', seedErr);
+    }
+
+    // Backfill FuelRecord.monthKey (idempotent; a no-op once filled). Awaited
+    // so the indexed month filter in getAllFuelRecords never serves requests
+    // against partially-backfilled data.
+    try {
+      await backfillFuelMonthKeys();
+    } catch (backfillErr) {
+      logger.error('monthKey backfill failed — month filters may miss old records until next restart:', backfillErr);
     }
 
     // Connect to Redis (for Socket.io adapter, caching, sessions)

@@ -56,13 +56,11 @@ export const responseSanitizationMiddleware = (
         return originalJson.call(this, body);
       }
 
-      // Convert to a pure JSON-safe POJO first so that Mongoose documents,
-      // BSON ObjectIds, Dates, etc. are serialized to plain strings/numbers
-      // before the sanitizer iterates own properties.
-      const jsonSafe = JSON.parse(JSON.stringify(body));
-
-      // Sanitize the JSON-safe body (only deals with primitives now)
-      const sanitized = sanitizeObject(jsonSafe);
+      // Sanitize the body directly — sanitizeObject passes Dates, Buffers and
+      // BSON types through untouched and converts Mongoose documents via
+      // toJSON(), so the previous JSON.parse(JSON.stringify(body)) round-trip
+      // (which doubled serialization cost on every response) is unnecessary.
+      const sanitized = sanitizeObject(body);
 
       // Log response for debugging (if not successful, will be caught by error handler)
       if (!body.success && body.message) {

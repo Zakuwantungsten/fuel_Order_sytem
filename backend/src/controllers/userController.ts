@@ -5,7 +5,7 @@ import UserMFA from '../models/UserMFA';
 import { MFA } from '../models/MFA';
 import { SystemConfig } from '../models';
 import { ApiError } from '../middleware/errorHandler';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, invalidateAuthUserCache } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emailService } from '../services/emailService';
@@ -385,6 +385,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
       throw new ApiError(404, 'User not found');
     }
 
+    invalidateAuthUserCache(id);
     logger.info(`User updated: ${user.username} by ${req.user?.username}`);
 
     // Notify the affected user via WebSocket so their session reflects changes immediately
@@ -446,6 +447,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
       throw new ApiError(404, 'User not found');
     }
 
+    invalidateAuthUserCache(id);
     logger.info(`User deleted: ${user.username} by ${req.user?.username}`);
 
     // Immediately kick the deleted user out via WebSocket
@@ -548,6 +550,7 @@ export const resetUserPassword = async (req: AuthRequest, res: Response): Promis
 
     await user.save();
 
+    invalidateAuthUserCache(user._id);
     logger.info(`Password reset for user: ${user.username} by ${req.user?.username} (method: ${provisioningMethod})`);
 
     // Kick the user out so they must re-authenticate with the new credentials
@@ -654,6 +657,7 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response): Promise
     user.isActive = !user.isActive;
     await user.save();
 
+    invalidateAuthUserCache(id);
     logger.info(`User status toggled: ${user.username} (${user.isActive ? 'active' : 'inactive'}) by ${req.user?.username}`);
 
     // If deactivating, immediately force the user off via WebSocket
@@ -718,6 +722,7 @@ export const banUser = async (req: AuthRequest, res: Response): Promise<void> =>
     user.refreshToken = undefined; // Clear refresh token to force logout
     await user.save();
 
+    invalidateAuthUserCache(id);
     logger.warn(`User banned: ${user.username} by ${req.user?.username}. Reason: ${reason}`);
 
     // Immediately kick the banned user out via WebSocket
@@ -773,6 +778,7 @@ export const unbanUser = async (req: AuthRequest, res: Response): Promise<void> 
     user.isActive = true; // Reactivate when unbanned
     await user.save();
 
+    invalidateAuthUserCache(id);
     logger.info(`User unbanned: ${user.username} by ${req.user?.username}`);
 
     await AuditService.log({
@@ -1005,6 +1011,8 @@ export const bulkDeleteUsers = async (req: AuthRequest, res: Response): Promise<
       { isDeleted: true, deletedAt: new Date() }
     );
 
+    for (const deletedId of userIds) invalidateAuthUserCache(deletedId);
+
     // Notify all affected users via WebSocket
     for (const u of usersToDelete) {
       emitToUser((u as any).username, 'session_event', {
@@ -1072,6 +1080,7 @@ export const bulkResetPasswords = async (req: AuthRequest, res: Response): Promi
         user.passwordResetAt = new Date();
         (user as any).refreshToken = undefined;
         await user.save();
+        invalidateAuthUserCache(user._id);
 
         emitToUser(user.username, 'session_event', {
           type: 'password_reset',

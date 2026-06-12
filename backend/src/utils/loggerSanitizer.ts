@@ -96,6 +96,15 @@ export function sanitizeObject(obj: any, depth: number = 0, seen?: WeakSet<objec
     return obj;
   }
 
+  // Mongoose documents (and any class exposing toJSON) are converted to plain
+  // objects first, so we iterate their data fields rather than internal state.
+  // Plain objects and arrays have no own/inherited toJSON, so this only fires
+  // for class instances. Depth+1 guards against a pathological self-returning
+  // toJSON.
+  if (typeof (obj as any).toJSON === 'function') {
+    return sanitizeObject((obj as any).toJSON(), depth + 1, seen);
+  }
+
   // Detect circular references
   if (!seen) seen = new WeakSet();
   if (seen.has(obj)) return '[Circular]';

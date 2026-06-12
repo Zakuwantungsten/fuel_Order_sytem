@@ -13,8 +13,11 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 30 * 1000,           // Consider data fresh for 30 seconds (was 5 min — caused stale reads after WebSocket pushes)
       gcTime: 10 * 60 * 1000,        // Keep unused data in cache for 10 minutes (formerly cacheTime)
-      refetchOnWindowFocus: true,     // Refetch when user returns to window
-      refetchOnReconnect: true,       // Refetch when internet reconnects
+      // Focus refetch is OFF: WebSocket sync (useRealtimeSync at app level)
+      // already invalidates affected queries on every data change, so refiring
+      // all active queries on each alt-tab back only duplicated requests.
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,       // Refetch when internet reconnects (covers missed WebSocket events)
       retry: 1,                       // Retry failed requests once
     },
   },

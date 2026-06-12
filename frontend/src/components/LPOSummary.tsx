@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle, ChevronDown, Check } from 'lucide-react';
 import { LPOEntry, DriverAccountEntry } from '../types';
 import { driverAccountAPI } from '../services/api';
-import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 // Helper to derive currency from station name
@@ -305,8 +304,9 @@ const LPOSummary = ({
         regularLPOCount
       });
     }
-  }, [selectedMonth, selectedYear, combinedEntries.length, localSelectedStations, localDateFrom, localDateTo]);  // Helper function to apply borders and center alignment to worksheet
-  const applyExcelStyles = (ws: XLSX.WorkSheet) => {
+  }, [selectedMonth, selectedYear, combinedEntries.length, localSelectedStations, localDateFrom, localDateTo]);  // Helper function to apply borders and center alignment to worksheet.
+  // Receives the lazily-imported xlsx-js-style module from the caller.
+  const applyExcelStyles = (XLSX: any, ws: any) => {
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
     
     const borderStyle = {
@@ -356,8 +356,10 @@ const LPOSummary = ({
     ];
   };
 
-  const handleExportMonth = () => {
+  const handleExportMonth = async () => {
     if (!summary) return;
+    // xlsx-js-style is loaded on demand — it's ~870 KB and only needed here
+    const XLSX = (await import('xlsx-js-style')).default;
 
     const exportData = summary.entries.map((entry, index) => ({
       'S/N': index + 1,
@@ -377,14 +379,16 @@ const LPOSummary = ({
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
-    applyExcelStyles(ws);
+    applyExcelStyles(XLSX, ws);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${selectedMonth}_${selectedYear}`);
     XLSX.writeFile(wb, `LPO_Summary_${selectedMonth}_${selectedYear}.xlsx`);
   };
 
-  const handleExportYear = () => {
+  const handleExportYear = async () => {
     if (availableMonths.length === 0) return;
+    // xlsx-js-style is loaded on demand — it's ~870 KB and only needed here
+    const XLSX = (await import('xlsx-js-style')).default;
 
     const wb = XLSX.utils.book_new();
 
@@ -411,7 +415,7 @@ const LPOSummary = ({
         }));
 
         const ws = XLSX.utils.json_to_sheet(exportData);
-        applyExcelStyles(ws);
+        applyExcelStyles(XLSX, ws);
         XLSX.utils.book_append_sheet(wb, ws, `${month}_${selectedYear}`);
       }
     });
@@ -438,7 +442,7 @@ const LPOSummary = ({
     });
 
     const summaryWs = XLSX.utils.json_to_sheet(yearSummary);
-    applyExcelStyles(summaryWs);
+    applyExcelStyles(XLSX, summaryWs);
     XLSX.utils.book_append_sheet(wb, summaryWs, `${selectedYear}_Summary`);
 
     XLSX.writeFile(wb, `LPO_Summary_${selectedYear}.xlsx`);

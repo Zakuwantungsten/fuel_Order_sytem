@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2, Truck } from 'lucide-react';
-import XLSX from 'xlsx-js-style';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import type { LPOEntry, LPOSummary as LPOSummaryType } from '../types';
 import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI, configAPI } from '../services/api';
@@ -928,7 +927,9 @@ const LPOs = () => {
     setViewMode('workbook');
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    // xlsx-js-style is loaded on demand — it's ~870 KB and only needed here
+    const XLSX = (await import('xlsx-js-style')).default;
     // Create worksheet data with headers
     const headers = ['S/No', 'Date', 'LPO No.', 'Station', 'DO/SDO', 'Truck No.', 'Ltrs', 'Price/Ltr', 'Dest.', 'Amount'];
     
