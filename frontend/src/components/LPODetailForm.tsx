@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
-import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI, configAPI, resourceLockAPI } from '../services/api';
+import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI, resourceLockAPI } from '../services/api';
+import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
@@ -277,14 +278,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   } | null>(null);
   const [isCreatingAndForwarding, setIsCreatingAndForwarding] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [autoDownloadLPOPdf, setAutoDownloadLPOPdf] = useState(true);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    configAPI.getJourneyConfig()
-      .then((cfg) => setAutoDownloadLPOPdf(cfg.autoDownloadLPOPdf ?? true))
-      .catch(() => {/* keep default true */});
-  }, [isOpen]);
+  const { data: journeyConfig } = useJourneyConfig();
+  const autoDownloadLPOPdf = journeyConfig?.autoDownloadLPOPdf ?? true;
 
   // Creation lock: only one user may use the new-LPO form at a time. Acquire a
   // global 'lpo_create' resource lock while the form is open (creating only),

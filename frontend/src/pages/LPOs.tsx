@@ -5,7 +5,8 @@ import { useSearchParams } from 'react-router-dom';
 import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2, Truck } from 'lucide-react';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import type { LPOEntry, LPOSummary as LPOSummaryType } from '../types';
-import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI, configAPI } from '../services/api';
+import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI } from '../services/api';
+import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import LPODetailForm from '../components/LPODetailForm';
 import LPOWorkbook from '../components/LPOWorkbook';
 import LPOSummaryComponent from '../components/LPOSummary';
@@ -65,13 +66,8 @@ const LPOs = () => {
     } catch { /* ignore */ }
   }, [selectedYear]);
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
-  const [autoDownloadLPOPdf, setAutoDownloadLPOPdf] = useState(true);
-
-  useEffect(() => {
-    configAPI.getJourneyConfig()
-      .then((cfg) => setAutoDownloadLPOPdf(cfg.autoDownloadLPOPdf ?? true))
-      .catch(() => {/* keep default true */});
-  }, []);
+  const { data: journeyConfig } = useJourneyConfig();
+  const autoDownloadLPOPdf = journeyConfig?.autoDownloadLPOPdf ?? true;
   const [stationFilter, setStationFilter] = usePersistedState('lpo:stationFilter', '');
   const [statusFilter, setStatusFilter] = usePersistedState('lpo:statusFilter', 'all');
   const [dateFilter, setDateFilter] = usePersistedState('lpo:dateFilter', '');

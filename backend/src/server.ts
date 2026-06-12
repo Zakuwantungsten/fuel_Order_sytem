@@ -101,7 +101,11 @@ app.use(fingerprintObfuscationMiddleware);
 //    potentially user-specific data. no-store prevents the browser or any intermediate
 //    proxy from persisting the response. Pragma/Expires provide HTTP/1.0 back-compat
 //    for older proxies and CDN edge nodes.
-app.use((_req, res, next) => {
+//    OPTIONS (CORS preflight) requests are excluded: their preflight cache is controlled
+//    by Access-Control-Max-Age (a separate browser cache), not the HTTP response cache.
+//    Applying no-store to OPTIONS prevents browsers from honouring maxAge caching.
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -126,6 +130,10 @@ app.use(
     origin: config.corsOrigin,
     credentials: true,
     optionsSuccessStatus: 200,
+    // Cache preflight responses for 24 h. Browsers store this in a separate
+    // CORS preflight cache (not the HTTP cache), so each unique endpoint only
+    // pays one OPTIONS round-trip per day instead of one per request.
+    maxAge: 86400,
   })
 );
 

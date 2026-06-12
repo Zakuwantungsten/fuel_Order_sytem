@@ -18,6 +18,11 @@ export default defineConfig({
     },
   },
   build: {
+    // Vite emits <link rel="modulepreload"> for all chunks by default — including
+    // lazy vendor chunks like pdf-vendor and icons-vendor. This causes browsers to
+    // proactively validate all chunks on every page load, which adds 9+ seconds when
+    // a Vercel CDN node is slow. Disabled so lazy chunks only fetch when needed.
+    modulePreload: false,
     rollupOptions: {
       output: {
         manualChunks: {

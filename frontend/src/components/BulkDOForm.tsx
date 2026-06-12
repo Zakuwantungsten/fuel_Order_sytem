@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, FileDown, Plus, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
-import { deliveryOrdersAPI, configAPI } from '../services/api';
+import { deliveryOrdersAPI } from '../services/api';
+import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
 import { toast } from 'react-toastify';
 
@@ -80,18 +81,12 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   const [bulkInput, setBulkInput] = useState('');
   const [parsedRows, setParsedRows] = useState<BulkDORow[]>([]);
   const [createdOrders, setCreatedOrders] = useState<Partial<DeliveryOrder>[]>([]);
-  const [autoDownloadPdf, setAutoDownloadPdf] = useState(true);
-
   // Progress tracking state
   const [isCreating, setIsCreating] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
 
-  useEffect(() => {
-    if (!isOpen) return;
-    configAPI.getJourneyConfig()
-      .then((cfg) => setAutoDownloadPdf(cfg.autoDownloadDOPdf ?? true))
-      .catch(() => {/* keep default true */});
-  }, [isOpen]);
+  const { data: journeyConfig } = useJourneyConfig();
+  const autoDownloadPdf = journeyConfig?.autoDownloadDOPdf ?? true;
   
   // Dropdown states
   const [showCargoTypeDropdown, setShowCargoTypeDropdown] = useState(false);

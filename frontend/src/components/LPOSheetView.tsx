@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
-import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, configAPI, FuelAutomationConfig } from '../services/api';
+import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, FuelAutomationConfig } from '../services/api';
+import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
@@ -90,11 +91,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     fetchFreshSheet();
   }, [lpoNo]);
 
+  const { data: journeyConfig } = useJourneyConfig();
   useEffect(() => {
-    configAPI.getJourneyConfig()
-      .then(cfg => { if (cfg?.fuelAutomation) setFuelAutomation(cfg.fuelAutomation); })
-      .catch(() => {});
-  }, []);
+    if (journeyConfig?.fuelAutomation) setFuelAutomation(journeyConfig.fuelAutomation);
+  }, [journeyConfig]);
 
   // Refresh sheet from server (used after save/cancel operations)
   const refreshSheet = async () => {

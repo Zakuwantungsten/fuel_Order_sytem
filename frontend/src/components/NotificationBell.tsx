@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { Bell, X, CheckCircle2, AlertCircle, Link2, Edit3, Truck, FileText, Trash2 } from 'lucide-react';
 import api from '../services/api';
@@ -61,13 +62,25 @@ const getNotificationId = (notification: Notification): string => {
   return notification.id || notification._id || '';
 };
 
+// Shared query key — both mounted instances (mobile + desktop header) subscribe
+// to the same key so React Query makes exactly one network request.
+export const NOTIFICATIONS_QUERY_KEY = ['notifications', 'pending'] as const;
+
 export default function NotificationBell({ onNotificationClick, onEditDO, onRelinkDO, onViewPendingYardFuel, onViewAllNotifications }: NotificationBellProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const queryClient = useQueryClient();
+
+  const { data: notifData, isLoading: loading } = useQuery({
+    queryKey: NOTIFICATIONS_QUERY_KEY,
+    queryFn: () => api.get('/notifications', { params: { status: 'pending' } }).then(r => r.data),
+    staleTime: 30 * 1000,
+  });
+
+  const notifications: Notification[] = notifData?.data || [];
+  const unreadCount: number = notifData?.unreadCount || 0;
+  const pendingYardFuelCount: number = notifications.filter(n => n.type === 'truck_pending_linking').length;
+
   const [showDropdown, setShowDropdown] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [relinkingId, setRelinkingId] = useState<string | null>(null);
-  const [pendingYardFuelCount, setPendingYardFuelCount] = useState(0);
   const [dismissingAll, setDismissingAll] = useState(false);
 
   // Pre-load the notification sound once so it's ready to play instantly
@@ -124,14 +137,15 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
         subscribeToNotifications((notification) => {
           console.log('[NotificationBell] Received real-time notification:', notification);
           
-          // Add new notification to the list
-          setNotifications((prev) => [notification, ...prev]);
-          setUnreadCount((prev) => prev + 1);
-          
-          // Update pending yard fuel count if applicable
-          if (notification.type === 'truck_pending_linking') {
-            setPendingYardFuelCount((prev) => prev + 1);
-          }
+          // Optimistically prepend to cache so UI updates instantly
+          queryClient.setQueryData(NOTIFICATIONS_QUERY_KEY, (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              data: [notification, ...(old.data || [])],
+              unreadCount: (old.unreadCount || 0) + 1,
+            };
+          });
           
           // Play notification sound
           playNotificationSound();
@@ -296,27 +310,9 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     }
   };
 
-  const loadNotifications = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get('/notifications', {
-        params: { status: 'pending' }
-      });
-      
-      setNotifications(response.data.data || []);
-      setUnreadCount(response.data.unreadCount || 0);
-      
-      // Count pending yard fuel notifications
-      const pendingCount = (response.data.data || []).filter(
-        (n: Notification) => n.type === 'truck_pending_linking'
-      ).length;
-      setPendingYardFuelCount(pendingCount);
-    } catch (error) {
-      console.error('Failed to load notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadNotifications = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
+  }, [queryClient]);
 
   const markAsRead = async (id: string) => {
     try {

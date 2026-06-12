@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { X, ChevronDown, Check } from 'lucide-react';
 import { DeliveryOrder } from '../types';
-import { deliveryOrdersAPI, configAPI } from '../services/api';
+import { deliveryOrdersAPI } from '../services/api';
+import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import axios from 'axios';
 import { cleanDeliveryOrder, isCorruptedDriverName } from '../utils/dataCleanup';
 
@@ -57,14 +58,8 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [autoDownloadPdf, setAutoDownloadPdf] = useState(true);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    configAPI.getJourneyConfig()
-      .then((cfg) => setAutoDownloadPdf(cfg.autoDownloadDOPdf ?? true))
-      .catch(() => {/* keep default true */});
-  }, [isOpen]);
+  const { data: journeyConfig } = useJourneyConfig();
+  const autoDownloadPdf = journeyConfig?.autoDownloadDOPdf ?? true;
   const isEditMode = !!order;
 
   // Dropdown states

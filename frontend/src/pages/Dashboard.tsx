@@ -22,7 +22,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI, configAPI } from '../services/api';
+import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
+import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { DashboardStats, FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
@@ -76,13 +77,10 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     fuelMaxResults: 3,
   });
 
+  const { data: journeyConfig } = useJourneyConfig();
   useEffect(() => {
-    configAPI.getJourneyConfig()
-      .then((cfg) => {
-        if (cfg.searchConfig) setSearchConfig((prev) => ({ ...prev, ...cfg.searchConfig }));
-      })
-      .catch(() => {});
-  }, []);
+    if (journeyConfig?.searchConfig) setSearchConfig((prev) => ({ ...prev, ...journeyConfig.searchConfig }));
+  }, [journeyConfig]);
 
   // Persist search state to sessionStorage whenever it changes
   useEffect(() => {
