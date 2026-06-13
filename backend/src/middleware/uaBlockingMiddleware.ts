@@ -160,6 +160,12 @@ export function uaBlockingMiddleware(req: Request, res: Response, next: NextFunc
     return next();
   }
 
+  // Skip loopback — cloudflared health checks use go-http-client/1.1 from ::1/127.0.0.1
+  const clientIP = getClientIP(req);
+  if (clientIP === '127.0.0.1' || clientIP === '::1' || clientIP === 'unknown') {
+    return next();
+  }
+
   const ua = req.headers['user-agent'] || '';
 
   // Empty UA handling
