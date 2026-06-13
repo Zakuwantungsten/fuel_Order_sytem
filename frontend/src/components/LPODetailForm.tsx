@@ -775,8 +775,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         return true;
       };
 
+      const entries = formData.entries ?? [];
       try {
-        for (const entry of formData.entries) {
+        for (const entry of entries) {
           if (cancelled) break;
           if (entry.truckNo && entry.truckNo.length >= 4 && entry.doNo && entry.doNo !== 'NIL') {
             const truckLPOs: { lpos: LPOSummary[], direction: string, doNo: string }[] = [];
