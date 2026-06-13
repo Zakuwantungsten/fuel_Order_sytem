@@ -143,6 +143,10 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
     ...opts,
     headers,
   });
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Backend unreachable (HTTP ${res.status}). Check server status or try refreshing.`);
+  }
   const json = await res.json();
   if (!res.ok || !json.success) throw new Error(json.message || 'Request failed');
   return json.data;
@@ -215,6 +219,37 @@ export default function SecurityBlocklistTab() {
   const configChanged = autoblockConfig && configDraft &&
     JSON.stringify(autoblockConfig) !== JSON.stringify(configDraft);
 
+  const fetchBaseData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [blockedData, statsData] = await Promise.all([
+        apiFetch<BlockedIPEntry[]>('/'),
+        apiFetch<BlocklistStats>('/stats'),
+      ]);
+      setBlocked(blockedData);
+      setStats(statsData);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchTabData = useCallback(async () => {
+    try {
+      if (tab === 'suspicious') {
+        const susData = await apiFetch<SuspiciousIP[]>('/suspicious');
+        setSuspicious(susData);
+      } else if (tab === 'history') {
+        const histData = await apiFetch<HistoryEntry[]>('/history');
+        setHistory(histData);
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  }, [tab]);
+
+  // fetchData kept for explicit refresh button (fetches base + current tab)
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -228,8 +263,7 @@ export default function SecurityBlocklistTab() {
       if (tab === 'suspicious') {
         const susData = await apiFetch<SuspiciousIP[]>('/suspicious');
         setSuspicious(susData);
-      }
-      if (tab === 'history') {
+      } else if (tab === 'history') {
         const histData = await apiFetch<HistoryEntry[]>('/history');
         setHistory(histData);
       }
@@ -240,7 +274,8 @@ export default function SecurityBlocklistTab() {
     }
   }, [tab]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchBaseData(); }, [fetchBaseData]);
+  useEffect(() => { fetchTabData(); }, [fetchTabData]);
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
 
   const handleBlock = async (e: React.FormEvent) => {

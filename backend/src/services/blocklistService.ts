@@ -382,6 +382,8 @@ const BlocklistService = {
     blockedBy: string;
     suspiciousCount: number;
     details: string;
+    isActive: boolean;
+    lastSuspiciousEvent: string | null;
   }>> {
     try {
       const now = new Date();
@@ -395,15 +397,23 @@ const BlocklistService = {
         .sort({ blockedAt: -1 })
         .lean();
 
-      return blocks.map(b => ({
-        ip: b.ip,
-        reason: b.reason,
-        blockedAt: b.blockedAt,
-        expiresAt: b.expiresAt,
-        blockedBy: b.blockedBy,
-        suspiciousCount: b.suspiciousCount,
-        details: b.details,
-      }));
+      return blocks.map(b => {
+        const inMemory = suspiciousIPs.get(b.ip);
+        const lastEvent = inMemory && inMemory.events.length > 0
+          ? new Date(Math.max(...inMemory.events.map(e => e.timestamp))).toISOString()
+          : null;
+        return {
+          ip: b.ip,
+          reason: b.reason,
+          blockedAt: b.blockedAt,
+          expiresAt: b.expiresAt,
+          blockedBy: b.blockedBy,
+          suspiciousCount: b.suspiciousCount,
+          details: b.details,
+          isActive: b.isActive,
+          lastSuspiciousEvent: lastEvent,
+        };
+      });
     } catch (err) {
       logger.error('BlocklistService: Failed to fetch blocked IPs', err);
       return [];
@@ -493,16 +503,18 @@ const BlocklistService = {
    * Get stats for the security dashboard.
    */
   async getStats(): Promise<{
+    totalBlocked: number;
     activeBlocks: number;
-    blockedToday: number;
+    expiredBlocks: number;
+    permanentBlocks: number;
     suspiciousIPs: number;
-    topReasons: Array<{ reason: string; count: number }>;
+    byReason: Record<string, number>;
   }> {
     try {
       const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      const [activeBlocks, blockedToday, reasonAgg] = await Promise.all([
+      const [totalBlocked, activeBlocks, expiredBlocks, permanentBlocks, reasonAgg] = await Promise.all([
+        BlockedIP.countDocuments({}),
         BlockedIP.countDocuments({
           isActive: true,
           $or: [
@@ -511,25 +523,39 @@ const BlocklistService = {
           ],
         }),
         BlockedIP.countDocuments({
-          blockedAt: { $gte: todayStart },
+          $or: [
+            { isActive: false },
+            { expiresAt: { $lte: now } },
+          ],
+        }),
+        BlockedIP.countDocuments({
+          isActive: true,
+          expiresAt: null,
         }),
         BlockedIP.aggregate([
           { $match: { isActive: true } },
           { $group: { _id: '$reason', count: { $sum: 1 } } },
           { $sort: { count: -1 } },
-          { $limit: 10 },
+          { $limit: 20 },
         ]),
       ]);
 
+      const byReason: Record<string, number> = {};
+      for (const r of reasonAgg) {
+        if (r._id) byReason[r._id] = r.count;
+      }
+
       return {
+        totalBlocked,
         activeBlocks,
-        blockedToday,
+        expiredBlocks,
+        permanentBlocks,
         suspiciousIPs: suspiciousIPs.size,
-        topReasons: reasonAgg.map(r => ({ reason: r._id, count: r.count })),
+        byReason,
       };
     } catch (err) {
       logger.error('BlocklistService: Failed to fetch stats', err);
-      return { activeBlocks: 0, blockedToday: 0, suspiciousIPs: 0, topReasons: [] };
+      return { totalBlocked: 0, activeBlocks: 0, expiredBlocks: 0, permanentBlocks: 0, suspiciousIPs: 0, byReason: {} };
     }
   },
 
