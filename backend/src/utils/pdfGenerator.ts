@@ -802,9 +802,9 @@ export const generateLPOPDF = (
     doc.save().fillOpacity(0.82);
     doc.rect(MARGIN, y, CONTENT_W, HDR_H).fill('#F5F5F5');
     doc.restore();
-    doc.rect(MARGIN, y, CONTENT_W, HDR_H).lineWidth(1).strokeColor('#000000').stroke();
+    doc.rect(MARGIN, y, CONTENT_W, HDR_H).lineWidth(0.5).strokeColor('#000000').stroke();
     C.forEach((col, i) => {
-      if (i > 0) vline(col.x, y, y + HDR_H, 1);
+      if (i > 0) vline(col.x, y, y + HDR_H, 0.5);
     });
     const labels = ['D.O NO', 'TRUCK NO', 'DESTINATION', 'DESCRIPTION', 'QTY', 'RATE', 'AMOUNT'];
     const ty = y + (HDR_H - 9) / 2;
@@ -823,7 +823,7 @@ export const generateLPOPDF = (
     doc.save().fillOpacity(0.78);
     doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill(bg);
     doc.restore();
-    doc.rect(MARGIN, y, CONTENT_W, ROW_H).lineWidth(0.5).strokeColor('#000000').stroke();
+    // No horizontal row borders — vertical column dividers only
     C.forEach((col, i) => {
       if (i > 0) vline(col.x, y, y + ROW_H, 0.5);
     });
@@ -838,10 +838,10 @@ export const generateLPOPDF = (
 
     const ty = y + (ROW_H - 9) / 2;
     // D.O NO
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(doColor)
+    doc.font('Helvetica').fontSize(9).fillColor(doColor)
       .text(doNo, C[0].x + 2, ty, { width: C[0].w - 4, align: 'center', lineBreak: false });
     // TRUCK NO
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(stdColor)
+    doc.font('Helvetica').fontSize(9).fillColor(stdColor)
       .text(entry.truckNo, C[1].x + 2, ty, { width: C[1].w - 4, align: 'center', lineBreak: false });
     // DESTINATION
     doc.font('Helvetica').fontSize(9).fillColor(destColor)
@@ -850,13 +850,13 @@ export const generateLPOPDF = (
     doc.font('Helvetica').fontSize(9).fillColor(stdColor)
       .text(descText, C[3].x + 4, ty, { width: C[3].w - 8, align: 'left', lineBreak: false });
     // QTY
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(stdColor)
+    doc.font('Helvetica').fontSize(9).fillColor(stdColor)
       .text(entry.liters.toLocaleString('en-US'), C[4].x + 2, ty, { width: C[4].w - 4, align: 'center', lineBreak: false });
     // RATE
     doc.font('Helvetica').fontSize(9).fillColor(rateColor)
       .text(entry.rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), C[5].x + 2, ty, { width: C[5].w - 4, align: 'center', lineBreak: false });
     // AMOUNT
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(stdColor)
+    doc.font('Helvetica').fontSize(9).fillColor(stdColor)
       .text(entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), C[6].x + 2, ty, { width: C[6].w - 4, align: 'right', lineBreak: false });
 
     if (cancelled) {
@@ -886,15 +886,15 @@ export const generateLPOPDF = (
       const companyX = MARGIN + LOGO_W + 12;
       const companyW = TABLE_R - companyX - 20;
       doc.font('Helvetica-Bold').fontSize(24).fillColor('#000000')
-        .text(branding.companyName || 'TAHMEED COACH TZ LTD', companyX, y + 4, { width: companyW, align: 'center', lineBreak: false });
+        .text(branding.companyName || 'TAHMEED COACH TZ LTD', companyX, y + 4, { width: companyW, align: 'right', lineBreak: false });
       const addressLine = (branding as any).companyAddress || branding.companyWebsite || '';
       if (addressLine) {
         doc.font('Helvetica').fontSize(13).fillColor('#333333')
-          .text(addressLine, companyX, y + 40, { width: companyW, align: 'center', lineBreak: false });
+          .text(addressLine, companyX, y + 40, { width: companyW, align: 'right', lineBreak: false });
       }
       if (branding.companyEmail) {
         doc.font('Helvetica').fontSize(13).fillColor('#333333')
-          .text(`Email: ${branding.companyEmail}`, companyX, y + 58, { width: companyW, align: 'center', lineBreak: false });
+          .text(`Email: ${branding.companyEmail}`, companyX, y + 58, { width: companyW, align: 'right', lineBreak: false });
       }
 
       y = MARGIN + LOGO_H + 8; // ≈ 143
@@ -979,10 +979,9 @@ export const generateLPOPDF = (
     // ── TABLE ──
     const tableStartY = y;
     const totalTableH = HDR_H + pageEntries.length * ROW_H;
-    const TABLE_RADIUS = 4;
 
     doc.save();
-    doc.roundedRect(MARGIN, tableStartY, CONTENT_W, totalTableH, TABLE_RADIUS).clip();
+    doc.rect(MARGIN, tableStartY, CONTENT_W, totalTableH).clip();
 
     drawTableHeader(y);
     y += HDR_H;
@@ -994,65 +993,46 @@ export const generateLPOPDF = (
 
     doc.restore();
 
-    // Rounded outer border
-    doc.roundedRect(MARGIN, tableStartY, CONTENT_W, totalTableH, TABLE_RADIUS)
-      .lineWidth(1).strokeColor('#000000').stroke();
+    // Sharp outer border for table body
+    doc.rect(MARGIN, tableStartY, CONTENT_W, totalTableH)
+      .lineWidth(0.5).strokeColor('#000000').stroke();
 
     if (isLast) {
-      y += 20;
+      // ── FOOTER ROW: always pinned to bottom of page ──
+      const FOOTER_H = 36;
+      // Align right section with QTY column so the vertical divider is one continuous line
+      const rightSecX = C[4].x; // = MARGIN + 330 = 370
+      const rightSecW = TABLE_R - rightSecX; // = 185
 
-      // ── FOOTER ROW: Prepared by | Approved By | Total | Amount ──
-      const FOOTER_H = 58;
-      const prepW = 155;
-      const approW = 185;
-      const totalSecW = CONTENT_W - prepW - approW; // 175
-      const totalLabelW = 55;
-      const totalAmtW = totalSecW - totalLabelW;    // 120
+      const ftrY = FOOTER_Y - FOOTER_H - 30;
 
-      const ftrY = y;
-
-      // Outer box
-      doc.rect(MARGIN, ftrY, CONTENT_W, FOOTER_H).lineWidth(0.5).strokeColor('#000000').stroke();
-
-      // Vertical dividers
-      const div1X = MARGIN + prepW;
-      const div2X = MARGIN + prepW + approW;
-      const div3X = div2X + totalLabelW;
-      vline(div1X, ftrY, ftrY + FOOTER_H);
-      vline(div2X, ftrY, ftrY + FOOTER_H);
-      vline(div3X, ftrY, ftrY + FOOTER_H);
-
-      // Prepared by
+      // Left section: plain text only, no borders
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000')
-        .text('Prepared by:', MARGIN + 6, ftrY + 10, { width: prepW - 12, lineBreak: false });
+        .text('Prepared by:', MARGIN + 6, ftrY + 6, { lineBreak: false });
       if (preparedBy) {
         doc.font('Helvetica').fontSize(9).fillColor('#000000')
-          .text(preparedBy, MARGIN + 6, ftrY + 24, { width: prepW - 12, lineBreak: false });
+          .text(preparedBy, MARGIN + 6, ftrY + 18, { lineBreak: false });
       }
 
-      // Approved By
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000')
-        .text('Approved By :', div1X + 6, ftrY + 10, { width: approW - 12, lineBreak: false });
+        .text('Approved By :', MARGIN + 165, ftrY + 6, { lineBreak: false });
       const approvedByName = approvedBy || '';
       if (approvedByName) {
         doc.font('Helvetica').fontSize(9).fillColor('#000000')
-          .text(approvedByName, div1X + 6, ftrY + 24, { width: approW - 12, lineBreak: false });
+          .text(approvedByName, MARGIN + 165, ftrY + 18, { lineBreak: false });
       }
 
-      // Total label
+      // Right section: full box, no internal divider, Total + Amount in one cell
+      doc.rect(rightSecX, ftrY, rightSecW, FOOTER_H).lineWidth(0.5).strokeColor('#000000').stroke();
+      const vertCenter = ftrY + (FOOTER_H - 10) / 2;
       doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000')
-        .text('Total', div2X + 3, ftrY + (FOOTER_H - 12) / 2, { width: totalLabelW - 6, align: 'center', lineBreak: false });
-
-      // Total amount
+        .text('Total', rightSecX + 6, vertCenter, { lineBreak: false });
       doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000')
-        .text(fmtAmount(totalAmount), div3X + 3, ftrY + (FOOTER_H - 12) / 2, { width: totalAmtW - 6, align: 'center', lineBreak: false });
+        .text(fmtAmount(totalAmount), rightSecX + 6, vertCenter, { width: rightSecW - 12, align: 'right', lineBreak: false });
 
-      y += FOOTER_H + 10;
-
-      hline(y, MARGIN, TABLE_R, 0.5, '#CCCCCC');
-      y += 8;
+      // Computer-generated disclaimer below footer
       doc.font('Helvetica').fontSize(8).fillColor('#888888')
-        .text('This is a computer-generated document.', MARGIN, y, { lineBreak: false });
+        .text('This is a computer-generated document.', MARGIN, ftrY + FOOTER_H + 6, { lineBreak: false });
     }
 
     // Page number footer
