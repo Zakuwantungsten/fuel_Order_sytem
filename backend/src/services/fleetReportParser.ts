@@ -13,59 +13,46 @@ interface ParsedReport {
   checkpointDistribution: Map<string, number>;
 }
 
-/**
- * Fleet Report Parser Service
- * Parses Excel/CSV files containing truck position reports
- */
 export class FleetReportParser {
   private checkpoints: Map<string, { name: string; order: number }> = new Map();
 
-  /**
-   * Initialize parser by loading checkpoints
-   */
   async initialize(): Promise<void> {
     const allCheckpoints = await Checkpoint.find({ isDeleted: false, isActive: true }).sort({ order: 1 });
-    
+
     for (const cp of allCheckpoints) {
-      // Add main name
       this.checkpoints.set(cp.name.toUpperCase(), { name: cp.name, order: cp.order });
-      
-      // Add alternative names
       for (const altName of cp.alternativeNames) {
         this.checkpoints.set(altName.toUpperCase(), { name: cp.name, order: cp.order });
       }
     }
-    
+
     logger.info(`Loaded ${allCheckpoints.length} checkpoints for fleet report parsing`);
   }
 
-  /**
-   * Parse Excel file buffer
-   */
   async parseExcelFile(fileBuffer: Buffer, fileName: string): Promise<ParsedReport> {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(fileBuffer as any);
 
-    // Determine report type from filename or content
     const reportType = fileName.toUpperCase().includes('NO_ORDER') || fileName.toUpperCase().includes('NO ORDER')
       ? 'NO_ORDER'
       : 'IMPORT';
 
-    // Get the first worksheet
-    const worksheet = workbook.worksheets[0];
+    // Find the first worksheet that has actual data (skip chart sheets which have ≤3 rows)
+    const worksheet =
+      workbook.worksheets.find(ws => ws.rowCount > 3) || workbook.worksheets[0];
+
     if (!worksheet) {
       throw new Error('No worksheet found in Excel file');
     }
 
+    logger.info(`Using worksheet "${worksheet.name}" (${worksheet.rowCount} rows) for ${reportType} report`);
+
     const fleetGroups: IFleetGroup[] = [];
     let reportDate = new Date();
-    
-    // Check if this is multi-table (IMPORT) or single-table (NO_ORDER)
+
     if (reportType === 'IMPORT') {
       const groups = this.extractMultiTableFleetGroups(worksheet);
       fleetGroups.push(...groups);
-      
-      // Try to extract report date from first few rows
       reportDate = this.extractReportDate(worksheet) || new Date();
     } else {
       const group = this.extractSingleTableFleetGroup(worksheet);
@@ -75,7 +62,6 @@ export class FleetReportParser {
       reportDate = this.extractReportDate(worksheet) || new Date();
     }
 
-    // Calculate statistics
     const totalTrucks = fleetGroups.reduce((sum, group) => sum + group.trucks.length, 0);
     const goingTrucks = fleetGroups.reduce(
       (sum, group) => sum + group.trucks.filter(t => t.direction === 'GOING').length,
@@ -106,16 +92,45 @@ export class FleetReportParser {
   }
 
   /**
-   * Extract fleet groups from multi-table format (IMPORT reports)
+   * Build a { COLUMN_NAME: columnIndex } map from the S/N header row.
+   * ExcelJS rows are 1-indexed (index 0 is always null).
    */
+  private buildColumnMap(row: any[]): Record<string, number> {
+    const map: Record<string, number> = {};
+    for (let i = 1; i < row.length; i++) {
+      const cell = row[i];
+      if (cell == null) continue;
+      const key = cell.toString().trim().toUpperCase();
+      if (key) map[key] = i;
+    }
+    return map;
+  }
+
+  /**
+   * Resolve a column index from the map by trying multiple name variants.
+   * Falls back to prefix-matching when no exact match is found.
+   */
+  private resolveCol(map: Record<string, number>, ...names: string[]): number {
+    for (const name of names) {
+      if (map[name] !== undefined) return map[name];
+    }
+    for (const name of names) {
+      for (const key of Object.keys(map)) {
+        if (key.startsWith(name) || name.startsWith(key)) return map[key];
+      }
+    }
+    return -1;
+  }
+
   private extractMultiTableFleetGroups(worksheet: ExcelJS.Worksheet): IFleetGroup[] {
     const groups: IFleetGroup[] = [];
     const rows = worksheet.getSheetValues() as any[];
-    
+
     let currentGroupName = '';
     let currentGroupTrucks: ITruckPositionInSnapshot[] = [];
     let inDataSection = false;
     let emptyRowCount = 0;
+    let colMap: Record<string, number> = {};
 
     logger.info(`Processing ${rows.length} rows for multi-table fleet groups`);
 
@@ -123,11 +138,9 @@ export class FleetReportParser {
       const row = rows[i];
       if (!row || !Array.isArray(row)) continue;
 
-      // Check multiple columns for fleet group headers (columns 1-3)
-      // CSVs may have leading empty columns that shift data
+      // Check columns 1-3 for fleet group headers
       let headerFound = false;
       let headerText = '';
-      
       for (let col = 1; col <= 3; col++) {
         const cellText = row[col]?.toString().trim();
         if (cellText && this.isFleetGroupHeader(cellText)) {
@@ -138,43 +151,39 @@ export class FleetReportParser {
       }
 
       if (headerFound) {
-        // Save previous group if exists
         if (currentGroupName && currentGroupTrucks.length > 0) {
           logger.info(`Completed group "${currentGroupName}" with ${currentGroupTrucks.length} trucks`);
           groups.push(this.createFleetGroup(currentGroupName, currentGroupTrucks));
         }
-        
-        // Start new group
         currentGroupName = headerText;
         currentGroupTrucks = [];
         inDataSection = false;
         emptyRowCount = 0;
+        colMap = {};
         logger.info(`Started new group: "${currentGroupName}"`);
         continue;
       }
 
-      // Check if this is a column header row (S/N, TRUCK, TRAILER, etc.)
-      // Also check multiple columns as data might be offset
-      let isHeaderRow = false;
-      for (let col = 1; col <= 3; col++) {
+      // Detect the S/N header row and build the column map from it
+      let snColIdx = -1;
+      for (let col = 1; col <= 4; col++) {
         const cellText = row[col]?.toString().trim().toUpperCase();
         if (cellText === 'S/N' || cellText === 'SN') {
-          isHeaderRow = true;
+          snColIdx = col;
           break;
         }
       }
 
-      if (isHeaderRow) {
+      if (snColIdx >= 0) {
+        colMap = this.buildColumnMap(row);
         inDataSection = true;
         emptyRowCount = 0;
-        logger.info(`Found data header row at line ${i}, starting data extraction for "${currentGroupName}"`);
+        logger.info(`Found header row at line ${i} for group "${currentGroupName}": ${Object.keys(colMap).join(', ')}`);
         continue;
       }
 
-      // Track consecutive empty rows (but allow some spacing)
       if (this.isEmptyRow(row)) {
         emptyRowCount++;
-        // Only end section after 2+ consecutive empty rows
         if (emptyRowCount >= 2 && currentGroupTrucks.length > 0) {
           inDataSection = false;
         }
@@ -183,9 +192,8 @@ export class FleetReportParser {
         emptyRowCount = 0;
       }
 
-      // Extract truck data if we're in a data section
-      if (inDataSection && currentGroupName) {
-        const truck = this.extractTruckFromRow(row, 'IMPORT');
+      if (inDataSection && currentGroupName && Object.keys(colMap).length > 0) {
+        const truck = this.extractTruckFromRow(row, 'IMPORT', colMap);
         if (truck) {
           currentGroupTrucks.push(truck);
           if (currentGroupTrucks.length === 1) {
@@ -195,7 +203,6 @@ export class FleetReportParser {
       }
     }
 
-    // Add last group
     if (currentGroupName && currentGroupTrucks.length > 0) {
       logger.info(`Completed final group "${currentGroupName}" with ${currentGroupTrucks.length} trucks`);
       groups.push(this.createFleetGroup(currentGroupName, currentGroupTrucks));
@@ -203,39 +210,45 @@ export class FleetReportParser {
 
     const totalTrucks = groups.reduce((sum, g) => sum + g.trucks.length, 0);
     logger.info(`✅ Extracted ${groups.length} fleet groups with ${totalTrucks} total trucks`);
-    
+
     if (groups.length === 0) {
       logger.warn('⚠️ WARNING: No fleet groups extracted! Check if headers match expected patterns.');
     }
-    
+
     return groups;
   }
 
-  /**
-   * Extract fleet group from single-table format (NO_ORDER reports)
-   */
   private extractSingleTableFleetGroup(worksheet: ExcelJS.Worksheet): IFleetGroup | null {
     const rows = worksheet.getSheetValues() as any[];
     const trucks: ITruckPositionInSnapshot[] = [];
     let inDataSection = false;
+    let colMap: Record<string, number> = {};
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       if (!row || !Array.isArray(row)) continue;
 
-      const firstCell = row[1]?.toString().trim();
-      
-      // Check if this is column header
-      if (firstCell && (firstCell.toUpperCase() === 'S/N' || firstCell.toUpperCase() === 'SN')) {
+      // Detect the S/N header row in any of the first 4 columns
+      let snColIdx = -1;
+      for (let col = 1; col <= 4; col++) {
+        const cellText = row[col]?.toString().trim().toUpperCase();
+        if (cellText === 'S/N' || cellText === 'SN') {
+          snColIdx = col;
+          break;
+        }
+      }
+
+      if (snColIdx >= 0) {
+        colMap = this.buildColumnMap(row);
         inDataSection = true;
+        logger.info(`Found header row at line ${i}: ${Object.keys(colMap).join(', ')}`);
         continue;
       }
 
-      if (inDataSection) {
-        const truck = this.extractTruckFromRow(row, 'NO_ORDER');
+      if (inDataSection && Object.keys(colMap).length > 0) {
+        const truck = this.extractTruckFromRow(row, 'NO_ORDER', colMap);
         if (truck) {
           trucks.push(truck);
-          // Log first few trucks to verify status extraction
           if (trucks.length <= 3) {
             logger.info(`Sample truck: ${truck.truckNo} - Status: "${truck.status}" - Position: ${truck.currentCheckpoint}`);
           }
@@ -251,98 +264,79 @@ export class FleetReportParser {
     };
   }
 
-  /**
-   * Check if a cell value looks like a fleet group header
-   */
   private isFleetGroupHeader(text: string): boolean {
     if (!text || text.trim().length === 0) return false;
-    
+
     const upper = text.toUpperCase().trim();
-    
-    // Skip non-fleet headers
+
     if (upper.includes('IMPORT REPORT') || upper.includes('POD SUMMARY')) {
       return false;
     }
-    
-    // Look for patterns like "CONKEN", "RELOAD", "BRIDGE", "IMPALA", "POSEIDON", etc.
+
     const patterns = [
-      /^[A-Z]+\s+\d+\s+TRUCKS?/i,           // "CONKEN 4 TRUCKS"
-      /^RELOAD\s+\d+MT/i,                    // "RELOAD 313MT DSM-LIKASI"
-      /^BRIDGE\s+\d+/i,                      // "BRIDGE 1043MT MBSA-KOLWEZI"
-      /^IMPALA\s+\d+MT/i,                    // "IMPALA 638MT DSM-KOLWEZI"
-      /^POSEIDON\s+\d+MT/i,                  // "POSEIDON 126MT DSM-COMIKA"
-      /^POLYTRA\s+\d+MT/i,                   // "POLYTRA 639MT DSM-KOLWEZI"
-      /^GREATLAKES\s+DSM/i,                  // "GREATLAKES DSM-LUBUMBASHI"
+      /^[A-Z]+\s+\d+\s+TRUCKS?/i,
+      /^RELOAD\s+\d+MT/i,
+      /^BRIDGE\s+\d+/i,
+      /^IMPALA\s+\d+MT/i,
+      /^POSEIDON\s+\d+MT/i,
+      /^POLYTRA\s+\d+MT/i,
+      /^GREATLAKES\s+DSM/i,
     ];
-    
+
     const isMatch = patterns.some(pattern => pattern.test(upper));
-    
     if (isMatch) {
       logger.debug(`✓ Recognized fleet group header: "${text}"`);
     }
-    
     return isMatch;
   }
 
   /**
-   * Extract truck data from a row
+   * Extract a single truck record from a data row using the dynamic column map.
+   *
+   * Direction is not derived from status text:
+   *   - NO_ORDER: every truck is RETURNING (they have no active load order)
+   *   - IMPORT:   direction is left as UNKNOWN (mixed statuses, not meaningful here)
    */
-  private extractTruckFromRow(row: any[], reportType: 'IMPORT' | 'NO_ORDER'): ITruckPositionInSnapshot | null {
+  private extractTruckFromRow(
+    row: any[],
+    reportType: 'IMPORT' | 'NO_ORDER',
+    colMap: Record<string, number>
+  ): ITruckPositionInSnapshot | null {
     try {
-      // Column mapping differs between report types (1-indexed from ExcelJS):
-      // NO_ORDER: [1]=S/N, [2]=TRUCK, [3]=TRAILER, [4]=POSITION, [5]=TYPE, [6]=STATUS, [7]=C40, [8]=DSJ, [9]=DEPT DATE, [10]=DATE TODAY
-      // IMPORT:   [1]=S/N, [2]=TRUCK, [3]=TRAILER, [4]=POSITION, [5]=STATUS, [6]=TYPE, [7]=RETURN, [8]=DSJ, [9]=DEPT DATE, [10]=DATE TODAY
-      
-      // Try to auto-detect column offset by looking for S/N number in first 3 columns
-      let offset = 0;
-      for (let i = 1; i <= 3; i++) {
-        const val = row[i]?.toString().trim();
-        if (val && /^\d+$/.test(val)) {
-          offset = i - 1;
-          break;
-        }
-      }
-      
-      const truckNo = row[2 + offset]?.toString().trim();
-      const trailerNo = row[3 + offset]?.toString().trim();
-      const position = row[4 + offset]?.toString().trim();
-      
-      // STATUS is at different columns depending on report type
-      const status = reportType === 'IMPORT' 
-        ? row[5 + offset]?.toString().trim()  // Column 5 for IMPORT (after POSITION)
-        : row[6 + offset]?.toString().trim();  // Column 6 for NO_ORDER (after TYPE)
-      
-      const vehicleType = reportType === 'IMPORT'
-        ? row[6 + offset]?.toString().trim()  // Column 6 for IMPORT (after STATUS)
-        : row[5 + offset]?.toString().trim();  // Column 5 for NO_ORDER (before STATUS)
-        
-      const dsjText = reportType === 'IMPORT'
-        ? row[8 + offset]?.toString().trim()  // Column 8 for IMPORT
-        : row[8 + offset]?.toString().trim();  // Column 8 for NO_ORDER (same position)
-        
-      const deptDateText = reportType === 'IMPORT'
-        ? row[9 + offset]?.toString().trim()  // Column 9 for IMPORT
-        : row[9 + offset]?.toString().trim();  // Column 9 for NO_ORDER (same position)
+      const truckCol    = this.resolveCol(colMap, 'TRUCK', 'TRUCK NO', 'TRUCK NO.');
+      const trailerCol  = this.resolveCol(colMap, 'TRAILER', 'TRAILER NO', 'TRAILER NO.');
+      const positionCol = this.resolveCol(colMap, 'POSITION', 'POS', 'CURRENT POSITION');
+      const statusCol   = this.resolveCol(colMap, 'STATUS');
+      const typeCol     = this.resolveCol(colMap, 'TYPE', 'VEHICLE TYPE');
+      const dsjCol      = this.resolveCol(colMap, 'DSJ', 'D.S.J', 'DAYS');
+      const deptDateCol = this.resolveCol(colMap, 'DEPT DATE', 'DEPARTURE DATE', 'DEP DATE', 'DEPT. DATE');
+
+      const truckNo     = truckCol    >= 0 ? row[truckCol]?.toString().trim()    : null;
+      const trailerNo   = trailerCol  >= 0 ? row[trailerCol]?.toString().trim()  : '';
+      const position    = positionCol >= 0 ? row[positionCol]?.toString().trim() : null;
+      const status      = statusCol   >= 0 ? row[statusCol]?.toString().trim()   : '';
+      const vehicleType = typeCol     >= 0 ? row[typeCol]?.toString().trim()     : 'FLATBED';
+      const dsjText     = dsjCol      >= 0 ? row[dsjCol]?.toString().trim()      : null;
+      const deptDateText = deptDateCol >= 0 ? row[deptDateCol]?.toString().trim() : null;
 
       if (!truckNo || !position) {
-        // Only log if row has some data (not completely empty)
         if (row.some((cell, idx) => idx > 0 && cell?.toString().trim())) {
           logger.debug(`Skipping row - missing truck (${truckNo}) or position (${position})`);
         }
         return null;
       }
 
-      // Match position to checkpoint
       const checkpoint = this.matchCheckpoint(position);
       if (!checkpoint) {
         logger.warn(`Could not match position: ${position}`);
         return null;
       }
 
-      // Determine direction from status
-      const direction = this.determineDirection(status);
+      // NO_ORDER trucks have no active load order → all returning.
+      // IMPORT trucks show mixed states that don't map cleanly to a direction.
+      const direction: 'GOING' | 'RETURNING' | 'UNKNOWN' =
+        reportType === 'NO_ORDER' ? 'RETURNING' : 'UNKNOWN';
 
-      // Parse dates and days
       let departureDate: Date | undefined;
       if (deptDateText && deptDateText !== 'NA') {
         departureDate = this.parseDate(deptDateText);
@@ -370,193 +364,107 @@ export class FleetReportParser {
     }
   }
 
-  /**
-   * Match a position string to a checkpoint (fuzzy matching with regex normalization)
-   */
   private matchCheckpoint(positionText: string): { name: string; order: number } | null {
-    // Normalize: uppercase, trim, remove country suffixes
     const normalized = positionText
       .toUpperCase()
       .trim()
-      .replace(/-ZMB|-ZM|-TZ|-DRC|-CD|-KE|-MW|-BW|-AO/gi, ''); // Strip country codes
+      .replace(/-ZMB|-ZM|-TZ|-DRC|-CD|-KE|-MW|-BW|-AO/gi, '');
 
-    // Direct match after normalization
     if (this.checkpoints.has(normalized)) {
       return this.checkpoints.get(normalized)!;
     }
 
-    // Try to find checkpoint name within the position text
     for (const [key, value] of this.checkpoints.entries()) {
-      // Also normalize checkpoint key for comparison
       const normalizedKey = key.replace(/-ZMB|-ZM|-TZ|-DRC|-CD|-KE|-MW|-BW|-AO/gi, '');
-      
       if (normalized.includes(normalizedKey) || normalizedKey.includes(normalized)) {
         return value;
       }
     }
 
-    // Special handling for common variations
     if (normalized.includes('DSM') || normalized.includes('DAR')) {
       return this.checkpoints.get('DSM') || null;
     }
     if (normalized.includes('KASUMBALESA')) {
       if (positionText.toUpperCase().includes('DRC')) return this.checkpoints.get('KASUMBALESA DRC') || null;
-      if (positionText.toUpperCase().includes('ZMB') || positionText.toUpperCase().includes('ZM')) return this.checkpoints.get('KASUMBALESA ZMB') || null;
+      if (positionText.toUpperCase().includes('ZMB') || positionText.toUpperCase().includes('ZM'))
+        return this.checkpoints.get('KASUMBALESA ZMB') || null;
     }
 
     return null;
   }
 
-  /**
-   * Determine direction (GOING/RETURNING) from status text
-   */
-  private determineDirection(status: string): 'GOING' | 'RETURNING' | 'UNKNOWN' {
-    if (!status) return 'UNKNOWN';
-
-    const upper = status.toUpperCase();
-    
-    // Going indicators
-    if (upper.includes('ENROUTE') && !upper.includes('DAR') && !upper.includes('MSA') && !upper.includes('MOMBASA')) {
-      return 'GOING';
-    }
-    if (upper.includes('TO LOAD') || upper.includes('WAITING TO LOAD') || upper.includes('LOADED')) {
-      return 'GOING';
-    }
-    if (upper.includes('WAITING CLEARANCE') || upper.includes('UNDER CLEARANCE')) {
-      return 'GOING';
-    }
-    if (upper.includes('WAITING TO CROSS')) {
-      return 'GOING';
-    }
-
-    // Returning indicators
-    if (upper.includes('ENROUTE DAR') || upper.includes('ENROUTE MSA') || upper.includes('ENROUTE MOMBASA')) {
-      return 'RETURNING';
-    }
-    if (upper.includes('WAITING TO OFFLOAD') || upper.includes('WAITING OFFLOAD')) {
-      return 'RETURNING';
-    }
-
-    return 'UNKNOWN';
-  }
-
-  /**
-   * Create fleet group object
-   */
   private createFleetGroup(name: string, trucks: ITruckPositionInSnapshot[]): IFleetGroup {
-    // Try to extract tonnage and route from name
     const tonnageMatch = name.match(/(\d+)\s*MT/i);
     const tonnage = tonnageMatch ? parseInt(tonnageMatch[1]) : undefined;
 
     const routeMatch = name.match(/(DSM|MBSA|MOMBASA|TANGA)[\s-]+(KOLWEZI|LIKASI|LUBUMBASHI|COMIKA|TCC|KAMOA)/i);
     const route = routeMatch ? `${routeMatch[1]}-${routeMatch[2]}` : undefined;
 
-    return {
-      name,
-      tonnage,
-      route,
-      trucks,
-    };
+    return { name, tonnage, route, trucks };
   }
 
-  /**
-   * Check if row is empty or just commas
-   */
   private isEmptyRow(row: any[]): boolean {
     if (!row || !Array.isArray(row)) return true;
     return row.every(cell => !cell || cell.toString().trim() === '');
   }
 
-  /**
-   * Extract report date from worksheet
-   */
   private extractReportDate(worksheet: ExcelJS.Worksheet): Date | null {
     const rows = worksheet.getSheetValues() as any[];
-    
-    // Look in first 10 rows for date
+
     for (let i = 1; i <= Math.min(10, rows.length); i++) {
       const row = rows[i];
       if (!row || !Array.isArray(row)) continue;
 
       for (const cell of row) {
         if (!cell) continue;
-        
-        // Handle Excel date objects directly
+
         if (cell instanceof Date && !isNaN(cell.getTime())) {
-          if (cell.getFullYear() >= 2000) {
-            return cell;
-          }
+          if (cell.getFullYear() >= 2000) return cell;
         }
-        
-        // Try parsing as number or string
+
         const date = this.parseDate(cell);
-        if (date && date.getFullYear() >= 2000) {
-          return date;
-        }
+        if (date && date.getFullYear() >= 2000) return date;
       }
     }
 
-    // If no valid date found, return current date
     logger.warn('No valid report date found in Excel file, using current date');
     return new Date();
   }
 
-  /**
-   * Parse various date formats including Excel serial dates
-   */
   private parseDate(text: string | number): Date | undefined {
     if (!text && text !== 0) return undefined;
 
-    // If it's a number, treat it as Excel serial date
     if (typeof text === 'number') {
-      // Excel serial date: days since 1900-01-01 (with 1900 leap year bug)
-      const excelEpoch = new Date(1899, 11, 30); // December 30, 1899
+      const excelEpoch = new Date(1899, 11, 30);
       const msPerDay = 24 * 60 * 60 * 1000;
       return new Date(excelEpoch.getTime() + text * msPerDay);
     }
 
-    // Convert to string for text parsing
     const textStr = text.toString().trim();
     if (!textStr) return undefined;
 
-    // Try standard formats
     const date = new Date(textStr);
-    if (!isNaN(date.getTime()) && date.getFullYear() >= 2000) {
-      return date;
-    }
+    if (!isNaN(date.getTime()) && date.getFullYear() >= 2000) return date;
 
-    // Try DD-MMM format (e.g., "23-Jan")
     const ddMmmMatch = textStr.match(/(\d{1,2})[-/]([A-Za-z]{3})/);
     if (ddMmmMatch) {
       const day = parseInt(ddMmmMatch[1]);
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const monthIndex = monthNames.findIndex(m => m.toLowerCase() === ddMmmMatch[2].toLowerCase());
       if (monthIndex >= 0) {
-        const year = new Date().getFullYear();
-        return new Date(year, monthIndex, day);
+        return new Date(new Date().getFullYear(), monthIndex, day);
       }
     }
 
-    // Try DD/MM/YYYY or MM/DD/YYYY
     const slashMatch = textStr.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
     if (slashMatch) {
       const part1 = parseInt(slashMatch[1]);
       const part2 = parseInt(slashMatch[2]);
       let year = parseInt(slashMatch[3]);
-      
-      // Handle 2-digit years
-      if (year < 100) {
-        year += year < 50 ? 2000 : 1900;
-      }
-      
-      // Try DD/MM/YYYY first (international format)
-      if (part1 <= 31 && part2 <= 12) {
-        return new Date(year, part2 - 1, part1);
-      }
-      // Try MM/DD/YYYY (US format)
-      if (part1 <= 12 && part2 <= 31) {
-        return new Date(year, part1 - 1, part2);
-      }
+      if (year < 100) year += year < 50 ? 2000 : 1900;
+
+      if (part1 <= 31 && part2 <= 12) return new Date(year, part2 - 1, part1);
+      if (part1 <= 12 && part2 <= 31) return new Date(year, part1 - 1, part2);
     }
 
     return undefined;
