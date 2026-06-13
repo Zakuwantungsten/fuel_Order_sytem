@@ -730,96 +730,110 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     fetchNextLpoNumber();
   };
 
-  // Fetch existing LPOs for trucks when CASH is selected and checkpoint(s) are chosen
+  // Fetch existing LPOs for trucks when CASH is selected and checkpoint(s) are chosen.
+  // Debounced 600 ms + cancellation guard so bulk-paste (50 trucks × 250 ms stagger)
+  // only fires one full scan after all doNos have settled instead of ~50 overlapping runs.
   useEffect(() => {
+    const hasGoingCheckpoint = goingEnabled && goingCheckpoint;
+    const hasReturningCheckpoint = returningEnabled && returningCheckpoint;
+
+    if (!(formData.station === 'CASH' && (hasGoingCheckpoint || hasReturningCheckpoint) && formData.entries && formData.entries.length > 0)) {
+      setExistingLPOsForTrucks(prev => (prev.size === 0 ? prev : new Map()));
+      setTrucksWithoutLPOs(prev => (prev.size === 0 ? prev : new Set()));
+      setSelectedLPOsToCancel(prev => (prev.size === 0 ? prev : new Map()));
+      setSelectedLPOsToAmend(prev => (prev.size === 0 ? prev : new Map()));
+      return;
+    }
+
+    let cancelled = false;
+
     const fetchExistingLPOs = async () => {
-      // Check if at least one direction is enabled with a checkpoint
-      const hasGoingCheckpoint = goingEnabled && goingCheckpoint;
-      const hasReturningCheckpoint = returningEnabled && returningCheckpoint;
-      
-      if (formData.station === 'CASH' && (hasGoingCheckpoint || hasReturningCheckpoint) && formData.entries && formData.entries.length > 0) {
-        setIsFetchingLPOs(true);
-        const newMap = new Map<string, { lpos: LPOSummary[], direction: string, doNo: string }[]>();
-        const trucksWithoutLPOsSet = new Set<string>();
-        const newSelectedLPOs = new Map<string, Set<string>>();
-        
-        // Determine whether an LPO's station fills the same fuel record column as the
-        // selected checkpoint. This uses the station's declared fuelRecordFieldGoing /
-        // fuelRecordFieldReturning from the DB — no hardcoded name lists anywhere.
-        // For stations not found in the DB (custom / ad-hoc names), the LPO is included
-        // so the user can still see and manually decide to cancel it.
-        const doesLpoMatchCheckpoint = (lpoStation: string, cp: CancellationPoint): boolean => {
-          const checkpointFuelField = CANCELLATION_POINT_TO_FUEL_FIELD[cp];
-          if (!checkpointFuelField) return false;
-          const isReturn = cp.includes('RETURN') || cp.includes('RETURNING');
-          const stationConfig = availableStations.find(
-            s => s.stationName.toUpperCase() === lpoStation.toUpperCase().trim()
-          );
-          if (stationConfig) {
-            const stationField = isReturn
-              ? stationConfig.fuelRecordFieldReturning
-              : stationConfig.fuelRecordFieldGoing;
-            return stationField === checkpointFuelField;
-          }
-          // Station not in DB (custom/unlisted) — include it so the user can decide
-          return true;
-        };
+      setIsFetchingLPOs(true);
+      const newMap = new Map<string, { lpos: LPOSummary[], direction: string, doNo: string }[]>();
+      const trucksWithoutLPOsSet = new Set<string>();
+      const newSelectedLPOs = new Map<string, Set<string>>();
 
-        try {
-          for (const entry of formData.entries) {
-            if (entry.truckNo && entry.truckNo.length >= 4 && entry.doNo && entry.doNo !== 'NIL') {
-              const truckLPOs: { lpos: LPOSummary[], direction: string, doNo: string }[] = [];
+      // Determine whether an LPO's station fills the same fuel record column as the
+      // selected checkpoint. This uses the station's declared fuelRecordFieldGoing /
+      // fuelRecordFieldReturning from the DB — no hardcoded name lists anywhere.
+      // For stations not found in the DB (custom / ad-hoc names), the LPO is included
+      // so the user can still see and manually decide to cancel it.
+      const doesLpoMatchCheckpoint = (lpoStation: string, cp: CancellationPoint): boolean => {
+        const checkpointFuelField = CANCELLATION_POINT_TO_FUEL_FIELD[cp];
+        if (!checkpointFuelField) return false;
+        const isReturn = cp.includes('RETURN') || cp.includes('RETURNING');
+        const stationConfig = availableStations.find(
+          s => s.stationName.toUpperCase() === lpoStation.toUpperCase().trim()
+        );
+        if (stationConfig) {
+          const stationField = isReturn
+            ? stationConfig.fuelRecordFieldReturning
+            : stationConfig.fuelRecordFieldGoing;
+          return stationField === checkpointFuelField;
+        }
+        // Station not in DB (custom/unlisted) — include it so the user can decide
+        return true;
+      };
 
-              // Check going direction if enabled
-              if (hasGoingCheckpoint) {
-                const goingLpos = await lpoDocumentsAPI.findAtCheckpoint(
-                  entry.truckNo,
-                  entry.doNo,
-                  undefined,
-                  goingCheckpoint
-                );
-                const filteredGoingLpos = goingLpos.filter(
-                  lpo => doesLpoMatchCheckpoint(lpo.station, goingCheckpoint)
-                );
-                if (filteredGoingLpos.length > 0) {
-                  truckLPOs.push({ lpos: filteredGoingLpos, direction: 'Going', doNo: entry.doNo });
-                  if (!newSelectedLPOs.has(entry.truckNo)) {
-                    newSelectedLPOs.set(entry.truckNo, new Set());
-                  }
+      try {
+        for (const entry of formData.entries) {
+          if (cancelled) break;
+          if (entry.truckNo && entry.truckNo.length >= 4 && entry.doNo && entry.doNo !== 'NIL') {
+            const truckLPOs: { lpos: LPOSummary[], direction: string, doNo: string }[] = [];
+
+            // Check going direction if enabled
+            if (hasGoingCheckpoint) {
+              const goingLpos = await lpoDocumentsAPI.findAtCheckpoint(
+                entry.truckNo,
+                entry.doNo,
+                undefined,
+                goingCheckpoint
+              );
+              if (cancelled) break;
+              const filteredGoingLpos = goingLpos.filter(
+                lpo => doesLpoMatchCheckpoint(lpo.station, goingCheckpoint)
+              );
+              if (filteredGoingLpos.length > 0) {
+                truckLPOs.push({ lpos: filteredGoingLpos, direction: 'Going', doNo: entry.doNo });
+                if (!newSelectedLPOs.has(entry.truckNo)) {
+                  newSelectedLPOs.set(entry.truckNo, new Set());
                 }
-              }
-
-              // Check returning direction if enabled
-              if (hasReturningCheckpoint) {
-                const returningLpos = await lpoDocumentsAPI.findAtCheckpoint(
-                  entry.truckNo,
-                  entry.doNo,
-                  undefined,
-                  returningCheckpoint
-                );
-                const filteredReturningLpos = returningLpos.filter(
-                  lpo => doesLpoMatchCheckpoint(lpo.station, returningCheckpoint)
-                );
-                
-                if (filteredReturningLpos.length > 0) {
-                  truckLPOs.push({ lpos: filteredReturningLpos, direction: 'Returning', doNo: entry.doNo });
-                  if (!newSelectedLPOs.has(entry.truckNo)) {
-                    newSelectedLPOs.set(entry.truckNo, new Set());
-                  }
-                }
-              }
-              
-              if (truckLPOs.length > 0) {
-                newMap.set(entry.truckNo, truckLPOs);
-              } else {
-                // Truck has no LPOs at selected checkpoints for this journey
-                trucksWithoutLPOsSet.add(entry.truckNo);
               }
             }
+
+            // Check returning direction if enabled
+            if (hasReturningCheckpoint) {
+              const returningLpos = await lpoDocumentsAPI.findAtCheckpoint(
+                entry.truckNo,
+                entry.doNo,
+                undefined,
+                returningCheckpoint
+              );
+              if (cancelled) break;
+              const filteredReturningLpos = returningLpos.filter(
+                lpo => doesLpoMatchCheckpoint(lpo.station, returningCheckpoint)
+              );
+
+              if (filteredReturningLpos.length > 0) {
+                truckLPOs.push({ lpos: filteredReturningLpos, direction: 'Returning', doNo: entry.doNo });
+                if (!newSelectedLPOs.has(entry.truckNo)) {
+                  newSelectedLPOs.set(entry.truckNo, new Set());
+                }
+              }
+            }
+
+            if (truckLPOs.length > 0) {
+              newMap.set(entry.truckNo, truckLPOs);
+            } else {
+              // Truck has no LPOs at selected checkpoints for this journey
+              trucksWithoutLPOsSet.add(entry.truckNo);
+            }
           }
-        } catch (error) {
-          console.error('Error fetching existing LPOs:', error);
-        } finally {
+        }
+      } catch (error) {
+        if (!cancelled) console.error('Error fetching existing LPOs:', error);
+      } finally {
+        if (!cancelled) {
           setExistingLPOsForTrucks(newMap);
           setTrucksWithoutLPOs(trucksWithoutLPOsSet);
           // Preserve existing selections for trucks that are still in the results.
@@ -833,17 +847,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           });
           setIsFetchingLPOs(false);
         }
-      } else {
-        // Only reset when there's actually something to clear, otherwise we'd
-        // hand React a brand-new empty Map/Set on every run and force a re-render.
-        setExistingLPOsForTrucks(prev => (prev.size === 0 ? prev : new Map()));
-        setTrucksWithoutLPOs(prev => (prev.size === 0 ? prev : new Set()));
-        setSelectedLPOsToCancel(prev => (prev.size === 0 ? prev : new Map()));
-        setSelectedLPOsToAmend(prev => (prev.size === 0 ? prev : new Map()));
       }
     };
 
-    fetchExistingLPOs();
+    const timer = setTimeout(fetchExistingLPOs, 600);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => `${e?.truckNo || ''}-${e?.doNo || ''}`).join(','), availableStations]);
 
   // Check for duplicate allocations when station or entries change (for non-CASH stations)
