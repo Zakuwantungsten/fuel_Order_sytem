@@ -979,6 +979,9 @@ export const generateLPOPDF = (
     // ── TABLE ──
     const tableStartY = y;
     const totalTableH = HDR_H + pageEntries.length * ROW_H;
+    // Footer is pinned to a fixed Y; pre-compute so the table can extend to it
+    const FOOTER_H = 36;
+    const ftrY = FOOTER_Y - FOOTER_H - 30;
 
     doc.save();
     doc.rect(MARGIN, tableStartY, CONTENT_W, totalTableH).clip();
@@ -993,18 +996,23 @@ export const generateLPOPDF = (
 
     doc.restore();
 
-    // Sharp outer border for table body
-    doc.rect(MARGIN, tableStartY, CONTENT_W, totalTableH)
-      .lineWidth(0.5).strokeColor('#000000').stroke();
+    if (isLast) {
+      // Extend outer border and column dividers down to the footer box
+      doc.rect(MARGIN, tableStartY, CONTENT_W, ftrY - tableStartY)
+        .lineWidth(0.5).strokeColor('#000000').stroke();
+      C.forEach((col, i) => {
+        if (i > 0) vline(col.x, y, ftrY, 0.5);
+      });
+    } else {
+      doc.rect(MARGIN, tableStartY, CONTENT_W, totalTableH)
+        .lineWidth(0.5).strokeColor('#000000').stroke();
+    }
 
     if (isLast) {
       // ── FOOTER ROW: always pinned to bottom of page ──
-      const FOOTER_H = 36;
       // Align right section with QTY column so the vertical divider is one continuous line
       const rightSecX = C[4].x; // = MARGIN + 330 = 370
       const rightSecW = TABLE_R - rightSecX; // = 185
-
-      const ftrY = FOOTER_Y - FOOTER_H - 30;
 
       // Left section: plain text only, no borders
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000')
