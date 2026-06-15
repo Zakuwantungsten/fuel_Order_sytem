@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, XCircle, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { Search, Plus, Download, Edit, XCircle, RotateCcw, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { FuelRecord } from '../types';
 import { fuelRecordsAPI, configAPI, StandardAllocations } from '../services/api';
@@ -132,7 +132,8 @@ const toMonthApiFormat = (yyyyMm: string): string => {
 
 const FuelRecords = () => {
   const queryClient = useQueryClient();
-  const { isDark } = useAuth();
+  const { isDark, user } = useAuth();
+  const canUncancel = user?.role === 'super_admin' || user?.role === 'admin';
   const [searchTerm, setSearchTerm] = usePersistedState('fr:searchTerm', '');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FuelRecord | undefined>();
@@ -635,6 +636,20 @@ const FuelRecords = () => {
       } catch (error) {
         console.error('Error cancelling fuel record:', error);
         toast.error('Failed to cancel fuel record');
+      }
+    }
+  };
+
+  const handleUncancel = async (id: string | number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to uncancel this fuel record? This will restore it to active status.')) {
+      try {
+        await fuelRecordsAPI.uncancel(id);
+        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+        toast.success('Fuel record uncancelled successfully');
+      } catch (error) {
+        console.error('Error uncancelling fuel record:', error);
+        toast.error('Failed to uncancel fuel record');
       }
     }
   };
@@ -1395,6 +1410,20 @@ const FuelRecords = () => {
                         </button>
                       </div>
                     )}
+                    {isCancelled && canUncancel && (
+                      <div className="flex items-center gap-2 pt-3 border-t border-red-200 dark:border-red-700">
+                        <button
+                          onClick={(e) => {
+                            const id = record.id || (record as any)._id;
+                            if (id) handleUncancel(id, e);
+                          }}
+                          className="flex-1 px-3 py-2 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 inline-flex items-center justify-center"
+                        >
+                          <RotateCcw className="w-4 h-4 mr-1" />
+                          Uncancel
+                        </button>
+                      </div>
+                    )}
                     
                     <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2 italic">
                       Tap card to view full fuel breakdown →
@@ -1565,6 +1594,18 @@ const FuelRecords = () => {
                                 <XCircle className="w-3 h-3" />
                               </button>
                             </>
+                          )}
+                          {isCancelled && canUncancel && (
+                            <button
+                              onClick={(e) => {
+                                const id = record.id || (record as any)._id;
+                                if (id) handleUncancel(id, e);
+                              }}
+                              className="text-green-700 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                              title="Uncancel"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </button>
                           )}
                         </div>
                       </td>

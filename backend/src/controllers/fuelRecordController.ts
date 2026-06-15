@@ -752,6 +752,55 @@ export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise
   }
 };
 
+export const uncancelFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) throw new ApiError(404, 'Fuel record not found');
+
+    if (!existingRecord.isCancelled) {
+      throw new ApiError(409, 'Fuel record is not cancelled');
+    }
+
+    const fuelRecord = await FuelRecord.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      {
+        isCancelled: false,
+        uncancelledAt: new Date(),
+        uncancelledBy: username,
+        $unset: { cancelledAt: '', cancelledBy: '', cancellationReason: '' },
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+
+    await AuditService.logUpdate(
+      req.user?.userId || 'system',
+      username,
+      'FuelRecord',
+      fuelRecord._id.toString(),
+      { isCancelled: true },
+      { isCancelled: false, uncancelledBy: username },
+      req.ip
+    );
+
+    logger.info(`Fuel record ${id} uncancelled by ${username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Fuel record uncancelled successfully',
+      data: fuelRecord,
+    });
+    emitDataChange('fuel_records', 'update', fuelRecord.toObject());
+  } catch (error: any) {
+    throw error;
+  }
+};
+
 /**
  * Get monthly fuel summary
  */

@@ -224,6 +224,13 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       type: String,
       trim: true,
     },
+    uncancelledAt: {
+      type: Date,
+    },
+    uncancelledBy: {
+      type: String,
+      trim: true,
+    },
     isDeleted: {
       type: Boolean,
       default: false,
