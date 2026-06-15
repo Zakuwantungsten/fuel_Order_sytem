@@ -192,6 +192,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
           name={fieldName as string}
           value={value}
           onChange={handleChange}
+          onWheel={(e) => (e.target as HTMLInputElement).blur()}
           disabled={isLocked}
           className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
             isLocked ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
@@ -365,6 +366,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
                   name="totalLts"
                   value={formData.totalLts ?? ''}
                   onChange={handleChange}
+                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
                   required
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
