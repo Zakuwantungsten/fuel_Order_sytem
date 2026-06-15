@@ -1,4 +1,5 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { toast } from 'react-toastify';
 import {
   BarChart3,
@@ -21,24 +22,24 @@ import { useRealtimeSync } from '../hooks/useRealtimeSync';
 // Each section is lazy-loaded so opening the super-admin dashboard only
 // downloads the section being viewed — previously every tab below shipped in
 // one ~900 KB chunk that had to load before anything rendered.
-const UserManagementPage = lazy(() => import('./SuperAdmin/UserManagement').then(m => ({ default: m.UserManagementPage })));
-const FuelStationsTab = lazy(() => import('./SuperAdmin/FuelStationsTab'));
-const RoutesTab = lazy(() => import('./SuperAdmin/RoutesTab'));
-const AuditLogsTab = lazy(() => import('./SuperAdmin/AuditLogsTab'));
-const SecurityUnifiedTab = lazy(() => import('./SuperAdmin/SecurityUnifiedTab'));
-const BackupRecoveryTab = lazy(() => import('./SuperAdmin/BackupRecoveryTab'));
-const AnalyticsTab = lazy(() => import('./SuperAdmin/AnalyticsTab'));
-const TrashManagementTab = lazy(() => import('./SuperAdmin/TrashManagementTab'));
-const ArchivalManagementTab = lazy(() => import('./SuperAdmin/ArchivalManagementTab'));
+const UserManagementPage = lazyWithRetry(() => import('./SuperAdmin/UserManagement').then(m => ({ default: m.UserManagementPage })));
+const FuelStationsTab = lazyWithRetry(() => import('./SuperAdmin/FuelStationsTab'));
+const RoutesTab = lazyWithRetry(() => import('./SuperAdmin/RoutesTab'));
+const AuditLogsTab = lazyWithRetry(() => import('./SuperAdmin/AuditLogsTab'));
+const SecurityUnifiedTab = lazyWithRetry(() => import('./SuperAdmin/SecurityUnifiedTab'));
+const BackupRecoveryTab = lazyWithRetry(() => import('./SuperAdmin/BackupRecoveryTab'));
+const AnalyticsTab = lazyWithRetry(() => import('./SuperAdmin/AnalyticsTab'));
+const TrashManagementTab = lazyWithRetry(() => import('./SuperAdmin/TrashManagementTab'));
+const ArchivalManagementTab = lazyWithRetry(() => import('./SuperAdmin/ArchivalManagementTab'));
 // ConfigDiffTab, ConfigVersionHistoryTab, CronJobsTab, MaintenanceModeTab,
 // RateLimitConfigTab, DbIndexExplorerTab, WebhookManagerTab, FeatureFlagsTab, NotificationCenterConfigTab,
 // AnnouncementsTab, ExcelImport, SystemConfigDashboard, ConfigurationTab merged into SystemUnifiedTab
-const SystemUnifiedTab = lazy(() => import('./SuperAdmin/SystemUnifiedTab'));
-const FuelPriceTab = lazy(() => import('./SuperAdmin/FuelPriceTab'));
-const DataExportTab = lazy(() => import('./SuperAdmin/DataExportTab'));
-const StorageManagerTab = lazy(() => import('./SuperAdmin/StorageManagerTab'));
-const MonitoringUnifiedTab = lazy(() => import('./SuperAdmin/MonitoringUnifiedTab'));
-const CustomReportBuilderTab = lazy(() => import('./SuperAdmin/CustomReportBuilderTab'));
+const SystemUnifiedTab = lazyWithRetry(() => import('./SuperAdmin/SystemUnifiedTab'));
+const FuelPriceTab = lazyWithRetry(() => import('./SuperAdmin/FuelPriceTab'));
+const DataExportTab = lazyWithRetry(() => import('./SuperAdmin/DataExportTab'));
+const StorageManagerTab = lazyWithRetry(() => import('./SuperAdmin/StorageManagerTab'));
+const MonitoringUnifiedTab = lazyWithRetry(() => import('./SuperAdmin/MonitoringUnifiedTab'));
+const CustomReportBuilderTab = lazyWithRetry(() => import('./SuperAdmin/CustomReportBuilderTab'));
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 // SecurityScoreTab merged into SecurityUnifiedTab
 // PrivilegeElevationTab merged into UserManagement module

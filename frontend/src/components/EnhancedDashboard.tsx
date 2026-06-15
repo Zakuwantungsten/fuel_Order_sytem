@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, lazy, Suspense, useCallback } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { toast } from 'react-toastify';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -48,32 +49,32 @@ import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
 
 // Lazy-loaded components — only fetched when the user navigates to them
-const YardFuelSimple = lazy(() => import('./YardFuelSimple'));
-const Reports = lazy(() => import('./Reports'));
-const DriverPortal = lazy(() => import('./DriverPortal'));
-const StationView = lazy(() => import('./StationView'));
-const PaymentManager = lazy(() => import('./PaymentManager'));
-const SuperAdminDashboard = lazy(() => import('./SuperAdminDashboard'));
-const AdminDashboard = lazy(() => import('./AdminDashboard'));
-const ManagerView = lazy(() => import('./ManagerView'));
-const DriverCredentialsManager = lazy(() => import('../pages/Admin/DriverCredentialsManager'));
-const OfficerPortal = lazy(() => import('./OfficerPortal'));
-const PendingYardFuel = lazy(() => import('./PendingYardFuel'));
-const NotificationsPage = lazy(() => import('./NotificationsPage'));
-const ChangePasswordModal = lazy(() => import('./ChangePasswordModal'));
-const MFASettings = lazy(() => import('./MFASettings').then(m => ({ default: m.MFASettings })));
-const DevicesSessionsPanel = lazy(() => import('./DevicesSessionsPanel'));
+const YardFuelSimple = lazyWithRetry(() => import('./YardFuelSimple'));
+const Reports = lazyWithRetry(() => import('./Reports'));
+const DriverPortal = lazyWithRetry(() => import('./DriverPortal'));
+const StationView = lazyWithRetry(() => import('./StationView'));
+const PaymentManager = lazyWithRetry(() => import('./PaymentManager'));
+const SuperAdminDashboard = lazyWithRetry(() => import('./SuperAdminDashboard'));
+const AdminDashboard = lazyWithRetry(() => import('./AdminDashboard'));
+const ManagerView = lazyWithRetry(() => import('./ManagerView'));
+const DriverCredentialsManager = lazyWithRetry(() => import('../pages/Admin/DriverCredentialsManager'));
+const OfficerPortal = lazyWithRetry(() => import('./OfficerPortal'));
+const PendingYardFuel = lazyWithRetry(() => import('./PendingYardFuel'));
+const NotificationsPage = lazyWithRetry(() => import('./NotificationsPage'));
+const ChangePasswordModal = lazyWithRetry(() => import('./ChangePasswordModal'));
+const MFASettings = lazyWithRetry(() => import('./MFASettings').then(m => ({ default: m.MFASettings })));
+const DevicesSessionsPanel = lazyWithRetry(() => import('./DevicesSessionsPanel'));
 
 // Lazy-loaded pages
-const Dashboard = lazy(() => import('../pages/Dashboard'));
-const DeliveryOrders = lazy(() => import('../pages/DeliveryOrders'));
-const LPOs = lazy(() => import('../pages/LPOs'));
-const FuelRecordsPage = lazy(() => import('../pages/FuelRecords'));
-const ExcelImport = lazy(() => import('../pages/ExcelImport'));
-const TruckBatchesPage = lazy(() => import('../pages/TruckBatches'));
-const FleetTracking = lazy(() => import('../pages/FleetTracking'));
-const CheckpointManagement = lazy(() => import('../pages/CheckpointManagement'));
-const JourneyConfig = lazy(() => import('../pages/JourneyConfig'));
+const Dashboard = lazyWithRetry(() => import('../pages/Dashboard'));
+const DeliveryOrders = lazyWithRetry(() => import('../pages/DeliveryOrders'));
+const LPOs = lazyWithRetry(() => import('../pages/LPOs'));
+const FuelRecordsPage = lazyWithRetry(() => import('../pages/FuelRecords'));
+const ExcelImport = lazyWithRetry(() => import('../pages/ExcelImport'));
+const TruckBatchesPage = lazyWithRetry(() => import('../pages/TruckBatches'));
+const FleetTracking = lazyWithRetry(() => import('../pages/FleetTracking'));
+const CheckpointManagement = lazyWithRetry(() => import('../pages/CheckpointManagement'));
+const JourneyConfig = lazyWithRetry(() => import('../pages/JourneyConfig'));
 
 // Suspense fallback shown while a lazy chunk is loading
 const TabFallback = () => (

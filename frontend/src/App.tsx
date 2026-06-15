@@ -1,17 +1,18 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AmendedDOsProvider } from './contexts/AmendedDOsContext';
 import Login from './components/Login';
 import ProtectedRoute, { UnauthorizedPage } from './components/ProtectedRoute';
 import EnhancedDashboard from './components/EnhancedDashboard';
 
-const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
-const ResetPassword = lazy(() => import('./pages/ResetPassword'));
-const ForcePasswordChange = lazy(() => import('./pages/ForcePasswordChange'));
-const ActivateAccount = lazy(() => import('./pages/ActivateAccount'));
+const ForgotPassword = lazyWithRetry(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
+const ForcePasswordChange = lazyWithRetry(() => import('./pages/ForcePasswordChange'));
+const ActivateAccount = lazyWithRetry(() => import('./pages/ActivateAccount'));
 import { systemAdminAPI } from './services/api';
 import { initializeWebSocket, subscribeToMaintenanceEvents, unsubscribeFromMaintenanceEvents, subscribeToSettingsEvents, unsubscribeFromSettingsEvents } from './services/websocket';
 import { setSystemName, setSystemTimezone, setSystemDateFormat } from './utils/timezone';

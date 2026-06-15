@@ -1,14 +1,15 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { Activity } from 'lucide-react';
 import { toast } from 'react-toastify';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 
 // Lazy-loaded so each admin section only downloads when opened
-const UserSupportTab = lazy(() => import('./StandardAdmin/UserSupportTab'));
-const BasicReportsTab = lazy(() => import('./StandardAdmin/BasicReportsTab'));
-const FuelStationsTab = lazy(() => import('./SuperAdmin/FuelStationsTab'));
-const RoutesTab = lazy(() => import('./SuperAdmin/RoutesTab'));
-const FuelPriceTab = lazy(() => import('./SuperAdmin/FuelPriceTab'));
+const UserSupportTab = lazyWithRetry(() => import('./StandardAdmin/UserSupportTab'));
+const BasicReportsTab = lazyWithRetry(() => import('./StandardAdmin/BasicReportsTab'));
+const FuelStationsTab = lazyWithRetry(() => import('./SuperAdmin/FuelStationsTab'));
+const RoutesTab = lazyWithRetry(() => import('./SuperAdmin/RoutesTab'));
+const FuelPriceTab = lazyWithRetry(() => import('./SuperAdmin/FuelPriceTab'));
 
 interface AdminDashboardProps {
   user: any;

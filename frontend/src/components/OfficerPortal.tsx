@@ -1,4 +1,5 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { toast } from 'react-toastify';
 import { User } from '../types';
 import NotificationBell from './NotificationBell';
@@ -20,9 +21,9 @@ import {
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 import { readOfficerConfig } from '../hooks/useOfficerConfig';
 
-const DOManagement = lazy(() => import('./DOManagement'));
-const OfficerOverview = lazy(() => import('./OfficerOverview'));
-const OfficerConfig = lazy(() => import('./OfficerConfig'));
+const DOManagement = lazyWithRetry(() => import('./DOManagement'));
+const OfficerOverview = lazyWithRetry(() => import('./OfficerOverview'));
+const OfficerConfig = lazyWithRetry(() => import('./OfficerConfig'));
 
 interface OfficerPortalProps {
   user: User;
