@@ -15,6 +15,20 @@ router.get(
   asyncHandler(trashController.getTrashStats)
 );
 
+// Get cancelled items by type (super_admin and admin)
+router.get(
+  '/cancelled/:type',
+  authorize('super_admin', 'admin'),
+  asyncHandler(trashController.getCancelledItems)
+);
+
+// Uncancel a single item (super_admin and admin)
+router.post(
+  '/cancelled/:type/:id/uncancel',
+  authorize('super_admin', 'admin'),
+  asyncHandler(trashController.uncancelItem)
+);
+
 // Get deleted items by type (Super Admin only)
 router.get(
   '/:type',

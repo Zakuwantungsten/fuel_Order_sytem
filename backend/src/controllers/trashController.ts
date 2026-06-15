@@ -361,6 +361,199 @@ export const emptyTrash = async (req: AuthRequest, res: Response): Promise<void>
   }
 };
 
+// Types whose lifecycle is cancellation, not deletion
+const CANCELLABLE_TYPES = new Set(['fuel_records', 'delivery_orders', 'lpo_summaries']);
+
+/**
+ * Get cancelled items (fuel_records, delivery_orders, lpo_summaries only)
+ * LPO returns one row per cancelled entry (truckNo + lpoNo)
+ */
+export const getCancelledItems = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { type } = req.params;
+    const { dateFrom, dateTo, page = 1, limit = 50 } = req.query;
+
+    if (!CANCELLABLE_TYPES.has(type)) {
+      res.status(400).json({ success: false, message: 'Resource type does not support cancellation view' });
+      return;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    if (type === 'lpo_summaries') {
+      const pipeline: any[] = [
+        { $match: { isDeleted: false } },
+        { $unwind: { path: '$entries', includeArrayIndex: 'entryIndex' } },
+        { $match: { 'entries.isCancelled': true } },
+      ];
+
+      if (dateFrom || dateTo) {
+        const df: any = {};
+        if (dateFrom) df.$gte = new Date(dateFrom as string);
+        if (dateTo) df.$lte = new Date(dateTo as string);
+        pipeline.push({ $match: { 'entries.cancelledAt': df } });
+      }
+
+      pipeline.push({ $sort: { 'entries.cancelledAt': -1 } });
+      pipeline.push({
+        $facet: {
+          items: [
+            { $skip: skip },
+            { $limit: Number(limit) },
+            {
+              $project: {
+                _id: 1,
+                lpoNo: 1,
+                truckNo: '$entries.truckNo',
+                cancelledAt: '$entries.cancelledAt',
+                cancellationPoint: '$entries.cancellationPoint',
+                cancellationReason: '$entries.cancellationReason',
+              },
+            },
+          ],
+          total: [{ $count: 'count' }],
+        },
+      });
+
+      const [result] = await LPOSummary.aggregate(pipeline);
+      const items = result?.items || [];
+      const total = result?.total?.[0]?.count || 0;
+
+      res.status(200).json({
+        success: true,
+        data: items,
+        pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) },
+      });
+      return;
+    }
+
+    // fuel_records and delivery_orders
+    const Model = MODELS_MAP[type];
+    const filter: any = { isCancelled: true, isDeleted: false };
+
+    if (dateFrom || dateTo) {
+      filter.cancelledAt = {};
+      if (dateFrom) filter.cancelledAt.$gte = new Date(dateFrom as string);
+      if (dateTo) filter.cancelledAt.$lte = new Date(dateTo as string);
+    }
+
+    const [items, total] = await Promise.all([
+      Model.find(filter).sort({ cancelledAt: -1 }).limit(Number(limit)).skip(skip).lean(),
+      Model.countDocuments(filter),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: items,
+      pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) },
+    });
+  } catch (error: any) {
+    logger.error('Error getting cancelled items:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+/**
+ * Uncancel a single item (fuel_records, delivery_orders, lpo_summaries)
+ * For lpo_summaries pass { truckNo } in the request body to identify the entry
+ */
+export const uncancelItem = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { type, id } = req.params;
+    const { truckNo } = req.body;
+    const username = req.user?.username;
+    if (!username) { res.status(401).json({ success: false, message: 'Authentication required' }); return; }
+
+    if (!CANCELLABLE_TYPES.has(type)) {
+      res.status(400).json({ success: false, message: 'Resource type does not support uncancel' });
+      return;
+    }
+
+    if (type === 'lpo_summaries') {
+      if (!truckNo) { res.status(400).json({ success: false, message: 'truckNo is required for LPO entry uncancel' }); return; }
+
+      const lpo = await LPOSummary.findOne({ _id: id, isDeleted: false });
+      if (!lpo) { res.status(404).json({ success: false, message: 'LPO not found' }); return; }
+
+      const entryIndex = (lpo as any).entries.findIndex(
+        (e: any) => e.truckNo === truckNo && e.isCancelled === true
+      );
+      if (entryIndex === -1) {
+        res.status(404).json({ success: false, message: 'Cancelled entry not found in this LPO' });
+        return;
+      }
+
+      (lpo as any).entries[entryIndex].isCancelled = false;
+      (lpo as any).entries[entryIndex].cancellationPoint = undefined;
+      (lpo as any).entries[entryIndex].cancellationReason = undefined;
+      (lpo as any).entries[entryIndex].cancelledAt = undefined;
+      await (lpo as any).save();
+
+      await AuditService.logUpdate(
+        req.user?.userId || 'system', username,
+        'LPOSummary', id,
+        { isCancelled: true, truckNo },
+        { isCancelled: false, truckNo },
+        req.ip
+      );
+
+      logger.info(`LPO ${id} entry ${truckNo} uncancelled by ${username}`);
+      res.status(200).json({ success: true, message: 'LPO entry uncancelled successfully' });
+      emitDataChange('lpo_summaries', 'update');
+      return;
+    }
+
+    if (type === 'fuel_records') {
+      const record = await FuelRecord.findOne({ _id: id, isCancelled: true, isDeleted: false });
+      if (!record) { res.status(404).json({ success: false, message: 'Cancelled fuel record not found' }); return; }
+
+      await FuelRecord.findOneAndUpdate(
+        { _id: id },
+        { isCancelled: false, uncancelledAt: new Date(), uncancelledBy: username, $unset: { cancelledAt: '', cancelledBy: '', cancellationReason: '' } }
+      );
+
+      await AuditService.logUpdate(
+        req.user?.userId || 'system', username,
+        'FuelRecord', id,
+        { isCancelled: true },
+        { isCancelled: false, uncancelledBy: username },
+        req.ip
+      );
+
+      logger.info(`Fuel record ${id} uncancelled by ${username} via trash`);
+      res.status(200).json({ success: true, message: 'Fuel record uncancelled successfully' });
+      emitDataChange('fuel_records', 'update');
+      return;
+    }
+
+    if (type === 'delivery_orders') {
+      const order = await DeliveryOrder.findOne({ _id: id, isCancelled: true, isDeleted: false });
+      if (!order) { res.status(404).json({ success: false, message: 'Cancelled delivery order not found' }); return; }
+
+      await DeliveryOrder.findOneAndUpdate(
+        { _id: id },
+        { isCancelled: false, status: 'active', uncancelledAt: new Date(), uncancelledBy: username, $unset: { cancelledAt: '', cancelledBy: '', cancellationReason: '' } }
+      );
+
+      await AuditService.logUpdate(
+        req.user?.userId || 'system', username,
+        'DeliveryOrder', id,
+        { isCancelled: true },
+        { isCancelled: false, uncancelledBy: username },
+        req.ip
+      );
+
+      logger.info(`Delivery order ${id} uncancelled by ${username} via trash`);
+      res.status(200).json({ success: true, message: 'Delivery order uncancelled successfully' });
+      emitDataChange('delivery_orders', 'update');
+      return;
+    }
+  } catch (error: any) {
+    logger.error('Error uncancelling item:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
 /**
  * Get retention settings
  */

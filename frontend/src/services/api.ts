@@ -2282,6 +2282,21 @@ export const trashAPI = {
     return response.data;
   },
 
+  // Get cancelled items (fuel_records, delivery_orders, lpo_summaries)
+  getCancelledItems: async (
+    type: string,
+    params?: { dateFrom?: string; dateTo?: string; page?: number; limit?: number }
+  ) => {
+    const response = await apiClient.get(`/trash/cancelled/${type}`, { params });
+    return response.data;
+  },
+
+  // Uncancel a single item; pass truckNo for lpo_summaries entries
+  uncancelItem: async (type: string, id: string, truckNo?: string) => {
+    const response = await apiClient.post(`/trash/cancelled/${type}/${id}/uncancel`, truckNo ? { truckNo } : {});
+    return response.data;
+  },
+
   // Retention settings
   getRetentionSettings: async () => {
     const response = await apiClient.get('/trash/settings/retention');

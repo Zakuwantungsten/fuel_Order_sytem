@@ -147,6 +147,13 @@ const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
       type: String,
       trim: true,
     },
+    uncancelledAt: {
+      type: Date,
+    },
+    uncancelledBy: {
+      type: String,
+      trim: true,
+    },
     // Edit history tracking
     editHistory: [editHistorySchema],
     lastEditedAt: {
