@@ -623,7 +623,7 @@ const FuelRecords = () => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to cancel this fuel record? This will mark it as cancelled.')) {
       try {
-        await fuelRecordsAPI.update(id, { isCancelled: true } as any);
+        await fuelRecordsAPI.cancel(id);
         queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
         toast.success('Fuel record cancelled successfully');
       } catch (error) {

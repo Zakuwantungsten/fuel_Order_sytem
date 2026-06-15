@@ -42,6 +42,15 @@ router.put(
   asyncHandler(fuelRecordController.updateFuelRecord)
 );
 
+// Cancel route — admin-level only, no edit lock required
+router.post(
+  '/:id/cancel',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'boss'),
+  validate,
+  asyncHandler(fuelRecordController.cancelFuelRecord)
+);
+
 // Edit lock routes (same roles as update)
 const fuelLock = createEditLockHandlers(FuelRecord, 'fuel_records');
 router.post('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'driver', 'fuel_order_maker', 'boss', 'yard_personnel', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(fuelLock.acquireEditLock));

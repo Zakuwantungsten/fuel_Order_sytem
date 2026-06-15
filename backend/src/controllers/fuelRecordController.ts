@@ -708,6 +708,50 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
   }
 };
 
+export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) throw new ApiError(404, 'Fuel record not found');
+
+    if (existingRecord.isCancelled) {
+      throw new ApiError(409, 'Fuel record is already cancelled');
+    }
+
+    const fuelRecord = await FuelRecord.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { isCancelled: true, cancelledAt: new Date(), cancelledBy: username },
+      { new: true, runValidators: true }
+    );
+
+    if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+
+    await AuditService.logUpdate(
+      req.user?.userId || 'system',
+      username,
+      'FuelRecord',
+      fuelRecord._id.toString(),
+      { isCancelled: false },
+      { isCancelled: true, cancelledBy: username },
+      req.ip
+    );
+
+    logger.info(`Fuel record ${id} cancelled by ${username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Fuel record cancelled successfully',
+      data: fuelRecord,
+    });
+    emitDataChange('fuel_records', 'update', fuelRecord.toObject());
+  } catch (error: any) {
+    throw error;
+  }
+};
+
 /**
  * Get monthly fuel summary
  */

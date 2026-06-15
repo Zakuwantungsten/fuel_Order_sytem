@@ -1009,6 +1009,11 @@ export const fuelRecordsAPI = {
     return response.data.data;
   },
 
+  cancel: async (id: string | number): Promise<FuelRecord> => {
+    const response = await apiClient.post(`/fuel-records/${id}/cancel`);
+    return response.data.data;
+  },
+
   // Edit lock management
   acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
     const response = await apiClient.post(`/fuel-records/${id}/lock`);
