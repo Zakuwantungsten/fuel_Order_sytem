@@ -3814,18 +3814,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
           {/* LPO Entries */}
           <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3 mb-4">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Fuel Supply Details</h3>
-              <button
-                type="button"
-                onClick={handleAddEntry}
-                className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Entry
-              </button>
               {isCheckingDuplicates && (
-                <span className="ml-3 text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                <span className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
                   <Loader2 className="w-4 h-4 animate-spin mr-1" />
                   Checking for duplicates...
                 </span>
@@ -3903,7 +3895,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
             {/* Mobile Card View (< md) */}
             <div className="md:hidden space-y-1.5">
-              {formData.entries && formData.entries.length > 0 ? formData.entries.filter(entry => entry != null).map((entry, index) => {
+              {(formData.entries || []).filter(entry => entry != null).map((entry, index) => {
                 const autoFill = entryAutoFillData[index] || { direction: 'going', loading: false, fetched: false };
                 const duplicateInfo = duplicateWarnings.get(entry?.truckNo || '');
                 const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
@@ -4066,11 +4058,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     )}
                   </div>
                 );
-              }) : (
-                <div className="text-center py-6 text-xs text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-                  No entries. Tap "Add Entry" to begin.
-                </div>
-              )}
+              })}
+              <button
+                type="button"
+                onClick={handleAddEntry}
+                className="w-full py-3 text-xs text-primary-600 dark:text-primary-400 border border-dashed border-primary-300 dark:border-primary-600 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 flex items-center justify-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add new entry
+              </button>
             </div>
 
             {/* Desktop Table View (md+) */}
@@ -4125,8 +4121,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {formData.entries && formData.entries.length > 0 ? (
-                    formData.entries.filter(entry => entry != null).map((entry, index) => {
+                  {(formData.entries || []).filter(entry => entry != null).map((entry, index) => {
                       const autoFill = entryAutoFillData[index] || { direction: 'going', loading: false, fetched: false };
                       const duplicateInfo = duplicateWarnings.get(entry?.truckNo || '');
                       const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
@@ -4471,14 +4466,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           </td>
                         </tr>
                       );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={hasAnyIssue ? 10 : 9} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                        No entries added. Click "Add Entry" to add fuel supply details.
-                      </td>
-                    </tr>
-                  )}
+                    })}
+                  <tr
+                    onClick={handleAddEntry}
+                    className="cursor-pointer hover:bg-primary-50 dark:hover:bg-primary-900/20 border-t border-dashed border-primary-300 dark:border-primary-600"
+                  >
+                    <td colSpan={hasAnyIssue ? 10 : 9} className="px-4 py-3 text-center text-sm text-primary-600 dark:text-primary-400">
+                      <span className="inline-flex items-center gap-1">
+                        <Plus className="w-4 h-4" />
+                        Add new entry
+                      </span>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
