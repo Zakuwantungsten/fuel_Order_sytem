@@ -2131,98 +2131,114 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }));
     }
 
-    // If DO number is valid, fetch journey data
+    // If DO number is valid, debounce the fetch — same pattern as truck number.
+    // Without debouncing, every keystroke fires a concurrent request; the partial-DO
+    // fetches ("003", "0036", etc.) resolve after the correct one and wipe the auto-fill.
     if (doNoUpper && doNoUpper !== 'NIL' && doNoUpper.length >= 3) {
+      // Cancel any previous pending fetch for this row before starting a new one
+      if (fetchDebounceTimers.current[index]) {
+        clearTimeout(fetchDebounceTimers.current[index]);
+      }
+
       setEntryAutoFillData(prev => ({
         ...prev,
         [index]: { ...prev[index], loading: true, fetched: false }
       }));
 
-      const result = await fetchJourneyByDO(doNoUpper);
-      
-      // Detect direction from DO type (IMPORT = going, EXPORT = returning)
-      const direction = result.fuelRecord 
-        ? (result.fuelRecord.returnDo === doNoUpper ? 'returning' : 'going')
-        : 'going';
-      
-      // Check if return DO is missing
-      const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
-      
-      // Use correct destination based on direction
-      const destinationForAllocation = direction === 'going'
-        ? result.goingDestination 
-        : result.destination;
-      
-      const defaults = formData.station 
-        ? getStationDefaults(
-            formData.station, 
-            direction, 
-            destinationForAllocation,
-            result.fuelRecord?.totalLts ?? undefined,
-            result.fuelRecord?.extra ?? undefined,
-            result.fuelRecord?.balance ?? undefined
-          ) 
-        : { liters: noStationDefaultLiters, rate: noStationRate };
+      fetchDebounceTimers.current[index] = setTimeout(async () => {
+        const result = await fetchJourneyByDO(doNoUpper);
 
-      // Calculate balance info for Mbeya returning
-      let balanceInfo = undefined;
-      if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
-        balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
-      }
+        // Detect direction from DO type (IMPORT = going, EXPORT = returning)
+        const direction = result.fuelRecord
+          ? (result.fuelRecord.returnDo === doNoUpper ? 'returning' : 'going')
+          : 'going';
 
-      // Auto-fill the entry with truck number and details
-      setFormData(prev => {
-        const newEntries = [...(prev.entries || [])];
-        
-        if (!newEntries[index]) {
+        // Check if return DO is missing
+        const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
+
+        // Use correct destination based on direction
+        const destinationForAllocation = direction === 'going'
+          ? result.goingDestination
+          : result.destination;
+
+        const defaults = formData.station
+          ? getStationDefaults(
+              formData.station,
+              direction,
+              destinationForAllocation,
+              result.fuelRecord?.totalLts ?? undefined,
+              result.fuelRecord?.extra ?? undefined,
+              result.fuelRecord?.balance ?? undefined
+            )
+          : { liters: noStationDefaultLiters, rate: noStationRate };
+
+        // Calculate balance info for Mbeya returning
+        let balanceInfo = undefined;
+        if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
+          balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
+        }
+
+        // Auto-fill the entry with truck number and details
+        setFormData(prev => {
+          const newEntries = [...(prev.entries || [])];
+
+          if (!newEntries[index]) {
+            newEntries[index] = {
+              doNo: '',
+              truckNo: '',
+              liters: 0,
+              rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+              amount: 0,
+              dest: 'NIL',
+            };
+          }
+
           newEntries[index] = {
-            doNo: '',  // Start empty
-            truckNo: '',
-            liters: 0,
-            rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
-            amount: 0,
-            dest: 'NIL',
+            ...newEntries[index],
+            truckNo: result.truckNo || '',
+            doNo: doNoUpper,
+            dest: destinationForAllocation,
+            liters: defaults.liters,
+            rate: defaults.rate,
+            amount: defaults.liters * defaults.rate
           };
-        }
-        
-        newEntries[index] = {
-          ...newEntries[index],
-          truckNo: result.truckNo || '',  // Auto-fill truck number from journey
-          doNo: doNoUpper,
-          dest: destinationForAllocation,
-          liters: defaults.liters,
-          rate: defaults.rate,
-          amount: defaults.liters * defaults.rate
-        };
-        
-        // If Mbeya balance info suggests different liters, update
-        if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
-          newEntries[index].liters = balanceInfo.suggestedLiters;
-          newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
-        }
 
-        const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
-        
-        return { ...prev, entries: newEntries, total };
-      });
-      
-      setEntryAutoFillData(prev => ({
-        ...prev,
-        [index]: { 
-          direction, 
-          loading: false, 
-          fetched: result.success, 
-          fuelRecord: result.fuelRecord,
-          fuelRecordId: result.fuelRecord?.id || result.fuelRecord?._id,  // Handle both id and _id
-          goingDestination: result.goingDestination,
-          returnDoMissing,
-          warningType: result.warningType || null,
-          warningMessage: result.message,
-          balanceInfo,
-          formulaStatus: defaults.formulaStatus || null,
-          formulaMessage: defaults.formulaMessage,
-        }
-      }));
+          if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
+            newEntries[index].liters = balanceInfo.suggestedLiters;
+            newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
+          }
+
+          const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
+
+          return { ...prev, entries: newEntries, total };
+        });
+
+        setEntryAutoFillData(prev => ({
+          ...prev,
+          [index]: {
+            direction,
+            loading: false,
+            fetched: result.success,
+            fuelRecord: result.fuelRecord,
+            fuelRecordId: result.fuelRecord?.id || result.fuelRecord?._id,
+            goingDestination: result.goingDestination,
+            returnDoMissing,
+            warningType: result.warningType || null,
+            warningMessage: result.message,
+            balanceInfo,
+            formulaStatus: defaults.formulaStatus || null,
+            formulaMessage: defaults.formulaMessage,
+          }
+        }));
+
+        delete fetchDebounceTimers.current[index];
+      }, 300);
+    } else {
+      // Too short or cleared — cancel any pending timer
+      if (fetchDebounceTimers.current[index]) {
+        clearTimeout(fetchDebounceTimers.current[index]);
+        delete fetchDebounceTimers.current[index];
+      }
     }
   };
 

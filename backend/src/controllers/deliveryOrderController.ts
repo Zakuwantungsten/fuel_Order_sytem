@@ -1889,41 +1889,48 @@ export const getJourneyByDO = async (req: AuthRequest, res: Response): Promise<v
       isDeleted: false,
     }).lean();
 
-    if (!deliveryOrder) {
-      res.status(200).json({
-        success: true,
-        message: 'Delivery order not found',
-        data: {
-          found: false,
-          doNumber: doNoUpper,
-        },
-      });
-      return;
-    }
-
-    // Get truck number and normalize it
-    const truckNo = deliveryOrder.truckNo;
-    const normalizedTruck = truckNo.replace(/[\s-]/g, '').toUpperCase();
-
-    // Find fuel record for this DO
     const { FuelRecord } = require('../models');
     let fuelRecord = null;
     let direction: 'going' | 'returning' = 'going';
+    let truckNo: string;
+    let normalizedTruck: string;
 
-    if (deliveryOrder.importOrExport === 'IMPORT') {
-      // Find fuel record where this DO is the goingDo
+    if (!deliveryOrder) {
+      // No DeliveryOrder document — fall back to searching FuelRecord directly.
+      // Imported data often lives only in FuelRecord (goingDo / returnDo) with no
+      // corresponding DeliveryOrder, so the original early-return was always hit.
       fuelRecord = await FuelRecord.findOne({
-        goingDo: doNoUpper,
+        $or: [{ goingDo: doNoUpper }, { returnDo: doNoUpper }],
         isDeleted: false,
       }).lean();
-      direction = 'going';
-    } else if (deliveryOrder.importOrExport === 'EXPORT') {
-      // Find fuel record where this DO is the returnDo
-      fuelRecord = await FuelRecord.findOne({
-        returnDo: doNoUpper,
-        isDeleted: false,
-      }).lean();
-      direction = 'returning';
+
+      if (!fuelRecord) {
+        res.status(200).json({
+          success: true,
+          message: 'Delivery order not found',
+          data: {
+            found: false,
+            doNumber: doNoUpper,
+          },
+        });
+        return;
+      }
+
+      direction = fuelRecord.returnDo === doNoUpper ? 'returning' : 'going';
+      truckNo = fuelRecord.truckNo;
+      normalizedTruck = truckNo.replace(/[\s-]/g, '').toUpperCase();
+    } else {
+      // DeliveryOrder exists — look up the linked FuelRecord the original way
+      truckNo = deliveryOrder.truckNo;
+      normalizedTruck = truckNo.replace(/[\s-]/g, '').toUpperCase();
+
+      if (deliveryOrder.importOrExport === 'IMPORT') {
+        fuelRecord = await FuelRecord.findOne({ goingDo: doNoUpper, isDeleted: false }).lean();
+        direction = 'going';
+      } else if (deliveryOrder.importOrExport === 'EXPORT') {
+        fuelRecord = await FuelRecord.findOne({ returnDo: doNoUpper, isDeleted: false }).lean();
+        direction = 'returning';
+      }
     }
 
     // Get all fuel records for this truck to check for queue status
@@ -1954,27 +1961,13 @@ export const getJourneyByDO = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // Get associated DOs for complete journey info
-    let goingDO: any = null;
-    let returningDO: any = null;
+    let goingDO: any = deliveryOrder?.importOrExport === 'IMPORT' ? deliveryOrder : null;
+    let returningDO: any = deliveryOrder?.importOrExport === 'EXPORT' ? deliveryOrder : null;
 
-    if (deliveryOrder.importOrExport === 'IMPORT') {
-      goingDO = deliveryOrder;
-      // Check if there's a return DO for this journey
-      if (fuelRecord?.returnDo) {
-        returningDO = await DeliveryOrder.findOne({
-          doNumber: fuelRecord.returnDo,
-          isDeleted: false,
-        }).lean();
-      }
-    } else if (deliveryOrder.importOrExport === 'EXPORT') {
-      returningDO = deliveryOrder;
-      // Find the associated going DO
-      if (fuelRecord?.goingDo) {
-        goingDO = await DeliveryOrder.findOne({
-          doNumber: fuelRecord.goingDo,
-          isDeleted: false,
-        }).lean();
-      }
+    if (direction === 'going' && fuelRecord?.returnDo) {
+      returningDO = await DeliveryOrder.findOne({ doNumber: fuelRecord.returnDo, isDeleted: false }).lean();
+    } else if (direction === 'returning' && fuelRecord?.goingDo) {
+      goingDO = await DeliveryOrder.findOne({ doNumber: fuelRecord.goingDo, isDeleted: false }).lean();
     }
 
     res.status(200).json({
@@ -1989,13 +1982,11 @@ export const getJourneyByDO = async (req: AuthRequest, res: Response): Promise<v
         direction: direction,
         journeyStatus: journeyStatus,
         queuePosition: queuePosition,
-        // Complete journey info
         goingDO: goingDO,
         returningDO: returningDO,
-        destination: fuelRecord?.to || deliveryOrder.destination,
-        goingDestination: fuelRecord?.originalGoingTo || fuelRecord?.to || deliveryOrder.destination,
+        destination: fuelRecord?.to || deliveryOrder?.destination,
+        goingDestination: fuelRecord?.originalGoingTo || fuelRecord?.to || deliveryOrder?.destination,
         balance: fuelRecord?.balance || 0,
-        // Queue context
         hasActiveJourney: !!activeJourney,
         activeJourneyDO: activeJourney?.goingDo || null,
         queuedJourneys: queuedJourneys.map((j: any) => ({
