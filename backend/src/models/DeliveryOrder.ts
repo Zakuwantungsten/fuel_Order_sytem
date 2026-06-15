@@ -200,7 +200,7 @@ const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
 );
 
 // Pre-save middleware to compute/validate totalAmount
-deliveryOrderSchema.pre('save', function(next) {
+deliveryOrderSchema.pre('save', function(this: IDeliveryOrderDocument, next) {
   if (this.rateType === 'per_ton') {
     this.totalAmount = (this.tonnages || 0) * (this.ratePerTon || 0);
   } else if (this.rateType === 'fixed_total') {

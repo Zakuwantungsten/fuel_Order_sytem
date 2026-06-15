@@ -282,6 +282,8 @@ export interface IDeliveryOrder {
   cancelledAt?: Date;
   cancellationReason?: string;
   cancelledBy?: string;
+  uncancelledAt?: Date;
+  uncancelledBy?: string;
   // Edit history tracking
   editHistory?: IDeliveryOrderEditHistory[];
   lastEditedAt?: Date;
@@ -533,6 +535,8 @@ export interface IFuelRecord {
   cancelledAt?: Date;
   cancellationReason?: string;
   cancelledBy?: string;
+  uncancelledAt?: Date;
+  uncancelledBy?: string;
   isDeleted: boolean;
   deletedAt?: Date;
   editLock?: { lockedBy?: string | null; lockedAt?: Date | null; lockedUntil?: Date | null };
