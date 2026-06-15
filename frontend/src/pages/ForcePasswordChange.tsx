@@ -111,10 +111,17 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
         return;
       }
 
-      // If the session/token is invalid (expired, revoked, etc.), log out
-      // so the user gets a fresh login with up-to-date DB state.
+      // If the session token expired before the password could be saved, keep
+      // the user on this screen with a clear message rather than silently logging
+      // them out and leaving them with "invalid credentials" on the next login.
+      // The "Sign out" button below lets them log out manually; for temp-password
+      // accounts they can then log in with their temporary credentials again and
+      // return here to complete setup.
       if (status === 401) {
-        logout();
+        setError(
+          'Your session expired before the password could be saved. ' +
+          'Please use the "Sign out" button below, then sign in again to complete setup.'
+        );
         return;
       }
 

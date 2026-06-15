@@ -80,6 +80,16 @@ function parseUA(ua: string) {
 function healStaleMustChangePassword(user: IUserDocument): boolean {
   if (!user.mustChangePassword) return false;
 
+  // A genuinely pending account must never be treated as stale. This covers:
+  //   • email_link users who clicked the activation link but haven't set their
+  //     password yet — they have no tempPasswordExpiresAt so without this guard
+  //     the 5-minute branch below would incorrectly clear the flag on any /me or
+  //     /login call made after account creation, bypassing ForcePasswordChange.
+  //   • temp_password users whose admin just reset their password.
+  // pendingActivation is cleared only by firstLoginPassword / changePassword once
+  // the user actually sets their own password, so it is a reliable sentinel here.
+  if (user.pendingActivation) return false;
+
   let shouldClear = false;
   if (!user.passwordResetAt) {
     shouldClear = true;
@@ -1002,7 +1012,10 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
 
     // Auto-clear stale mustChangePassword — user already proved they know
     // their password at the login endpoint before being redirected here.
-    if (user.mustChangePassword) {
+    // Guard: skip if pendingActivation is still set (email_link / admin-reset
+    // account that has not completed first-login setup) to match the same logic
+    // used by healStaleMustChangePassword and avoid bypassing ForcePasswordChange.
+    if (user.mustChangePassword && !user.pendingActivation) {
       let shouldClear = false;
       if (!user.passwordResetAt) {
         shouldClear = true;
@@ -1236,7 +1249,10 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
 
     // Auto-clear stale mustChangePassword — user already proved they know
     // their password at the login endpoint before being redirected here.
-    if (user.mustChangePassword) {
+    // Guard: skip if pendingActivation is still set (email_link / admin-reset
+    // account that has not completed first-login setup) to match the same logic
+    // used by healStaleMustChangePassword and avoid bypassing ForcePasswordChange.
+    if (user.mustChangePassword && !user.pendingActivation) {
       let shouldClear = false;
       if (!user.passwordResetAt) {
         shouldClear = true;
