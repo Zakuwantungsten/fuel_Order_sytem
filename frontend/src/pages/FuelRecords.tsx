@@ -292,6 +292,10 @@ const FuelRecords = () => {
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
 
+        // Clear stale search/route filters so the incoming record isn't blocked
+        setSearchTerm('');
+        setRouteFilter('');
+
         // Reset to records view so the highlighted record is visible
         setViewMode('records');
 
