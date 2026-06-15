@@ -1339,8 +1339,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return {
         fuelRecord: journeyData.fuelRecord,
         truckNo: journeyData.truckNo,
-        goingDo: journeyData.goingDO?.doNumber || 'NIL',
-        returnDo: journeyData.returningDO?.doNumber || 'NIL',
+        goingDo: journeyData.goingDO?.doNumber || journeyData.fuelRecord?.goingDo || 'NIL',
+        returnDo: journeyData.returningDO?.doNumber || journeyData.fuelRecord?.returnDo || 'NIL',
         destination: journeyData.destination || 'NIL',
         goingDestination: journeyData.goingDestination || 'NIL',
         balance: journeyData.balance || 0,
