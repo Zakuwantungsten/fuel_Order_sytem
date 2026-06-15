@@ -901,6 +901,7 @@ export interface FuelRecordDetails {
     going: {
       tangaYard: number;
       darYard: number;
+      tangaGoing: number;
       darGoing: number;
       moroGoing: number;
       mbeyaGoing: number;

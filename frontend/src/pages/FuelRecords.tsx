@@ -752,6 +752,7 @@ const FuelRecords = () => {
         'MMSA\nYard': record.mmsaYard || '',
         'Tanga\nYard': record.tangaYard || '',
         'Dar\nYard': record.darYard || '',
+        'Tanga\nGoing': record.tangaGoing || '',
         'Dar\nGoing': record.darGoing || '',
         'Moro\nGoing': record.moroGoing || '',
         'Mbeya\nGoing': record.mbeyaGoing || '',
@@ -790,7 +791,7 @@ const FuelRecords = () => {
       addBorders: true,
       wrapHeader: true,
       centerAllCells: true,
-      columnWidths: [8, 10, 8, 8, 6, 8, 10, 8, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10, 8, 8, 8, 8, 8],
+      columnWidths: [8, 10, 8, 8, 6, 8, 10, 8, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10, 8, 8, 8, 8, 8],
       strikethroughCancelledRows: true,
     });
     } catch (error) {
@@ -1410,6 +1411,7 @@ const FuelRecords = () => {
                 <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MMS</th>
                 <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TnY</th>
                 <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrY</th>
+                <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">TnG</th>
                 <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">DrG</th>
                 <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MoG</th>
                 <th className="w-9 px-1 py-1 text-center font-medium text-gray-500 dark:text-gray-100 uppercase">MbG</th>
@@ -1429,13 +1431,13 @@ const FuelRecords = () => {
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {loading || isFetching ? (
                 <tr>
-                  <td colSpan={26} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <td colSpan={27} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                     Loading data...
                   </td>
                 </tr>
               ) : totalItems === 0 ? (
                 <tr>
-                  <td colSpan={26} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <td colSpan={27} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                     {selectedMonth ? `No fuel records found for ${getMonthName(selectedMonth)}` : 'No fuel records found'}
                   </td>
                 </tr>
@@ -1516,6 +1518,7 @@ const FuelRecords = () => {
                       {renderFuelCell('mmsaYard', record.mmsaYard)}
                       {renderFuelCell('tangaYard', record.tangaYard)}
                       {renderFuelCell('darYard', record.darYard)}
+                      {renderFuelCell('tangaGoing', record.tangaGoing)}
                       {renderFuelCell('darGoing', record.darGoing)}
                       {renderFuelCell('moroGoing', record.moroGoing)}
                       {renderFuelCell('mbeyaGoing', record.mbeyaGoing)}

@@ -26,6 +26,7 @@ type ActiveTab = 'lpos' | 'yard' | 'history';
 const FUEL_LABELS: Record<string, string> = {
   tangaYard: 'Tanga Yard',
   darYard: 'Dar Yard',
+  tangaGoing: 'Tanga Going',
   darGoing: 'Dar Going',
   moroGoing: 'Morogoro Going',
   mbeyaGoing: 'Mbeya Going',

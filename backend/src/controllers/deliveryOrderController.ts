@@ -166,6 +166,7 @@ const cascadeUpdateToFuelRecord = async (
             Math.abs(fuelRecord.mmsaYard || 0) +
             Math.abs(fuelRecord.tangaYard || 0) +
             Math.abs(fuelRecord.darYard || 0) +
+            Math.abs(fuelRecord.tangaGoing || 0) +
             Math.abs(fuelRecord.darGoing || 0) +
             Math.abs(fuelRecord.moroGoing || 0) +
             Math.abs(fuelRecord.mbeyaGoing || 0) +
@@ -228,6 +229,7 @@ const cascadeUpdateToFuelRecord = async (
             Math.abs(fuelRecord.mmsaYard || 0) +
             Math.abs(fuelRecord.tangaYard || 0) +
             Math.abs(fuelRecord.darYard || 0) +
+            Math.abs(fuelRecord.tangaGoing || 0) +
             Math.abs(fuelRecord.darGoing || 0) +
             Math.abs(fuelRecord.moroGoing || 0) +
             Math.abs(fuelRecord.mbeyaGoing || 0) +
@@ -296,6 +298,7 @@ const cascadeUpdateToFuelRecord = async (
             Math.abs(fuelRecord.mmsaYard || 0) +
             Math.abs(fuelRecord.tangaYard || 0) +
             Math.abs(fuelRecord.darYard || 0) +
+            Math.abs(fuelRecord.tangaGoing || 0) +
             Math.abs(fuelRecord.darGoing || 0) +
             Math.abs(fuelRecord.moroGoing || 0) +
             Math.abs(fuelRecord.mbeyaGoing || 0) +

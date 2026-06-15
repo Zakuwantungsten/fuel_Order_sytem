@@ -55,6 +55,7 @@ export const DESTINATIONS = [
 // Cancellation checkpoints - places along the route where trucks can cancel fuel orders
 // Going direction checkpoints
 export const GOING_CHECKPOINTS: CancellationPoint[] = [
+  'TANGA_GOING',    // Tanga checkpoint (Going)
   'DAR_GOING',      // Dar es Salaam checkpoint (Going)
   'MORO_GOING',     // Morogoro checkpoint (Going)
   'MBEYA_GOING',    // Mbeya checkpoint (Going)
@@ -78,6 +79,7 @@ export const RETURNING_CHECKPOINTS: CancellationPoint[] = [
 // Used when a station is selected to determine which checkpoint the cancellation applies to
 export const STATION_TO_CANCELLATION_POINT: Record<string, CancellationPoint> = {
   // Going stations/checkpoints
+  'TANGA GOING': 'TANGA_GOING',
   'DAR GOING': 'DAR_GOING',
   'MORO GOING': 'MORO_GOING',
   'MBEYA GOING': 'MBEYA_GOING',
@@ -103,6 +105,7 @@ export const STATION_TO_CANCELLATION_POINT: Record<string, CancellationPoint> = 
  */
 export const CANCELLATION_POINT_TO_FUEL_FIELD: Record<CancellationPoint, string> = {
   // Going direction checkpoints
+  'TANGA_GOING': 'tangaGoing',
   'DAR_GOING': 'darGoing',
   'MORO_GOING': 'moroGoing',
   'MBEYA_GOING': 'mbeyaGoing',
@@ -129,6 +132,7 @@ export const CANCELLATION_POINT_TO_FUEL_FIELD: Record<CancellationPoint, string>
  */
 export const FUEL_RECORD_COLUMNS = {
   going: [
+    { field: 'tangaGoing', label: 'Tanga Going' },
     { field: 'darGoing', label: 'Dar Going' },
     { field: 'moroGoing', label: 'Moro Going' },
     { field: 'mbeyaGoing', label: 'Mbeya Going' },
@@ -159,6 +163,7 @@ export const getFuelRecordFieldFromCancellationPoint = (cancellationPoint: Cance
 // Get cancellation point display name
 export const getCancellationPointDisplayName = (point: CancellationPoint): string => {
   const displayNames: Record<CancellationPoint, string> = {
+    'TANGA_GOING': 'Tanga Going',
     'DAR_GOING': 'Dar Going',
     'MORO_GOING': 'Moro Going',
     'MBEYA_GOING': 'Mbeya Going',

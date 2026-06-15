@@ -511,6 +511,7 @@ export interface IFuelRecord {
   mmsaYard?: number;
   tangaYard?: number;
   darYard?: number;
+  tangaGoing?: number;
   darGoing?: number;
   moroGoing?: number;
   mbeyaGoing?: number;

@@ -38,6 +38,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
     mmsaYard: 0,
     tangaYard: 0,
     darYard: 0,
+    tangaGoing: 0,
     darGoing: 0,
     moroGoing: 0,
     mbeyaGoing: 0,
@@ -64,7 +65,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
       // If auto-calculated, lock all allocation fields by default
       if (autoCalculated) {
         setLockedFields(new Set([
-          'extra', 'tangaYard', 'darYard', 'darGoing', 'moroGoing', 
+          'extra', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing', 'moroGoing',
           'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel',
           'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn',
           'darReturn', 'tangaReturn'
@@ -84,6 +85,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
       Math.abs(formData.mmsaYard || 0) +
       Math.abs(formData.tangaYard || 0) +
       Math.abs(formData.darYard || 0) +
+      Math.abs(formData.tangaGoing || 0) +
       Math.abs(formData.darGoing || 0) +
       Math.abs(formData.moroGoing || 0) +
       Math.abs(formData.mbeyaGoing || 0) +
@@ -107,7 +109,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
     }));
   }, [
     formData.totalLts, formData.extra, formData.mmsaYard, formData.tangaYard,
-    formData.darYard, formData.darGoing, formData.moroGoing, formData.mbeyaGoing,
+    formData.darYard, formData.tangaGoing, formData.darGoing, formData.moroGoing, formData.mbeyaGoing,
     formData.tdmGoing, formData.zambiaGoing, formData.congoFuel, formData.zambiaReturn,
     formData.tundumaReturn, formData.mbeyaReturn, formData.moroReturn,
     formData.darReturn, formData.tangaReturn
@@ -125,7 +127,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
     const uppercaseFields = ['truckNo', 'start', 'from', 'to', 'goingDo', 'returnDo'];
     let finalValue: string | number = value;
     
-    if (['totalLts', 'extra', 'mmsaYard', 'tangaYard', 'darYard', 'darGoing', 
+    if (['totalLts', 'extra', 'mmsaYard', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing',
          'moroGoing', 'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel',
          'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn'].includes(name)) {
       finalValue = parseFloat(value) || 0;
@@ -384,6 +386,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
           <div className="mb-6">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Going Fuel Allocations</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {renderFuelInput('Tanga Going', 'tangaGoing', autoCalculated)}
               {renderFuelInput('Dar Going', 'darGoing', autoCalculated)}
               {renderFuelInput('Moro Going', 'moroGoing', autoCalculated)}
               {renderFuelInput('Mbeya Going', 'mbeyaGoing', autoCalculated)}

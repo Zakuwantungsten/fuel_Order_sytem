@@ -286,6 +286,7 @@ export interface FuelRecord {
   mmsaYard?: number;
   tangaYard?: number;
   darYard?: number;
+  tangaGoing?: number;
   darGoing?: number;
   moroGoing?: number;
   mbeyaGoing?: number;
@@ -674,10 +675,11 @@ export interface YardFuelDispense {
 }
 
 // Cash Mode Cancellation Types - Checkpoints along the route
-export type CancellationPoint = 
+export type CancellationPoint =
   // Going direction checkpoints
-  | 'DAR_GOING' 
-  | 'MORO_GOING' 
+  | 'TANGA_GOING'
+  | 'DAR_GOING'
+  | 'MORO_GOING'
   | 'MBEYA_GOING'
   | 'INFINITY_GOING'  // Infinity/Mbeya Going
   | 'TDM_GOING'       // TDM/Tunduma (going)
@@ -1087,8 +1089,8 @@ export interface SystemPerformance {
 }
 
 // Configuration Types
-export type FuelRecordField = 
-  | 'darGoing' | 'moroGoing' | 'mbeyaGoing' | 'tdmGoing' | 'zambiaGoing' | 'congoFuel'
+export type FuelRecordField =
+  | 'tangaGoing' | 'darGoing' | 'moroGoing' | 'mbeyaGoing' | 'tdmGoing' | 'zambiaGoing' | 'congoFuel'
   | 'zambiaReturn' | 'tundumaReturn' | 'mbeyaReturn' | 'moroReturn' | 'darReturn' | 'tangaReturn';
 
 export interface FuelStationConfig {

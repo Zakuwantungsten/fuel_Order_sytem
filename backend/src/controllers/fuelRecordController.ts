@@ -593,7 +593,7 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     // Check if any balance-affecting fields are being updated
     const checkpointFields = [
-      'mmsaYard', 'tangaYard', 'darYard', 'darGoing', 'moroGoing', 'mbeyaGoing',
+      'mmsaYard', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing',
       'tdmGoing', 'zambiaGoing', 'congoFuel', 'zambiaReturn', 'tundumaReturn',
       'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn'
     ];
@@ -658,7 +658,7 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
     // Log audit trail — capture every field that actually changed
     const auditFields = [
       'truckNo', 'goingDo', 'totalLts', 'extra', 'balance', 'isLocked',
-      'mmsaYard', 'tangaYard', 'darYard', 'darGoing', 'moroGoing', 'mbeyaGoing',
+      'mmsaYard', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing',
       'tdmGoing', 'zambiaGoing', 'congoFuel', 'zambiaReturn', 'tundumaReturn',
       'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
       'date', 'month', 'lpoNo', 'routeFrom', 'routeTo',
@@ -1004,6 +1004,7 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     const goingFuelAllocations = {
       tangaYard: fuelRecord.tangaYard || 0,
       darYard: fuelRecord.darYard || 0,
+      tangaGoing: fuelRecord.tangaGoing || 0,
       darGoing: fuelRecord.darGoing || 0,
       moroGoing: fuelRecord.moroGoing || 0,
       mbeyaGoing: fuelRecord.mbeyaGoing || 0,

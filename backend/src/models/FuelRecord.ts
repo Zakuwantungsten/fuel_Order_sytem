@@ -142,6 +142,10 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       default: 0,
     },
     // Going fuel
+    tangaGoing: {
+      type: Number,
+      default: 0,
+    },
     darGoing: {
       type: Number,
       default: 0,

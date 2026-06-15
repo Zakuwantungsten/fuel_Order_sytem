@@ -97,6 +97,7 @@ const STATION_TO_FUEL_FIELD_FALLBACK: Record<string, { going?: string; returning
  */
 const CANCELLATION_POINT_TO_FUEL_FIELD: Record<string, string> = {
   // Going direction checkpoints
+  'TANGA_GOING': 'tangaGoing',
   'DAR_GOING': 'darGoing',
   'MORO_GOING': 'moroGoing',
   'MBEYA_GOING': 'mbeyaGoing',

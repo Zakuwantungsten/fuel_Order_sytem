@@ -8,6 +8,7 @@ const CHECKPOINT_COLUMNS = [
   { abbr: 'MMS', field: 'mmsaYard', label: 'MMSA Yard' },
   { abbr: 'TnY', field: 'tangaYard', label: 'Tanga Yard' },
   { abbr: 'DrY', field: 'darYard', label: 'DAR Yard' },
+  { abbr: 'TnG', field: 'tangaGoing', label: 'Tanga Going' },
   { abbr: 'DrG', field: 'darGoing', label: 'DAR Going' },
   { abbr: 'MoG', field: 'moroGoing', label: 'Moro Going' },
   { abbr: 'MbG', field: 'mbeyaGoing', label: 'Mbeya Going' },
@@ -67,6 +68,7 @@ function calculateTotalFuel(record: FuelRecord): number {
     (record.mmsaYard || 0) +
     (record.tangaYard || 0) +
     (record.darYard || 0) +
+    (record.tangaGoing || 0) +
     (record.darGoing || 0) +
     (record.moroGoing || 0) +
     (record.mbeyaGoing || 0) +

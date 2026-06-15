@@ -92,6 +92,7 @@ async function autoFillFuelRecordsForRoute(route: any, username: string): Promis
         Math.abs(record.mmsaYard || 0) +
         Math.abs(record.tangaYard || 0) +
         Math.abs(record.darYard || 0) +
+        Math.abs(record.tangaGoing || 0) +
         Math.abs(record.darGoing || 0) +
         Math.abs(record.moroGoing || 0) +
         Math.abs(record.mbeyaGoing || 0) +
@@ -171,6 +172,7 @@ export async function autoFillFuelRecordsForBatch(truckSuffix: string, extraLite
         Math.abs(record.mmsaYard || 0) +
         Math.abs(record.tangaYard || 0) +
         Math.abs(record.darYard || 0) +
+        Math.abs(record.tangaGoing || 0) +
         Math.abs(record.darGoing || 0) +
         Math.abs(record.moroGoing || 0) +
         Math.abs(record.mbeyaGoing || 0) +
@@ -798,6 +800,7 @@ export const getFormulaVariables = async (req: AuthRequest, res: Response) => {
     ];
 
     const fuelRecordFieldsGoing = [
+      { value: 'tangaGoing', label: 'Tanga Going' },
       { value: 'darGoing', label: 'Dar es Salaam Going' },
       { value: 'moroGoing', label: 'Morogoro Going' },
       { value: 'mbeyaGoing', label: 'Mbeya Going' },
