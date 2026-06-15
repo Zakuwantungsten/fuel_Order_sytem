@@ -31,6 +31,7 @@ export const responseSanitizationMiddleware = (
     '/auth/register',
     '/auth/refresh',
     '/auth/verify-mfa',
+    '/auth/activate-account',
     '/auth/first-login-password',
     '/auth/setup-mfa/generate',
     '/auth/setup-mfa/verify',
