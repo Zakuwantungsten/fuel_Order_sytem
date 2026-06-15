@@ -662,10 +662,15 @@ const FuelRecords = () => {
         );
         queryClient.setQueryData(fuelRecordKeys.detail(updatedId), updated);
         toast.success('Fuel record updated successfully');
+        // Close form AFTER save succeeds so the lock release (inside handleCloseForm)
+        // always happens after the PUT — not racing against it.
+        handleCloseForm();
       } else {
         await fuelRecordsAPI.create(data);
         queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
         toast.success('Fuel record created successfully');
+        setIsFormOpen(false);
+        setSelectedRecord(undefined);
       }
     } catch (error: any) {
       console.error('Error saving fuel record:', error);

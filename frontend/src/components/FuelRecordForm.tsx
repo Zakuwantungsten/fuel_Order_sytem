@@ -206,7 +206,9 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
     const trimmedReason = reason.trim();
     const submitData = trimmedReason ? { ...formData, reason: trimmedReason } : formData;
     onSubmit(submitData);
-    onClose();
+    // Do NOT call onClose() here — the parent closes the form after the async
+    // save completes. Calling onClose() here races the PUT with a DELETE /lock,
+    // which causes the backend to reject the save with 409 (no lock found).
   };
 
   if (!isOpen) return null;
