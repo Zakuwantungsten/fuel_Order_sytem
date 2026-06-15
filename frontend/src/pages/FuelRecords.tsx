@@ -580,8 +580,10 @@ const FuelRecords = () => {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
           toast.error(`This record is being edited by ${lockHolder}.`);
-          return;
+        } else {
+          toast.error('Could not acquire edit lock. Please try again.');
         }
+        return;
       }
     }
     setSelectedRecord(record);
