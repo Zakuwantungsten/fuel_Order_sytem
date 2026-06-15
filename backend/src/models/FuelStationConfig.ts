@@ -50,7 +50,7 @@ const FuelStationConfigSchema = new Schema<IFuelStationConfig>(
     fuelRecordFieldGoing: {
       type: String,
       trim: true,
-      enum: ['darGoing', 'moroGoing', 'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel'],
+      enum: ['tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel'],
     },
     fuelRecordFieldReturning: {
       type: String,
