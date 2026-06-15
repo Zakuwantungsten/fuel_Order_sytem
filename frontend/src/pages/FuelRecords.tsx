@@ -18,6 +18,7 @@ import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useEditLockSync } from '../hooks/useEditLockSync';
 import ConflictModal from '../components/ConflictModal';
 import EditLockBadge from '../components/EditLockBadge';
+import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 
@@ -149,6 +150,9 @@ const FuelRecords = () => {
   // Details modal state
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | number | null>(null);
+  const [cancelPending, setCancelPending] = useState<string | number | null>(null);
+  const [uncancelPending, setUncancelPending] = useState<string | number | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
   
   // Standard allocations (fetched from backend)
   const [standardAllocations, setStandardAllocations] = useState<StandardAllocations | null>(null);
@@ -626,31 +630,45 @@ const FuelRecords = () => {
     }
   };
 
-  const handleCancel = async (id: string | number, e: React.MouseEvent) => {
+  const handleCancel = (id: string | number, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to cancel this fuel record? This will mark it as cancelled.')) {
-      try {
-        await fuelRecordsAPI.cancel(id);
-        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
-        toast.success('Fuel record cancelled successfully');
-      } catch (error) {
-        console.error('Error cancelling fuel record:', error);
-        toast.error('Failed to cancel fuel record');
-      }
+    setCancelPending(id);
+  };
+
+  const executeCancel = async () => {
+    if (!cancelPending) return;
+    setIsActionLoading(true);
+    try {
+      await fuelRecordsAPI.cancel(cancelPending);
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      toast.success('Fuel record cancelled successfully');
+    } catch (error) {
+      console.error('Error cancelling fuel record:', error);
+      toast.error('Failed to cancel fuel record');
+    } finally {
+      setIsActionLoading(false);
+      setCancelPending(null);
     }
   };
 
-  const handleUncancel = async (id: string | number, e: React.MouseEvent) => {
+  const handleUncancel = (id: string | number, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to uncancel this fuel record? This will restore it to active status.')) {
-      try {
-        await fuelRecordsAPI.uncancel(id);
-        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
-        toast.success('Fuel record uncancelled successfully');
-      } catch (error) {
-        console.error('Error uncancelling fuel record:', error);
-        toast.error('Failed to uncancel fuel record');
-      }
+    setUncancelPending(id);
+  };
+
+  const executeUncancel = async () => {
+    if (!uncancelPending) return;
+    setIsActionLoading(true);
+    try {
+      await fuelRecordsAPI.uncancel(uncancelPending);
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      toast.success('Fuel record uncancelled successfully');
+    } catch (error) {
+      console.error('Error uncancelling fuel record:', error);
+      toast.error('Failed to uncancel fuel record');
+    } finally {
+      setIsActionLoading(false);
+      setUncancelPending(null);
     }
   };
 
@@ -1690,6 +1708,28 @@ const FuelRecords = () => {
         currentRecord={conflictData?.currentRecord}
         modifiedBy={conflictData?.currentRecord?.lastEditedBy?.name}
         modifiedAt={conflictData?.currentRecord?.updatedAt}
+      />
+      <ConfirmModal
+        open={cancelPending !== null}
+        title="Cancel Fuel Record"
+        message="Are you sure you want to cancel this fuel record? This will mark it as cancelled."
+        confirmLabel="Cancel Record"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={isActionLoading}
+        onConfirm={executeCancel}
+        onCancel={() => setCancelPending(null)}
+      />
+      <ConfirmModal
+        open={uncancelPending !== null}
+        title="Uncancel Fuel Record"
+        message="Are you sure you want to uncancel this fuel record? This will restore it to active status."
+        confirmLabel="Uncancel"
+        cancelLabel="Dismiss"
+        variant="warning"
+        loading={isActionLoading}
+        onConfirm={executeUncancel}
+        onCancel={() => setUncancelPending(null)}
       />
     </div>
   );
