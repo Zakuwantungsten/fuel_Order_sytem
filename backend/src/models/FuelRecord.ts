@@ -296,6 +296,21 @@ fuelRecordSchema.pre('findOneAndUpdate', function (next) {
   next();
 });
 
+// updateOne (used by the Excel import upsert) is a separate operation from
+// findOneAndUpdate and does NOT trigger the hook above. Mirror the same logic
+// so that any updateOne that sets date or month also keeps monthKey in sync.
+fuelRecordSchema.pre('updateOne', function (next) {
+  const update: any = this.getUpdate();
+  if (update && !Array.isArray(update)) {
+    const target = update.$set ?? update;
+    if (target.date || target.month) {
+      const key = computeMonthKey(target.date, target.month);
+      if (key) target.monthKey = key;
+    }
+  }
+  next();
+});
+
 fuelRecordSchema.pre('insertMany', function (next: (err?: Error) => void, docs: any[]) {
   if (Array.isArray(docs)) {
     for (const doc of docs) {

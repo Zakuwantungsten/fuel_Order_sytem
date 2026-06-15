@@ -12,6 +12,7 @@
 import { Response } from 'express';
 import * as XLSX from 'xlsx';
 import { FuelRecord, DeliveryOrder, LPOSummary, LPOWorkbook } from '../models';
+import { computeMonthKey } from '../models/FuelRecord';
 import { AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 import { AuditService } from '../utils/auditService';
@@ -331,6 +332,11 @@ function mapToFuelRecord(row: Record<string, unknown>, year?: number, sheetMonth
       doc.date = `${yr}-${mon}-${day}`;
     }
   }
+
+  // updateOne bypasses the pre('findOneAndUpdate') hook, so compute monthKey here
+  // to ensure imported records are visible in the month-filtered Fuel Records tab.
+  const mk = computeMonthKey(doc.date as string, doc.month as string);
+  if (mk) doc.monthKey = mk;
 
   return doc;
 }
