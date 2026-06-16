@@ -651,13 +651,12 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                     type="text"
                     name="startingNumber"
                     value={commonData.startingNumber}
-                    readOnly
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 cursor-not-allowed"
+                    onChange={handleCommonChange}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder={`e.g., 0001/26`}
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Auto-generated from last DO. Format: XXXX/YY
+                    Auto-generated — you can override if needed. Format: XXXX/YY
                   </p>
                 </div>
                 

@@ -349,12 +349,11 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   value={formData.doNumber || ''}
                   onChange={handleChange}
                   required
-                  readOnly
                   disabled={isEditMode}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-gray-100 cursor-not-allowed"
+                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 ${isEditMode ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : 'bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent'}`}
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {isEditMode ? 'DO number cannot be changed after creation' : 'Auto-assigned'}
+                  {isEditMode ? 'DO number cannot be changed after creation' : 'Auto-assigned — you can override if needed'}
                 </p>
               </div>
 
