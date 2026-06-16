@@ -82,7 +82,7 @@ const DELIVERY_ORDER_COLUMNS: Record<string, string> = {
   invoice: 'invoiceNos', 'invoice nos': 'invoiceNos', invoicenos: 'invoiceNos', 'invoice no': 'invoiceNos',
   client: 'clientName', 'client name': 'clientName', clientname: 'clientName',
   // truck/trailer/container — with and without trailing period
-  truck: 'truckNo', 'truck no': 'truckNo', 'truck no.': 'truckNo', truckno: 'truckNo',
+  truck: 'truckNo', 'truck no': 'truckNo', 'truck no.': 'truckNo', truckno: 'truckNo', 'truck number': 'truckNo',
   trailer: 'trailerNo', 'trailer no': 'trailerNo', 'trailer no.': 'trailerNo', trailerno: 'trailerNo',
   container: 'containerNo', 'container no': 'containerNo', 'container no.': 'containerNo', containerno: 'containerNo',
   // border — including full "BORDER ENTRY DRC" from CSV
@@ -260,7 +260,7 @@ function detectSheetType(sheetName: string, headers: string[]): SheetType {
   if (/going do|return do|dar going|mbeya going|tanga return|mbeya return/.test(headerStr)) {
     return 'fuelRecord';
   }
-  if (/d\.o no|do number|donumber|haulier|loading point|import or export/.test(headerStr)) {
+  if (/d\.o no|do no\b|do number|donumber|haulier|loading point|import or export/.test(headerStr)) {
     return 'deliveryOrder';
   }
   // LPO detection: match both full and truncated header variants
