@@ -19,6 +19,7 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
   const [editingRoute, setEditingRoute] = useState<RouteConfig | null>(null);
   const [deleteRouteTarget, setDeleteRouteTarget] = useState<string | null>(null);
   const [deletingRoute, setDeletingRoute] = useState(false);
+  const [savingRoute, setSavingRoute] = useState(false);
 
   const [routeForm, setRouteForm] = useState({
     routeName: '',
@@ -84,38 +85,40 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
   useRealtimeSync('routes', loadData);
 
   const handleCreateRoute = async () => {
+    if (savingRoute) return;
+    // Validate and trim required fields with specific messages
+    const routeName = routeForm.routeName?.trim();
+    if (!routeName) {
+      onMessage('error', 'Please enter a Route Name');
+      return;
+    }
+
+    const origin = routeForm.origin?.trim();
+    if (!origin) {
+      onMessage('error', 'Please enter a Starting Point');
+      return;
+    }
+
+    const destination = routeForm.destination?.trim();
+    if (!destination) {
+      onMessage('error', 'Please enter a Destination');
+      return;
+    }
+
+    const defaultLiters = routeForm.defaultTotalLiters?.trim();
+    if (!defaultLiters) {
+      onMessage('error', 'Please enter Default Liters');
+      return;
+    }
+
+    const litersValue = parseFloat(defaultLiters);
+    if (isNaN(litersValue) || litersValue <= 0) {
+      onMessage('error', 'Default Liters must be a valid number greater than 0');
+      return;
+    }
+
+    setSavingRoute(true);
     try {
-      // Validate and trim required fields with specific messages
-      const routeName = routeForm.routeName?.trim();
-      if (!routeName) {
-        onMessage('error', 'Please enter a Route Name');
-        return;
-      }
-
-      const origin = routeForm.origin?.trim();
-      if (!origin) {
-        onMessage('error', 'Please enter a Starting Point');
-        return;
-      }
-
-      const destination = routeForm.destination?.trim();
-      if (!destination) {
-        onMessage('error', 'Please enter a Destination');
-        return;
-      }
-
-      const defaultLiters = routeForm.defaultTotalLiters?.trim();
-      if (!defaultLiters) {
-        onMessage('error', 'Please enter Default Liters');
-        return;
-      }
-
-      const litersValue = parseFloat(defaultLiters);
-      if (isNaN(litersValue) || litersValue <= 0) {
-        onMessage('error', 'Default Liters must be a valid number greater than 0');
-        return;
-      }
-
       await configAPI.createRoute({
         routeName,
         origin,
@@ -133,43 +136,47 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
       loadData();
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to create route');
+    } finally {
+      setSavingRoute(false);
     }
   };
 
   const handleUpdateRoute = async () => {
     if (!editingRoute) return;
+    if (savingRoute) return;
+    // Validate and trim required fields with specific messages
+    const routeName = routeForm.routeName?.trim();
+    if (!routeName) {
+      onMessage('error', 'Please enter a Route Name');
+      return;
+    }
+
+    const origin = routeForm.origin?.trim();
+    if (!origin) {
+      onMessage('error', 'Please enter a Starting Point');
+      return;
+    }
+
+    const destination = routeForm.destination?.trim();
+    if (!destination) {
+      onMessage('error', 'Please enter a Destination');
+      return;
+    }
+
+    const defaultLiters = routeForm.defaultTotalLiters?.trim();
+    if (!defaultLiters) {
+      onMessage('error', 'Please enter Default Liters');
+      return;
+    }
+
+    const litersValue = parseFloat(defaultLiters);
+    if (isNaN(litersValue) || litersValue <= 0) {
+      onMessage('error', 'Default Liters must be a valid number greater than 0');
+      return;
+    }
+
+    setSavingRoute(true);
     try {
-      // Validate and trim required fields with specific messages
-      const routeName = routeForm.routeName?.trim();
-      if (!routeName) {
-        onMessage('error', 'Please enter a Route Name');
-        return;
-      }
-
-      const origin = routeForm.origin?.trim();
-      if (!origin) {
-        onMessage('error', 'Please enter a Starting Point');
-        return;
-      }
-
-      const destination = routeForm.destination?.trim();
-      if (!destination) {
-        onMessage('error', 'Please enter a Destination');
-        return;
-      }
-
-      const defaultLiters = routeForm.defaultTotalLiters?.trim();
-      if (!defaultLiters) {
-        onMessage('error', 'Please enter Default Liters');
-        return;
-      }
-
-      const litersValue = parseFloat(defaultLiters);
-      if (isNaN(litersValue) || litersValue <= 0) {
-        onMessage('error', 'Default Liters must be a valid number greater than 0');
-        return;
-      }
-
       await configAPI.updateRoute(editingRoute._id, {
         routeName,
         origin,
@@ -188,6 +195,8 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
       loadData();
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to update route');
+    } finally {
+      setSavingRoute(false);
     }
   };
 
@@ -497,8 +506,16 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
                 <button onClick={() => { setShowRouteModal(false); setEditingRoute(null); resetRouteForm(); }}
                   className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={editingRoute ? handleUpdateRoute : handleCreateRoute}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2">
-                  <Save className="w-4 h-4" />{editingRoute ? 'Update' : 'Create'}
+                  disabled={savingRoute}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {savingRoute ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {savingRoute
+                    ? (editingRoute ? 'Updating…' : 'Creating…')
+                    : (editingRoute ? 'Update' : 'Create')}
                 </button>
               </div>
             </div>

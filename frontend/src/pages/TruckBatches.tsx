@@ -931,11 +931,15 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
                 onClick={async () => {
                   await handleAddTruck();
                 }}
-                disabled={!newTruck.suffix.trim() || newTruck.batch <= 0}
+                disabled={!newTruck.suffix.trim() || newTruck.batch <= 0 || addTruckMutation.isPending}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                <Plus className="w-4 h-4" />
-                Add Truck
+                {addTruckMutation.isPending ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4" />
+                )}
+                {addTruckMutation.isPending ? 'Adding…' : 'Add Truck'}
               </button>
             </div>
           </div>
@@ -989,11 +993,15 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
               </button>
               <button
                 onClick={handleCreateBatch}
-                disabled={newBatchLiters <= 0 || newBatchLiters > 10000}
+                disabled={newBatchLiters <= 0 || newBatchLiters > 10000 || createBatchMutation.isPending}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                <Plus className="w-4 h-4" />
-                Create Batch
+                {createBatchMutation.isPending ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4" />
+                )}
+                {createBatchMutation.isPending ? 'Creating…' : 'Create Batch'}
               </button>
             </div>
           </div>

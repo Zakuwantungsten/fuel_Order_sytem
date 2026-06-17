@@ -19,6 +19,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   const [editingStation, setEditingStation] = useState<FuelStationConfig | null>(null);
   const [deleteStationTarget, setDeleteStationTarget] = useState<string | null>(null);
   const [deletingStation, setDeletingStation] = useState(false);
+  const [savingStation, setSavingStation] = useState(false);
 
   const [stationForm, setStationForm] = useState({
     stationName: '',
@@ -98,6 +99,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   useRealtimeSync(['fuel_stations'], loadData);
 
   const handleCreateStation = async () => {
+    if (savingStation) return;
     try {
       // Validate required fields with specific messages
       if (!stationForm.stationName || !stationForm.stationName.trim()) {
@@ -129,6 +131,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         return;
       }
 
+      setSavingStation(true);
       await configAPI.createStation({
         stationName: stationForm.stationName.trim(),
         defaultRate: rateValue,
@@ -152,11 +155,14 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || 'Failed to create station';
       onMessage('error', errorMessage);
+    } finally {
+      setSavingStation(false);
     }
   };
 
   const handleUpdateStation = async () => {
     if (!editingStation) return;
+    if (savingStation) return;
     try {
       // Validate required fields with specific messages
       if (!stationForm.stationName || !stationForm.stationName.trim()) {
@@ -188,6 +194,7 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         return;
       }
 
+      setSavingStation(true);
       await configAPI.updateStation(editingStation._id, {
         stationName: stationForm.stationName.trim(),
         defaultRate: rateValue,
@@ -211,6 +218,8 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
       loadData();
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to update station');
+    } finally {
+      setSavingStation(false);
     }
   };
 
@@ -630,8 +639,16 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                 <button onClick={() => { setShowStationModal(false); setEditingStation(null); resetStationForm(); }}
                   className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={editingStation ? handleUpdateStation : handleCreateStation}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2">
-                  <Save className="w-4 h-4" />{editingStation ? 'Update' : 'Create'}
+                  disabled={savingStation}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {savingStation ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {savingStation
+                    ? (editingStation ? 'Updating…' : 'Creating…')
+                    : (editingStation ? 'Update' : 'Create')}
                 </button>
               </div>
             </div>

@@ -5,7 +5,7 @@ import { FuelRecord } from '../types';
 interface FuelRecordFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Partial<FuelRecord>) => void;
+  onSubmit: (data: Partial<FuelRecord>) => void | Promise<void>;
   initialData?: FuelRecord;
   autoCalculated?: boolean; // Indicates if this was auto-created from a DO
 }
@@ -56,6 +56,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
 
   const [lockedFields, setLockedFields] = useState<Set<string>>(new Set());
   const [reason, setReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditing = Boolean(initialData);
 
   useEffect(() => {
@@ -202,11 +203,20 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     const trimmedReason = reason.trim();
     const submitData = trimmedReason ? { ...formData, reason: trimmedReason } : formData;
-    onSubmit(submitData);
+    // Track in-flight state so the submit button can show "Updating…/Creating…"
+    // and stay disabled (prevents double-submit). The parent closes the form on
+    // success; on error it stays open, so we reset the flag in finally.
+    setIsSubmitting(true);
+    try {
+      await onSubmit(submitData);
+    } finally {
+      setIsSubmitting(false);
+    }
     // Do NOT call onClose() here — the parent closes the form after the async
     // save completes. Calling onClose() here races the PUT with a DELETE /lock,
     // which causes the backend to reject the save with 409 (no lock found).
@@ -462,15 +472,22 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              disabled={isSubmitting}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+              disabled={isSubmitting}
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
             >
-              {initialData ? 'Update' : 'Create'} Record
+              {isSubmitting && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              )}
+              {isSubmitting
+                ? (initialData ? 'Updating…' : 'Creating…')
+                : `${initialData ? 'Update' : 'Create'} Record`}
             </button>
           </div>
         </form>
