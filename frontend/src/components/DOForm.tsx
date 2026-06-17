@@ -16,6 +16,49 @@ interface DOFormProps {
   user?: any; // User object for role-based auto-selection
 }
 
+// Local storage key for persisting the new-DO form draft (create mode only)
+const NEW_DO_FORM_STORAGE_KEY = 'new_do_form_draft';
+
+interface StoredDOData {
+  formData: Partial<DeliveryOrder>;
+  savedAt: string;
+}
+
+// A draft is worth restoring only if the user actually typed something
+const hasMeaningfulDO = (d: Partial<DeliveryOrder>): boolean =>
+  !!(d.clientName || d.truckNo || d.trailerNo || d.destination || d.loadingPoint || d.driverName || d.haulier || d.invoiceNos);
+
+const saveDODraft = (data: StoredDOData) => {
+  try {
+    localStorage.setItem(NEW_DO_FORM_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Error saving DO draft:', error);
+  }
+};
+
+const loadDODraft = (): StoredDOData | null => {
+  try {
+    const stored = localStorage.getItem(NEW_DO_FORM_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as StoredDOData;
+      const hoursDiff = (Date.now() - new Date(parsed.savedAt).getTime()) / (1000 * 60 * 60);
+      if (hoursDiff < 24) return parsed;
+      localStorage.removeItem(NEW_DO_FORM_STORAGE_KEY);
+    }
+  } catch (error) {
+    console.error('Error loading DO draft:', error);
+  }
+  return null;
+};
+
+const clearDODraft = () => {
+  try {
+    localStorage.removeItem(NEW_DO_FORM_STORAGE_KEY);
+  } catch (error) {
+    console.error('Error clearing DO draft:', error);
+  }
+};
+
 const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: DOFormProps) => {
   const getCurrentDate = useCallback(() => {
     const now = new Date();
@@ -58,6 +101,8 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Whether a saved draft was restored on open (drives the "draft restored" banner)
+  const [hasDraft, setHasDraft] = useState(false);
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadPdf = journeyConfig?.autoDownloadDOPdf ?? true;
   const isEditMode = !!order;
@@ -104,13 +149,46 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
           date: order.date ? order.date.split('T')[0] : getCurrentDate(),
         });
       } else {
-        // Create mode - reset to defaults with correct doType
-        const defaults = getDefaultFormData();
-        defaults.doType = defaultDoType; // Ensure we use the passed default
-        setFormData(defaults);
+        // Create mode - restore a saved draft if the user has one, else reset to
+        // defaults. The doNumber is (re)fetched by the effect below so a restored
+        // draft always gets a fresh, un-claimed number.
+        const draft = loadDODraft();
+        if (draft && hasMeaningfulDO(draft.formData)) {
+          setFormData({ ...draft.formData, doType: draft.formData.doType || defaultDoType });
+          setHasDraft(true);
+        } else {
+          const defaults = getDefaultFormData();
+          defaults.doType = defaultDoType; // Ensure we use the passed default
+          setFormData(defaults);
+          setHasDraft(false);
+        }
       }
     }
   }, [isOpen, order, defaultDoType, getDefaultFormData]);
+
+  // Auto-save the draft (debounced) while creating a new DO. Never persists in
+  // edit mode. We can't use a useState initializer because the modal stays
+  // mounted across open/close, so restore happens in the effect above instead.
+  useEffect(() => {
+    if (!isOpen || order || isSubmitting) return;
+    if (!hasMeaningfulDO(formData)) return;
+    const timeoutId = setTimeout(() => {
+      saveDODraft({ formData, savedAt: new Date().toISOString() });
+      setHasDraft(true);
+    }, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [isOpen, order, isSubmitting, formData]);
+
+  // Discard the current draft and start a clean form (with a fresh DO number)
+  const handleDiscardDraft = async () => {
+    clearDODraft();
+    const defaults = getDefaultFormData();
+    defaults.doType = defaultDoType;
+    setFormData(defaults);
+    setHasDraft(false);
+    const nextDONumber = await deliveryOrdersAPI.getNextNumber(defaultDoType);
+    setFormData(prev => ({ ...prev, doNumber: nextDONumber }));
+  };
 
   // Fetch next DO/SDO number when component opens
   // Note: When doType changes via handleDOTypeChange, it fetches directly, so we don't need doType in dependencies
@@ -194,6 +272,9 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       console.log('onSave returned:', savedOrder);
       
       if (!order && savedOrder) {
+        // New DO created — the draft is spent, discard it.
+        clearDODraft();
+        setHasDraft(false);
         if (autoDownloadPdf) {
           console.log('Auto-downloading PDF for new DO...');
           await handleDownload(savedOrder as DeliveryOrder);
@@ -294,6 +375,20 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 px-3 md:px-6 py-4 md:py-6 max-h-[80vh] overflow-y-auto">
+            {hasDraft && !order && (
+              <div className="mb-4 flex items-center justify-between rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-2">
+                <span className="text-sm text-amber-800 dark:text-amber-300">
+                  Restored your unsaved draft. Continue where you left off, or discard it.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="text-sm font-medium text-amber-800 dark:text-amber-300 hover:underline"
+                >
+                  Discard draft
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
               {/* Basic Information */}
               <div className="md:col-span-2">

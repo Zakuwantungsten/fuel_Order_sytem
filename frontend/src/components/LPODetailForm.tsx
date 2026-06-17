@@ -546,6 +546,35 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
   };
 
+  // Apply a saved draft (from localStorage) to every piece of form state.
+  // CRITICAL: the modal stays mounted (parent renders it unconditionally and we
+  // only `return null` while closed), so the useState initializers that read the
+  // draft run ONCE on first mount — not on reopen. We must therefore push the
+  // stored values back into state explicitly here, otherwise reopening shows an
+  // empty form even though a draft exists in localStorage.
+  const applyStoredDraft = (stored: StoredFormData) => {
+    setFormData(stored.formData);
+    setEntryAutoFillData(stored.entryAutoFillData || {});
+    setGoingEnabled(stored.goingEnabled ?? false);
+    setReturningEnabled(stored.returningEnabled ?? false);
+    setGoingCheckpoint(stored.goingCheckpoint ?? '');
+    setReturningCheckpoint(stored.returningCheckpoint ?? '');
+    setCashCurrency(stored.cashCurrency ?? 'TZS');
+    setCashRate(stored.cashRate ?? 0);
+    setCashDefaultLiters(stored.cashDefaultLiters ?? 0);
+    setCustomStationName(stored.customStationName ?? '');
+    setCustomCurrency(stored.customCurrency ?? 'USD');
+    setCustomRate(stored.customRate ?? 0);
+    setCustomDefaultLiters(stored.customDefaultLiters ?? 0);
+    setCustomGoingEnabled(stored.customGoingEnabled ?? false);
+    setCustomReturnEnabled(stored.customReturnEnabled ?? false);
+    setCustomGoingCheckpoint(stored.customGoingCheckpoint ?? '');
+    setCustomReturnCheckpoint(stored.customReturnCheckpoint ?? '');
+    setNoStationRate(stored.noStationRate ?? 0);
+    setNoStationDefaultLiters(stored.noStationDefaultLiters ?? 0);
+    setHasDraft(true);
+  };
+
   // Load stations from database using React Query
   const queryClient = useQueryClient();
   const { data: fuelStations, isLoading: loadingStations } = useActiveFuelStations();
@@ -651,9 +680,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     if (isOpen && !initialData) {
       const stored = loadFormFromStorage();
       if (stored && stored.formData.entries && stored.formData.entries.length > 0) {
-        // Found a draft with entries - keep the loaded data and show indicator
-        setHasDraft(true);
-        // Entries are already loaded from useState initializers
+        // Found a draft with entries - restore it into state. We can't rely on the
+        // useState initializers here: the form stays mounted across open/close, so
+        // they only ran once on first mount. Push the draft back in explicitly.
+        applyStoredDraft(stored);
       } else {
         // No draft or empty draft - reset and fetch new LPO number
         resetForm(false); // Don't clear storage since there's nothing there
@@ -718,9 +748,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     initialData
   ]);
 
-  // Handle cancel button click - reset and close
+  // Closing the form (overlay click, X, or Cancel) intentionally KEEPS the draft
+  // so the user can step away to check something elsewhere and come back to their
+  // data. The draft is cleared only via "Discard Draft" or a successful submit.
+  // (The open-effect resets to a clean form when there is no saved draft.)
   const handleCancel = () => {
-    resetForm();
     onClose();
   };
 
@@ -2767,8 +2799,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setIsSubmitting(true);
     try {
       await onSubmit(submitData);
-      clearFormStorage();
-      setHasDraft(false);
+      // Reset in-memory state (not just storage) so a pending autosave debounce
+      // can't re-save a draft for the LPO we just submitted. Changing formData's
+      // ref also cancels any in-flight autosave timer via the effect cleanup.
+      resetForm();
     } finally {
       setIsSubmitting(false);
     }

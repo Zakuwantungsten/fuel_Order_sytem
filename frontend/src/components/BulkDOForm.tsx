@@ -22,6 +22,62 @@ interface BulkDORow {
   totalAmount?: number;
 }
 
+interface BulkCommonData {
+  date: string;
+  importOrExport: 'IMPORT' | 'EXPORT';
+  doType: 'DO' | 'SDO';
+  clientName: string;
+  loadingPoint: string;
+  destination: string;
+  haulier: string;
+  containerNo: string;
+  cargoType: 'loosecargo' | 'container';
+  rateType: 'per_ton' | 'fixed_total';
+  startingNumber: string;
+}
+
+// Local storage key for persisting the bulk DO form draft
+const BULK_DO_FORM_STORAGE_KEY = 'bulk_do_form_draft';
+
+interface StoredBulkDOData {
+  commonData: BulkCommonData;
+  bulkInput: string;
+  parsedRows: BulkDORow[];
+  savedAt: string;
+}
+
+const saveBulkDraft = (data: StoredBulkDOData) => {
+  try {
+    localStorage.setItem(BULK_DO_FORM_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Error saving bulk DO draft:', error);
+  }
+};
+
+const loadBulkDraft = (): StoredBulkDOData | null => {
+  try {
+    const stored = localStorage.getItem(BULK_DO_FORM_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as StoredBulkDOData;
+      // Drafts expire after 24 hours
+      const hoursDiff = (Date.now() - new Date(parsed.savedAt).getTime()) / (1000 * 60 * 60);
+      if (hoursDiff < 24) return parsed;
+      localStorage.removeItem(BULK_DO_FORM_STORAGE_KEY);
+    }
+  } catch (error) {
+    console.error('Error loading bulk DO draft:', error);
+  }
+  return null;
+};
+
+const clearBulkDraft = () => {
+  try {
+    localStorage.removeItem(BULK_DO_FORM_STORAGE_KEY);
+  } catch (error) {
+    console.error('Error clearing bulk DO draft:', error);
+  }
+};
+
 const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   // Auto-select importOrExport based on user role
   const getDefaultImportExport = (): 'IMPORT' | 'EXPORT' => {
@@ -84,6 +140,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   // Progress tracking state
   const [isCreating, setIsCreating] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
+  // Whether a saved draft was restored on open (drives the "draft restored" banner)
+  const [hasDraft, setHasDraft] = useState(false);
 
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadPdf = journeyConfig?.autoDownloadDOPdf ?? true;
@@ -124,7 +182,55 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       }));
     }
   }, [isOpen]);
-  
+
+  // Restore a saved draft when the form opens. Declared AFTER the next-number
+  // effects above so the auto-fetched startingNumber wins over the stored one
+  // (DO numbers can be claimed by others while the draft sat idle). We can't use
+  // useState initializers here because the modal stays mounted across open/close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const draft = loadBulkDraft();
+    if (draft && (draft.bulkInput?.trim() || (draft.parsedRows?.length ?? 0) > 0)) {
+      setBulkInput(draft.bulkInput || '');
+      setParsedRows(draft.parsedRows || []);
+      setCommonData(prev => ({
+        ...prev,
+        ...draft.commonData,
+        startingNumber: prev.startingNumber, // keep freshly-fetched number
+      }));
+      setHasDraft(true);
+    } else {
+      setHasDraft(false);
+    }
+  }, [isOpen]);
+
+  // Auto-save the draft (debounced) whenever meaningful data changes. Skip while
+  // creating or once orders have been created (that draft is spent).
+  useEffect(() => {
+    if (!isOpen || isCreating || createdOrders.length > 0) return;
+    const hasData = bulkInput.trim().length > 0 || parsedRows.length > 0;
+    if (!hasData) return;
+    const timeoutId = setTimeout(() => {
+      saveBulkDraft({
+        commonData,
+        bulkInput,
+        parsedRows,
+        savedAt: new Date().toISOString(),
+      });
+      setHasDraft(true);
+    }, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [isOpen, isCreating, createdOrders.length, bulkInput, parsedRows, commonData]);
+
+  // Discard the current draft and start fresh
+  const handleDiscardDraft = () => {
+    clearBulkDraft();
+    setBulkInput('');
+    setParsedRows([]);
+    setHasDraft(false);
+    setCommonData(prev => ({ ...prev, clientName: '', loadingPoint: '', destination: '', haulier: '' }));
+  };
+
   // Dropdown refs
   const cargoTypeDropdownRef = useRef<HTMLDivElement>(null);
   const rateTypeDropdownRef = useRef<HTMLDivElement>(null);
@@ -340,6 +446,11 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       
       console.log(`✓ Successfully created ${result.createdOrders.length} out of ${paddedOrders.length} orders!`);
       
+      // Orders were created successfully — the draft is spent, discard it so it
+      // doesn't reappear next time the form opens.
+      clearBulkDraft();
+      setHasDraft(false);
+
       // Set only the actually created orders for display and PDF generation
       setCreatedOrders(result.createdOrders);
       setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Generating PDF...' });
@@ -489,6 +600,21 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
 
           {/* Form */}
           <div className="bg-white dark:bg-gray-800 px-6 py-6 max-h-[80vh] overflow-y-auto">
+            {/* Restored draft banner */}
+            {hasDraft && createdOrders.length === 0 && (
+              <div className="mb-4 flex items-center justify-between rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-2">
+                <span className="text-sm text-amber-800 dark:text-amber-300">
+                  Restored your unsaved draft. Continue where you left off, or discard it.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="text-sm font-medium text-amber-800 dark:text-amber-300 hover:underline"
+                >
+                  Discard draft
+                </button>
+              </div>
+            )}
             {/* Common Information */}
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 uppercase">
