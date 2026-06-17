@@ -59,7 +59,6 @@ router.get('/next-do-number', asyncHandler(deliveryOrderController.getNextDONumb
 router.get('/trucks', asyncHandler(deliveryOrderController.getAllTrucks));
 router.get('/truck/:truckNo', asyncHandler(deliveryOrderController.getDeliveryOrdersByTruck));
 router.get('/truck/:truckNo/current-journey', asyncHandler(deliveryOrderController.getCurrentJourneyByTruck));
-router.get('/journey/:doNumber', asyncHandler(deliveryOrderController.getJourneyByDO));
 
 // Single DO PDF download route (must be before generic /:id route)
 router.get(

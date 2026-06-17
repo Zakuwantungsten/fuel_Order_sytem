@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
-import { lpoDocumentsAPI, fuelRecordsAPI, deliveryOrdersAPI, resourceLockAPI } from '../services/api';
+import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
@@ -1269,10 +1269,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   }, []);
 
   /**
-   * Fetch journey data by DO number (for DO-first search)
-   * Returns same TruckFetchResult structure for consistency
+   * Fetch journey data by DO number — sourced from the fuel record table
+   * (the SAME source as the truck-number lookup), not the delivery-orders
+   * collection. Each DO is unique and belongs to exactly one journey as either
+   * the going or the returning DO (never both), so we look the record up
+   * directly and let the backend detect the direction.
+   * Returns the same TruckFetchResult structure for consistency.
    */
-  const fetchJourneyByDO = useCallback(async (doNumber: string): Promise<TruckFetchResult & { truckNo?: string }> => {
+  const fetchByDONumber = useCallback(async (doNumber: string): Promise<TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' }> => {
     if (!doNumber || doNumber.length < 3) {
       return {
         fuelRecord: null,
@@ -1287,9 +1291,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
 
     try {
-      const journeyData = await deliveryOrdersAPI.getJourneyByDO(doNumber.trim().toUpperCase());
+      const result = await fuelRecordsAPI.getByDoNumber(doNumber.trim().toUpperCase());
 
-      if (!journeyData.found) {
+      if (!result || !result.fuelRecord) {
         return {
           fuelRecord: null,
           goingDo: 'NIL',
@@ -1297,63 +1301,29 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           destination: 'NIL',
           goingDestination: 'NIL',
           balance: 0,
-          message: `⚠️ DO ${doNumber} not found`,
+          message: `⚠️ No fuel record found for DO ${doNumber}`,
           success: false,
           warningType: 'not_found' as const
         };
       }
 
-      if (!journeyData.fuelRecord) {
-        return {
-          fuelRecord: null,
-          truckNo: journeyData.truckNo,
-          goingDo: journeyData.goingDO?.doNumber || 'NIL',
-          returnDo: journeyData.returningDO?.doNumber || 'NIL',
-          destination: journeyData.destination || 'NIL',
-          goingDestination: journeyData.goingDestination || 'NIL',
-          balance: 0,
-          message: `⚠️ No fuel record found for DO ${doNumber} (Truck: ${journeyData.truckNo})`,
-          success: false,
-          warningType: 'not_found' as const
-        };
-      }
-
-      // Build status message based on journey status
-      let statusMessage = '';
-      if (journeyData.journeyStatus === 'queued') {
-        statusMessage = `QUEUED Journey (Position #${journeyData.queuePosition || '?'}): ${doNumber}`;
-        if (journeyData.hasActiveJourney) {
-          statusMessage += ` | Active: ${journeyData.activeJourneyDO}`;
-        }
-      } else if (journeyData.journeyStatus === 'active') {
-        statusMessage = `ACTIVE Journey: DO ${doNumber}, Balance: ${journeyData.balance}L`;
-        if (journeyData.queuedJourneys && journeyData.queuedJourneys.length > 0) {
-          statusMessage += ` | ${journeyData.queuedJourneys.length} queued`;
-        }
-      } else if (journeyData.journeyStatus === 'completed') {
-        statusMessage = `✓ COMPLETED Journey: DO ${doNumber}`;
-      } else {
-        statusMessage = `Found: DO ${doNumber}, Balance: ${journeyData.balance}L`;
-      }
+      const { fuelRecord, direction } = result;
+      const goingDestination = fuelRecord.originalGoingTo || fuelRecord.to || 'NIL';
 
       return {
-        fuelRecord: journeyData.fuelRecord,
-        truckNo: journeyData.truckNo,
-        goingDo: journeyData.goingDO?.doNumber || journeyData.fuelRecord?.goingDo || 'NIL',
-        returnDo: journeyData.returningDO?.doNumber || journeyData.fuelRecord?.returnDo || 'NIL',
-        destination: journeyData.destination || 'NIL',
-        goingDestination: journeyData.goingDestination || 'NIL',
-        balance: journeyData.balance || 0,
-        message: statusMessage,
+        fuelRecord,
+        truckNo: fuelRecord.truckNo,
+        direction,
+        goingDo: fuelRecord.goingDo || 'NIL',
+        returnDo: fuelRecord.returnDo || 'NIL',
+        destination: fuelRecord.to || 'NIL',
+        goingDestination,
+        balance: fuelRecord.balance || 0,
+        message: `Found: DO ${doNumber}, Balance: ${fuelRecord.balance ?? 0}L`,
         success: true,
-        queueInfo: journeyData.queuedJourneys && journeyData.queuedJourneys.length > 0 ? {
-          hasQueue: true,
-          queuedCount: journeyData.queuedJourneys.length,
-          nextJourney: journeyData.fuelRecord,
-        } : undefined,
       };
     } catch (error) {
-      console.error('Error fetching journey by DO:', error);
+      console.error('Error fetching fuel record by DO:', error);
       return {
         fuelRecord: null,
         goingDo: 'NIL',
@@ -2146,12 +2116,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }));
 
       fetchDebounceTimers.current[index] = setTimeout(async () => {
-        const result = await fetchJourneyByDO(doNoUpper);
+        const result = await fetchByDONumber(doNoUpper);
 
-        // Detect direction from DO type (IMPORT = going, EXPORT = returning)
-        const direction = result.fuelRecord
-          ? (result.fuelRecord.returnDo === doNoUpper ? 'returning' : 'going')
-          : 'going';
+        // Direction is detected by the backend from which DO field matched
+        // (goingDo → going, returnDo → returning). Fall back to a local match
+        // against the record's returnDo if the backend didn't supply one.
+        const direction: 'going' | 'returning' = result.direction
+          ? result.direction
+          : (result.fuelRecord && result.fuelRecord.returnDo === doNoUpper ? 'returning' : 'going');
 
         // Check if return DO is missing
         const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';

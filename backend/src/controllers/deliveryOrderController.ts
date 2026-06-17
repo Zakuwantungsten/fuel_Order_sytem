@@ -20,7 +20,7 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import axios from 'axios';
-import { formatDONumber, parseDONumber, getNextDONumber as getNextFormattedDONumber } from '../utils/doNumberFormatter';
+import { formatDONumber } from '../utils/doNumberFormatter';
 import type { CompanyBranding } from '../utils/pdfGenerator';
 import {
   matchRouteLiters,
@@ -1873,135 +1873,6 @@ export const getCurrentJourneyByTruck = async (req: AuthRequest, res: Response):
 };
 
 /**
- * Get journey information by DO number
- * Used for LPO form when user enters DO number first
- * Returns complete journey info: truck, DOs, balance, fuel record, queue status
- */
-export const getJourneyByDO = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { doNumber } = req.params;
-    
-    const doNoUpper = doNumber.trim().toUpperCase();
-
-    // Find the delivery order
-    const deliveryOrder = await DeliveryOrder.findOne({
-      doNumber: doNoUpper,
-      isDeleted: false,
-    }).lean();
-
-    const { FuelRecord } = require('../models');
-    let fuelRecord = null;
-    let direction: 'going' | 'returning' = 'going';
-    let truckNo: string;
-    let normalizedTruck: string;
-
-    if (!deliveryOrder) {
-      // No DeliveryOrder document — fall back to searching FuelRecord directly.
-      // Imported data often lives only in FuelRecord (goingDo / returnDo) with no
-      // corresponding DeliveryOrder, so the original early-return was always hit.
-      fuelRecord = await FuelRecord.findOne({
-        $or: [{ goingDo: doNoUpper }, { returnDo: doNoUpper }],
-        isDeleted: false,
-      }).lean();
-
-      if (!fuelRecord) {
-        res.status(200).json({
-          success: true,
-          message: 'Delivery order not found',
-          data: {
-            found: false,
-            doNumber: doNoUpper,
-          },
-        });
-        return;
-      }
-
-      direction = fuelRecord.returnDo === doNoUpper ? 'returning' : 'going';
-      truckNo = fuelRecord.truckNo;
-      normalizedTruck = truckNo.replace(/[\s-]/g, '').toUpperCase();
-    } else {
-      // DeliveryOrder exists — look up the linked FuelRecord the original way
-      truckNo = deliveryOrder.truckNo;
-      normalizedTruck = truckNo.replace(/[\s-]/g, '').toUpperCase();
-
-      if (deliveryOrder.importOrExport === 'IMPORT') {
-        fuelRecord = await FuelRecord.findOne({ goingDo: doNoUpper, isDeleted: false }).lean();
-        direction = 'going';
-      } else if (deliveryOrder.importOrExport === 'EXPORT') {
-        fuelRecord = await FuelRecord.findOne({ returnDo: doNoUpper, isDeleted: false }).lean();
-        direction = 'returning';
-      }
-    }
-
-    // Get all fuel records for this truck to check for queue status
-    const allFuelRecords = await FuelRecord.find({
-      isDeleted: false,
-    }).sort({ date: -1 }).lean();
-
-    const truckRecords = allFuelRecords.filter((record: any) => {
-      const normalizedRecordTruck = record.truckNo.replace(/[\s-]/g, '').toUpperCase();
-      return normalizedRecordTruck === normalizedTruck;
-    });
-
-    // Find active and queued journeys
-    const activeJourney = truckRecords.find((r: any) => r.journeyStatus === 'active');
-    const queuedJourneys = truckRecords
-      .filter((r: any) => r.journeyStatus === 'queued')
-      .sort((a: any, b: any) => (a.queueOrder || 0) - (b.queueOrder || 0));
-
-    // Determine journey status
-    let journeyStatus: 'active' | 'queued' | 'completed' | 'cancelled' | 'not_found' = 'not_found';
-    let queuePosition = 0;
-
-    if (fuelRecord) {
-      journeyStatus = fuelRecord.journeyStatus || 'active';
-      if (journeyStatus === 'queued') {
-        queuePosition = fuelRecord.queueOrder || 0;
-      }
-    }
-
-    // Get associated DOs for complete journey info
-    let goingDO: any = deliveryOrder?.importOrExport === 'IMPORT' ? deliveryOrder : null;
-    let returningDO: any = deliveryOrder?.importOrExport === 'EXPORT' ? deliveryOrder : null;
-
-    if (direction === 'going' && fuelRecord?.returnDo) {
-      returningDO = await DeliveryOrder.findOne({ doNumber: fuelRecord.returnDo, isDeleted: false }).lean();
-    } else if (direction === 'returning' && fuelRecord?.goingDo) {
-      goingDO = await DeliveryOrder.findOne({ doNumber: fuelRecord.goingDo, isDeleted: false }).lean();
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Journey retrieved successfully',
-      data: {
-        found: true,
-        doNumber: doNoUpper,
-        truckNo: truckNo,
-        deliveryOrder: deliveryOrder,
-        fuelRecord: fuelRecord,
-        direction: direction,
-        journeyStatus: journeyStatus,
-        queuePosition: queuePosition,
-        goingDO: goingDO,
-        returningDO: returningDO,
-        destination: fuelRecord?.to || deliveryOrder?.destination,
-        goingDestination: fuelRecord?.originalGoingTo || fuelRecord?.to || deliveryOrder?.destination,
-        balance: fuelRecord?.balance || 0,
-        hasActiveJourney: !!activeJourney,
-        activeJourneyDO: activeJourney?.goingDo || null,
-        queuedJourneys: queuedJourneys.map((j: any) => ({
-          goingDo: j.goingDo,
-          queueOrder: j.queueOrder,
-          estimatedStartDate: j.estimatedStartDate,
-        })),
-      },
-    });
-  } catch (error: any) {
-    throw error;
-  }
-};
-
-/**
  * Get next DO number based on type (DO or SDO)
  * Returns the next DO number in XXXX/YY format (e.g., 0001/26, 0002/26)
  * Handles year rollover - resets to 0001 when year changes
@@ -2012,39 +1883,43 @@ export const getNextDONumber = async (req: AuthRequest, res: Response): Promise<
     const currentYear = new Date().getFullYear();
     const yearSuffix = currentYear.toString().slice(-2);
 
-    // Scope the query to the current year so sn resets correctly at year rollover.
-    // doNumber format is XXXX/YY, so filtering on the suffix isolates this year's DOs.
-    const lastDO = await DeliveryOrder.findOne({
-      doType,
-      isDeleted: false,
-      doNumber: { $regex: `/${yearSuffix}$` },
-    })
-      .sort({ sn: -1 })
-      .select('doNumber sn')
-      .lean();
-
-    let nextDONumber: string;
-    let nextSN: number;
-
-    if (!lastDO || !lastDO.doNumber) {
-      // No DO for this year yet — start from 1
-      nextSN = 1;
-      nextDONumber = formatDONumber(1, currentYear);
-    } else {
-      const parsed = parseDONumber(lastDO.doNumber);
-      nextSN = lastDO.sn + 1;
-      nextDONumber = formatDONumber((parsed?.sequentialNumber ?? 0) + 1, currentYear);
-    }
-
-    // Race-condition safety check: if the candidate already exists, derive the true max
-    // from the current year's records via aggregation rather than a full scan.
-    const exists = await DeliveryOrder.exists({ doNumber: nextDONumber, doType, isDeleted: false });
-    if (exists) {
+    // Derive the next number from the sequential value embedded in `doNumber`, NOT from
+    // the `sn` column. Imported DOs carry their spreadsheet's row-serial in `sn`, which
+    // bears no relation to their actual DO number (e.g. doNumber 2198/26 with sn 54), so
+    // ranking by `sn` would silently ignore high imported numbers.
+    //
+    // Scope to the current year so the sequence resets at year rollover — doNumber format
+    // is XXXX/YY, so filtering on the suffix isolates this year's DOs. The numeric prefix
+    // (the part before "/") is parsed in-DB and the max is taken.
+    const computeMaxSequential = async (): Promise<number> => {
       const agg = await DeliveryOrder.aggregate([
         { $match: { doType, isDeleted: false, doNumber: { $regex: `/${yearSuffix}$` } } },
-        { $group: { _id: null, maxSN: { $max: '$sn' } } },
+        {
+          $group: {
+            _id: null,
+            maxSeq: {
+              $max: {
+                $convert: {
+                  input: { $arrayElemAt: [{ $split: ['$doNumber', '/'] }, 0] },
+                  to: 'int',
+                  onError: 0,
+                  onNull: 0,
+                },
+              },
+            },
+          },
+        },
       ]);
-      nextSN = (agg[0]?.maxSN ?? 0) + 1;
+      return agg[0]?.maxSeq ?? 0;
+    };
+
+    let nextSN = (await computeMaxSequential()) + 1;
+    let nextDONumber = formatDONumber(nextSN, currentYear);
+
+    // Race-condition safety check: if the candidate already exists, recompute the true max.
+    const exists = await DeliveryOrder.exists({ doNumber: nextDONumber, doType, isDeleted: false });
+    if (exists) {
+      nextSN = (await computeMaxSequential()) + 1;
       nextDONumber = formatDONumber(nextSN, currentYear);
     }
 
