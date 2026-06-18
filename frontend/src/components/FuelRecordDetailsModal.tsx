@@ -416,9 +416,15 @@ export default function FuelRecordDetailsModal({
                               {details.lpoEntries.map((lpo, idx) => (
                                 <tr
                                   key={lpo.id || idx}
-                                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${lpo.isDriverAccount ? 'bg-red-50/40 dark:bg-red-900/10' : ''}`}
+                                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${lpo.isCancelled ? 'bg-red-50/60 dark:bg-red-900/20' : lpo.isDriverAccount ? 'bg-red-50/40 dark:bg-red-900/10' : ''}`}
                                 >
-                                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">{lpo.lpoNo}</td>
+                                  <td className="py-2 pr-3 font-medium whitespace-nowrap">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={lpo.isCancelled ? 'line-through text-red-400 dark:text-red-500' : 'text-slate-900 dark:text-slate-100'}>{lpo.lpoNo}</span>
+                                      {lpo.isCancelled && <span className="px-1 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
+                                      {!lpo.isCancelled && lpo.originalLtrs != null && lpo.originalLtrs !== lpo.ltrs && <span className="px-1 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded">AMENDED</span>}
+                                    </div>
+                                  </td>
                                   <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{lpo.date}</td>
                                   <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{lpo.dieselAt}</td>
                                   <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
@@ -430,13 +436,15 @@ export default function FuelRecordDetailsModal({
                                       <span className="text-amber-600 dark:text-amber-400 italic">NIL (Cash)</span>
                                     ) : lpo.doSdo}
                                   </td>
-                                  <td className="py-2 pr-3 text-right font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                                    {lpo.ltrs?.toLocaleString() ?? 0}
-                                    {lpo.originalLtrs !== undefined && lpo.originalLtrs !== null && lpo.originalLtrs !== lpo.ltrs && (
-                                      <div className="text-amber-600 dark:text-amber-400 font-normal">
-                                        was {lpo.originalLtrs.toLocaleString()}
-                                      </div>
-                                    )}
+                                  <td className="py-2 pr-3 text-right whitespace-nowrap">
+                                    <span className="inline-flex items-center justify-end gap-1.5">
+                                      {lpo.originalLtrs != null && lpo.originalLtrs !== lpo.ltrs && (
+                                        <span className="font-normal text-slate-400 dark:text-slate-500 line-through">{lpo.originalLtrs.toLocaleString()}</span>
+                                      )}
+                                      <span className={`font-medium ${lpo.isCancelled ? 'text-red-400 dark:text-red-500 line-through' : 'text-slate-900 dark:text-slate-100'}`}>
+                                        {lpo.ltrs?.toLocaleString() ?? 0}
+                                      </span>
+                                    </span>
                                   </td>
                                   <td className="py-2 pr-3 text-right text-slate-600 dark:text-slate-400 whitespace-nowrap">
                                     {lpo.pricePerLtr?.toLocaleString() ?? 0}

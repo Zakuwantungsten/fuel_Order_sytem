@@ -904,6 +904,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           pricePerLtr: '$entries.rate',
           destinations: { $ifNull: ['$entries.dest', 'PENDING'] },
           isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
+          isCancelled: { $ifNull: ['$entries.isCancelled', false] },
+          originalLtrs: '$entries.originalLiters',
         },
       },
       { $sort: { date: 1 } },
@@ -968,6 +970,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           pricePerLtr: '$entries.rate',
           destinations: { $ifNull: ['$entries.dest', 'NIL'] },
           isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
+          isCancelled: { $ifNull: ['$entries.isCancelled', false] },
+          originalLtrs: '$entries.originalLiters',
         },
       },
       { $sort: { date: 1 } },
@@ -1002,6 +1006,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
             destinations: entry.dest,  // This will be 'NIL'
             isDriverAccount: true,
             originalDoNo: entry.originalDoNo,  // The reference DO
+            isCancelled: entry.isCancelled ?? false,
+            originalLtrs: entry.originalLiters ?? null,
           });
         }
       }
