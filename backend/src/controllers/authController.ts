@@ -1481,6 +1481,8 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
     // ── Rotate the HttpOnly cookie if this request came from one ─────────
     // Each use of the cookie issues a brand-new token and resets the TTL
     // so active users stay logged in without ever touching localStorage.
+    const sessionTimeoutMinutes = sessionSysConfig?.systemSettings?.session?.sessionTimeout ?? 30;
+
     if (usedCookie) {
       const rmDays = rtRefreshExpiryDays ?? 30;
       res.cookie('fuel_order_refresh', tokens.refreshToken, refreshCookieOptions(rmDays));
@@ -1488,13 +1490,13 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
       res.status(200).json({
         success: true,
         message: 'Token refreshed successfully',
-        data: { accessToken: tokens.accessToken },
+        data: { accessToken: tokens.accessToken, sessionTimeoutMinutes },
       });
     } else {
       res.status(200).json({
         success: true,
         message: 'Token refreshed successfully',
-        data: tokens,
+        data: { ...tokens, sessionTimeoutMinutes },
       });
     }
   } catch (error: any) {

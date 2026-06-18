@@ -197,11 +197,26 @@ export default function SecurityPoliciesSubTab({ onMessage, onNavigate }: Props)
 
     if (result.ok) {
       // Sync form and server-state snapshot with what was actually stored in the DB
-      if (result.data?.data?.session) {
-        setSessionSettings((prev: any) => ({ ...prev, ...result.data.data.session }));
-        setServerSession((prev: any) => ({ ...prev, ...result.data.data.session }));
+      const savedSession = result.data?.data?.session;
+      if (savedSession) {
+        setSessionSettings((prev: any) => ({ ...prev, ...savedSession }));
+        setServerSession((prev: any) => ({ ...prev, ...savedSession }));
+
+        // Propagate the new timeout to the current session immediately so the
+        // running inactivity tracker restarts with the correct value without a re-login.
+        try {
+          const stored = sessionStorage.getItem('fuel_order_auth');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            parsed.sessionTimeoutMinutes = savedSession.sessionTimeout;
+            sessionStorage.setItem('fuel_order_auth', JSON.stringify(parsed));
+            window.dispatchEvent(new Event('session-timeout-updated'));
+          }
+        } catch {
+          // Non-critical — ignore
+        }
       }
-      onMessage('success', 'Session settings saved. Changes apply to new sessions.');
+      onMessage('success', 'Session settings saved. Changes apply to all sessions immediately.');
     } else {
       onMessage('error', result.error);
     }

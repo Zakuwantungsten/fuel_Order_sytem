@@ -240,13 +240,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
               };
 
               // Persist session data so next in-tab navigation doesn't re-refresh
+              const restoredTimeout = (refreshResult as any).sessionTimeoutMinutes ?? 30;
               sessionStorage.setItem('fuel_order_auth', JSON.stringify({
                 ...user,
                 token: newAccessToken,
                 permissions,
                 lastLogin: authUser.lastLogin,
                 theme: userTheme,
-                sessionTimeoutMinutes: 30,
+                sessionTimeoutMinutes: restoredTimeout,
               }));
 
               dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
@@ -590,37 +591,44 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Activity tracking for auto-logout on inactivity
   useEffect(() => {
-    if (state.isAuthenticated && state.user) {
-      // Read the configurable session timeout stored at login time (minutes → ms)
-      let sessionTimeoutMs = 30 * 60 * 1000; // fallback: 30 minutes
+    const readTimeoutMs = (): number => {
       try {
         const stored = sessionStorage.getItem('fuel_order_auth');
         if (stored) {
           const parsed = JSON.parse(stored);
           if (typeof parsed.sessionTimeoutMinutes === 'number' && parsed.sessionTimeoutMinutes > 0) {
-            sessionTimeoutMs = parsed.sessionTimeoutMinutes * 60 * 1000;
+            return parsed.sessionTimeoutMinutes * 60 * 1000;
           }
         }
       } catch {
-        // Silently use default
+        // fall through to default
       }
-
-      // Start tracking activity when user is authenticated
-      activityTracker.start(() => {
-        console.log(`User inactive for ${sessionTimeoutMs / 60000} minutes, logging out...`);
-        logout();
-        // Redirect to login with a message
-        window.location.href = '/login?reason=inactivity';
-      }, sessionTimeoutMs);
-    } else {
-      // Stop tracking when user is not authenticated
-      activityTracker.stop();
-    }
-
-    // Cleanup on unmount
-    return () => {
-      activityTracker.stop();
+      return 30 * 60 * 1000;
     };
+
+    const startTracker = () => {
+      const sessionTimeoutMs = readTimeoutMs();
+      activityTracker.start(() => {
+        logout();
+        window.location.href = `/login?reason=inactivity&timeout=${Math.round(sessionTimeoutMs / 60000)}`;
+      }, sessionTimeoutMs);
+    };
+
+    if (state.isAuthenticated && state.user) {
+      startTracker();
+
+      // Re-start the tracker whenever the admin updates the session timeout setting
+      // so the change takes effect for the current session without requiring a re-login.
+      const handleTimeoutUpdate = () => startTracker();
+      window.addEventListener('session-timeout-updated', handleTimeoutUpdate);
+      return () => {
+        window.removeEventListener('session-timeout-updated', handleTimeoutUpdate);
+        activityTracker.stop();
+      };
+    } else {
+      activityTracker.stop();
+      return () => { activityTracker.stop(); };
+    }
   }, [state.isAuthenticated, state.user]);
 
   const contextValue: AuthContextType = {

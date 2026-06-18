@@ -55,8 +55,9 @@ const Login: React.FC = () => {
       setSessionMessageTitle('Session Expired');
       setSessionMessage('Your session has expired. Please log in again.');
     } else if (reason === 'inactivity') {
+      const timeout = params.get('timeout') || '30';
       setSessionMessageTitle('Session Expired');
-      setSessionMessage('You were logged out due to 30 minutes of inactivity. Please log in again.');
+      setSessionMessage(`You were logged out due to ${timeout} minutes of inactivity. Please log in again.`);
     } else if (reason === 'unauthorized') {
       setSessionMessageTitle('Session Expired');
       setSessionMessage('Your session is no longer valid. Please log in again.');
