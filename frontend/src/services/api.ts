@@ -684,7 +684,7 @@ export const lpoDocumentsAPI = {
   },
   
   getByLpoNo: async (lpoNo: string): Promise<LPOSummary> => {
-    const response = await apiClient.get(`/lpo-documents/lpo/${lpoNo}`);
+    const response = await apiClient.get(`/lpo-documents/lpo/${encodeURIComponent(lpoNo)}`);
     return response.data.data;
   },
   

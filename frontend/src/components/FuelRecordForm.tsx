@@ -61,8 +61,18 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
 
   useEffect(() => {
     if (initialData) {
-      setFormData(initialData);
-      
+      // Sanitize null checkpoint values to 0 so they don't fail backend validation
+      const CHECKPOINT_FIELDS = [
+        'mmsaYard', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing',
+        'tdmGoing', 'zambiaGoing', 'congoFuel', 'zambiaReturn', 'tundumaReturn',
+        'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
+      ] as const;
+      const sanitized = { ...initialData };
+      for (const field of CHECKPOINT_FIELDS) {
+        if (sanitized[field] == null) sanitized[field] = 0;
+      }
+      setFormData(sanitized);
+
       // If auto-calculated, lock all allocation fields by default
       if (autoCalculated) {
         setLockedFields(new Set([
@@ -130,7 +140,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
     
     if (['totalLts', 'extra', 'mmsaYard', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing',
          'moroGoing', 'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel',
-         'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn'].includes(name)) {
+         'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn'].includes(name)) {
       finalValue = parseFloat(value) || 0;
     } else if (uppercaseFields.includes(name)) {
       finalValue = value.toUpperCase();
