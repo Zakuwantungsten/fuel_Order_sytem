@@ -1519,15 +1519,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         }
       }
 
-      // Regular station change - update rates for existing entries
+      // Regular station change - update rates for existing entries.
+      // In forwarding mode the entries were zeroed out, so always apply defaults.liters.
+      // On a normal form, preserve any liters the user has already typed.
       const updatedEntries = formData.entries?.map((entry, idx) => {
         const direction = entryAutoFillData[idx]?.direction || 'going';
         const defaults = getStationDefaults(value, direction, entry.dest);
+        const resolvedLiters = isForwardingMode ? defaults.liters : (entry.liters || defaults.liters);
         return {
           ...entry,
           rate: defaults.rate,
-          liters: entry.liters || defaults.liters,
-          amount: (entry.liters || defaults.liters) * defaults.rate
+          liters: resolvedLiters,
+          amount: resolvedLiters * defaults.rate
         };
       }) || [];
       
@@ -2831,6 +2834,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         return;
       }
 
+      // CASH-specific validation — mirrors handleSubmit
+      if (formData.station === 'CASH') {
+        if (!goingEnabled && !returningEnabled) {
+          toast.warn('For CASH payments, you must enable at least one direction (Going or Returning).');
+          return;
+        }
+        if (goingEnabled && !goingCheckpoint) {
+          toast.warn('Going direction is enabled but no checkpoint is selected. Please select a checkpoint or disable Going direction.');
+          return;
+        }
+        if (returningEnabled && !returningCheckpoint) {
+          toast.warn('Returning direction is enabled but no checkpoint is selected. Please select a checkpoint or disable Returning direction.');
+          return;
+        }
+      }
+
       // Submit the current LPO using the same format as handleSubmit
       const validEntries = formData.entries.filter(e => e != null).map((entry, idx) => {
         const af = entryAutoFillData[idx];
@@ -2848,6 +2867,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           isRefer: isREF,
           referenceDoNo: isDA ? (af?.referenceDoNo || undefined) : undefined,
           journeyDirection: af?.direction,
+          goingCheckpoint: formData.station === 'CASH' && goingEnabled && goingCheckpoint ? goingCheckpoint : undefined,
+          returningCheckpoint: formData.station === 'CASH' && returningEnabled && returningCheckpoint ? returningCheckpoint : undefined,
         };
       });
 
@@ -2862,33 +2883,107 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         total,
       };
 
+      // CASH cancellation — cancel selected existing station LPOs before saving
+      if (formData.station === 'CASH' && selectedLPOsToCancel.size > 0) {
+        const hasAnySelection = Array.from(selectedLPOsToCancel.values()).some(set => set.size > 0);
+        if (hasAnySelection) {
+          try {
+            for (const [truckNo, selectedLPOIds] of selectedLPOsToCancel) {
+              if (selectedLPOIds.size === 0) continue;
+              const truckDirections = existingLPOsForTrucks.get(truckNo);
+              if (!truckDirections) continue;
+              for (const { lpos, direction, doNo } of truckDirections) {
+                const checkpoint = direction === 'Going' ? goingCheckpoint : returningCheckpoint;
+                for (const lpo of lpos) {
+                  const lpoId = (lpo as any)._id?.toString() || lpo.id?.toString();
+                  if (lpoId && selectedLPOIds.has(lpoId)) {
+                    await lpoDocumentsAPI.cancelTruck(
+                      lpoId,
+                      truckNo,
+                      checkpoint as CancellationPoint,
+                      `Cash mode payment - station was out of fuel (${direction}, DO: ${doNo})`
+                    );
+                  }
+                }
+              }
+            }
+          } catch (error: any) {
+            const msg = error?.response?.data?.message || error?.message || 'Unknown error';
+            toast.error(`Failed to cancel existing LPO: ${msg}. Fix the issue and try again. The CASH LPO has NOT been saved.`);
+            return;
+          }
+        }
+      }
+
+      // CASH amendment — reduce existing station LPO entry liters before saving
+      if (formData.station === 'CASH' && selectedLPOsToAmend.size > 0) {
+        try {
+          for (const [amendKey, { lpoId, newLiters }] of selectedLPOsToAmend) {
+            const [truckNo] = amendKey.split('::');
+            const truckDirections = existingLPOsForTrucks.get(truckNo);
+            if (!truckDirections) continue;
+            for (const { lpos, direction, doNo } of truckDirections) {
+              const lpoMatch = lpos.find((l) => {
+                const id = (l as any)._id?.toString() || l.id?.toString();
+                return id === lpoId;
+              });
+              if (!lpoMatch) continue;
+              const checkpoint = direction === 'Going' ? goingCheckpoint : returningCheckpoint;
+              await lpoDocumentsAPI.amendTruck(
+                lpoId,
+                truckNo,
+                newLiters,
+                checkpoint as string,
+                `Cash mode payment - truck received ${newLiters}L cash, reducing station allocation (${direction}, DO: ${doNo})`
+              );
+            }
+          }
+        } catch (error: any) {
+          const msg = error?.response?.data?.message || error?.message || 'Unknown error';
+          toast.error(`Failed to amend existing LPO: ${msg}. Fix the issue and try again. The CASH LPO has NOT been saved.`);
+          return;
+        }
+      }
+
       const createdLpo = await lpoDocumentsAPI.create(lpoData);
       console.log('Source LPO created:', createdLpo);
 
       // Fetch the next LPO number immediately for the forwarded LPO
       const nextLpoNo = await lpoDocumentsAPI.getNextLpoNumber();
 
-      // Keep the same trucks for forwarding, preserve all fields properly
+      // Keep the same trucks for forwarding. Zero liters/rate/amount so the next
+      // station's defaults populate cleanly when the user selects a station.
       const forwardedEntries = formData.entries.map(entry => ({
-        id: undefined, // Remove ID so it's treated as new
+        id: undefined,
         doNo: entry.doNo || 'NIL',
         truckNo: entry.truckNo,
         dest: entry.dest || 'NIL',
-        liters: entry.liters || 0,
-        rate: entry.rate || 0,
-        amount: entry.amount || 0,
+        liters: 0,
+        rate: 0,
+        amount: 0,
       }));
 
       // Reset form with the trucks pre-filled AND the next LPO number ready
       setFormData({
         id: undefined,
-        lpoNo: nextLpoNo, // Already fetched, ready to use
+        lpoNo: nextLpoNo,
         date: new Date().toISOString().split('T')[0],
-        station: '', // User will select this
+        station: '',
         orderOf: formData.orderOf || 'TAHMEED',
         entries: forwardedEntries,
         total: undefined,
       });
+
+      // Reset autofill data to an unfetched state so stale formula/balance badges
+      // from the previous station don't bleed into the forwarded form.
+      setEntryAutoFillData(
+        Object.fromEntries(
+          forwardedEntries.map((_, idx) => [
+            idx,
+            { direction: 'going' as const, loading: false, fetched: false, fuelRecord: null },
+          ])
+        )
+      );
 
       // Set forwarding mode
       setIsForwardingMode(true);
