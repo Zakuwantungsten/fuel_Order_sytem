@@ -409,6 +409,7 @@ export default function FuelRecordDetailsModal({
                                 <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">DO</th>
                                 <th className="pb-2 text-right font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Liters</th>
                                 <th className="pb-2 text-right font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Rate</th>
+                                <th className="pb-2 text-center font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Chkp</th>
                                 <th className="pb-2 text-center font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">Type</th>
                               </tr>
                             </thead>
@@ -448,6 +449,15 @@ export default function FuelRecordDetailsModal({
                                   </td>
                                   <td className="py-2 pr-3 text-right text-slate-600 dark:text-slate-400 whitespace-nowrap">
                                     {lpo.pricePerLtr?.toLocaleString() ?? 0}
+                                  </td>
+                                  <td className="py-2 pr-3 text-center whitespace-nowrap">
+                                    {lpo.checkpoint ? (
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                        {lpo.checkpoint}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300 dark:text-slate-600">—</span>
+                                    )}
                                   </td>
                                   <td className="py-2 text-center whitespace-nowrap">
                                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${lpoTypeStyle(lpo.journeyType)}`}>

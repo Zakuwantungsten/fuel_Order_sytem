@@ -906,6 +906,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
           isCancelled: { $ifNull: ['$entries.isCancelled', false] },
           originalLtrs: '$entries.originalLiters',
+          goingCheckpoint: '$entries.goingCheckpoint',
+          returningCheckpoint: '$entries.returningCheckpoint',
         },
       },
       { $sort: { date: 1 } },
@@ -972,6 +974,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
           isCancelled: { $ifNull: ['$entries.isCancelled', false] },
           originalLtrs: '$entries.originalLiters',
+          goingCheckpoint: '$entries.goingCheckpoint',
+          returningCheckpoint: '$entries.returningCheckpoint',
         },
       },
       { $sort: { date: 1 } },
@@ -1008,6 +1012,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
             originalDoNo: entry.originalDoNo,  // The reference DO
             isCancelled: entry.isCancelled ?? false,
             originalLtrs: entry.originalLiters ?? null,
+            goingCheckpoint: entry.goingCheckpoint ?? null,
+            returningCheckpoint: entry.returningCheckpoint ?? null,
           });
         }
       }
@@ -1119,6 +1125,25 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
         totalReturnFuel: Object.values(returnFuelAllocations).reduce((a, b) => a + Math.abs(b), 0),
       },
       lpoEntries: filteredLPOs.map((lpo: any) => {
+        // Checkpoint label lookup
+        const CHECKPOINT_LABELS: Record<string, string> = {
+          DAR_GOING: 'DrG', MORO_GOING: 'MoG', MBEYA_GOING: 'MbG', INFINITY_GOING: 'MbG',
+          TDM_GOING: 'TdG', ZAMBIA_GOING: 'ZmG', CONGO_GOING: 'Cng',
+          ZAMBIA_RETURNING: 'ZmR', TDM_RETURN: 'TdR', MBEYA_RETURN: 'MbR',
+          MORO_RETURN: 'MoR', DAR_RETURN: 'DrR', TANGA_RETURN: 'TnR',
+          CONGO_RETURNING: 'Cng', CUSTOM_GOING: 'Cst', CUSTOM_RETURN: 'Cst',
+        };
+        const stationCheckpointFallback = (station: string, isReturn: boolean): string => {
+          const s = (station || '').toUpperCase();
+          if (s.startsWith('LAKE') && !s.includes('TUNDUMA')) return isReturn ? 'ZmR' : 'ZmG';
+          if (s.includes('TUNDUMA')) return isReturn ? 'TdR' : 'TdG';
+          if (s.includes('INFINITY') || s.includes('MBEYA')) return isReturn ? 'MbR' : 'MbG';
+          if (s.includes('MOROGORO') || s.includes('KANGE') || s.includes('GBP') || s.includes('GPB')) return isReturn ? 'MoR' : 'MoG';
+          if (s.includes('TANGA')) return isReturn ? 'TnR' : 'TnG';
+          if (s.includes('DAR') || s === 'CASH') return isReturn ? 'DrR' : 'DrG';
+          return '';
+        };
+
         // Determine journey type
         let journeyType: 'going' | 'return' | 'cash' | 'driver_account' | 'related';
         const isNilDo = !lpo.doSdo || lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || lpo.doSdo === '';
@@ -1137,10 +1162,17 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           journeyType = 'related';
         }
         
+        const isReturn = journeyType === 'return';
+        const rawCheckpoint = isReturn ? lpo.returningCheckpoint : lpo.goingCheckpoint;
+        const checkpoint = rawCheckpoint
+          ? (CHECKPOINT_LABELS[rawCheckpoint] || rawCheckpoint)
+          : stationCheckpointFallback(lpo.dieselAt, isReturn);
+
         return {
           ...lpo,
           id: lpo._id,
           journeyType,
+          checkpoint,
           isDriverAccount: lpo.isDriverAccount || false,
           originalDoNo: lpo.originalDoNo,  // Reference DO for driver account entries
         };

@@ -895,10 +895,11 @@ export interface FuelRecordDetails {
     totalGoingFuel: number;
     totalReturnFuel: number;
   };
-  lpoEntries: (LPOEntry & { 
+  lpoEntries: (LPOEntry & {
     journeyType: 'going' | 'return' | 'cash' | 'driver_account' | 'related';
     isDriverAccount?: boolean;
-    originalDoNo?: string;  // Reference DO for driver account entries
+    originalDoNo?: string;
+    checkpoint?: string;
   })[];
   yardDispenses: YardFuelDispense[];
   summary: {
