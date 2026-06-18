@@ -96,7 +96,7 @@ const LPOs = () => {
   const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account', 'refer'] as const;
   type ViewMode = typeof VIEW_MODES[number];
   const [viewMode, setViewMode] = usePersistedState<ViewMode>('lpo:viewMode', 'list');
-  const [selectedWorkbookId, setSelectedWorkbookId] = useState<string | number | null>(null);
+  const [selectedWorkbookId, setSelectedWorkbookId] = usePersistedState<string | number | null>('lpo:selectedWorkbookId', null);
   const [summaryFilters, setSummaryFilters] = usePersistedState('lpo:summaryFilters', {
     stations: [] as string[],
     dateFrom: '',
@@ -105,7 +105,7 @@ const LPOs = () => {
   const [openDropdowns, setOpenDropdowns] = useState<{[key: string | number]: boolean}>({});
   const [dropdownPosition, setDropdownPosition] = useState<{top?: number, bottom?: number, left: number}>({top: 0, left: 0});
   const [exportingYear, setExportingYear] = useState<number | null>(null);
-  const [selectedLpoNo, setSelectedLpoNo] = useState<string | null>(null);
+  const [selectedLpoNo, setSelectedLpoNo] = usePersistedState<string | null>('lpo:selectedLpoNo', null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | number | null>(null);
   const [downloadingImage, setDownloadingImage] = useState<string | number | null>(null);
   
