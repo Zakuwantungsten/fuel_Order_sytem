@@ -999,8 +999,13 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         <div className="grid grid-cols-2 gap-4 mb-3">
                           <div>
                             <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Quantity</p>
-                            <p className={`text-sm font-semibold ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                              {entry.liters.toFixed(2)} L
+                            <p className="flex items-center gap-1.5">
+                              {entry.originalLiters != null && entry.originalLiters !== entry.liters && (
+                                <span className="text-sm font-semibold text-gray-400 dark:text-gray-500 line-through">{entry.originalLiters.toFixed(2)} L</span>
+                              )}
+                              <span className={`text-sm font-semibold ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                                {entry.liters.toFixed(2)} L
+                              </span>
                             </p>
                           </div>
                           <div>
@@ -1116,7 +1121,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       />
                     ) : (
-                      <span className={`text-sm ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.liters}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        {entry.originalLiters != null && entry.originalLiters !== entry.liters && (
+                          <span className="text-sm text-gray-400 dark:text-gray-500 line-through">{entry.originalLiters}</span>
+                        )}
+                        <span className={`text-sm ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.liters}</span>
+                      </span>
                     )}
                   </div>
                   
