@@ -634,9 +634,79 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         </div>
       )}
 
-      {/* Sheet Header - LPO Header Info */}
-      <div className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2">
-        {/* Desktop: single row | Mobile: stacked */}
+      {/* Mobile Header */}
+      <div className="lg:hidden bg-gradient-to-br from-[#1b2433] to-[#0f1722] px-[18px] pt-[14px] pb-[22px] rounded-b-[26px] relative" style={{boxShadow: '0 12px 28px -14px rgba(15,23,34,0.6)'}}>
+        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px'}}>
+          <div className="text-[17px] font-extrabold text-white tracking-tight">LPO {editedSheet.lpoNo}</div>
+          <div className="relative">
+            <button
+              onClick={() => setShowCopyDropdown(!showCopyDropdown)}
+              style={{width: '38px', height: '38px', borderRadius: '11px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)'}}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c4cedd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
+              </svg>
+            </button>
+            {showCopyDropdown && (
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-xl z-50">
+                <div className="py-1">
+                  <div className="px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wide">Copy</div>
+                  <button onClick={handleCopyImageToClipboard} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <Image className="w-4 h-4 mr-3 text-gray-400" />Copy as Image
+                  </button>
+                  <button onClick={handleCopyWhatsAppText} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <MessageSquare className="w-4 h-4 mr-3 text-gray-400" />Copy for WhatsApp
+                  </button>
+                  <button onClick={handleCopyCsvText} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <Calculator className="w-4 h-4 mr-3 text-gray-400" />Copy as CSV Text
+                  </button>
+                  <div className="border-t border-gray-100 my-1" />
+                  <div className="px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wide">Download</div>
+                  <button onClick={handleDownloadPDF} disabled={downloadingPdf} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                    {downloadingPdf ? <Loader2 className="w-4 h-4 mr-3 text-red-500 animate-spin" /> : <FileDown className="w-4 h-4 mr-3 text-red-500" />}
+                    {downloadingPdf ? 'Downloading...' : 'Download as PDF'}
+                  </button>
+                  <button onClick={handleDownloadImage} disabled={downloadingImage} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                    {downloadingImage ? <Loader2 className="w-4 h-4 mr-3 text-green-500 animate-spin" /> : <Download className="w-4 h-4 mr-3 text-green-500" />}
+                    {downloadingImage ? 'Downloading...' : 'Download as Image'}
+                  </button>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button onClick={handleStartEdit} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <Edit2 className="w-4 h-4 mr-3 text-blue-500" />Edit LPO
+                  </button>
+                  {editedSheet.entries.some(e => !e.isCancelled) && (
+                    <button onClick={() => { setShowCopyDropdown(false); setShowCancelAllModal(true); }} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50">
+                      <XCircle className="w-4 h-4 mr-3" />Cancel LPO
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+          <div>
+            <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#6b7990] mb-[3px]">Station</div>
+            <div className="text-[13.5px] font-bold text-[#eef2f8]">{editedSheet.station}</div>
+          </div>
+          <div>
+            <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#6b7990] mb-[3px]">Date</div>
+            <div className="text-[13.5px] font-bold text-[#eef2f8]">{new Date(editedSheet.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+          </div>
+          <div>
+            <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#6b7990] mb-[3px]">Order Of</div>
+            <div className="text-[13.5px] font-bold text-[#eef2f8]">{editedSheet.orderOf}</div>
+          </div>
+          <div>
+            <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#6b7990] mb-[3px]">Grand Total</div>
+            <div className="text-[13.5px] font-extrabold text-[#4ade80] tabular-nums">${formatCurrency(editedSheet.total)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sheet Header - Desktop Only */}
+      <div className="hidden lg:block border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2">
+        {/* Desktop: single row */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-x-4">
           {/* LPO details - wrap on mobile */}
           <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5">
@@ -898,163 +968,183 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         </div>
       )}
 
-      {/* Sheet Content - Excel-like Table */}
-      <div className="flex-1 overflow-auto p-2 sm:p-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+      {/* Sheet Content */}
+      <div className="flex-1 overflow-auto">
 
-            {/* ===== MOBILE CARD VIEW (lg:hidden) ===== */}
-            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-800">
-              {visibleEntries.map((entry, index) => {
-                const isCancelled = entry.isCancelled;
-                const isDriverAccount = entry.isDriverAccount;
+        {/* ===== MOBILE VIEW (lg:hidden) ===== */}
+        <div className="lg:hidden bg-[#eef1f5] min-h-full">
 
-                return (
-                  <div key={index} className={`${isCancelled ? 'bg-gray-50 dark:bg-gray-800/60' : 'bg-white dark:bg-gray-900'}`}>
-                    {editingRow === index ? (
-                      /* Edit mode */
-                      <div className="p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Editing Entry</span>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleRowSave(index)}
-                              disabled={isSaving}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium disabled:opacity-50"
-                            >
-                              <Save className="w-3.5 h-3.5" />
-                              {isSaving ? 'Saving…' : 'Save'}
-                            </button>
-                            <button
-                              onClick={() => handleRowCancel(index)}
-                              className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">Truck No.</label>
-                            <input type="text" value={entry.truckNo} onChange={(e) => handleEntryEdit(index, 'truckNo', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">DO No.</label>
-                            <input type="text" value={entry.doNo} onChange={(e) => handleEntryEdit(index, 'doNo', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">Liters</label>
-                            <input type="number" value={entry.liters} onChange={(e) => handleEntryEdit(index, 'liters', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">Rate</label>
-                            <input type="number" step="0.1" value={entry.rate} onChange={(e) => handleEntryEdit(index, 'rate', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                          </div>
-                          <div className="col-span-2">
-                            <label className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1 block">Destination</label>
-                            <input type="text" value={entry.dest} onChange={(e) => handleEntryEdit(index, 'dest', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      /* View mode */
-                      <div className="p-3">
-                        {/* Header: truck + status badges + total */}
-                        <div className="flex items-start justify-between mb-1.5">
-                          <div className="min-w-0 flex-1 mr-3">
-                            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                              <span className={`font-bold text-base tracking-wide ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-blue-600 dark:text-blue-400'}`}>
-                                {entry.truckNo}
-                              </span>
-                              {!isCancelled && !isDriverAccount && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 tracking-wide uppercase">
-                                  Verified
-                                </span>
-                              )}
-                              {isCancelled && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 tracking-wide uppercase">
-                                  Cancelled
-                                </span>
-                              )}
-                              {isDriverAccount && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 tracking-wide uppercase">
-                                  Driver A/C
-                                </span>
-                              )}
-                            </div>
-                            <p className={`text-xs ${isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                              DO #{isDriverAccount ? 'NIL' : entry.doNo} • {entry.dest}
-                            </p>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Total</p>
-                            <p className={`text-base font-bold ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                              ${formatCurrency(entry.amount)}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Quantity + Rate */}
-                        <div className="grid grid-cols-2 gap-4 mb-3">
-                          <div>
-                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Quantity</p>
-                            <p className="flex items-center gap-1.5">
-                              {entry.originalLiters != null && entry.originalLiters !== entry.liters && (
-                                <span className="text-sm font-semibold text-gray-400 dark:text-gray-500 line-through">{entry.originalLiters.toFixed(2)} L</span>
-                              )}
-                              <span className={`text-sm font-semibold ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                                {entry.liters.toFixed(2)} L
-                              </span>
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Rate</p>
-                            <p className={`text-sm ${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                              ${entry.rate} / L
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="flex gap-2">
-                          {isCancelled ? (
-                            <button
-                              onClick={() => handleUncancelEntry(index)}
-                              disabled={isSaving}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                              Restore Entry
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => handleStartRowEdit(index)}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                                Modify
-                              </button>
-                              <button
-                                onClick={() => openCancelModal(index)}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-red-200 dark:border-red-800 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                              >
-                                <XCircle className="w-4 h-4" />
-                                Void
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          {/* Search */}
+          <div className="px-4 pt-4 pb-1.5">
+            <div className="relative">
+              <Search className="absolute left-[14px] top-1/2 -translate-y-1/2 w-4 h-4 text-[#97a3b6] pointer-events-none" />
+              <input
+                type="text"
+                value={entrySearch}
+                onChange={(e) => setEntrySearch(e.target.value)}
+                placeholder="Search truck, DO or destination"
+                className="w-full h-[46px] pl-[40px] pr-4 border border-[#e3e8f0] rounded-[14px] bg-white text-[13.5px] font-semibold text-[#1f2937] placeholder-[#97a3b6] outline-none"
+              />
             </div>
+          </div>
 
-            {/* ===== DESKTOP TABLE VIEW (hidden lg:block) ===== */}
-            <div className="hidden lg:block">
+          {/* Section label */}
+          <div className="flex items-center justify-between px-[18px] py-2">
+            <div className="text-[12px] font-extrabold tracking-[0.06em] uppercase text-[#56627a]">Trucks</div>
+            <div className="text-[11px] font-bold text-[#8a95a8] bg-[#e2e7ef] px-[9px] py-[3px] rounded-full">
+              {editedSheet.entries.length} total
+            </div>
+          </div>
+
+          {/* Entry cards */}
+          <div className="flex flex-col gap-3 px-4 pb-2">
+            {visibleEntries.map((entry, index) => {
+              const isCancelled = entry.isCancelled;
+              const isDriverAccount = entry.isDriverAccount;
+              return (
+                <div
+                  key={index}
+                  className="bg-white border border-[#eaeef4] rounded-[18px]"
+                  style={{ opacity: isCancelled ? 0.66 : 1, boxShadow: '0 4px 16px -10px rgba(28,40,64,0.28)' }}
+                >
+                  {editingRow === index ? (
+                    <div className="p-4 space-y-3">
+                      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px'}}>
+                        <span className="text-[10px] font-extrabold text-[#56627a] uppercase tracking-wide">Editing Entry</span>
+                        <div style={{display: 'flex', gap: '8px', flexShrink: 0}}>
+                          <button onClick={() => handleRowSave(index)} disabled={isSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-[10px] text-xs font-bold disabled:opacity-50">
+                            <Save className="w-3.5 h-3.5" />{isSaving ? 'Saving…' : 'Save'}
+                          </button>
+                          <button onClick={() => handleRowCancel(index)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#dde3ec] text-[#344256] rounded-[10px] text-xs font-bold bg-white">
+                            <X className="w-3.5 h-3.5" />Cancel
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[9px] font-bold text-[#9aa4b6] uppercase tracking-wide mb-1 block">Truck No.</label>
+                          <input type="text" value={entry.truckNo} onChange={(e) => handleEntryEdit(index, 'truckNo', e.target.value)} className="w-full px-3 py-2 text-sm border border-[#e3e8f0] rounded-[10px] bg-[#f5f7fa] text-[#1f2937] font-semibold outline-none" />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-[#9aa4b6] uppercase tracking-wide mb-1 block">DO No.</label>
+                          <input type="text" value={entry.doNo} onChange={(e) => handleEntryEdit(index, 'doNo', e.target.value)} className="w-full px-3 py-2 text-sm border border-[#e3e8f0] rounded-[10px] bg-[#f5f7fa] text-[#1f2937] font-semibold outline-none" />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-[#9aa4b6] uppercase tracking-wide mb-1 block">Liters</label>
+                          <input type="number" value={entry.liters} onChange={(e) => handleEntryEdit(index, 'liters', parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 text-sm border border-[#e3e8f0] rounded-[10px] bg-[#f5f7fa] text-[#1f2937] font-semibold outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-[#9aa4b6] uppercase tracking-wide mb-1 block">Rate</label>
+                          <input type="number" step="0.1" value={entry.rate} onChange={(e) => handleEntryEdit(index, 'rate', parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 text-sm border border-[#e3e8f0] rounded-[10px] bg-[#f5f7fa] text-[#1f2937] font-semibold outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[9px] font-bold text-[#9aa4b6] uppercase tracking-wide mb-1 block">Destination</label>
+                          <input type="text" value={entry.dest} onChange={(e) => handleEntryEdit(index, 'dest', e.target.value)} className="w-full px-3 py-2 text-sm border border-[#e3e8f0] rounded-[10px] bg-[#f5f7fa] text-[#1f2937] font-semibold outline-none" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-[15px]">
+                      {/* Truck + pill / Amount */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[17px] font-extrabold tracking-tight ${isCancelled ? 'line-through text-[#9aa4b6]' : 'text-[#1f2937]'}`}>
+                              {entry.truckNo}
+                            </span>
+                            <span style={{
+                              fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' as const,
+                              padding: '3px 8px', borderRadius: '7px',
+                              color: isCancelled ? '#dc2626' : isDriverAccount ? '#5b53d4' : '#15924f',
+                              background: isCancelled ? '#fdeaea' : isDriverAccount ? '#eef0fb' : '#e7f7ee'
+                            }}>
+                              {isCancelled ? 'Cancelled' : isDriverAccount ? 'Driver A/C' : 'Verified'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-[5px] text-[12px] font-semibold text-[#8893a6]">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/>
+                            </svg>
+                            <span>DO {isDriverAccount ? 'NIL' : entry.doNo}</span>
+                            <span className="text-[#cbd3e0]">•</span>
+                            <span className="text-[#6b7689]">{entry.dest}</span>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-[9px] font-bold tracking-[0.08em] uppercase text-[#aab3c4]">Amount</div>
+                          <div className={`text-[18px] font-extrabold tabular-nums leading-tight ${isCancelled ? 'line-through text-[#9aa4b6]' : 'text-[#16202f]'}`}>
+                            ${formatCurrency(entry.amount)}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Stat strip */}
+                      <div className="flex gap-[10px] mt-[13px]">
+                        <div className="flex-1 bg-[#f5f7fa] rounded-[11px] px-3 py-[9px]">
+                          <div className="text-[9px] font-bold tracking-[0.07em] uppercase text-[#9aa4b6] mb-[2px]">Liters</div>
+                          <div className="text-[14px] font-extrabold text-[#2a3343] tabular-nums">
+                            {entry.originalLiters != null && entry.originalLiters !== entry.liters && (
+                              <span className="line-through text-[#9aa4b6] mr-1 text-xs">{entry.originalLiters.toFixed(2)}</span>
+                            )}
+                            {entry.liters.toFixed(2)}{' '}<span className="text-[11px] font-semibold text-[#9aa4b6]">L</span>
+                          </div>
+                        </div>
+                        <div className="flex-1 bg-[#f5f7fa] rounded-[11px] px-3 py-[9px]">
+                          <div className="text-[9px] font-bold tracking-[0.07em] uppercase text-[#9aa4b6] mb-[2px]">Rate</div>
+                          <div className="text-[14px] font-extrabold text-[#2a3343] tabular-nums">
+                            {entry.rate}{' '}<span className="text-[11px] font-semibold text-[#9aa4b6]">/L</span>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Actions */}
+                      <div className="flex gap-[9px] mt-[13px]">
+                        {isCancelled ? (
+                          <button onClick={() => handleUncancelEntry(index)} disabled={isSaving} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-[12px] border border-[#c7dbff] bg-[#eff5ff] text-[#2563eb] text-[13px] font-bold disabled:opacity-50">
+                            <RotateCcw className="w-[15px] h-[15px]" />Restore Entry
+                          </button>
+                        ) : (
+                          <>
+                            <button onClick={() => handleStartRowEdit(index)} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-[12px] border border-[#dde3ec] bg-white text-[#344256] text-[13px] font-bold">
+                              <Edit2 className="w-[15px] h-[15px]" />Modify
+                            </button>
+                            <button onClick={() => openCancelModal(index)} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-[12px] border border-[#fbd0d0] bg-[#fef2f2] text-[#dc2626] text-[13px] font-bold">
+                              <XCircle className="w-[15px] h-[15px]" />Void
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Empty state */}
+          {visibleEntries.length === 0 && entrySearch.trim() && (
+            <div className="text-center py-8 text-[#9aa4b6]">
+              <Search className="w-6 h-6 mx-auto mb-2 opacity-50" />
+              <div className="text-[13px] font-semibold mt-2">No trucks match your search</div>
+              <button onClick={() => setEntrySearch('')} className="mt-[10px] bg-transparent border-none text-[13px] font-bold text-[#2563eb] cursor-pointer">
+                Clear search
+              </button>
+            </div>
+          )}
+
+          {/* Locked notice */}
+          <div className="flex items-center justify-center gap-2 mx-4 my-2 p-[11px] bg-[#fff8eb] border border-[#fde9c0] rounded-[13px] text-[#b07a17]">
+            <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="text-[11.5px] font-semibold">Sheet locked — editing existing entries only</span>
+          </div>
+
+          {/* Spacer for sticky bar */}
+          <div className="h-24" />
+        </div>
+
+        {/* ===== DESKTOP VIEW (hidden lg:block) ===== */}
+        <div className="hidden lg:block p-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+
             {/* Table Header */}
             <div className="bg-blue-50 dark:bg-blue-900/30 border-b border-gray-300 dark:border-gray-700">
               <div className="grid grid-cols-7 gap-0">
@@ -1246,9 +1336,6 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 </div>
               </div>
             </div>
-            </div>
-            {/* End desktop table wrapper */}
-
             {/* No search results */}
             {visibleEntries.length === 0 && entrySearch.trim() && (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -1261,42 +1348,44 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             )}
           </div>
 
-          {/* Summary Statistics - desktop only */}
-          <div className="hidden lg:grid mt-4 sm:mt-6 grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 sm:p-4 rounded-lg">
-              <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Entries</div>
-              <div className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">{editedSheet.entries.length}</div>
+          {/* Summary Statistics */}
+          <div className="grid mt-6 grid-cols-3 gap-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Total Entries</div>
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{editedSheet.entries.length}</div>
             </div>
-            
-            <div className="bg-green-50 dark:bg-green-900/20 p-3 sm:p-4 rounded-lg">
-              <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Liters</div>
-              <div className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
+            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Total Liters</div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                 {editedSheet.entries.reduce((sum, entry) => sum + entry.liters, 0)}
               </div>
             </div>
-            
-            <div className="bg-purple-50 dark:bg-purple-900/20 p-3 sm:p-4 rounded-lg">
-              <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Amount</div>
-              <div className="text-xl sm:text-2xl font-bold text-purple-600 dark:text-purple-400">
+            <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Total Amount</div>
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
                 {formatCurrency(editedSheet.total)}
               </div>
             </div>
           </div>
         </div>
       </div>
+      {/* End desktop view */}
 
-      {/* Mobile Summary Bar */}
-      <div className="lg:hidden flex-shrink-0 bg-gray-900 dark:bg-gray-950 px-4 py-3">
-        <div className="flex items-center justify-between">
+      </div>
+      {/* End sheet content */}
+
+      {/* Mobile Sticky Summary Bar */}
+      <div className="lg:hidden flex-shrink-0 px-3 pb-6 pt-2" style={{background: '#eef1f5'}}>
+        <div className="flex items-center justify-between rounded-[20px] px-[18px] py-[13px]" style={{background: 'linear-gradient(160deg, #1b2433, #0f1722)', boxShadow: '0 16px 32px -12px rgba(15,23,34,0.7)'}}>
           <div>
-            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Summary Metrics</p>
-            <p className="text-sm font-semibold text-white mt-0.5">
-              {editedSheet.entries.length} {editedSheet.entries.length === 1 ? 'Entry' : 'Entries'} • {editedSheet.entries.filter(e => !e.isCancelled).reduce((sum, e) => sum + e.liters, 0).toFixed(0)} L
-            </p>
+            <div className="text-[9px] font-bold tracking-[0.1em] uppercase text-[#6b7990]">
+              {editedSheet.entries.filter(e => !e.isCancelled).length} active · {editedSheet.entries.filter(e => !e.isCancelled).reduce((s, e) => s + e.liters, 0).toLocaleString()} L
+            </div>
+            <div className="text-[11px] font-semibold text-[#aab4c6] mt-[1px]">Active trucks</div>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Grand</p>
-            <p className="text-xl font-bold text-white mt-0.5">${formatCurrency(editedSheet.total)}</p>
+            <div className="text-[9px] font-bold tracking-[0.1em] uppercase text-[#6b7990]">Grand Total</div>
+            <div className="text-[21px] font-extrabold text-white tabular-nums leading-tight">${formatCurrency(editedSheet.total)}</div>
           </div>
         </div>
       </div>

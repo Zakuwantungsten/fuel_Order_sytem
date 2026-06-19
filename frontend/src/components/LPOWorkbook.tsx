@@ -193,7 +193,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800 transition-colors">
       {/* Workbook Header */}
-      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 p-2 sm:p-4">
+      <div className="hidden lg:block border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 p-2 sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
             <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400 flex-shrink-0" />
@@ -258,7 +258,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
       </div>
 
       {/* Sheet Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
+      <div className="hidden lg:block border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
         <div className="flex items-center overflow-x-auto">
           {canGoPrev && (
             <button
