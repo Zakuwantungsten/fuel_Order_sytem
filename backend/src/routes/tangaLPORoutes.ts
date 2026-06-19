@@ -49,6 +49,25 @@ router.post('/manual-link',
   asyncHandler(tangaLPOController.manualLinkTangaEntry)
 );
 
+router.post('/preview-manual-link',
+  authorize(...WRITE_ROLES),
+  asyncHandler(tangaLPOController.previewManualLinkTangaEntry)
+);
+
+router.post('/:id/preview-bulk-link',
+  commonValidation.mongoId,
+  authorize(...WRITE_ROLES),
+  validate,
+  asyncHandler(tangaLPOController.previewBulkAutoLinkTangaEntries)
+);
+
+router.post('/:id/bulk-link',
+  commonValidation.mongoId,
+  authorize(...WRITE_ROLES),
+  validate,
+  asyncHandler(tangaLPOController.bulkAutoLinkTangaEntries)
+);
+
 router.post('/:id/cancel-all',
   commonValidation.mongoId,
   authorize(...WRITE_ROLES),

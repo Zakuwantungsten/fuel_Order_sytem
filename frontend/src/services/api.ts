@@ -1511,11 +1511,8 @@ export interface YardFuelTimeLimitConfig {
   };
 }
 
-// Per-operation fuel-record automation toggles (all default true server-side).
+// Per-operation fuel-record automation toggles for DO operations.
 export interface FuelAutomationConfig {
-  lpoCreateDeduct: boolean;
-  lpoCancelRevert: boolean;
-  lpoEditAdjust: boolean;
   doImportCreate: boolean;
   doExportUpdate: boolean;
   doAmendCascade: boolean;
@@ -2426,6 +2423,18 @@ export const tangaLPOAPI = {
     const response = await apiClient.post('/tanga-lpo/manual-link', data);
     return response.data.data;
   },
+  previewManualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
+    const response = await apiClient.post('/tanga-lpo/preview-manual-link', data);
+    return response.data.data;
+  },
+  bulkLink: async (lpoId: string, data: { entryIds: string[]; topUpEntryIds?: string[] }) => {
+    const response = await apiClient.post(`/tanga-lpo/${lpoId}/bulk-link`, data);
+    return response.data;
+  },
+  previewBulkLink: async (lpoId: string, data: { entryIds: string[] }) => {
+    const response = await apiClient.post(`/tanga-lpo/${lpoId}/preview-bulk-link`, data);
+    return response.data;
+  },
 };
 
 // ── Dar LPO API ───────────────────────────────────────────────────────────────
@@ -2486,6 +2495,18 @@ export const darLPOAPI = {
   manualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
     const response = await apiClient.post('/dar-lpo/manual-link', data);
     return response.data.data;
+  },
+  previewManualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
+    const response = await apiClient.post('/dar-lpo/preview-manual-link', data);
+    return response.data.data;
+  },
+  bulkLink: async (lpoId: string, data: { entryIds: string[]; topUpEntryIds?: string[] }) => {
+    const response = await apiClient.post(`/dar-lpo/${lpoId}/bulk-link`, data);
+    return response.data;
+  },
+  previewBulkLink: async (lpoId: string, data: { entryIds: string[] }) => {
+    const response = await apiClient.post(`/dar-lpo/${lpoId}/preview-bulk-link`, data);
+    return response.data;
   },
 };
 

@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import {
-  Plus, Edit2, X, Ban, Copy, ChevronDown,
+  Plus, Edit2, X, Ban, Copy, ChevronDown, Check,
   Loader2, XCircle, Search, AlertTriangle, Lock, Scissors, Link2,
-  MessageSquare, FileDown, Printer, ArrowLeft,
+  MessageSquare, FileDown, Printer, ArrowLeft, Eye,
 } from 'lucide-react';
+import FuelRecordInspectModal from './FuelRecordInspectModal';
 import { useAuth } from '../contexts/AuthContext';
 import { darLPOAPI } from '../services/api';
+import DarYardLPOForm from './DarYardLPOForm';
 import DarLPOEntryForm from './DarLPOEntryForm';
 import DarLPOPrint from './DarLPOPrint';
 import { copyDarLPOForWhatsApp } from '../utils/darLPOTextGenerator';
@@ -19,6 +21,25 @@ interface Props {
   onUpdated: () => void;
   onBack?: () => void;
 }
+
+type BulkLinkResult = {
+  entryId: string;
+  status: 'linked' | 'topped_up' | 'conflict' | 'not_found' | 'already_linked';
+  truckNo: string;
+  doNo: string;
+  liters: number;
+  existingValue?: number;
+};
+
+type BulkPreviewResult = {
+  entryId: string;
+  status: 'found' | 'conflict' | 'not_found';
+  truckNo: string;
+  doNo: string;
+  liters: number;
+  existingValue: number;
+  fuelRecord: any | null;
+};
 
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
@@ -53,15 +74,9 @@ function generateCopyText(lpo: DarLPO): string {
 
 // ── Amend Modal ────────────────────────────────────────────────────────────────
 function AmendModal({
-  entry,
-  lpoId,
-  onDone,
-  onClose,
+  entry, lpoId, onDone, onClose,
 }: {
-  entry: DarLPOEntry;
-  lpoId: string;
-  onDone: (updatedLpo: DarLPO) => void;
-  onClose: () => void;
+  entry: DarLPOEntry; lpoId: string; onDone: (updatedLpo: DarLPO) => void; onClose: () => void;
 }) {
   const [newLiters, setNewLiters] = useState('');
   const [reason, setReason] = useState('');
@@ -74,12 +89,7 @@ function AmendModal({
     if (liters >= entry.liters) { toast.error(`New liters must be less than current (${entry.liters})`); return; }
     setSaving(true);
     try {
-      const updated = await darLPOAPI.amendEntry({
-        lpoId,
-        entryId: entry._id!,
-        newLiters: liters,
-        amendReason: reason || undefined,
-      });
+      const updated = await darLPOAPI.amendEntry({ lpoId, entryId: entry._id!, newLiters: liters, amendReason: reason || undefined });
       toast.success(`Entry amended: ${entry.liters}L → ${liters}L`);
       onDone(updated);
     } catch (err: any) {
@@ -107,39 +117,22 @@ function AmendModal({
               New Liters <span className="text-red-500">*</span>
             </label>
             <input
-              type="number"
-              value={newLiters}
-              onChange={e => setNewLiters(e.target.value)}
-              step="0.01"
-              min={0.01}
-              max={entry.liters - 0.01}
-              placeholder={`Less than ${entry.liters}`}
+              type="number" value={newLiters} onChange={e => setNewLiters(e.target.value)}
+              step="0.01" min={0.01} max={entry.liters - 0.01} placeholder={`Less than ${entry.liters}`}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
-              autoFocus
-              required
+              autoFocus required
             />
             {newLiters && parseFloat(newLiters) > 0 && parseFloat(newLiters) < entry.liters && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                Delta: −{(entry.liters - parseFloat(newLiters)).toFixed(2)}L
-              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Delta: −{(entry.liters - parseFloat(newLiters)).toFixed(2)}L</p>
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Reason (optional)
-            </label>
-            <input
-              type="text"
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-              placeholder="Brief reason for amendment"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason (optional)</label>
+            <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="Brief reason for amendment"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm" />
           </div>
           <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
-              Cancel
-            </button>
+            <button type="button" onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Cancel</button>
             <button type="submit" disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Scissors className="w-3.5 h-3.5" />}
               Amend
@@ -153,15 +146,9 @@ function AmendModal({
 
 // ── Cancel Entry Modal ─────────────────────────────────────────────────────────
 function CancelEntryModal({
-  entry,
-  lpoId,
-  onDone,
-  onClose,
+  entry, lpoId, onDone, onClose,
 }: {
-  entry: DarLPOEntry;
-  lpoId: string;
-  onDone: (updatedLpo: DarLPO) => void;
-  onClose: () => void;
+  entry: DarLPOEntry; lpoId: string; onDone: (updatedLpo: DarLPO) => void; onClose: () => void;
 }) {
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
@@ -188,9 +175,7 @@ function CancelEntryModal({
           </div>
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">Cancel Entry</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {entry.truckNo} · {entry.liters}L · {fmt(entry.amount)}
-            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.truckNo} · {entry.liters}L · {fmt(entry.amount)}</p>
           </div>
         </div>
         <div className="p-4 space-y-3">
@@ -198,22 +183,13 @@ function CancelEntryModal({
             This will reverse <strong>{entry.liters}L</strong> from the linked fuel record's <span className="font-mono text-green-600 dark:text-green-400">darYard</span> field and recalculate the balance.
           </p>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Reason (optional)
-            </label>
-            <input
-              type="text"
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-              placeholder="e.g. Duplicate entry"
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason (optional)</label>
+            <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Duplicate entry"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              autoFocus
-            />
+              autoFocus />
           </div>
           <div className="flex gap-2">
-            <button onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
-              Back
-            </button>
+            <button onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Back</button>
             <button onClick={handleConfirm} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
               Cancel Entry
@@ -227,15 +203,9 @@ function CancelEntryModal({
 
 // ── Cancel All Modal ───────────────────────────────────────────────────────────
 function CancelAllModal({
-  lpoNo,
-  lpoId,
-  onDone,
-  onClose,
+  lpoNo, lpoId, onDone, onClose,
 }: {
-  lpoNo: string;
-  lpoId: string;
-  onDone: (updatedLpo: DarLPO) => void;
-  onClose: () => void;
+  lpoNo: string; lpoId: string; onDone: (updatedLpo: DarLPO) => void; onClose: () => void;
 }) {
   const [saving, setSaving] = useState(false);
 
@@ -265,13 +235,9 @@ function CancelAllModal({
               <p className="text-xs text-gray-500 dark:text-gray-400">LPO {lpoNo}</p>
             </div>
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            All active entries will be cancelled and their liters reversed on the linked fuel records. This cannot be undone in bulk.
-          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">All active entries will be cancelled and their liters reversed on the linked fuel records. This cannot be undone in bulk.</p>
           <div className="flex gap-2 pt-1">
-            <button onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
-              Back
-            </button>
+            <button onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Back</button>
             <button onClick={handleConfirm} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
               Cancel All
@@ -283,24 +249,35 @@ function CancelAllModal({
   );
 }
 
-// ── Manual Link Modal ──────────────────────────────────────────────────────────
+// ── Manual Link Modal (2-step: search → preview → confirm) ────────────────────
 function ManualLinkModal({
-  entry,
-  lpoId,
-  onDone,
-  onClose,
+  entry, lpoId, onDone, onClose,
 }: {
-  entry: DarLPOEntry;
-  lpoId: string;
-  onDone: (updatedLpo: DarLPO) => void;
-  onClose: () => void;
+  entry: DarLPOEntry; lpoId: string; onDone: (updatedLpo: DarLPO) => void; onClose: () => void;
 }) {
   const [doNo, setDoNo] = useState(entry.doNo);
+  const [step, setStep] = useState<'input' | 'preview'>('input');
+  const [searching, setSearching] = useState(false);
+  const [previewRecord, setPreviewRecord] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [inspectFrId, setInspectFrId] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!doNo.trim()) { toast.error('DO number is required'); return; }
+    setSearching(true);
+    try {
+      const result = await darLPOAPI.previewManualLink({ lpoId, entryId: entry._id!, doNo: doNo.trim() });
+      setPreviewRecord(result.fuelRecord);
+      setStep('preview');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'No matching fuel record found');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleConfirm = async () => {
     setSaving(true);
     try {
       const updated = await darLPOAPI.manualLink({ lpoId, entryId: entry._id!, doNo: doNo.trim() });
@@ -314,56 +291,349 @@ function ManualLinkModal({
   };
 
   return (
+    <>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                {step === 'input' ? 'Link Entry Manually' : 'Confirm Link'}
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.truckNo} · {entry.liters}L</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+
+          {step === 'input' ? (
+            <form onSubmit={handleSearch} className="p-4 space-y-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Enter the DO number to find the matching FuelRecord. <strong>{entry.liters}L</strong> will be added to{' '}
+                <span className="font-mono text-green-600 dark:text-green-400">darYard</span> and the balance recalculated.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">DO Number <span className="text-red-500">*</span></label>
+                <input type="text" value={doNo} onChange={e => setDoNo(e.target.value)} placeholder="e.g. DO-2026-001"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm font-mono"
+                  autoFocus required />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Cancel</button>
+                <button type="submit" disabled={searching} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                  {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  Search
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="p-4 space-y-3">
+              {previewRecord && (
+                <div className="border border-green-200 dark:border-green-800 rounded-lg p-3 bg-green-50 dark:bg-green-900/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{previewRecord.truckNo}</span>
+                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{previewRecord.date}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setInspectFrId(String(previewRecord._id || previewRecord.id))}
+                      className="p-1 rounded text-green-600 hover:text-green-800 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-900/40"
+                      title="View full fuel record breakdown"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    <div><span className="text-gray-500 dark:text-gray-400">Going DO:</span><span className="ml-1 font-mono text-gray-800 dark:text-gray-200">{previewRecord.goingDo || '—'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Return DO:</span><span className="ml-1 font-mono text-gray-800 dark:text-gray-200">{previewRecord.returnDo || '—'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Balance:</span>
+                      <span className={`ml-1 font-bold ${(previewRecord.balance ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {previewRecord.balance?.toFixed(0) ?? 'N/A'}L
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">Dar Yard now:</span>
+                      <span className={`ml-1 font-bold ${(previewRecord.darYard ?? 0) > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {previewRecord.darYard ?? 0}L
+                      </span>
+                    </div>
+                  </div>
+                  {(previewRecord.darYard ?? 0) > 0 && (
+                    <p className="text-xs text-orange-600 dark:text-orange-400">
+                      Top-up: {previewRecord.darYard}L + {entry.liters}L = {(previewRecord.darYard ?? 0) + entry.liters}L
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setStep('input')} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Back</button>
+                <button type="button" onClick={handleConfirm} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                  Confirm Link
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      {inspectFrId && (
+        <FuelRecordInspectModal
+          isOpen
+          onClose={() => setInspectFrId(null)}
+          fuelRecordId={inspectFrId}
+          truckNumber={previewRecord?.truckNo}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Bulk Link Conflict Modal ───────────────────────────────────────────────────
+function BulkLinkConflictModal({
+  conflicts, onConfirm, onClose,
+}: {
+  conflicts: BulkLinkResult[];
+  onConfirm: (topUpIds: string[]) => void;
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(conflicts.map(c => c.entryId)));
+
+  const toggle = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <div>
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Link Entry Manually</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.truckNo} · {entry.liters}L</p>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Dar Yard Already Has Values</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {conflicts.length} {conflicts.length === 1 ? 'entry' : 'entries'} already have fuel recorded. Choose which to top-up.
+            </p>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Enter the correct DO number to find the matching FuelRecord. <strong>{entry.liters}L</strong> will be added to{' '}
-            <span className="font-mono text-green-600 dark:text-green-400">darYard</span> and the balance recalculated.
-          </p>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              DO Number <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={doNo}
-              onChange={e => setDoNo(e.target.value)}
-              placeholder="e.g. DO-2026-001"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm font-mono"
-              autoFocus
-              required
-            />
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-            >
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
-              Link
-            </button>
-          </div>
-        </form>
+        <div className="p-4 space-y-2 max-h-72 overflow-auto">
+          {conflicts.map(c => {
+            const checked = selected.has(c.entryId);
+            const newTotal = (c.existingValue ?? 0) + c.liters;
+            return (
+              <button
+                key={c.entryId}
+                type="button"
+                onClick={() => toggle(c.entryId)}
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                  checked
+                    ? 'border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20'
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'
+                }`}
+              >
+                <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                  checked ? 'border-green-600 bg-green-600' : 'border-gray-400 dark:border-gray-500'
+                }`}>
+                  {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{c.truckNo}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{c.doNo}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 text-xs flex-wrap">
+                    <span className="text-gray-500">Current:</span>
+                    <span className="font-semibold text-orange-600 dark:text-orange-400">{c.existingValue}L</span>
+                    <span className="text-gray-400">+</span>
+                    <span className="text-gray-500">This LPO:</span>
+                    <span className="font-semibold text-green-600 dark:text-green-400">{c.liters}L</span>
+                    <span className="text-gray-400">=</span>
+                    <span className="font-bold text-blue-600 dark:text-blue-400">{newTotal}L</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex gap-2 p-4 border-t border-gray-200 dark:border-gray-700">
+          <button type="button" onClick={onClose}
+            className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
+            Skip All
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(Array.from(selected))}
+            disabled={selected.size === 0}
+            className="flex-1 px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            Top-up {selected.size > 0 ? `(${selected.size})` : ''}
+          </button>
+        </div>
       </div>
     </div>
+  );
+}
+
+// ── Bulk Link Preview Modal ────────────────────────────────────────────────────
+function BulkLinkPreviewModal({
+  results,
+  onConfirm,
+  onClose,
+}: {
+  results: BulkPreviewResult[];
+  onConfirm: (selectedIds: string[], topUpIds: string[]) => void;
+  onClose: () => void;
+}) {
+  const actionable = results.filter(r => r.status === 'found' || r.status === 'conflict');
+  const notFound = results.filter(r => r.status === 'not_found');
+  const [selected, setSelected] = useState<Set<string>>(new Set(actionable.map(r => r.entryId)));
+  const [inspectFrId, setInspectFrId] = useState<string | null>(null);
+  const [inspectTruckNo, setInspectTruckNo] = useState<string | undefined>(undefined);
+
+  const toggle = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const allChecked = selected.size === actionable.length && actionable.length > 0;
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(actionable.map(r => r.entryId)));
+
+  const handleConfirm = () => {
+    const selectedArr = Array.from(selected);
+    const topUpIds = results.filter(r => r.status === 'conflict' && selected.has(r.entryId)).map(r => r.entryId);
+    onConfirm(selectedArr, topUpIds);
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Auto-Link Preview</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {actionable.length} matched · {notFound.length} not found — confirm which to link
+              </p>
+            </div>
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-auto p-4 space-y-4">
+            {actionable.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <button type="button" onClick={toggleAll}
+                    className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${allChecked ? 'border-green-600 bg-green-600' : 'border-gray-400 dark:border-gray-500'}`}>
+                    {allChecked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                  </button>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                    Matched ({actionable.length})
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {actionable.map(r => {
+                    const checked = selected.has(r.entryId);
+                    const isConflict = r.status === 'conflict';
+                    return (
+                      <div key={r.entryId}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-lg border ${
+                          checked
+                            ? isConflict
+                              ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20'
+                              : 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20'
+                        }`}>
+                        <button type="button" onClick={() => toggle(r.entryId)}
+                          className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                            checked
+                              ? isConflict ? 'border-orange-600 bg-orange-600' : 'border-green-600 bg-green-600'
+                              : 'border-gray-400 dark:border-gray-500'
+                          }`}>
+                          {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{r.truckNo}</span>
+                            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{r.doNo}</span>
+                            {isConflict && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 rounded font-medium">top-up</span>
+                            )}
+                          </div>
+                          <div className="text-xs mt-0.5">
+                            {isConflict
+                              ? <span className="text-orange-600 dark:text-orange-400">{r.existingValue}L + {r.liters}L = {r.existingValue + r.liters}L → darYard</span>
+                              : <span className="text-green-700 dark:text-green-400">+{r.liters}L → darYard</span>
+                            }
+                          </div>
+                        </div>
+                        {r.fuelRecord && (
+                          <button type="button"
+                            onClick={() => { setInspectFrId(String(r.fuelRecord._id || r.fuelRecord.id)); setInspectTruckNo(r.truckNo); }}
+                            className="p-1 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:text-green-400 dark:hover:bg-green-900/30 flex-shrink-0"
+                            title="View fuel record breakdown">
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {notFound.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                  Not Found ({notFound.length})
+                </div>
+                <div className="space-y-1">
+                  {notFound.map(r => (
+                    <div key={r.entryId} className="flex items-center gap-2 p-2 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/10">
+                      <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{r.truckNo}</span>
+                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{r.doNo}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {results.length === 0 && (
+              <div className="text-center py-8 text-gray-400 dark:text-gray-500">
+                <p className="text-sm">No results to preview</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
+              Cancel
+            </button>
+            <button type="button" onClick={handleConfirm} disabled={selected.size === 0}
+              className="flex-1 px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+              <Link2 className="w-3.5 h-3.5" />
+              {selected.size > 0 ? `Link (${selected.size})` : 'Link'}
+            </button>
+          </div>
+        </div>
+      </div>
+      {inspectFrId && (
+        <FuelRecordInspectModal
+          isOpen
+          onClose={() => setInspectFrId(null)}
+          fuelRecordId={inspectFrId}
+          truckNumber={inspectTruckNo}
+        />
+      )}
+    </>
   );
 }
 
@@ -380,17 +650,26 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showYardAddForm, setShowYardAddForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<{ index: number; entry: DarLPOEntry } | null>(null);
   const [amendingEntry, setAmendingEntry] = useState<DarLPOEntry | null>(null);
   const [cancellingEntry, setCancellingEntry] = useState<DarLPOEntry | null>(null);
   const [linkingEntry, setLinkingEntry] = useState<DarLPOEntry | null>(null);
   const [showCancelAll, setShowCancelAll] = useState(false);
 
+  // Bulk link state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLinking, setBulkLinking] = useState(false);
+  const [bulkConflicts, setBulkConflicts] = useState<BulkLinkResult[]>([]);
+  const [showBulkConflict, setShowBulkConflict] = useState(false);
+  const [showBulkPreview, setShowBulkPreview] = useState(false);
+  const [bulkPreviewResults, setBulkPreviewResults] = useState<BulkPreviewResult[]>([]);
+
   const lpoId = (lpo._id ?? lpo.id) as string;
 
   useEffect(() => {
     setEntrySearch('');
+    setSelectedIds(new Set());
     if (!lpo.lpoNo) return;
     let cancelled = false;
     setIsFetching(true);
@@ -403,7 +682,7 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
   }, [lpo.lpoNo]);
 
   useEffect(() => {
-    if (!isSaving && !showAddForm && !editingEntry && !amendingEntry && !cancellingEntry) {
+    if (!isSaving && !showYardAddForm && !editingEntry && !amendingEntry && !cancellingEntry) {
       setLpo(initialLpo);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -414,30 +693,12 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
     onUpdated();
   }, [onUpdated]);
 
-  const handleAddEntry = async (newEntry: Omit<DarLPOEntry, '_id'>) => {
-    setIsSaving(true);
-    try {
-      await darLPOAPI.acquireLock(lpoId);
-      try {
-        const updatedEntries = [...lpo.entries, newEntry];
-        const updated = await darLPOAPI.update(lpoId, { entries: updatedEntries });
-        toast.success('Entry added and fuel record updated');
-        handleMutationResult(updated as DarLPO);
-        setShowAddForm(false);
-      } finally {
-        await darLPOAPI.releaseLock(lpoId).catch(() => {});
-      }
-    } catch (err: any) {
-      if (err?.response?.status === 423) {
-        const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-        toast.error(`Locked by ${holder} — try again later`);
-      } else {
-        toast.error(err?.response?.data?.message || 'Failed to add entry');
-      }
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const refreshLpo = useCallback(() => {
+    darLPOAPI.getByLPONo(lpo.lpoNo).then(fresh => {
+      if (fresh) setLpo(fresh as DarLPO);
+    }).catch(() => {});
+    onUpdated();
+  }, [lpo.lpoNo, onUpdated]);
 
   const handleEditEntry = async (updatedEntry: Omit<DarLPOEntry, '_id'>) => {
     if (!editingEntry) return;
@@ -467,6 +728,74 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
     }
   };
 
+  // ── Bulk link ──────────────────────────────────────────────────────────────
+  const unlinkableEntries = lpo.entries.filter(e => !e.isCancelled && !e.linkedFuelRecordId && e._id);
+  const allUnlinkedSelected = unlinkableEntries.length > 0 && unlinkableEntries.every(e => selectedIds.has(e._id!));
+
+  const toggleEntry = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const toggleSelectAll = () => {
+    if (allUnlinkedSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(unlinkableEntries.map(e => e._id!)));
+    }
+  };
+
+  const handlePreviewBulkLink = async () => {
+    const entryIds = Array.from(selectedIds);
+    if (entryIds.length === 0) return;
+    setBulkLinking(true);
+    try {
+      const res = await darLPOAPI.previewBulkLink(lpoId, { entryIds });
+      setBulkPreviewResults(res.results || []);
+      setShowBulkPreview(true);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Preview failed');
+    } finally {
+      setBulkLinking(false);
+    }
+  };
+
+  const handleBulkLink = async (entryIds: string[], topUpEntryIds: string[] = []) => {
+    if (entryIds.length === 0) return;
+    setBulkLinking(true);
+    try {
+      const res = await darLPOAPI.bulkLink(lpoId, { entryIds, topUpEntryIds });
+      handleMutationResult(res.data as DarLPO);
+
+      const results: BulkLinkResult[] = res.results || [];
+      const linked = results.filter(r => r.status === 'linked').length;
+      const toppedUp = results.filter(r => r.status === 'topped_up').length;
+      const notFound = results.filter(r => r.status === 'not_found');
+      const conflicts = results.filter(r => r.status === 'conflict');
+
+      if (linked + toppedUp > 0) {
+        toast.success(`${linked + toppedUp} ${linked + toppedUp === 1 ? 'entry' : 'entries'} linked to fuel records`);
+      }
+      if (notFound.length > 0) {
+        toast.warn(`${notFound.length} not found: ${notFound.map(r => r.truckNo).join(', ')}`);
+      }
+
+      setSelectedIds(new Set());
+
+      if (conflicts.length > 0) {
+        setBulkConflicts(conflicts);
+        setShowBulkConflict(true);
+      } else {
+        setBulkConflicts([]);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Bulk link failed');
+    } finally {
+      setBulkLinking(false);
+    }
+  };
+
   const handleCopyText = async () => {
     try {
       await navigator.clipboard.writeText(generateCopyText(lpo));
@@ -492,16 +821,7 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
       const { default: html2canvas } = await import('html2canvas');
       const { jsPDF } = await import('jspdf');
       const el = printRef.current;
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: 794,
-        height: el.scrollHeight,
-        windowWidth: 794,
-        windowHeight: el.scrollHeight,
-      });
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, width: 794, height: el.scrollHeight, windowWidth: 794, windowHeight: el.scrollHeight });
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
       const imgWidthMm = 210;
       const pageHeightMm = 297;
@@ -532,13 +852,8 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
     setShowCopyDropdown(false);
     const content = printRef.current.outerHTML;
     const win = window.open('', '_blank', 'width=900,height=700');
-    if (!win) {
-      toast.error('Pop-up blocked — please allow pop-ups and try again');
-      return;
-    }
-    win.document.write(
-      `<!DOCTYPE html><html><head><title>${lpo.lpoNo} — Dar Yard LPO</title></head><body style="margin:0">${content}</body></html>`
-    );
+    if (!win) { toast.error('Pop-up blocked — please allow pop-ups and try again'); return; }
+    win.document.write(`<!DOCTYPE html><html><head><title>${lpo.lpoNo} — Dar Yard LPO</title></head><body style="margin:0">${content}</body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); win.close(); }, 500);
   };
@@ -550,13 +865,11 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
   const visibleEntries = entrySearch.trim()
     ? lpo.entries.filter(e => {
         const t = entrySearch.toLowerCase();
-        return (
-          e.truckNo.toLowerCase().includes(t) ||
-          e.doNo.toLowerCase().includes(t) ||
-          e.dest.toLowerCase().includes(t)
-        );
+        return e.truckNo.toLowerCase().includes(t) || e.doNo.toLowerCase().includes(t) || e.dest.toLowerCase().includes(t);
       })
     : lpo.entries;
+
+  const hasSelection = selectedIds.size > 0;
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 relative">
@@ -571,12 +884,7 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             {onBack && (
-              <button
-                onClick={onBack}
-                className="w-8 h-8 rounded-[10px] flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}
-                aria-label="Back to list"
-              >
+              <button onClick={onBack} className="w-8 h-8 rounded-[10px] flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }} aria-label="Back to list">
                 <ArrowLeft className="w-4 h-4 text-[#c4cedd]" />
               </button>
             )}
@@ -587,20 +895,13 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
           </div>
           <div className="flex items-center gap-2">
             {canWrite && !allCancelled && (
-              <button
-                onClick={() => setShowAddForm(true)}
-                disabled={isSaving}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-[10px] text-xs font-bold disabled:opacity-50"
-              >
+              <button onClick={() => setShowYardAddForm(true)} disabled={isSaving}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-[10px] text-xs font-bold disabled:opacity-50">
                 <Plus className="w-3.5 h-3.5" /> Add
               </button>
             )}
             <div className="relative">
-              <button
-                onClick={() => setShowCopyDropdown(v => !v)}
-                className="w-9 h-9 rounded-[10px] flex items-center justify-center"
-                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}
-              >
+              <button onClick={() => setShowCopyDropdown(v => !v)} className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}>
                 <ChevronDown className="w-4 h-4 text-[#c4cedd]" />
               </button>
               {showCopyDropdown && (
@@ -632,20 +933,10 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
             </div>
           </div>
         </div>
-
         <div className="grid grid-cols-3 gap-3">
-          <div>
-            <div className="text-[9.5px] font-semibold text-[#4a7a5a] uppercase tracking-wide mb-0.5">Trucks</div>
-            <div className="text-[15px] font-bold text-[#eef2f8]">{activeEntries.length}</div>
-          </div>
-          <div>
-            <div className="text-[9.5px] font-semibold text-[#4a7a5a] uppercase tracking-wide mb-0.5">Liters</div>
-            <div className="text-[15px] font-bold text-[#eef2f8]">{totalLiters.toLocaleString()}</div>
-          </div>
-          <div>
-            <div className="text-[9.5px] font-semibold text-[#4a7a5a] uppercase tracking-wide mb-0.5">Total</div>
-            <div className="text-[15px] font-bold text-[#4ade80]">{fmt(lpo.total)}</div>
-          </div>
+          <div><div className="text-[9.5px] font-semibold text-[#4a7a5a] uppercase tracking-wide mb-0.5">Trucks</div><div className="text-[15px] font-bold text-[#eef2f8]">{activeEntries.length}</div></div>
+          <div><div className="text-[9.5px] font-semibold text-[#4a7a5a] uppercase tracking-wide mb-0.5">Liters</div><div className="text-[15px] font-bold text-[#eef2f8]">{totalLiters.toLocaleString()}</div></div>
+          <div><div className="text-[9.5px] font-semibold text-[#4a7a5a] uppercase tracking-wide mb-0.5">Total</div><div className="text-[15px] font-bold text-[#4ade80]">{fmt(lpo.total)}</div></div>
         </div>
       </div>
 
@@ -653,11 +944,7 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
       <div className="hidden lg:flex items-center justify-between gap-4 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
         <div className="flex items-center gap-4 flex-wrap">
           {onBack && (
-            <button
-              onClick={onBack}
-              className="flex items-center gap-1 px-2 py-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              aria-label="Back to list"
-            >
+            <button onClick={onBack} className="flex items-center gap-1 px-2 py-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors" aria-label="Back to list">
               <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
           )}
@@ -666,28 +953,29 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
           <span className="text-sm text-gray-600 dark:text-gray-400">Currency: <strong className="text-gray-900 dark:text-gray-100">{lpo.currency}</strong></span>
           {lpo.notes && <span className="text-sm text-gray-500 dark:text-gray-400 italic truncate max-w-xs">{lpo.notes}</span>}
           {allCancelled && (
-            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-              Fully Cancelled
-            </span>
+            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">Fully Cancelled</span>
           )}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input
-              type="text"
-              value={entrySearch}
-              onChange={e => setEntrySearch(e.target.value)}
-              placeholder="Search truck, DO…"
-              className="pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 w-36"
-            />
+            <input type="text" value={entrySearch} onChange={e => setEntrySearch(e.target.value)} placeholder="Search truck, DO…"
+              className="pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 w-36" />
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="relative">
+          {/* Auto-link selected */}
+          {canWrite && hasSelection && (
             <button
-              onClick={() => setShowCopyDropdown(v => !v)}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+              onClick={handlePreviewBulkLink}
+              disabled={bulkLinking}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-700 hover:bg-green-800 disabled:opacity-50 rounded-lg transition-colors"
             >
+              {bulkLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+              Auto-Link ({selectedIds.size})
+            </button>
+          )}
+          <div className="relative">
+            <button onClick={() => setShowCopyDropdown(v => !v)} className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
               <Copy className="w-3.5 h-3.5" /> Copy <ChevronDown className="w-3 h-3 ml-0.5" />
             </button>
             {showCopyDropdown && (
@@ -714,17 +1002,12 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
 
           {canWrite && !allCancelled && (
             <>
-              <button
-                onClick={() => setShowAddForm(true)}
-                disabled={isSaving}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors"
-              >
+              <button onClick={() => setShowYardAddForm(true)} disabled={isSaving}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors">
                 <Plus className="w-3.5 h-3.5" /> Add Entry
               </button>
-              <button
-                onClick={() => setShowCancelAll(true)}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/40 rounded-lg transition-colors"
-              >
+              <button onClick={() => setShowCancelAll(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/40 rounded-lg transition-colors">
                 <XCircle className="w-3.5 h-3.5" /> Cancel LPO
               </button>
             </>
@@ -745,65 +1028,72 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
           <div className="px-4 pt-4 pb-2">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#97a3b6]" />
-              <input
-                type="text"
-                value={entrySearch}
-                onChange={e => setEntrySearch(e.target.value)}
-                placeholder="Search truck, DO or destination"
-                className="w-full h-11 pl-10 pr-4 border border-[#e3e8f0] rounded-[13px] bg-white text-[13.5px] font-semibold text-[#1f2937] placeholder-[#97a3b6] outline-none"
-              />
+              <input type="text" value={entrySearch} onChange={e => setEntrySearch(e.target.value)} placeholder="Search truck, DO or destination"
+                className="w-full h-11 pl-10 pr-4 border border-[#e3e8f0] rounded-[13px] bg-white text-[13.5px] font-semibold text-[#1f2937] placeholder-[#97a3b6] outline-none" />
             </div>
           </div>
 
+          {/* Mobile bulk-link bar */}
+          {canWrite && unlinkableEntries.length > 0 && (
+            <div className="mx-4 mb-2 flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-[12px]">
+              <button type="button" onClick={toggleSelectAll}
+                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${allUnlinkedSelected ? 'border-green-600 bg-green-600' : 'border-gray-400'}`}>
+                {allUnlinkedSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+              </button>
+              <span className="text-[11px] font-semibold text-green-700 dark:text-green-400 flex-1">
+                {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select unlinked entries to auto-link'}
+              </span>
+              {hasSelection && (
+                <button onClick={handlePreviewBulkLink} disabled={bulkLinking}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-green-700 hover:bg-green-800 disabled:opacity-50 rounded-lg transition-colors">
+                  {bulkLinking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                  Auto-Link
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center justify-between px-4 py-2">
             <div className="text-[11px] font-extrabold tracking-wide uppercase text-[#56627a]">Entries</div>
-            <div className="text-[10px] font-bold text-[#8a95a8] bg-[#e2e7ef] px-2 py-0.5 rounded-full">
-              {lpo.entries.length} total
-            </div>
+            <div className="text-[10px] font-bold text-[#8a95a8] bg-[#e2e7ef] px-2 py-0.5 rounded-full">{lpo.entries.length} total</div>
           </div>
 
           <div className="flex flex-col gap-3 px-4 pb-4">
             {visibleEntries.map((entry, idx) => {
               const realIdx = lpo.entries.indexOf(entry);
               const isCancelled = entry.isCancelled;
+              const isSelectable = canWrite && !isCancelled && !entry.linkedFuelRecordId && !!entry._id;
+              const isSelected = isSelectable && selectedIds.has(entry._id!);
               return (
-                <div
-                  key={entry._id ?? idx}
-                  className="bg-white border border-[#eaeef4] rounded-[16px]"
-                  style={{ opacity: isCancelled ? 0.65 : 1, boxShadow: '0 4px 16px -10px rgba(28,40,64,0.25)' }}
-                >
+                <div key={entry._id ?? idx} className="bg-white border border-[#eaeef4] rounded-[16px]"
+                  style={{ opacity: isCancelled ? 0.65 : 1, boxShadow: '0 4px 16px -10px rgba(28,40,64,0.25)' }}>
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[16px] font-extrabold tracking-tight ${isCancelled ? 'line-through text-[#9aa4b6]' : 'text-[#1f2937]'}`}>
-                            {entry.truckNo}
-                          </span>
-                          <span style={{
-                            fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' as const,
-                            padding: '2px 7px', borderRadius: '6px',
-                            color: isCancelled ? '#dc2626' : entry.originalLiters ? '#d97706' : '#15924f',
-                            background: isCancelled ? '#fdeaea' : entry.originalLiters ? '#fef3c7' : '#e7f7ee',
-                          }}>
-                            {isCancelled ? 'Cancelled' : entry.originalLiters ? 'Amended' : 'Active'}
-                          </span>
-                          {!entry.linkedFuelRecordId && !isCancelled && (
-                            <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '6px', color: '#b45309', background: '#fef3c7' }}>
-                              Unlinked
+                      <div className="min-w-0 flex items-start gap-2">
+                        {isSelectable && (
+                          <button type="button" onClick={() => toggleEntry(entry._id!)}
+                            className={`mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${isSelected ? 'border-green-600 bg-green-600' : 'border-gray-400'}`}>
+                            {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                          </button>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[16px] font-extrabold tracking-tight ${isCancelled ? 'line-through text-[#9aa4b6]' : 'text-[#1f2937]'}`}>{entry.truckNo}</span>
+                            <span style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' as const, padding: '2px 7px', borderRadius: '6px', color: isCancelled ? '#dc2626' : entry.originalLiters ? '#d97706' : '#15924f', background: isCancelled ? '#fdeaea' : entry.originalLiters ? '#fef3c7' : '#e7f7ee' }}>
+                              {isCancelled ? 'Cancelled' : entry.originalLiters ? 'Amended' : 'Active'}
                             </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-1 text-[12px] font-semibold text-[#8893a6]">
-                          <span>DO {entry.doNo}</span>
-                          <span className="text-[#cbd3e0]">·</span>
-                          <span>{entry.dest}</span>
+                            {!entry.linkedFuelRecordId && !isCancelled && (
+                              <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '6px', color: '#b45309', background: '#fef3c7' }}>Unlinked</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 text-[12px] font-semibold text-[#8893a6]">
+                            <span>DO {entry.doNo}</span><span className="text-[#cbd3e0]">·</span><span>{entry.dest}</span>
+                          </div>
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <div className="text-[9px] font-bold uppercase text-[#aab3c4] tracking-wide">Amount</div>
-                        <div className={`text-[17px] font-extrabold tabular-nums ${isCancelled ? 'line-through text-[#9aa4b6]' : 'text-[#16202f]'}`}>
-                          {fmt(entry.amount)}
-                        </div>
+                        <div className={`text-[17px] font-extrabold tabular-nums ${isCancelled ? 'line-through text-[#9aa4b6]' : 'text-[#16202f]'}`}>{fmt(entry.amount)}</div>
                       </div>
                     </div>
 
@@ -819,48 +1109,32 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
                       </div>
                       <div className="flex-1 bg-[#f5f7fa] rounded-[10px] px-3 py-2">
                         <div className="text-[9px] font-bold uppercase text-[#9aa4b6] mb-0.5 tracking-wide">Rate</div>
-                        <div className="text-[14px] font-extrabold text-[#2a3343] tabular-nums">
-                          {entry.rate}<span className="text-[10px] text-[#9aa4b6] ml-0.5">/L</span>
-                        </div>
+                        <div className="text-[14px] font-extrabold text-[#2a3343] tabular-nums">{entry.rate}<span className="text-[10px] text-[#9aa4b6] ml-0.5">/L</span></div>
                       </div>
                     </div>
 
                     {canWrite && (
                       <div className="flex gap-2 mt-3">
                         {isCancelled ? (
-                          <div className="flex-1 flex items-center justify-center h-9 rounded-[10px] text-[12px] font-bold text-[#9aa4b6]">
-                            Cancelled
-                          </div>
+                          <div className="flex-1 flex items-center justify-center h-9 rounded-[10px] text-[12px] font-bold text-[#9aa4b6]">Cancelled</div>
                         ) : (
                           <>
                             {!entry.linkedFuelRecordId && (
-                              <button
-                                onClick={() => setLinkingEntry(entry)}
-                                disabled={isSaving}
-                                className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d] text-[12px] font-bold disabled:opacity-50"
-                              >
+                              <button onClick={() => setLinkingEntry(entry)} disabled={isSaving}
+                                className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d] text-[12px] font-bold disabled:opacity-50">
                                 <Link2 className="w-3.5 h-3.5" /> Link
                               </button>
                             )}
-                            <button
-                              onClick={() => setEditingEntry({ index: realIdx, entry })}
-                              disabled={isSaving}
-                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#dde3ec] bg-white text-[#344256] text-[12px] font-bold disabled:opacity-50"
-                            >
+                            <button onClick={() => setEditingEntry({ index: realIdx, entry })} disabled={isSaving}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#dde3ec] bg-white text-[#344256] text-[12px] font-bold disabled:opacity-50">
                               <Edit2 className="w-3.5 h-3.5" /> Edit
                             </button>
-                            <button
-                              onClick={() => setAmendingEntry(entry)}
-                              disabled={isSaving}
-                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#fde9c0] bg-[#fffbeb] text-[#b45309] text-[12px] font-bold disabled:opacity-50"
-                            >
+                            <button onClick={() => setAmendingEntry(entry)} disabled={isSaving}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#fde9c0] bg-[#fffbeb] text-[#b45309] text-[12px] font-bold disabled:opacity-50">
                               <Scissors className="w-3.5 h-3.5" /> Amend
                             </button>
-                            <button
-                              onClick={() => setCancellingEntry(entry)}
-                              disabled={isSaving}
-                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#fbd0d0] bg-[#fef2f2] text-[#dc2626] text-[12px] font-bold disabled:opacity-50"
-                            >
+                            <button onClick={() => setCancellingEntry(entry)} disabled={isSaving}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#fbd0d0] bg-[#fef2f2] text-[#dc2626] text-[12px] font-bold disabled:opacity-50">
                               <Ban className="w-3.5 h-3.5" /> Void
                             </button>
                           </>
@@ -875,21 +1149,14 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
             {visibleEntries.length === 0 && lpo.entries.length === 0 && (
               <div className="text-center py-10 text-[#9aa4b6]">
                 <div className="text-[13px] font-semibold">No entries yet</div>
-                {canWrite && (
-                  <button onClick={() => setShowAddForm(true)} className="mt-2 text-[13px] font-bold text-[#16a34a] bg-transparent border-none cursor-pointer">
-                    Add the first entry
-                  </button>
-                )}
+                {canWrite && <button onClick={() => setShowYardAddForm(true)} className="mt-2 text-[13px] font-bold text-[#16a34a] bg-transparent border-none cursor-pointer">Add the first entry</button>}
               </div>
             )}
-
             {visibleEntries.length === 0 && entrySearch.trim() && (
               <div className="text-center py-8 text-[#9aa4b6]">
                 <Search className="w-6 h-6 mx-auto mb-2 opacity-40" />
                 <div className="text-[13px] font-semibold">No entries match</div>
-                <button onClick={() => setEntrySearch('')} className="mt-1.5 text-[12px] font-bold text-[#16a34a] bg-transparent border-none cursor-pointer">
-                  Clear search
-                </button>
+                <button onClick={() => setEntrySearch('')} className="mt-1.5 text-[12px] font-bold text-[#16a34a] bg-transparent border-none cursor-pointer">Clear search</button>
               </div>
             )}
           </div>
@@ -902,9 +1169,7 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
           <div className="px-4 pb-6">
             <div className="flex items-center justify-between rounded-[18px] px-4 py-3" style={{ background: 'linear-gradient(160deg,#0f2318,#071510)', boxShadow: '0 16px 32px -12px rgba(7,21,16,0.7)' }}>
               <div>
-                <div className="text-[9px] font-bold uppercase tracking-wide text-[#4a7a5a]">
-                  {activeEntries.length} active · {totalLiters.toLocaleString()} L
-                </div>
+                <div className="text-[9px] font-bold uppercase tracking-wide text-[#4a7a5a]">{activeEntries.length} active · {totalLiters.toLocaleString()} L</div>
                 <div className="text-[11px] font-semibold text-[#6aad82] mt-0.5">Active entries</div>
               </div>
               <div className="text-right">
@@ -918,12 +1183,20 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
         {/* Desktop table */}
         <div className="hidden lg:block p-5">
           <div className="max-w-5xl mx-auto border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-green-50 dark:bg-green-900/30 border-b border-gray-200 dark:border-gray-700">
+            {/* Header row */}
+            <div className="grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-green-50 dark:bg-green-900/30 border-b border-gray-200 dark:border-gray-700">
+              {/* Checkbox select-all header */}
+              <div className="px-1 py-2 flex items-center justify-center border-r border-gray-200 dark:border-gray-700">
+                {canWrite && unlinkableEntries.length > 0 && (
+                  <button type="button" onClick={toggleSelectAll}
+                    className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${allUnlinkedSelected ? 'border-green-600 bg-green-600' : 'border-gray-400'}`}>
+                    {allUnlinkedSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                  </button>
+                )}
+              </div>
               {['#', 'DO No', 'Truck', 'Liters', 'Rate', 'Amount', 'Destination', 'Actions'].map((h, i) => (
-                <div
-                  key={h}
-                  className={`px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide ${i > 1 && i < 6 ? 'text-right' : ''} ${i < 7 ? 'border-r border-gray-200 dark:border-gray-700' : 'text-center'}`}
-                >
+                <div key={h}
+                  className={`px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide ${i > 1 && i < 6 ? 'text-right' : ''} ${i < 7 ? 'border-r border-gray-200 dark:border-gray-700' : 'text-center'}`}>
                   {h}
                 </div>
               ))}
@@ -932,26 +1205,33 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
             {visibleEntries.map((entry, idx) => {
               const realIdx = lpo.entries.indexOf(entry);
               const isCancelled = entry.isCancelled;
+              const isSelectable = canWrite && !isCancelled && !entry.linkedFuelRecordId && !!entry._id;
+              const isSelected = isSelectable && selectedIds.has(entry._id!);
               const rowCls = isCancelled
                 ? 'bg-red-50 dark:bg-red-900/15 border-b border-red-100 dark:border-red-900/30'
-                : 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50';
+                : isSelected
+                  ? 'bg-green-50/60 dark:bg-green-900/10 border-b border-green-100 dark:border-green-900/20'
+                  : 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50';
               return (
-                <div key={entry._id ?? idx} className={`grid grid-cols-[2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] ${rowCls}`}>
+                <div key={entry._id ?? idx} className={`grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] ${rowCls}`}>
+                  {/* Checkbox cell */}
+                  <div className="px-1 py-2 flex items-center justify-center border-r border-gray-200 dark:border-gray-700">
+                    {isSelectable && (
+                      <button type="button" onClick={() => toggleEntry(entry._id!)}
+                        className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${isSelected ? 'border-green-600 bg-green-600' : 'border-gray-400'}`}>
+                        {isSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                      </button>
+                    )}
+                  </div>
                   <div className="px-2 py-2 text-xs text-gray-400 border-r border-gray-200 dark:border-gray-700">{realIdx + 1}</div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700">
-                    <span className={`text-sm font-mono ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                      {entry.doNo}
-                    </span>
+                    <span className={`text-sm font-mono ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>{entry.doNo}</span>
                   </div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-1.5">
-                      <span className={`text-sm font-medium ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                        {entry.truckNo}
-                      </span>
+                      <span className={`text-sm font-medium ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>{entry.truckNo}</span>
                       {!entry.linkedFuelRecordId && !isCancelled && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded font-medium">
-                          unlinked
-                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded font-medium">unlinked</span>
                       )}
                     </div>
                   </div>
@@ -964,14 +1244,10 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
                     </span>
                   </div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700 text-right">
-                    <span className={`text-sm ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                      {entry.rate}
-                    </span>
+                    <span className={`text-sm ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>{entry.rate}</span>
                   </div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700 text-right">
-                    <span className={`text-sm font-medium ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                      {fmt(entry.amount)}
-                    </span>
+                    <span className={`text-sm font-medium ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>{fmt(entry.amount)}</span>
                   </div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700">
                     <span className={`text-sm ${isCancelled ? 'text-red-400' : 'text-gray-600 dark:text-gray-400'}`}>{entry.dest}</span>
@@ -982,37 +1258,21 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
                     ) : canWrite ? (
                       <>
                         {!entry.linkedFuelRecordId && (
-                          <button
-                            onClick={() => setLinkingEntry(entry)}
-                            disabled={isSaving}
-                            className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 disabled:opacity-40"
-                            title="Link to FuelRecord manually"
-                          >
+                          <button onClick={() => setLinkingEntry(entry)} disabled={isSaving}
+                            className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 disabled:opacity-40" title="Link to FuelRecord manually">
                             <Link2 className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        <button
-                          onClick={() => setEditingEntry({ index: realIdx, entry })}
-                          disabled={isSaving}
-                          className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 disabled:opacity-40"
-                          title="Edit"
-                        >
+                        <button onClick={() => setEditingEntry({ index: realIdx, entry })} disabled={isSaving}
+                          className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 disabled:opacity-40" title="Edit">
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => setAmendingEntry(entry)}
-                          disabled={isSaving}
-                          className="p-1 text-amber-600 hover:text-amber-800 dark:text-amber-400 disabled:opacity-40"
-                          title="Amend (reduce liters)"
-                        >
+                        <button onClick={() => setAmendingEntry(entry)} disabled={isSaving}
+                          className="p-1 text-amber-600 hover:text-amber-800 dark:text-amber-400 disabled:opacity-40" title="Amend (reduce liters)">
                           <Scissors className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => setCancellingEntry(entry)}
-                          disabled={isSaving}
-                          className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 disabled:opacity-40"
-                          title="Cancel"
-                        >
+                        <button onClick={() => setCancellingEntry(entry)} disabled={isSaving}
+                          className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 disabled:opacity-40" title="Cancel">
                           <Ban className="w-3.5 h-3.5" />
                         </button>
                       </>
@@ -1025,14 +1285,9 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
             {lpo.entries.length === 0 && (
               <div className="py-12 text-center text-gray-400 dark:text-gray-500">
                 <p className="text-sm font-medium">No entries</p>
-                {canWrite && (
-                  <button onClick={() => setShowAddForm(true)} className="mt-2 text-sm text-green-600 hover:underline">
-                    Add the first entry
-                  </button>
-                )}
+                {canWrite && <button onClick={() => setShowYardAddForm(true)} className="mt-2 text-sm text-green-600 hover:underline">Add the first entry</button>}
               </div>
             )}
-
             {visibleEntries.length === 0 && entrySearch.trim() && (
               <div className="py-8 text-center text-gray-400 dark:text-gray-500">
                 <Search className="w-5 h-5 mx-auto mb-1.5 opacity-50" />
@@ -1043,24 +1298,18 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
 
             <div className="bg-green-50 dark:bg-green-900/20 border-t border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center gap-2">
               <Lock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-              <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                An edit lock is acquired automatically when you add or edit entries
-              </span>
+              <span className="text-xs font-medium text-green-700 dark:text-green-400">An edit lock is acquired automatically when you add or edit entries</span>
             </div>
 
-            <div className="grid grid-cols-[2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-green-50 dark:bg-green-900/30 font-semibold">
+            {/* Totals row */}
+            <div className="grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-green-50 dark:bg-green-900/30 font-semibold">
+              <div className="px-1 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
-              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 uppercase">
-                {activeEntries.length} active
-              </div>
-              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-right text-sm font-bold text-green-700 dark:text-green-300">
-                {totalLiters.toLocaleString()}
-              </div>
+              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 uppercase">{activeEntries.length} active</div>
+              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-right text-sm font-bold text-green-700 dark:text-green-300">{totalLiters.toLocaleString()}</div>
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
-              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-right text-sm font-bold text-green-900 dark:text-green-200">
-                {fmt(lpo.total)}
-              </div>
+              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-right text-sm font-bold text-green-900 dark:text-green-200">{fmt(lpo.total)}</div>
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">{lpo.currency}</div>
               <div className="px-2 py-2.5" />
             </div>
@@ -1083,19 +1332,19 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
         </div>
       </div>
 
-      {/* ── Hidden print target (off-screen, always mounted) ── */}
+      {/* Hidden print target */}
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '794px', pointerEvents: 'none' }}>
         <DarLPOPrint ref={printRef} data={lpo} preparedBy={user?.username} />
       </div>
 
-      {showAddForm && (
-        <DarLPOEntryForm
-          defaultRate={lpo.entries.length > 0 ? lpo.entries[lpo.entries.length - 1].rate : undefined}
-          onSave={handleAddEntry}
-          onClose={() => setShowAddForm(false)}
+      {showYardAddForm && (
+        <DarYardLPOForm
+          mode="add-entries"
+          existingLpo={lpo}
+          onClose={() => setShowYardAddForm(false)}
+          onSuccess={refreshLpo}
         />
       )}
-
       {editingEntry && (
         <DarLPOEntryForm
           entry={editingEntry.entry}
@@ -1104,40 +1353,46 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
           onClose={() => setEditingEntry(null)}
         />
       )}
-
       {amendingEntry && (
-        <AmendModal
-          entry={amendingEntry}
-          lpoId={lpoId}
+        <AmendModal entry={amendingEntry} lpoId={lpoId}
           onDone={updated => { setAmendingEntry(null); handleMutationResult(updated); }}
-          onClose={() => setAmendingEntry(null)}
-        />
+          onClose={() => setAmendingEntry(null)} />
       )}
-
       {cancellingEntry && (
-        <CancelEntryModal
-          entry={cancellingEntry}
-          lpoId={lpoId}
+        <CancelEntryModal entry={cancellingEntry} lpoId={lpoId}
           onDone={updated => { setCancellingEntry(null); handleMutationResult(updated); }}
-          onClose={() => setCancellingEntry(null)}
-        />
+          onClose={() => setCancellingEntry(null)} />
       )}
-
       {showCancelAll && (
-        <CancelAllModal
-          lpoNo={lpo.lpoNo}
-          lpoId={lpoId}
+        <CancelAllModal lpoNo={lpo.lpoNo} lpoId={lpoId}
           onDone={updated => { setShowCancelAll(false); handleMutationResult(updated); }}
-          onClose={() => setShowCancelAll(false)}
+          onClose={() => setShowCancelAll(false)} />
+      )}
+      {linkingEntry && (
+        <ManualLinkModal entry={linkingEntry} lpoId={lpoId}
+          onDone={updated => { setLinkingEntry(null); handleMutationResult(updated); }}
+          onClose={() => setLinkingEntry(null)} />
+      )}
+      {showBulkPreview && (
+        <BulkLinkPreviewModal
+          results={bulkPreviewResults}
+          onConfirm={(selectedIds, topUpIds) => {
+            setShowBulkPreview(false);
+            setBulkPreviewResults([]);
+            if (selectedIds.length > 0) handleBulkLink(selectedIds, topUpIds);
+          }}
+          onClose={() => { setShowBulkPreview(false); setBulkPreviewResults([]); }}
         />
       )}
-
-      {linkingEntry && (
-        <ManualLinkModal
-          entry={linkingEntry}
-          lpoId={lpoId}
-          onDone={updated => { setLinkingEntry(null); handleMutationResult(updated); }}
-          onClose={() => setLinkingEntry(null)}
+      {showBulkConflict && bulkConflicts.length > 0 && (
+        <BulkLinkConflictModal
+          conflicts={bulkConflicts}
+          onConfirm={topUpIds => {
+            setShowBulkConflict(false);
+            setBulkConflicts([]);
+            if (topUpIds.length > 0) handleBulkLink(topUpIds, topUpIds);
+          }}
+          onClose={() => { setShowBulkConflict(false); setBulkConflicts([]); }}
         />
       )}
     </div>

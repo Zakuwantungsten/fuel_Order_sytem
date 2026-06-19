@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, BookOpen, List, BarChart2 } from 'lucide-react';
+import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, BookOpen, List, BarChart2, FilePlus } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { useTangaLPOList, useTangaNextNumber, tangaLPOKeys } from '../hooks/useTangaLPOs';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
-import TangaLPOForm from '../components/TangaLPOForm';
+import TangaYardLPOForm from '../components/TangaYardLPOForm';
 import TangaLPOWorkbook from '../components/TangaLPOWorkbook';
 import TangaLPOSummary from '../components/TangaLPOSummary';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
@@ -52,6 +52,7 @@ export default function TangaLPOs() {
   const [dateTo, setDateTo] = useState('');
   const [filterUnlinked, setFilterUnlinked] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showAddEntries, setShowAddEntries] = useState(false);
 
   useRealtimeSync('tanga_lpo_documents', () => {}, 'rt-tanga-lpo-page');
 
@@ -155,13 +156,25 @@ export default function TangaLPOs() {
               <BarChart2 className="w-3.5 h-3.5" /> Summary
             </button>
           </div>
-          {canWrite && nextLpoNo && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
-            >
-              <Plus className="w-4 h-4" /> New LPO
-            </button>
+          {canWrite && (
+            <div className="flex items-center gap-2">
+              {lpos.length > 0 && (
+                <button
+                  onClick={() => setShowAddEntries(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
+                >
+                  <FilePlus className="w-4 h-4" /> Add Entries
+                </button>
+              )}
+              {nextLpoNo && (
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
+                >
+                  <Plus className="w-4 h-4" /> Add LPO
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -379,14 +392,23 @@ export default function TangaLPOs() {
         )}
       </div>}
 
-      {/* Create form modal */}
+      {/* New LPO form */}
       {showForm && nextLpoNo && (
-        <TangaLPOForm
+        <TangaYardLPOForm
+          mode="new"
           nextLpoNo={nextLpoNo}
-          onClose={() => {
-            setShowForm(false);
-            queryClient.invalidateQueries({ queryKey: tangaLPOKeys.all });
-          }}
+          onClose={() => setShowForm(false)}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: tangaLPOKeys.all })}
+        />
+      )}
+
+      {/* Add Entries to most recent LPO */}
+      {showAddEntries && lpos[0] && (
+        <TangaYardLPOForm
+          mode="add-entries"
+          existingLpo={lpos[0]}
+          onClose={() => setShowAddEntries(false)}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: tangaLPOKeys.all })}
         />
       )}
     </div>

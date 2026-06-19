@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { TangaLPODocument } from '../models/TangaLPODocument';
 import { FuelRecord } from '../models';
+import { SystemConfig } from '../models/SystemConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
@@ -24,16 +25,16 @@ function recalcBalance(fr: any): number {
 
 // ── FuelRecord link helper ─────────────────────────────────────────────────────
 
-async function findLinkedFuelRecord(doNo: string, truckNo: string): Promise<any | null> {
-  const records = await FuelRecord.find({
+async function findLinkedFuelRecord(doNo: string, truckNo: string, afterDate?: Date): Promise<any | null> {
+  const query: any = {
     truckNo,
     $or: [{ goingDo: doNo }, { returnDo: doNo }],
     isDeleted: false,
     isCancelled: { $ne: true },
-  }).sort({ date: -1 });
-
-  if (records.length === 0) return null;
-  return records[0];
+  };
+  if (afterDate) query.date = { $gte: afterDate.toISOString().split('T')[0] };
+  const records = await FuelRecord.find(query).sort({ date: -1 });
+  return records.length ? records[0] : null;
 }
 
 async function applyTangaYardDelta(
@@ -209,27 +210,6 @@ export const createTangaLPO = async (req: AuthRequest, res: Response): Promise<v
     createdBy: req.user?.username || 'Unknown',
   });
 
-  // Link entries to FuelRecords sequentially (read-modify-write, never $inc)
-  const warnings: string[] = [];
-
-  for (const entry of lpo.entries) {
-    if (entry.isCancelled) continue;
-
-    const fr = await findLinkedFuelRecord(entry.doNo, entry.truckNo);
-    if (!fr) {
-      warnings.push(`No FuelRecord found for DO ${entry.doNo} / truck ${entry.truckNo}`);
-      logger.warn(`[TangaLPO] Unlinked entry: DO=${entry.doNo}, truck=${entry.truckNo}, lpo=${lpoNo}`);
-      continue;
-    }
-
-    // Store the link on the entry (update in-place via Mongoose sub-doc)
-    entry.linkedFuelRecordId = fr._id.toString();
-    await applyTangaYardDelta(fr, entry.liters);
-  }
-
-  // Persist linkedFuelRecordId values set above
-  await lpo.save();
-
   await AuditService.log({
     userId: req.user?.userId,
     username: req.user?.username || 'system',
@@ -246,11 +226,9 @@ export const createTangaLPO = async (req: AuthRequest, res: Response): Promise<v
     success: true,
     message: 'Tanga LPO created successfully',
     data: { ...responseData, id: responseData._id },
-    warnings: warnings.length ? warnings : undefined,
   });
 
   emitDataChange('tanga_lpo_documents', 'create');
-  emitDataChange('fuel_records', 'update');
 };
 
 export const updateTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -264,51 +242,9 @@ export const updateTangaLPO = async (req: AuthRequest, res: Response): Promise<v
   if (!username) throw new ApiError(401, 'Authentication required');
   await enforceEditLock(TangaLPODocument, id, username, 'tanga_lpo_documents');
 
-  // Build maps keyed by entry _id string for diffing
-  const oldMap = new Map(existing.entries.map((e: any) => [e._id.toString(), e]));
-  const newEntries: any[] = newData.entries || existing.entries;
-
-  for (const newEntry of newEntries) {
-    if (newEntry.isCancelled) continue;
-
-    const oldEntry = newEntry._id ? oldMap.get(newEntry._id.toString()) : undefined;
-    if (!oldEntry) {
-      // Brand-new entry added during update
-      const fr = await findLinkedFuelRecord(newEntry.doNo, newEntry.truckNo);
-      if (fr) {
-        newEntry.linkedFuelRecordId = fr._id.toString();
-        await applyTangaYardDelta(fr, newEntry.liters);
-      }
-      continue;
-    }
-
-    if (oldEntry.isCancelled) continue;
-
-    const delta = newEntry.liters - (oldEntry as any).liters;
-    if (delta !== 0 && oldEntry.linkedFuelRecordId) {
-      const fr = await FuelRecord.findById(oldEntry.linkedFuelRecordId);
-      if (fr) {
-        // Track amendment
-        newEntry.originalLiters = (oldEntry as any).originalLiters ?? (oldEntry as any).liters;
-        newEntry.amendedAt = new Date();
-        await applyTangaYardDelta(fr, delta);
-      }
-    }
-  }
-
-  // Handle entries removed in this update
-  const newIds = new Set(newEntries.map((e: any) => e._id?.toString()).filter(Boolean));
-  for (const [oldId, oldEntry] of oldMap) {
-    if (!newIds.has(oldId) && !(oldEntry as any).isCancelled && (oldEntry as any).linkedFuelRecordId) {
-      const fr = await FuelRecord.findById((oldEntry as any).linkedFuelRecordId);
-      if (fr) await applyTangaYardDelta(fr, -(oldEntry as any).liters);
-    }
-  }
-
   if (newData.date) {
     newData.year = new Date(newData.date).getFullYear();
   }
-  newData.entries = newEntries;
 
   const updated = await TangaLPODocument.findOneAndUpdate(
     { _id: id, isDeleted: false },
@@ -337,7 +273,6 @@ export const updateTangaLPO = async (req: AuthRequest, res: Response): Promise<v
   });
 
   emitDataChange('tanga_lpo_documents', 'update');
-  emitDataChange('fuel_records', 'update');
 };
 
 export const cancelEntryInTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -507,4 +442,180 @@ export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Pro
 
   emitDataChange('tanga_lpo_documents', 'update');
   emitDataChange('fuel_records', 'update');
+};
+
+// ── Bulk Auto-Link ─────────────────────────────────────────────────────────────
+
+type BulkLinkResult = {
+  entryId: string;
+  status: 'linked' | 'topped_up' | 'conflict' | 'not_found' | 'already_linked';
+  truckNo: string;
+  doNo: string;
+  liters: number;
+  existingValue?: number;
+};
+
+export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { entryIds, topUpEntryIds = [] } = req.body;
+
+  if (!Array.isArray(entryIds) || entryIds.length === 0) {
+    throw new ApiError(400, 'entryIds must be a non-empty array');
+  }
+
+  const lpo = await TangaLPODocument.findOne({ _id: id, isDeleted: false });
+  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+
+  // Gate FuelRecord search to the configured tanga yard time window
+  const timeLimitCfg = await SystemConfig.findOne({ configType: 'yard_fuel_time_limit', isDeleted: false }).lean();
+  let afterDate: Date | undefined;
+  const tlCfg = (timeLimitCfg as any)?.yardFuelTimeLimit;
+  if (tlCfg?.enabled && tlCfg.perYard?.tangaYard?.enabled) {
+    const days: number = tlCfg.perYard.tangaYard.timeLimitDays ?? 2;
+    afterDate = new Date();
+    afterDate.setDate(afterDate.getDate() - days);
+  }
+
+  const results: BulkLinkResult[] = [];
+  const topUpSet = new Set<string>(topUpEntryIds as string[]);
+  let didApply = false;
+
+  for (const entryId of entryIds as string[]) {
+    const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
+    if (!entry || entry.isCancelled) continue;
+
+    if (entry.linkedFuelRecordId) {
+      results.push({ entryId, status: 'already_linked', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters });
+      continue;
+    }
+
+    const fr = await findLinkedFuelRecord(entry.doNo, entry.truckNo, afterDate);
+    if (!fr) {
+      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters });
+      continue;
+    }
+
+    const existingValue: number = fr.tangaYard ?? 0;
+
+    if (existingValue > 0 && !topUpSet.has(entryId)) {
+      results.push({ entryId, status: 'conflict', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, existingValue });
+      continue;
+    }
+
+    entry.linkedFuelRecordId = fr._id.toString();
+    await applyTangaYardDelta(fr, entry.liters);
+    didApply = true;
+    results.push({
+      entryId,
+      status: existingValue > 0 ? 'topped_up' : 'linked',
+      truckNo: entry.truckNo,
+      doNo: entry.doNo,
+      liters: entry.liters,
+      existingValue: existingValue > 0 ? existingValue : undefined,
+    });
+  }
+
+  if (didApply) await lpo.save();
+
+  const linked = results.filter(r => r.status === 'linked' || r.status === 'topped_up').length;
+  const conflicts = results.filter(r => r.status === 'conflict');
+  const notFound = results.filter(r => r.status === 'not_found').length;
+
+  await AuditService.log({
+    userId: req.user?.userId,
+    username: req.user?.username || 'system',
+    action: 'UPDATE',
+    resourceType: 'TangaLPODocument',
+    resourceId: lpo.lpoNo,
+    details: `Bulk auto-link on Tanga LPO ${lpo.lpoNo}: ${linked} linked, ${conflicts.length} conflicts, ${notFound} not found — by ${req.user?.username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
+  const responseData = lpo.toObject();
+  res.status(200).json({
+    success: true,
+    message: 'Bulk auto-link completed',
+    data: { ...responseData, id: responseData._id },
+    results,
+    summary: { linked, conflicts: conflicts.length, notFound },
+  });
+
+  if (didApply) {
+    emitDataChange('tanga_lpo_documents', 'update');
+    emitDataChange('fuel_records', 'update');
+  }
+};
+
+// ── Preview Manual Link (dry-run, no writes) ───────────────────────────────────
+
+export const previewManualLinkTangaEntry = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { lpoId, entryId, doNo } = req.body;
+  if (!lpoId || !entryId || !doNo) throw new ApiError(400, 'lpoId, entryId and doNo are required');
+
+  const lpo = await TangaLPODocument.findOne({ _id: lpoId, isDeleted: false });
+  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+
+  const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
+  if (!entry) throw new ApiError(404, 'Entry not found');
+  if (entry.isCancelled) throw new ApiError(400, 'Cannot link a cancelled entry');
+  if (entry.linkedFuelRecordId) throw new ApiError(400, 'Entry is already linked');
+
+  const fr = await findLinkedFuelRecord(doNo, entry.truckNo);
+  if (!fr) throw new ApiError(404, `No FuelRecord found for DO ${doNo} / truck ${entry.truckNo}`);
+
+  res.status(200).json({
+    success: true,
+    message: 'FuelRecord found',
+    data: { fuelRecord: fr.toObject() },
+  });
+};
+
+// ── Preview Bulk Auto-Link (dry-run, no writes) ────────────────────────────────
+
+export const previewBulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { entryIds } = req.body;
+
+  if (!Array.isArray(entryIds) || entryIds.length === 0) {
+    throw new ApiError(400, 'entryIds must be a non-empty array');
+  }
+
+  const lpo = await TangaLPODocument.findOne({ _id: id, isDeleted: false });
+  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+
+  const timeLimitCfg = await SystemConfig.findOne({ configType: 'yard_fuel_time_limit', isDeleted: false }).lean();
+  let afterDate: Date | undefined;
+  const tlCfg = (timeLimitCfg as any)?.yardFuelTimeLimit;
+  if (tlCfg?.enabled && tlCfg.perYard?.tangaYard?.enabled) {
+    const days: number = tlCfg.perYard.tangaYard.timeLimitDays ?? 2;
+    afterDate = new Date();
+    afterDate.setDate(afterDate.getDate() - days);
+  }
+
+  const results = [];
+
+  for (const entryId of entryIds as string[]) {
+    const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
+    if (!entry || entry.isCancelled || entry.linkedFuelRecordId) continue;
+
+    const fr = await findLinkedFuelRecord(entry.doNo, entry.truckNo, afterDate);
+    if (!fr) {
+      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, fuelRecord: null, existingValue: 0 });
+      continue;
+    }
+
+    const existingValue: number = fr.tangaYard ?? 0;
+    results.push({
+      entryId,
+      status: existingValue > 0 ? 'conflict' : 'found',
+      truckNo: entry.truckNo,
+      doNo: entry.doNo,
+      liters: entry.liters,
+      existingValue,
+      fuelRecord: fr.toObject(),
+    });
+  }
+
+  res.status(200).json({ success: true, message: 'Preview completed', results });
 };

@@ -49,6 +49,25 @@ router.post('/manual-link',
   asyncHandler(darLPOController.manualLinkDarEntry)
 );
 
+router.post('/preview-manual-link',
+  authorize(...WRITE_ROLES),
+  asyncHandler(darLPOController.previewManualLinkDarEntry)
+);
+
+router.post('/:id/preview-bulk-link',
+  commonValidation.mongoId,
+  authorize(...WRITE_ROLES),
+  validate,
+  asyncHandler(darLPOController.previewBulkAutoLinkDarEntries)
+);
+
+router.post('/:id/bulk-link',
+  commonValidation.mongoId,
+  authorize(...WRITE_ROLES),
+  validate,
+  asyncHandler(darLPOController.bulkAutoLinkDarEntries)
+);
+
 router.post('/:id/cancel-all',
   commonValidation.mongoId,
   authorize(...WRITE_ROLES),

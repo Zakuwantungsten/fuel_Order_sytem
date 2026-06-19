@@ -638,9 +638,6 @@ function StandardAllocationsCard() {
 // ── Fuel Record Automation ───────────────────────────────────────────────────
 
 const FUEL_AUTOMATION_DEFAULTS: FuelAutomationConfig = {
-  lpoCreateDeduct: true,
-  lpoCancelRevert: true,
-  lpoEditAdjust: true,
   doImportCreate: true,
   doExportUpdate: true,
   doAmendCascade: true,
@@ -651,14 +648,6 @@ const FUEL_AUTOMATION_GROUPS: {
   title: string;
   rows: { key: keyof FuelAutomationConfig; label: string; sub: string }[];
 }[] = [
-  {
-    title: 'LPO → Fuel record',
-    rows: [
-      { key: 'lpoCreateDeduct', label: 'Deduct on LPO creation', sub: 'When an LPO is created, deduct its liters from the matched fuel record.' },
-      { key: 'lpoCancelRevert', label: 'Revert on LPO cancellation', sub: 'When an LPO entry is cancelled/restored, add the liters back / re-deduct.' },
-      { key: 'lpoEditAdjust', label: 'Re-adjust on LPO edit', sub: 'When LPO liters change, an entry is removed, added, or converted, re-balance the fuel record.' },
-    ],
-  },
   {
     title: 'DO → Fuel record',
     rows: [

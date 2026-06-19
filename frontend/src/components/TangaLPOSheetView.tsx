@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import {
-  Plus, Edit2, X, Ban, Copy, ChevronDown,
+  Plus, Edit2, X, Ban, Copy, ChevronDown, Check,
   Loader2, XCircle, Search, AlertTriangle, Lock, Scissors, Link2,
-  MessageSquare, FileDown, Printer, ArrowLeft,
+  MessageSquare, FileDown, Printer, ArrowLeft, Eye,
 } from 'lucide-react';
+import FuelRecordInspectModal from './FuelRecordInspectModal';
 import { useAuth } from '../contexts/AuthContext';
 import { tangaLPOAPI } from '../services/api';
+import TangaYardLPOForm from './TangaYardLPOForm';
 import TangaLPOEntryForm from './TangaLPOEntryForm';
 import TangaLPOPrint from './TangaLPOPrint';
 import { copyTangaLPOForWhatsApp } from '../utils/tangaLPOTextGenerator';
@@ -19,6 +21,25 @@ interface Props {
   onUpdated: () => void;
   onBack?: () => void;
 }
+
+type BulkLinkResult = {
+  entryId: string;
+  status: 'linked' | 'topped_up' | 'conflict' | 'not_found' | 'already_linked';
+  truckNo: string;
+  doNo: string;
+  liters: number;
+  existingValue?: number;
+};
+
+type BulkPreviewResult = {
+  entryId: string;
+  status: 'found' | 'conflict' | 'not_found';
+  truckNo: string;
+  doNo: string;
+  liters: number;
+  existingValue: number;
+  fuelRecord: any | null;
+};
 
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
@@ -189,7 +210,7 @@ function CancelEntryModal({
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">Cancel Entry</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {entry.truckNo} · {entry.liters}L · {fmt(entry.amount)} {/* amount */}
+              {entry.truckNo} · {entry.liters}L · {fmt(entry.amount)}
             </p>
           </div>
         </div>
@@ -283,7 +304,7 @@ function CancelAllModal({
   );
 }
 
-// ── Manual Link Modal ──────────────────────────────────────────────────────────
+// ── Manual Link Modal (2-step: search → preview → confirm) ────────────────────
 function ManualLinkModal({
   entry,
   lpoId,
@@ -296,11 +317,28 @@ function ManualLinkModal({
   onClose: () => void;
 }) {
   const [doNo, setDoNo] = useState(entry.doNo);
+  const [step, setStep] = useState<'input' | 'preview'>('input');
+  const [searching, setSearching] = useState(false);
+  const [previewRecord, setPreviewRecord] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [inspectFrId, setInspectFrId] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!doNo.trim()) { toast.error('DO number is required'); return; }
+    setSearching(true);
+    try {
+      const result = await tangaLPOAPI.previewManualLink({ lpoId, entryId: entry._id!, doNo: doNo.trim() });
+      setPreviewRecord(result.fuelRecord);
+      setStep('preview');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'No matching fuel record found');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleConfirm = async () => {
     setSaving(true);
     try {
       const updated = await tangaLPOAPI.manualLink({ lpoId, entryId: entry._id!, doNo: doNo.trim() });
@@ -314,56 +352,349 @@ function ManualLinkModal({
   };
 
   return (
+    <>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                {step === 'input' ? 'Link Entry Manually' : 'Confirm Link'}
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.truckNo} · {entry.liters}L</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+
+          {step === 'input' ? (
+            <form onSubmit={handleSearch} className="p-4 space-y-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Enter the DO number to find the matching FuelRecord. <strong>{entry.liters}L</strong> will be added to{' '}
+                <span className="font-mono text-blue-600 dark:text-blue-400">tangaYard</span> and the balance recalculated.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">DO Number <span className="text-red-500">*</span></label>
+                <input type="text" value={doNo} onChange={e => setDoNo(e.target.value)} placeholder="e.g. DO-2026-001"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm font-mono"
+                  autoFocus required />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Cancel</button>
+                <button type="submit" disabled={searching} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                  {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  Search
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="p-4 space-y-3">
+              {previewRecord && (
+                <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{previewRecord.truckNo}</span>
+                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{previewRecord.date}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setInspectFrId(String(previewRecord._id || previewRecord.id))}
+                      className="p-1 rounded text-amber-600 hover:text-amber-800 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40"
+                      title="View full fuel record breakdown"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    <div><span className="text-gray-500 dark:text-gray-400">Going DO:</span><span className="ml-1 font-mono text-gray-800 dark:text-gray-200">{previewRecord.goingDo || '—'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Return DO:</span><span className="ml-1 font-mono text-gray-800 dark:text-gray-200">{previewRecord.returnDo || '—'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Balance:</span>
+                      <span className={`ml-1 font-bold ${(previewRecord.balance ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {previewRecord.balance?.toFixed(0) ?? 'N/A'}L
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">Tanga Yard now:</span>
+                      <span className={`ml-1 font-bold ${(previewRecord.tangaYard ?? 0) > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {previewRecord.tangaYard ?? 0}L
+                      </span>
+                    </div>
+                  </div>
+                  {(previewRecord.tangaYard ?? 0) > 0 && (
+                    <p className="text-xs text-orange-600 dark:text-orange-400">
+                      Top-up: {previewRecord.tangaYard}L + {entry.liters}L = {(previewRecord.tangaYard ?? 0) + entry.liters}L
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setStep('input')} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Back</button>
+                <button type="button" onClick={handleConfirm} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                  Confirm Link
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      {inspectFrId && (
+        <FuelRecordInspectModal
+          isOpen
+          onClose={() => setInspectFrId(null)}
+          fuelRecordId={inspectFrId}
+          truckNumber={previewRecord?.truckNo}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Bulk Link Conflict Modal ───────────────────────────────────────────────────
+function BulkLinkConflictModal({
+  conflicts, onConfirm, onClose,
+}: {
+  conflicts: BulkLinkResult[];
+  onConfirm: (topUpIds: string[]) => void;
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(conflicts.map(c => c.entryId)));
+
+  const toggle = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <div>
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Link Entry Manually</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.truckNo} · {entry.liters}L</p>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Tanga Yard Already Has Values</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {conflicts.length} {conflicts.length === 1 ? 'entry' : 'entries'} already have fuel recorded. Choose which to top-up.
+            </p>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Enter the correct DO number to find the matching FuelRecord. <strong>{entry.liters}L</strong> will be added to{' '}
-            <span className="font-mono text-blue-600 dark:text-blue-400">tangaYard</span> and the balance recalculated.
-          </p>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              DO Number <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={doNo}
-              onChange={e => setDoNo(e.target.value)}
-              placeholder="e.g. DO-2026-001"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm font-mono"
-              autoFocus
-              required
-            />
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-            >
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
-              Link
-            </button>
-          </div>
-        </form>
+        <div className="p-4 space-y-2 max-h-72 overflow-auto">
+          {conflicts.map(c => {
+            const checked = selected.has(c.entryId);
+            const newTotal = (c.existingValue ?? 0) + c.liters;
+            return (
+              <button
+                key={c.entryId}
+                type="button"
+                onClick={() => toggle(c.entryId)}
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                  checked
+                    ? 'border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'
+                }`}
+              >
+                <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                  checked ? 'border-blue-600 bg-blue-600' : 'border-gray-400 dark:border-gray-500'
+                }`}>
+                  {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{c.truckNo}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{c.doNo}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 text-xs flex-wrap">
+                    <span className="text-gray-500">Current:</span>
+                    <span className="font-semibold text-orange-600 dark:text-orange-400">{c.existingValue}L</span>
+                    <span className="text-gray-400">+</span>
+                    <span className="text-gray-500">This LPO:</span>
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">{c.liters}L</span>
+                    <span className="text-gray-400">=</span>
+                    <span className="font-bold text-blue-700 dark:text-blue-300">{newTotal}L</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex gap-2 p-4 border-t border-gray-200 dark:border-gray-700">
+          <button type="button" onClick={onClose}
+            className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
+            Skip All
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(Array.from(selected))}
+            disabled={selected.size === 0}
+            className="flex-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            Top-up {selected.size > 0 ? `(${selected.size})` : ''}
+          </button>
+        </div>
       </div>
     </div>
+  );
+}
+
+// ── Bulk Link Preview Modal ────────────────────────────────────────────────────
+function BulkLinkPreviewModal({
+  results,
+  onConfirm,
+  onClose,
+}: {
+  results: BulkPreviewResult[];
+  onConfirm: (selectedIds: string[], topUpIds: string[]) => void;
+  onClose: () => void;
+}) {
+  const actionable = results.filter(r => r.status === 'found' || r.status === 'conflict');
+  const notFound = results.filter(r => r.status === 'not_found');
+  const [selected, setSelected] = useState<Set<string>>(new Set(actionable.map(r => r.entryId)));
+  const [inspectFrId, setInspectFrId] = useState<string | null>(null);
+  const [inspectTruckNo, setInspectTruckNo] = useState<string | undefined>(undefined);
+
+  const toggle = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const allChecked = selected.size === actionable.length && actionable.length > 0;
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(actionable.map(r => r.entryId)));
+
+  const handleConfirm = () => {
+    const selectedArr = Array.from(selected);
+    const topUpIds = results.filter(r => r.status === 'conflict' && selected.has(r.entryId)).map(r => r.entryId);
+    onConfirm(selectedArr, topUpIds);
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Auto-Link Preview</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {actionable.length} matched · {notFound.length} not found — confirm which to link
+              </p>
+            </div>
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-auto p-4 space-y-4">
+            {actionable.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <button type="button" onClick={toggleAll}
+                    className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${allChecked ? 'border-blue-600 bg-blue-600' : 'border-gray-400 dark:border-gray-500'}`}>
+                    {allChecked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                  </button>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                    Matched ({actionable.length})
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {actionable.map(r => {
+                    const checked = selected.has(r.entryId);
+                    const isConflict = r.status === 'conflict';
+                    return (
+                      <div key={r.entryId}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-lg border ${
+                          checked
+                            ? isConflict
+                              ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20'
+                              : 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20'
+                            : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20'
+                        }`}>
+                        <button type="button" onClick={() => toggle(r.entryId)}
+                          className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                            checked
+                              ? isConflict ? 'border-orange-600 bg-orange-600' : 'border-blue-600 bg-blue-600'
+                              : 'border-gray-400 dark:border-gray-500'
+                          }`}>
+                          {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{r.truckNo}</span>
+                            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{r.doNo}</span>
+                            {isConflict && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 rounded font-medium">top-up</span>
+                            )}
+                          </div>
+                          <div className="text-xs mt-0.5">
+                            {isConflict
+                              ? <span className="text-orange-600 dark:text-orange-400">{r.existingValue}L + {r.liters}L = {r.existingValue + r.liters}L → tangaYard</span>
+                              : <span className="text-blue-700 dark:text-blue-400">+{r.liters}L → tangaYard</span>
+                            }
+                          </div>
+                        </div>
+                        {r.fuelRecord && (
+                          <button type="button"
+                            onClick={() => { setInspectFrId(String(r.fuelRecord._id || r.fuelRecord.id)); setInspectTruckNo(r.truckNo); }}
+                            className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 flex-shrink-0"
+                            title="View fuel record breakdown">
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {notFound.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                  Not Found ({notFound.length})
+                </div>
+                <div className="space-y-1">
+                  {notFound.map(r => (
+                    <div key={r.entryId} className="flex items-center gap-2 p-2 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/10">
+                      <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{r.truckNo}</span>
+                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{r.doNo}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {results.length === 0 && (
+              <div className="text-center py-8 text-gray-400 dark:text-gray-500">
+                <p className="text-sm">No results to preview</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
+              Cancel
+            </button>
+            <button type="button" onClick={handleConfirm} disabled={selected.size === 0}
+              className="flex-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+              <Link2 className="w-3.5 h-3.5" />
+              {selected.size > 0 ? `Link (${selected.size})` : 'Link'}
+            </button>
+          </div>
+        </div>
+      </div>
+      {inspectFrId && (
+        <FuelRecordInspectModal
+          isOpen
+          onClose={() => setInspectFrId(null)}
+          fuelRecordId={inspectFrId}
+          truckNumber={inspectTruckNo}
+        />
+      )}
+    </>
   );
 }
 
@@ -381,32 +712,39 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
   const printRef = useRef<HTMLDivElement>(null);
 
   // Entry modals
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showYardAddForm, setShowYardAddForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<{ index: number; entry: TangaLPOEntry } | null>(null);
   const [amendingEntry, setAmendingEntry] = useState<TangaLPOEntry | null>(null);
   const [cancellingEntry, setCancellingEntry] = useState<TangaLPOEntry | null>(null);
   const [linkingEntry, setLinkingEntry] = useState<TangaLPOEntry | null>(null);
   const [showCancelAll, setShowCancelAll] = useState(false);
 
+  // Bulk link state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLinking, setBulkLinking] = useState(false);
+  const [bulkConflicts, setBulkConflicts] = useState<BulkLinkResult[]>([]);
+  const [showBulkConflict, setShowBulkConflict] = useState(false);
+  const [showBulkPreview, setShowBulkPreview] = useState(false);
+  const [bulkPreviewResults, setBulkPreviewResults] = useState<BulkPreviewResult[]>([]);
+
   const lpoId = (lpo._id ?? lpo.id) as string;
 
-  // Re-fetch fresh data when the LPO number changes (switching tabs)
   useEffect(() => {
     setEntrySearch('');
+    setSelectedIds(new Set());
     if (!lpo.lpoNo) return;
     let cancelled = false;
     setIsFetching(true);
     tangaLPOAPI.getByLPONo(lpo.lpoNo).then(fresh => {
       if (!cancelled && fresh) setLpo(fresh as TangaLPO);
-    }).catch(() => {/* keep existing data on error */}).finally(() => {
+    }).catch(() => {}).finally(() => {
       if (!cancelled) setIsFetching(false);
     });
     return () => { cancelled = true; };
   }, [lpo.lpoNo]);
 
-  // Sync with prop when workbook data refreshes (but don't overwrite a mid-operation state)
   useEffect(() => {
-    if (!isSaving && !showAddForm && !editingEntry && !amendingEntry && !cancellingEntry) {
+    if (!isSaving && !showYardAddForm && !editingEntry && !amendingEntry && !cancellingEntry) {
       setLpo(initialLpo);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -417,33 +755,13 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
     onUpdated();
   }, [onUpdated]);
 
-  // ── Add Entry ─────────────────────────────────────────────────────────────
-  const handleAddEntry = async (newEntry: Omit<TangaLPOEntry, '_id'>) => {
-    setIsSaving(true);
-    try {
-      await tangaLPOAPI.acquireLock(lpoId);
-      try {
-        const updatedEntries = [...lpo.entries, newEntry];
-        const updated = await tangaLPOAPI.update(lpoId, { entries: updatedEntries });
-        toast.success('Entry added and fuel record updated');
-        handleMutationResult(updated as TangaLPO);
-        setShowAddForm(false);
-      } finally {
-        await tangaLPOAPI.releaseLock(lpoId).catch(() => {});
-      }
-    } catch (err: any) {
-      if (err?.response?.status === 423) {
-        const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-        toast.error(`Locked by ${holder} — try again later`);
-      } else {
-        toast.error(err?.response?.data?.message || 'Failed to add entry');
-      }
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const refreshLpo = useCallback(() => {
+    tangaLPOAPI.getByLPONo(lpo.lpoNo).then(fresh => {
+      if (fresh) setLpo(fresh as TangaLPO);
+    }).catch(() => {});
+    onUpdated();
+  }, [lpo.lpoNo, onUpdated]);
 
-  // ── Edit Entry ────────────────────────────────────────────────────────────
   const handleEditEntry = async (updatedEntry: Omit<TangaLPOEntry, '_id'>) => {
     if (!editingEntry) return;
     setIsSaving(true);
@@ -469,6 +787,74 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
       }
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // ── Bulk link ──────────────────────────────────────────────────────────────
+  const unlinkableEntries = lpo.entries.filter(e => !e.isCancelled && !e.linkedFuelRecordId && e._id);
+  const allUnlinkedSelected = unlinkableEntries.length > 0 && unlinkableEntries.every(e => selectedIds.has(e._id!));
+
+  const toggleEntry = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const toggleSelectAll = () => {
+    if (allUnlinkedSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(unlinkableEntries.map(e => e._id!)));
+    }
+  };
+
+  const handlePreviewBulkLink = async () => {
+    const entryIds = Array.from(selectedIds);
+    if (entryIds.length === 0) return;
+    setBulkLinking(true);
+    try {
+      const res = await tangaLPOAPI.previewBulkLink(lpoId, { entryIds });
+      setBulkPreviewResults(res.results || []);
+      setShowBulkPreview(true);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Preview failed');
+    } finally {
+      setBulkLinking(false);
+    }
+  };
+
+  const handleBulkLink = async (entryIds: string[], topUpEntryIds: string[] = []) => {
+    if (entryIds.length === 0) return;
+    setBulkLinking(true);
+    try {
+      const res = await tangaLPOAPI.bulkLink(lpoId, { entryIds, topUpEntryIds });
+      handleMutationResult(res.data as TangaLPO);
+
+      const results: BulkLinkResult[] = res.results || [];
+      const linked = results.filter(r => r.status === 'linked').length;
+      const toppedUp = results.filter(r => r.status === 'topped_up').length;
+      const notFound = results.filter(r => r.status === 'not_found');
+      const conflicts = results.filter(r => r.status === 'conflict');
+
+      if (linked + toppedUp > 0) {
+        toast.success(`${linked + toppedUp} ${linked + toppedUp === 1 ? 'entry' : 'entries'} linked to fuel records`);
+      }
+      if (notFound.length > 0) {
+        toast.warn(`${notFound.length} not found: ${notFound.map(r => r.truckNo).join(', ')}`);
+      }
+
+      setSelectedIds(new Set());
+
+      if (conflicts.length > 0) {
+        setBulkConflicts(conflicts);
+        setShowBulkConflict(true);
+      } else {
+        setBulkConflicts([]);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Bulk link failed');
+    } finally {
+      setBulkLinking(false);
     }
   };
 
@@ -563,9 +949,10 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
       })
     : lpo.entries;
 
+  const hasSelection = selectedIds.size > 0;
+
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 relative">
-      {/* Fetch overlay */}
       {isFetching && (
         <div className="absolute inset-0 bg-white/60 dark:bg-gray-900/60 flex items-center justify-center z-10">
           <Loader2 className="w-7 h-7 text-blue-500 animate-spin" />
@@ -594,7 +981,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
           <div className="flex items-center gap-2">
             {canWrite && !allCancelled && (
               <button
-                onClick={() => setShowAddForm(true)}
+                onClick={() => setShowYardAddForm(true)}
                 disabled={isSaving}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-[10px] text-xs font-bold disabled:opacity-50"
               >
@@ -639,7 +1026,6 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
           <div>
             <div className="text-[9.5px] font-semibold text-[#6b7990] uppercase tracking-wide mb-0.5">Trucks</div>
@@ -677,7 +1063,6 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
               Fully Cancelled
             </span>
           )}
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
@@ -691,7 +1076,17 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Copy dropdown */}
+          {/* Auto-link selected */}
+          {canWrite && hasSelection && (
+            <button
+              onClick={handlePreviewBulkLink}
+              disabled={bulkLinking}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-700 hover:bg-blue-800 disabled:opacity-50 rounded-lg transition-colors"
+            >
+              {bulkLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+              Auto-Link ({selectedIds.size})
+            </button>
+          )}
           <div className="relative">
             <button
               onClick={() => setShowCopyDropdown(v => !v)}
@@ -724,7 +1119,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
           {canWrite && !allCancelled && (
             <>
               <button
-                onClick={() => setShowAddForm(true)}
+                onClick={() => setShowYardAddForm(true)}
                 disabled={isSaving}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors"
               >
@@ -741,7 +1136,6 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
         </div>
       </div>
 
-      {/* ── Cancellation notice ── */}
       {allCancelled && (
         <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-4 py-2 flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
@@ -749,12 +1143,10 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
         </div>
       )}
 
-      {/* ── Content ── */}
       <div className="flex-1 overflow-auto">
 
         {/* Mobile cards */}
         <div className="lg:hidden bg-[#eef1f5] dark:bg-gray-900 min-h-full">
-          {/* Mobile search */}
           <div className="px-4 pt-4 pb-2">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#97a3b6]" />
@@ -768,6 +1160,26 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
             </div>
           </div>
 
+          {/* Mobile bulk-link bar */}
+          {canWrite && unlinkableEntries.length > 0 && (
+            <div className="mx-4 mb-2 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-[12px]">
+              <button type="button" onClick={toggleSelectAll}
+                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${allUnlinkedSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-400'}`}>
+                {allUnlinkedSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+              </button>
+              <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 flex-1">
+                {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select unlinked entries to auto-link'}
+              </span>
+              {hasSelection && (
+                <button onClick={handlePreviewBulkLink} disabled={bulkLinking}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-blue-700 hover:bg-blue-800 disabled:opacity-50 rounded-lg transition-colors">
+                  {bulkLinking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                  Auto-Link
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center justify-between px-4 py-2">
             <div className="text-[11px] font-extrabold tracking-wide uppercase text-[#56627a]">Entries</div>
             <div className="text-[10px] font-bold text-[#8a95a8] bg-[#e2e7ef] px-2 py-0.5 rounded-full">
@@ -779,6 +1191,8 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
             {visibleEntries.map((entry, idx) => {
               const realIdx = lpo.entries.indexOf(entry);
               const isCancelled = entry.isCancelled;
+              const isSelectable = canWrite && !isCancelled && !entry.linkedFuelRecordId && !!entry._id;
+              const isSelected = isSelectable && selectedIds.has(entry._id!);
               return (
                 <div
                   key={entry._id ?? idx}
@@ -787,29 +1201,37 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
                 >
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[16px] font-extrabold tracking-tight ${isCancelled ? 'line-through text-[#9aa4b6]' : 'text-[#1f2937]'}`}>
-                            {entry.truckNo}
-                          </span>
-                          <span style={{
-                            fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' as const,
-                            padding: '2px 7px', borderRadius: '6px',
-                            color: isCancelled ? '#dc2626' : entry.originalLiters ? '#d97706' : '#15924f',
-                            background: isCancelled ? '#fdeaea' : entry.originalLiters ? '#fef3c7' : '#e7f7ee',
-                          }}>
-                            {isCancelled ? 'Cancelled' : entry.originalLiters ? 'Amended' : 'Active'}
-                          </span>
-                          {!entry.linkedFuelRecordId && !isCancelled && (
-                            <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '6px', color: '#b45309', background: '#fef3c7' }}>
-                              Unlinked
+                      <div className="min-w-0 flex items-start gap-2">
+                        {isSelectable && (
+                          <button type="button" onClick={() => toggleEntry(entry._id!)}
+                            className={`mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-400'}`}>
+                            {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                          </button>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[16px] font-extrabold tracking-tight ${isCancelled ? 'line-through text-[#9aa4b6]' : 'text-[#1f2937]'}`}>
+                              {entry.truckNo}
                             </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-1 text-[12px] font-semibold text-[#8893a6]">
-                          <span>DO {entry.doNo}</span>
-                          <span className="text-[#cbd3e0]">·</span>
-                          <span>{entry.dest}</span>
+                            <span style={{
+                              fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' as const,
+                              padding: '2px 7px', borderRadius: '6px',
+                              color: isCancelled ? '#dc2626' : entry.originalLiters ? '#d97706' : '#15924f',
+                              background: isCancelled ? '#fdeaea' : entry.originalLiters ? '#fef3c7' : '#e7f7ee',
+                            }}>
+                              {isCancelled ? 'Cancelled' : entry.originalLiters ? 'Amended' : 'Active'}
+                            </span>
+                            {!entry.linkedFuelRecordId && !isCancelled && (
+                              <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '6px', color: '#b45309', background: '#fef3c7' }}>
+                                Unlinked
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 text-[12px] font-semibold text-[#8893a6]">
+                            <span>DO {entry.doNo}</span>
+                            <span className="text-[#cbd3e0]">·</span>
+                            <span>{entry.dest}</span>
+                          </div>
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
@@ -889,7 +1311,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
               <div className="text-center py-10 text-[#9aa4b6]">
                 <div className="text-[13px] font-semibold">No entries yet</div>
                 {canWrite && (
-                  <button onClick={() => setShowAddForm(true)} className="mt-2 text-[13px] font-bold text-[#2563eb] bg-transparent border-none cursor-pointer">
+                  <button onClick={() => setShowYardAddForm(true)} className="mt-2 text-[13px] font-bold text-[#2563eb] bg-transparent border-none cursor-pointer">
                     Add the first entry
                   </button>
                 )}
@@ -907,13 +1329,11 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
             )}
           </div>
 
-          {/* Lock notice */}
           <div className="mx-4 mb-4 flex items-center gap-2 px-3 py-2.5 bg-[#fff8eb] border border-[#fde9c0] rounded-[12px] text-[#b07a17]">
             <Lock className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="text-[11px] font-semibold">Edit lock required for add / edit operations</span>
           </div>
 
-          {/* Mobile sticky total */}
           <div className="px-4 pb-6">
             <div className="flex items-center justify-between rounded-[18px] px-4 py-3" style={{ background: 'linear-gradient(160deg,#1b2433,#0f1722)', boxShadow: '0 16px 32px -12px rgba(15,23,34,0.6)' }}>
               <div>
@@ -934,7 +1354,16 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
         <div className="hidden lg:block p-5">
           <div className="max-w-5xl mx-auto border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
             {/* Table header */}
-            <div className="grid grid-cols-[2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-blue-50 dark:bg-blue-900/30 border-b border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-blue-50 dark:bg-blue-900/30 border-b border-gray-200 dark:border-gray-700">
+              {/* Checkbox select-all header */}
+              <div className="px-1 py-2 flex items-center justify-center border-r border-gray-200 dark:border-gray-700">
+                {canWrite && unlinkableEntries.length > 0 && (
+                  <button type="button" onClick={toggleSelectAll}
+                    className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${allUnlinkedSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-400'}`}>
+                    {allUnlinkedSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                  </button>
+                )}
+              </div>
               {['#', 'DO No', 'Truck', 'Liters', 'Rate', 'Amount', 'Destination', 'Actions'].map((h, i) => (
                 <div
                   key={h}
@@ -949,11 +1378,24 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
             {visibleEntries.map((entry, idx) => {
               const realIdx = lpo.entries.indexOf(entry);
               const isCancelled = entry.isCancelled;
+              const isSelectable = canWrite && !isCancelled && !entry.linkedFuelRecordId && !!entry._id;
+              const isSelected = isSelectable && selectedIds.has(entry._id!);
               const rowCls = isCancelled
                 ? 'bg-red-50 dark:bg-red-900/15 border-b border-red-100 dark:border-red-900/30'
-                : 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50';
+                : isSelected
+                  ? 'bg-blue-50/60 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/20'
+                  : 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50';
               return (
-                <div key={entry._id ?? idx} className={`grid grid-cols-[2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] ${rowCls}`}>
+                <div key={entry._id ?? idx} className={`grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] ${rowCls}`}>
+                  {/* Checkbox cell */}
+                  <div className="px-1 py-2 flex items-center justify-center border-r border-gray-200 dark:border-gray-700">
+                    {isSelectable && (
+                      <button type="button" onClick={() => toggleEntry(entry._id!)}
+                        className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-400'}`}>
+                        {isSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                      </button>
+                    )}
+                  </div>
                   <div className="px-2 py-2 text-xs text-gray-400 border-r border-gray-200 dark:border-gray-700">{realIdx + 1}</div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700">
                     <span className={`text-sm font-mono ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
@@ -1039,12 +1481,11 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
               );
             })}
 
-            {/* Empty state */}
             {lpo.entries.length === 0 && (
               <div className="py-12 text-center text-gray-400 dark:text-gray-500">
                 <p className="text-sm font-medium">No entries</p>
                 {canWrite && (
-                  <button onClick={() => setShowAddForm(true)} className="mt-2 text-sm text-blue-600 hover:underline">
+                  <button onClick={() => setShowYardAddForm(true)} className="mt-2 text-sm text-blue-600 hover:underline">
                     Add the first entry
                   </button>
                 )}
@@ -1059,7 +1500,6 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
               </div>
             )}
 
-            {/* Lock notice */}
             <div className="bg-amber-50 dark:bg-amber-900/20 border-t border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center gap-2">
               <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
@@ -1068,7 +1508,8 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
             </div>
 
             {/* Total row */}
-            <div className="grid grid-cols-[2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-blue-50 dark:bg-blue-900/30 font-semibold">
+            <div className="grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-blue-50 dark:bg-blue-900/30 font-semibold">
+              <div className="px-1 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 uppercase">
@@ -1086,7 +1527,6 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
             </div>
           </div>
 
-          {/* Desktop summary cards */}
           <div className="grid grid-cols-3 gap-4 mt-4 max-w-5xl mx-auto">
             <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
               <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Active Entries</div>
@@ -1111,11 +1551,12 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
 
       {/* ── Modals ── */}
 
-      {showAddForm && (
-        <TangaLPOEntryForm
-          defaultRate={lpo.entries.length > 0 ? lpo.entries[lpo.entries.length - 1].rate : undefined}
-          onSave={handleAddEntry}
-          onClose={() => setShowAddForm(false)}
+      {showYardAddForm && (
+        <TangaYardLPOForm
+          mode="add-entries"
+          existingLpo={lpo}
+          onClose={() => setShowYardAddForm(false)}
+          onSuccess={refreshLpo}
         />
       )}
 
@@ -1161,6 +1602,30 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
           lpoId={lpoId}
           onDone={updated => { setLinkingEntry(null); handleMutationResult(updated); }}
           onClose={() => setLinkingEntry(null)}
+        />
+      )}
+
+      {showBulkPreview && (
+        <BulkLinkPreviewModal
+          results={bulkPreviewResults}
+          onConfirm={(selectedIds, topUpIds) => {
+            setShowBulkPreview(false);
+            setBulkPreviewResults([]);
+            if (selectedIds.length > 0) handleBulkLink(selectedIds, topUpIds);
+          }}
+          onClose={() => { setShowBulkPreview(false); setBulkPreviewResults([]); }}
+        />
+      )}
+
+      {showBulkConflict && bulkConflicts.length > 0 && (
+        <BulkLinkConflictModal
+          conflicts={bulkConflicts}
+          onConfirm={topUpIds => {
+            setShowBulkConflict(false);
+            setBulkConflicts([]);
+            if (topUpIds.length > 0) handleBulkLink(topUpIds, topUpIds);
+          }}
+          onClose={() => { setShowBulkConflict(false); setBulkConflicts([]); }}
         />
       )}
     </div>

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, BookOpen, List, BarChart2 } from 'lucide-react';
+import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, BookOpen, List, BarChart2, FilePlus } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { useDarLPOList, useDarNextNumber, darLPOKeys } from '../hooks/useDarLPOs';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
-import DarLPOForm from '../components/DarLPOForm';
+import DarYardLPOForm from '../components/DarYardLPOForm';
 import DarLPOWorkbook from '../components/DarLPOWorkbook';
 import DarLPOSummary from '../components/DarLPOSummary';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
@@ -52,6 +52,7 @@ export default function DarLPOs() {
   const [dateTo, setDateTo] = useState('');
   const [filterUnlinked, setFilterUnlinked] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showAddEntries, setShowAddEntries] = useState(false);
 
   useRealtimeSync('dar_lpo_documents', () => {}, 'rt-dar-lpo-page');
 
@@ -152,13 +153,25 @@ export default function DarLPOs() {
               <BarChart2 className="w-3.5 h-3.5" /> Summary
             </button>
           </div>
-          {canWrite && nextLpoNo && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm"
-            >
-              <Plus className="w-4 h-4" /> New LPO
-            </button>
+          {canWrite && (
+            <div className="flex items-center gap-2">
+              {lpos.length > 0 && (
+                <button
+                  onClick={() => setShowAddEntries(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/40 rounded-lg transition-colors"
+                >
+                  <FilePlus className="w-4 h-4" /> Add Entries
+                </button>
+              )}
+              {nextLpoNo && (
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm"
+                >
+                  <Plus className="w-4 h-4" /> Add LPO
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -376,14 +389,23 @@ export default function DarLPOs() {
         )}
       </div>}
 
-      {/* Create form modal */}
+      {/* New LPO form */}
       {showForm && nextLpoNo && (
-        <DarLPOForm
+        <DarYardLPOForm
+          mode="new"
           nextLpoNo={nextLpoNo}
-          onClose={() => {
-            setShowForm(false);
-            queryClient.invalidateQueries({ queryKey: darLPOKeys.all });
-          }}
+          onClose={() => setShowForm(false)}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: darLPOKeys.all })}
+        />
+      )}
+
+      {/* Add Entries to most recent LPO */}
+      {showAddEntries && lpos[0] && (
+        <DarYardLPOForm
+          mode="add-entries"
+          existingLpo={lpos[0]}
+          onClose={() => setShowAddEntries(false)}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: darLPOKeys.all })}
         />
       )}
     </div>
