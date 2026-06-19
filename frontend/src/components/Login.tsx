@@ -274,10 +274,12 @@ const Login: React.FC = () => {
             {/* Username */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#4a5568', marginBottom: 8, letterSpacing: '0.01em' }}>Username</label>
-              <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
-                  <User size={18} color="#97a3b6" />
-                </div>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 10, height: 54, paddingLeft: 15, paddingRight: 16, border: '1.5px solid #e3e8f0', borderRadius: 15, background: '#fff', transition: 'border-color 0.15s' }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = '#2563eb'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#e3e8f0'; }}
+              >
+                <User size={18} color="#97a3b6" style={{ flexShrink: 0 }} />
                 <input
                   name="username"
                   type="text"
@@ -285,9 +287,7 @@ const Login: React.FC = () => {
                   value={credentials.username}
                   onChange={handleInputChange}
                   placeholder="Enter your username"
-                  style={{ width: '100%', boxSizing: 'border-box', height: 54, padding: '0 16px 0 50px', border: '1.5px solid #e3e8f0', borderRadius: 15, background: '#fff', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, outline: 'none', color: '#1f2937', transition: 'border-color 0.15s' }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = '#2563eb'; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = '#e3e8f0'; }}
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 15, fontWeight: 600, color: '#1f2937', fontFamily: 'inherit', minWidth: 0 }}
                 />
               </div>
             </div>
@@ -295,10 +295,12 @@ const Login: React.FC = () => {
             {/* Password */}
             <div style={{ marginBottom: 18 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#4a5568', marginBottom: 8, letterSpacing: '0.01em' }}>Password</label>
-              <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
-                  <Lock size={18} color="#97a3b6" />
-                </div>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 10, height: 54, paddingLeft: 15, paddingRight: 6, border: '1.5px solid #e3e8f0', borderRadius: 15, background: '#fff', transition: 'border-color 0.15s' }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = '#2563eb'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#e3e8f0'; }}
+              >
+                <Lock size={18} color="#97a3b6" style={{ flexShrink: 0 }} />
                 <input
                   name="password"
                   type={showPassword ? 'text' : 'password'}
@@ -306,14 +308,12 @@ const Login: React.FC = () => {
                   value={credentials.password}
                   onChange={handleInputChange}
                   placeholder="Enter your password"
-                  style={{ width: '100%', boxSizing: 'border-box', height: 54, padding: '0 50px 0 50px', border: '1.5px solid #e3e8f0', borderRadius: 15, background: '#fff', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, outline: 'none', color: '#1f2937', transition: 'border-color 0.15s' }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = '#2563eb'; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = '#e3e8f0'; }}
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 15, fontWeight: 600, color: '#1f2937', fontFamily: 'inherit', minWidth: 0 }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: 'absolute', right: 6, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none', cursor: 'pointer' }}
+                  style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0 }}
                 >
                   {showPassword
                     ? <EyeOff size={19} style={{ color: '#8893a6' }} />
