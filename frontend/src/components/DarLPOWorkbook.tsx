@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDarWorkbook, useDarYears, darLPOKeys } from '../hooks/useDarLPOs';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import DarLPOSheetView from './DarLPOSheetView';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 import type { DarLPO } from '../types';
@@ -9,7 +10,7 @@ import type { DarLPO } from '../types';
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const TABS_PER_PAGE = 8;
 
-export default function DarLPOWorkbook() {
+export default function DarLPOWorkbook({ onBack }: { onBack?: () => void } = {}) {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
   const queryClient = useQueryClient();
@@ -70,6 +71,8 @@ export default function DarLPOWorkbook() {
     queryClient.invalidateQueries({ queryKey: darLPOKeys.workbook(selectedYear) });
     queryClient.invalidateQueries({ queryKey: darLPOKeys.all });
   };
+
+  useRealtimeSync('dar_lpo_documents', handleLpoUpdated, 'rt-dar-lpo-workbook');
 
   const allYears = [...new Set([...years, currentYear])].sort((a, b) => b - a);
 
@@ -181,6 +184,7 @@ export default function DarLPOWorkbook() {
           <DarLPOSheetView
             lpo={activeLpo}
             onUpdated={handleLpoUpdated}
+            onBack={onBack}
           />
         ) : (
           <div className="flex items-center justify-center h-48">

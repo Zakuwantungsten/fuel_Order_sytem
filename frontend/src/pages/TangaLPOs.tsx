@@ -3,6 +3,7 @@ import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { useTangaLPOList, useTangaNextNumber, tangaLPOKeys } from '../hooks/useTangaLPOs';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import TangaLPOForm from '../components/TangaLPOForm';
 import TangaLPOWorkbook from '../components/TangaLPOWorkbook';
 import TangaLPOSummary from '../components/TangaLPOSummary';
@@ -11,15 +12,19 @@ import type { TangaLPO } from '../types';
 
 const WRITE_ROLES = ['super_admin', 'admin', 'manager', 'supervisor', 'tanga_yard'];
 
-function StatCard({ label, value, sub, icon: Icon, accent }: {
+function StatCard({ label, value, sub, icon: Icon, accent, onClick }: {
   label: string;
   value: string | number;
   sub?: string;
   icon: React.ElementType;
   accent: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-start gap-3">
+    <div
+      className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-start gap-3 transition-colors ${onClick ? 'cursor-pointer hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-sm' : ''}`}
+      onClick={onClick}
+    >
       <div className={`p-2.5 rounded-lg ${accent}`}>
         <Icon className="w-5 h-5 text-white" />
       </div>
@@ -45,7 +50,10 @@ export default function TangaLPOs() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [filterUnlinked, setFilterUnlinked] = useState(false);
   const [showForm, setShowForm] = useState(false);
+
+  useRealtimeSync('tanga_lpo_documents', () => {}, 'rt-tanga-lpo-page');
 
   const LIMIT = 20;
 
@@ -57,6 +65,7 @@ export default function TangaLPOs() {
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
     order: 'desc',
+    filter: filterUnlinked ? 'unlinked' : undefined,
   });
 
   // Stats: this-month aggregations from a separate query
@@ -96,10 +105,11 @@ export default function TangaLPOs() {
     setSearch('');
     setDateFrom('');
     setDateTo('');
+    setFilterUnlinked(false);
     setPage(1);
   };
 
-  const hasFilters = search || dateFrom || dateTo;
+  const hasFilters = search || dateFrom || dateTo || filterUnlinked;
 
   return (
     <div className="p-4 lg:p-6 space-y-5 min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -181,18 +191,19 @@ export default function TangaLPOs() {
           accent="bg-green-500"
         />
         <StatCard
-          label="Trucks Served"
-          value={monthTrucks}
-          sub={unlinkedCount > 0 ? `${unlinkedCount} unlinked entries` : 'All linked'}
+          label={unlinkedCount > 0 ? 'Unlinked Entries' : 'Trucks Served'}
+          value={unlinkedCount > 0 ? unlinkedCount : monthTrucks}
+          sub={unlinkedCount > 0 ? 'Click to view & fix' : 'All linked'}
           icon={unlinkedCount > 0 ? AlertTriangle : Truck}
           accent={unlinkedCount > 0 ? 'bg-amber-500' : 'bg-indigo-500'}
+          onClick={unlinkedCount > 0 ? () => { setFilterUnlinked(true); setViewMode('list'); setPage(1); } : undefined}
         />
       </div>
 
       {/* Workbook view */}
       {viewMode === 'workbook' && (
         <div className="flex-1 min-h-[600px]">
-          <TangaLPOWorkbook />
+          <TangaLPOWorkbook onBack={() => setViewMode('list')} />
         </div>
       )}
 
@@ -228,6 +239,16 @@ export default function TangaLPOs() {
             onChange={e => { setDateTo(e.target.value); setPage(1); }}
             className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+          {filterUnlinked && (
+            <button
+              onClick={() => { setFilterUnlinked(false); setPage(1); }}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Unlinked only
+              <X className="w-3.5 h-3.5 ml-0.5" />
+            </button>
+          )}
           {hasFilters && (
             <button
               onClick={handleClearFilters}

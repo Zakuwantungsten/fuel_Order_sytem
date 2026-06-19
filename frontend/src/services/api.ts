@@ -2422,6 +2422,10 @@ export const tangaLPOAPI = {
     const response = await apiClient.delete(`/tanga-lpo/${id}/lock`);
     return response.data.data;
   },
+  manualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
+    const response = await apiClient.post('/tanga-lpo/manual-link', data);
+    return response.data.data;
+  },
 };
 
 // ── Dar LPO API ───────────────────────────────────────────────────────────────
@@ -2477,6 +2481,10 @@ export const darLPOAPI = {
   },
   releaseLock: async (id: string) => {
     const response = await apiClient.delete(`/dar-lpo/${id}/lock`);
+    return response.data.data;
+  },
+  manualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
+    const response = await apiClient.post('/dar-lpo/manual-link', data);
     return response.data.data;
   },
 };

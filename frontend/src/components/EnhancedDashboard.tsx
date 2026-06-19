@@ -35,6 +35,8 @@ import {
   Activity,
   Building2,
   Receipt,
+  Anchor,
+  Landmark,
   FileUp,
   Download,
   HardDrive,
@@ -411,8 +413,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'do', label: 'DO Management', icon: PackageCheck },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: Receipt },
-        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Receipt },
-        { id: 'dar_lpo', label: 'Dar LPO', icon: Receipt },
+        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Anchor },
+        { id: 'dar_lpo', label: 'Dar LPO', icon: Landmark },
         { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
         { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
         { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
@@ -434,8 +436,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'do', label: 'DO Management', icon: PackageCheck },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: Receipt },
-        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Receipt },
-        { id: 'dar_lpo', label: 'Dar LPO', icon: Receipt },
+        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Anchor },
+        { id: 'dar_lpo', label: 'Dar LPO', icon: Landmark },
         { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
         { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
         { id: 'journey_config', label: 'Journey Config', icon: Waypoints },
@@ -452,14 +454,14 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
     if (user.role === 'tanga_yard') {
       return [
-        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Receipt },
+        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Anchor },
         { id: 'yard_fuel', label: 'Fuel Dispense', icon: Fuel },
       ];
     }
 
     if (user.role === 'dar_yard') {
       return [
-        { id: 'dar_lpo', label: 'Dar LPO', icon: Receipt },
+        { id: 'dar_lpo', label: 'Dar LPO', icon: Landmark },
         { id: 'yard_fuel', label: 'Fuel Dispense', icon: Fuel },
       ];
     }
@@ -746,7 +748,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                       onMouseEnter={e => { if (activeTab !== item.id) { e.currentTarget.style.background = '#1E293B'; e.currentTarget.style.color = '#CBD5E1'; } }}
                       onMouseLeave={e => { if (activeTab !== item.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94A3B8'; } }}
                     >
-                      <IconComponent className="w-5 h-5 flex-shrink-0" style={{ opacity: activeTab === item.id ? 1 : 0.75 }} />
+                      <IconComponent className="w-6 h-6 flex-shrink-0" style={{ opacity: activeTab === item.id ? 1 : 0.75 }} />
                       {sidebarOpen && (
                         <span className="ml-2.5 text-sm truncate flex-1">{item.label}</span>
                       )}

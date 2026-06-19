@@ -4,6 +4,8 @@ import { subscribeToDataChanges, unsubscribeFromDataChanges } from '../services/
 import { lpoKeys } from './useLPOs';
 import { deliveryOrderKeys } from './useDeliveryOrders';
 import { fuelRecordKeys } from './useFuelRecords';
+import { tangaLPOKeys } from './useTangaLPOs';
+import { darLPOKeys } from './useDarLPOs';
 
 /** Shape of a real-time data-change event delivered over the WebSocket. */
 export interface DataChangeEvent {
@@ -23,10 +25,12 @@ export interface DataChangeEvent {
  * affecting both fuel records and delivery orders).
  */
 const COLLECTION_QUERY_KEYS: Record<string, () => ReadonlyArray<ReadonlyArray<unknown>>> = {
-  lpo_summaries:   () => [lpoKeys.lists(), lpoKeys.workbooks(), lpoKeys.availableFilters()],
-  delivery_orders: () => [deliveryOrderKeys.lists(), deliveryOrderKeys.availablePeriods({})],
-  fuel_records:    () => [fuelRecordKeys.lists(), fuelRecordKeys.availablePeriods()],
-  truck_batches:   () => [fuelRecordKeys.lists(), deliveryOrderKeys.lists()],
+  lpo_summaries:        () => [lpoKeys.lists(), lpoKeys.workbooks(), lpoKeys.availableFilters()],
+  delivery_orders:      () => [deliveryOrderKeys.lists(), deliveryOrderKeys.availablePeriods({})],
+  fuel_records:         () => [fuelRecordKeys.lists(), fuelRecordKeys.availablePeriods()],
+  truck_batches:        () => [fuelRecordKeys.lists(), deliveryOrderKeys.lists()],
+  tanga_lpo_documents:  () => [tangaLPOKeys.lists(), [...tangaLPOKeys.all, 'workbook'] as const, tangaLPOKeys.years()],
+  dar_lpo_documents:    () => [darLPOKeys.lists(), [...darLPOKeys.all, 'workbook'] as const, darLPOKeys.years()],
 };
 
 /** Map collection name → the detail-level React Query key for a specific record id. */

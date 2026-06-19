@@ -65,7 +65,15 @@ const LPOs = () => {
       localStorage.setItem('fuel-order:lpo:selectedYear', JSON.stringify(selectedYear));
     } catch { /* ignore */ }
   }, [selectedYear]);
-  const [isDetailFormOpen, setIsDetailFormOpen] = useState(false);
+  const [isDetailFormOpen, setIsDetailFormOpen] = useState(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('action') === 'create-lpo') {
+      url.searchParams.delete('action');
+      window.history.replaceState({}, '', url.toString());
+      return true;
+    }
+    return false;
+  });
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadLPOPdf = journeyConfig?.autoDownloadLPOPdf ?? true;
   const [stationFilter, setStationFilter] = usePersistedState('lpo:stationFilter', '');

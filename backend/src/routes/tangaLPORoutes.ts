@@ -44,6 +44,11 @@ router.post('/amend-entry',
   asyncHandler(tangaLPOController.amendEntryInTangaLPO)
 );
 
+router.post('/manual-link',
+  authorize(...WRITE_ROLES),
+  asyncHandler(tangaLPOController.manualLinkTangaEntry)
+);
+
 router.post('/:id/cancel-all',
   commonValidation.mongoId,
   authorize(...WRITE_ROLES),

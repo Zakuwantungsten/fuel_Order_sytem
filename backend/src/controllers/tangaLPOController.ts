@@ -90,7 +90,7 @@ export const getTangaAvailableYears = async (req: AuthRequest, res: Response): P
 
 export const getAllTangaLPOs = async (req: AuthRequest, res: Response): Promise<void> => {
   const { page, limit, sort, order } = getPaginationParams(req.query);
-  const { year, dateFrom, dateTo, lpoNo, search } = req.query;
+  const { year, dateFrom, dateTo, lpoNo, search, filter: filterMode } = req.query;
 
   const filter: any = { isDeleted: false };
 
@@ -113,6 +113,19 @@ export const getAllTangaLPOs = async (req: AuthRequest, res: Response): Promise<
     }
   } else if (lpoNo) {
     filter.lpoNo = { $regex: sanitizeRegexInput(lpoNo as string) || lpoNo, $options: 'i' };
+  }
+
+  if (filterMode === 'unlinked') {
+    filter['entries'] = {
+      $elemMatch: {
+        isCancelled: { $ne: true },
+        $or: [
+          { linkedFuelRecordId: { $exists: false } },
+          { linkedFuelRecordId: null },
+          { linkedFuelRecordId: '' },
+        ],
+      },
+    };
   }
 
   const skip = calculateSkip(page, limit);
@@ -448,6 +461,48 @@ export const amendEntryInTangaLPO = async (req: AuthRequest, res: Response): Pro
     success: true,
     message: 'Entry amended successfully',
     data: { ...lpo.toObject(), id: lpo._id },
+  });
+
+  emitDataChange('tanga_lpo_documents', 'update');
+  emitDataChange('fuel_records', 'update');
+};
+
+export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { lpoId, entryId, doNo } = req.body;
+  if (!lpoId || !entryId || !doNo) throw new ApiError(400, 'lpoId, entryId and doNo are required');
+
+  const lpo = await TangaLPODocument.findOne({ _id: lpoId, isDeleted: false });
+  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+
+  const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
+  if (!entry) throw new ApiError(404, 'Entry not found');
+  if (entry.isCancelled) throw new ApiError(400, 'Cannot link a cancelled entry');
+  if (entry.linkedFuelRecordId) throw new ApiError(400, 'Entry is already linked — cancel and re-create to re-link');
+
+  const fr = await findLinkedFuelRecord(doNo as string, entry.truckNo);
+  if (!fr) throw new ApiError(404, `No FuelRecord found for DO ${doNo} / truck ${entry.truckNo}`);
+
+  entry.doNo = doNo;
+  entry.linkedFuelRecordId = fr._id.toString();
+  await applyTangaYardDelta(fr, entry.liters);
+  await lpo.save();
+
+  await AuditService.log({
+    userId: req.user?.userId,
+    username: req.user?.username || 'system',
+    action: 'UPDATE',
+    resourceType: 'TangaLPODocument',
+    resourceId: lpo.lpoNo,
+    details: `Entry ${entryId} in Tanga LPO ${lpo.lpoNo} manually linked to FuelRecord ${fr._id} (DO: ${doNo}) by ${req.user?.username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
+  const responseData = lpo.toObject();
+  res.status(200).json({
+    success: true,
+    message: 'Entry manually linked to FuelRecord successfully',
+    data: { ...responseData, id: responseData._id },
   });
 
   emitDataChange('tanga_lpo_documents', 'update');

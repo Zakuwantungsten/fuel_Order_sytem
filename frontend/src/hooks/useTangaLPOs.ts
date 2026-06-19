@@ -28,6 +28,7 @@ export interface TangaLPOFilters {
   lpoNo?: string;
   sort?: string;
   order?: 'asc' | 'desc';
+  filter?: 'unlinked';
 }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,7 @@ export function useTangaLPOList(filters: TangaLPOFilters = {}, enabled = true) {
   if (filters.dateTo)   params.dateTo   = filters.dateTo;
   if (filters.search)   params.search   = filters.search;
   if (filters.lpoNo)    params.lpoNo    = filters.lpoNo;
+  if (filters.filter)   params.filter   = filters.filter;
 
   return useQuery({
     queryKey: tangaLPOKeys.list(params),
