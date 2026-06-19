@@ -1376,12 +1376,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
       {/* Mobile Sticky Summary Bar */}
       <div className="lg:hidden flex-shrink-0 px-3 pb-6 pt-2" style={{background: '#eef1f5'}}>
-        <div className="flex items-center justify-between rounded-[20px] px-[18px] py-[13px]" style={{background: 'linear-gradient(160deg, #1b2433, #0f1722)', boxShadow: '0 16px 32px -12px rgba(15,23,34,0.7)'}}>
+        <div className="flex items-start justify-between rounded-[20px] px-[18px] py-[13px]" style={{background: 'linear-gradient(160deg, #1b2433, #0f1722)', boxShadow: '0 16px 32px -12px rgba(15,23,34,0.7)'}}>
           <div>
-            <div className="text-[9px] font-bold tracking-[0.1em] uppercase text-[#6b7990]">
+            <div className="text-[9px] font-bold tracking-[0.1em] uppercase text-[#6b7990]">Active trucks</div>
+            <div className="text-[11px] font-semibold text-[#aab4c6] mt-[1px]">
               {editedSheet.entries.filter(e => !e.isCancelled).length} active · {editedSheet.entries.filter(e => !e.isCancelled).reduce((s, e) => s + e.liters, 0).toLocaleString()} L
             </div>
-            <div className="text-[11px] font-semibold text-[#aab4c6] mt-[1px]">Active trucks</div>
           </div>
           <div className="text-right">
             <div className="text-[9px] font-bold tracking-[0.1em] uppercase text-[#6b7990]">Grand Total</div>
