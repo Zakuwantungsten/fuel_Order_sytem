@@ -2367,4 +2367,118 @@ export const archivalAPI = {
   },
 };
 
+// ── Tanga LPO API ─────────────────────────────────────────────────────────────
+
+export const tangaLPOAPI = {
+  getAll: async (params?: Record<string, unknown>) => {
+    const response = await apiClient.get('/tanga-lpo', { params });
+    return response.data.data;
+  },
+  getById: async (id: string) => {
+    const response = await apiClient.get(`/tanga-lpo/${id}`);
+    return response.data.data;
+  },
+  getByLPONo: async (lpoNo: string) => {
+    const response = await apiClient.get(`/tanga-lpo/lpo/${encodeURIComponent(lpoNo)}`);
+    return response.data.data;
+  },
+  getWorkbookYear: async (year: number) => {
+    const response = await apiClient.get(`/tanga-lpo/workbooks/${year}`);
+    return response.data.data;
+  },
+  getYears: async (): Promise<number[]> => {
+    const response = await apiClient.get('/tanga-lpo/years');
+    return response.data.data || [];
+  },
+  getNextNumber: async (): Promise<string> => {
+    const response = await apiClient.get('/tanga-lpo/next-number');
+    return response.data.data?.nextLpoNo || '';
+  },
+  create: async (data: Record<string, unknown>) => {
+    const response = await apiClient.post('/tanga-lpo', data);
+    return response.data;
+  },
+  update: async (id: string, data: Record<string, unknown>) => {
+    const response = await apiClient.put(`/tanga-lpo/${id}`, data);
+    return response.data.data;
+  },
+  cancelEntry: async (data: { lpoId: string; entryId: string; cancellationReason?: string }) => {
+    const response = await apiClient.post('/tanga-lpo/cancel-entry', data);
+    return response.data.data;
+  },
+  amendEntry: async (data: { lpoId: string; entryId: string; newLiters: number; amendReason?: string }) => {
+    const response = await apiClient.post('/tanga-lpo/amend-entry', data);
+    return response.data.data;
+  },
+  cancelAll: async (id: string, cancellationReason?: string) => {
+    const response = await apiClient.post(`/tanga-lpo/${id}/cancel-all`, { cancellationReason });
+    return response.data.data;
+  },
+  acquireLock: async (id: string) => {
+    const response = await apiClient.post(`/tanga-lpo/${id}/lock`);
+    return response.data.data;
+  },
+  releaseLock: async (id: string) => {
+    const response = await apiClient.delete(`/tanga-lpo/${id}/lock`);
+    return response.data.data;
+  },
+};
+
+// ── Dar LPO API ───────────────────────────────────────────────────────────────
+
+export const darLPOAPI = {
+  getAll: async (params?: Record<string, unknown>) => {
+    const response = await apiClient.get('/dar-lpo', { params });
+    return response.data.data;
+  },
+  getById: async (id: string) => {
+    const response = await apiClient.get(`/dar-lpo/${id}`);
+    return response.data.data;
+  },
+  getByLPONo: async (lpoNo: string) => {
+    const response = await apiClient.get(`/dar-lpo/lpo/${encodeURIComponent(lpoNo)}`);
+    return response.data.data;
+  },
+  getWorkbookYear: async (year: number) => {
+    const response = await apiClient.get(`/dar-lpo/workbooks/${year}`);
+    return response.data.data;
+  },
+  getYears: async (): Promise<number[]> => {
+    const response = await apiClient.get('/dar-lpo/years');
+    return response.data.data || [];
+  },
+  getNextNumber: async (): Promise<string> => {
+    const response = await apiClient.get('/dar-lpo/next-number');
+    return response.data.data?.nextLpoNo || '';
+  },
+  create: async (data: Record<string, unknown>) => {
+    const response = await apiClient.post('/dar-lpo', data);
+    return response.data;
+  },
+  update: async (id: string, data: Record<string, unknown>) => {
+    const response = await apiClient.put(`/dar-lpo/${id}`, data);
+    return response.data.data;
+  },
+  cancelEntry: async (data: { lpoId: string; entryId: string; cancellationReason?: string }) => {
+    const response = await apiClient.post('/dar-lpo/cancel-entry', data);
+    return response.data.data;
+  },
+  amendEntry: async (data: { lpoId: string; entryId: string; newLiters: number; amendReason?: string }) => {
+    const response = await apiClient.post('/dar-lpo/amend-entry', data);
+    return response.data.data;
+  },
+  cancelAll: async (id: string, cancellationReason?: string) => {
+    const response = await apiClient.post(`/dar-lpo/${id}/cancel-all`, { cancellationReason });
+    return response.data.data;
+  },
+  acquireLock: async (id: string) => {
+    const response = await apiClient.post(`/dar-lpo/${id}/lock`);
+    return response.data.data;
+  },
+  releaseLock: async (id: string) => {
+    const response = await apiClient.delete(`/dar-lpo/${id}/lock`);
+    return response.data.data;
+  },
+};
+
 export default apiClient;

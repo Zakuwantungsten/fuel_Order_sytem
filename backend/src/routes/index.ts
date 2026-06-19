@@ -63,6 +63,8 @@ import securityIncidentRoutes from './securityIncidentRoutes';
 import complianceRoutes from './complianceRoutes';
 import conditionalAccessRoutes from './conditionalAccessRoutes';
 import firewallRoutes from './firewallRoutes';
+import tangaLPORoutes from './tangaLPORoutes';
+import darLPORoutes from './darLPORoutes';
 
 const router = Router();
 
@@ -136,6 +138,8 @@ router.use('/system-admin/session-anomalies', sessionAnomalyRoutes); // Session 
 router.use('/system-admin/incidents', securityIncidentRoutes); // Security incident workflow
 router.use('/system-admin/compliance', complianceRoutes); // Compliance & regulatory dashboard
 router.use('/system-admin/conditional-access', conditionalAccessRoutes); // Conditional access policies
-router.use('/system-admin/firewall', firewallRoutes); // Unified Firewall management hub
+router.use('/system-admin/firewall', firewallRoutes);
+router.use('/tanga-lpo', tangaLPORoutes);
+router.use('/dar-lpo',   darLPORoutes);
 
 export default router;

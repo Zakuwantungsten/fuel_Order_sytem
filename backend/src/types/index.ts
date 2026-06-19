@@ -662,6 +662,50 @@ export interface IStandardAllocations {
   tangaReturnToMombasa: number;
 }
 
+// ── Tanga Yard LPO ────────────────────────────────────────────────────────────
+
+export interface ITangaLPOEntry {
+  _id?: string;
+  doNo: string;
+  truckNo: string;
+  liters: number;
+  rate: number;
+  amount: number;
+  dest: string;
+  sortOrder?: number;
+  originalLiters?: number | null;
+  amendedAt?: Date | null;
+  isCancelled: boolean;
+  cancellationReason?: string;
+  cancelledAt?: Date;
+  linkedFuelRecordId?: string;
+}
+
+export interface ITangaLPODocument {
+  _id?: string;
+  lpoNo: string;
+  date: string;
+  year: number;
+  entries: ITangaLPOEntry[];
+  total: number;
+  currency: 'TZS' | 'USD';
+  createdBy?: string;
+  approvedBy?: string;
+  notes?: string;
+  isDeleted: boolean;
+  deletedAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// ── Dar Yard LPO ──────────────────────────────────────────────────────────────
+
+export interface IDarLPOEntry extends ITangaLPOEntry {}
+
+export interface IDarLPODocument extends Omit<ITangaLPODocument, 'lpoNo'> {
+  lpoNo: string; // "DY-YYYY-NNN"
+}
+
 export interface ISystemConfig {
   configType: 'fuel_stations' | 'routes' | 'truck_batches' | 'standard_allocations' | 'general';
   fuelStations?: IFuelStation[];

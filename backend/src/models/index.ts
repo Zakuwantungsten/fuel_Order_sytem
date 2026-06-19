@@ -32,6 +32,10 @@ export { Checkpoint, ICheckpoint } from './Checkpoint';
 export { FleetSnapshot, IFleetSnapshot, IFleetGroup, ITruckPositionInSnapshot } from './FleetSnapshot';
 export { TruckPosition, ITruckPosition } from './TruckPosition';
 
+// Export yard LPO models
+export { TangaLPODocument, ITangaLPODocumentModel } from './TangaLPODocument';
+export { DarLPODocument, IDarLPODocumentModel } from './DarLPODocument';
+
 // Export archived data models
 export {
   ArchivedFuelRecord,

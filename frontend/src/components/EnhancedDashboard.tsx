@@ -75,6 +75,8 @@ const TruckBatchesPage = lazyWithRetry(() => import('../pages/TruckBatches'));
 const FleetTracking = lazyWithRetry(() => import('../pages/FleetTracking'));
 const CheckpointManagement = lazyWithRetry(() => import('../pages/CheckpointManagement'));
 const JourneyConfig = lazyWithRetry(() => import('../pages/JourneyConfig'));
+const TangaLPOs = lazyWithRetry(() => import('../pages/TangaLPOs'));
+const DarLPOs = lazyWithRetry(() => import('../pages/DarLPOs'));
 
 // Suspense fallback shown while a lazy chunk is loading
 const TabFallback = () => (
@@ -101,22 +103,24 @@ const getInitialTab = (userRole: string): string => {
   // Define valid tabs for each role type
   const getValidTabs = () => {
     if (isDriver) return ['driver_portal'];
+    if (userRole === 'tanga_yard') return ['tanga_lpo', 'yard_fuel'];
+    if (userRole === 'dar_yard') return ['dar_lpo', 'yard_fuel'];
     if (isYardRole || userRole === 'yard_personnel') return ['yard_fuel'];
     if (userRole === 'super_admin') {
       return [
-        'overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports',
-        'sa_overview', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_system', 
+        'overview', 'do', 'fuel_records', 'lpo', 'tanga_lpo', 'dar_lpo', 'fleet_tracking', 'reports',
+        'sa_overview', 'sa_users', 'sa_fuel_stations', 'sa_routes', 'sa_system',
         'sa_audit', 'sa_security', 'sa_trash', 'sa_archival', 'sa_backup', 'sa_analytics', 'sa_fuel_prices', 'sa_data_export', 'sa_monitoring', 'sa_storage', 'sa_custom_report', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'admin' || userRole === 'boss') {
       return [
-        'overview', 'do', 'fuel_records', 'lpo', 'truck_batches', 'fleet_tracking',
+        'overview', 'do', 'fuel_records', 'lpo', 'tanga_lpo', 'dar_lpo', 'truck_batches', 'fleet_tracking',
         'admin_users', 'admin_fuel_stations', 'admin_fuel_prices', 'admin_routes', 'admin_reports', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'fuel_order_maker') {
-      return ['overview', 'do', 'fuel_records', 'lpo', 'fleet_tracking', 'reports'];
+      return ['overview', 'do', 'fuel_records', 'lpo', 'tanga_lpo', 'dar_lpo', 'fleet_tracking', 'reports'];
     }
     if (userRole === 'payment_manager') {
       return ['overview', 'payments'];
@@ -138,6 +142,8 @@ const getInitialTab = (userRole: string): string => {
   }
   
   // Default based on role
+  if (userRole === 'tanga_yard') return 'tanga_lpo';
+  if (userRole === 'dar_yard') return 'dar_lpo';
   if (isYardRole || userRole === 'yard_personnel') return 'yard_fuel';
   if (isDriver) return 'driver_portal';
   if (isManager) return 'manager_view';
@@ -405,6 +411,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'do', label: 'DO Management', icon: PackageCheck },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: Receipt },
+        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Receipt },
+        { id: 'dar_lpo', label: 'Dar LPO', icon: Receipt },
         { id: 'truck_batches', label: 'Truck Batches', icon: Truck },
         { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
         { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
@@ -426,6 +434,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         { id: 'do', label: 'DO Management', icon: PackageCheck },
         { id: 'fuel_records', label: 'Fuel Records', icon: Fuel },
         { id: 'lpo', label: 'LPO Management', icon: Receipt },
+        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Receipt },
+        { id: 'dar_lpo', label: 'Dar LPO', icon: Receipt },
         { id: 'fleet_tracking', label: 'Fleet Tracking', icon: Navigation },
         { id: 'checkpoints', label: 'Checkpoints', icon: MapPinned },
         { id: 'journey_config', label: 'Journey Config', icon: Waypoints },
@@ -437,6 +447,20 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       return [
         ...baseItems,
         { id: 'payments', label: 'Payment & Order Management', icon: DollarSign },
+      ];
+    }
+
+    if (user.role === 'tanga_yard') {
+      return [
+        { id: 'tanga_lpo', label: 'Tanga LPO', icon: Receipt },
+        { id: 'yard_fuel', label: 'Fuel Dispense', icon: Fuel },
+      ];
+    }
+
+    if (user.role === 'dar_yard') {
+      return [
+        { id: 'dar_lpo', label: 'Dar LPO', icon: Receipt },
+        { id: 'yard_fuel', label: 'Fuel Dispense', icon: Fuel },
       ];
     }
 
@@ -466,6 +490,10 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         return <FuelRecordsPage />;
       case 'lpo':
         return <LPOs />;
+      case 'tanga_lpo':
+        return <TangaLPOs />;
+      case 'dar_lpo':
+        return <DarLPOs />;
       case 'truck_batches':
         return <TruckBatchesPage initialSuffix={pendingTruckSuffix} onSuffixConsumed={() => setPendingTruckSuffix('')} />;
       case 'fleet_tracking':

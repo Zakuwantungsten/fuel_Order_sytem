@@ -1180,3 +1180,87 @@ export interface Notification {
   createdAt?: string;
   updatedAt?: string;
 }
+
+// ── Tanga LPO types ────────────────────────────────────────────────────────────
+
+export interface TangaLPOEntry {
+  _id?: string;
+  doNo: string;
+  truckNo: string;
+  liters: number;
+  rate: number;
+  amount: number;
+  dest: string;
+  sortOrder?: number;
+  originalLiters?: number | null;
+  amendedAt?: string | null;
+  isCancelled: boolean;
+  cancellationReason?: string;
+  cancelledAt?: string;
+  linkedFuelRecordId?: string;
+}
+
+export interface TangaLPO {
+  _id?: string;
+  id?: string;
+  lpoNo: string;
+  date: string;
+  year: number;
+  entries: TangaLPOEntry[];
+  total: number;
+  currency: 'TZS' | 'USD';
+  createdBy?: string;
+  approvedBy?: string;
+  notes?: string;
+  isDeleted: boolean;
+  deletedAt?: string;
+  editLock?: {
+    lockedBy: string;
+    lockedAt: string;
+    expiresAt: string;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ── Dar LPO types ──────────────────────────────────────────────────────────────
+
+export interface DarLPOEntry {
+  _id?: string;
+  doNo: string;
+  truckNo: string;
+  liters: number;
+  rate: number;
+  amount: number;
+  dest: string;
+  sortOrder?: number;
+  originalLiters?: number | null;
+  amendedAt?: string | null;
+  isCancelled: boolean;
+  cancellationReason?: string;
+  cancelledAt?: string;
+  linkedFuelRecordId?: string;
+}
+
+export interface DarLPO {
+  _id?: string;
+  id?: string;
+  lpoNo: string;
+  date: string;
+  year: number;
+  entries: DarLPOEntry[];
+  total: number;
+  currency: 'TZS' | 'USD';
+  createdBy?: string;
+  approvedBy?: string;
+  notes?: string;
+  isDeleted: boolean;
+  deletedAt?: string;
+  editLock?: {
+    lockedBy: string;
+    lockedAt: string;
+    expiresAt: string;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}

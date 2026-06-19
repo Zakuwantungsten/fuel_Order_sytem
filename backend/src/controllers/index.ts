@@ -9,3 +9,5 @@ export * as userController from './userController';
 export * as adminController from './adminController';
 export * as driverAccountController from './driverAccountController';
 export * as notificationController from './notificationController';
+export * as tangaLPOController from './tangaLPOController';
+export * as darLPOController from './darLPOController';
