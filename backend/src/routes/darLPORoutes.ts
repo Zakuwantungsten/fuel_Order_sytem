@@ -19,6 +19,7 @@ router.get('/years',             asyncHandler(darLPOController.getDarAvailableYe
 router.get('/filter-options',    asyncHandler(darLPOController.getDarFilterOptions));
 router.get('/workbooks/:year',   asyncHandler(darLPOController.getDarWorkbookByYear));
 router.get('/lpo/:lpoNo',        asyncHandler(darLPOController.getDarLPOByLPONo));
+router.get('/:id/pdf', commonValidation.mongoId, validate, asyncHandler(darLPOController.downloadDarLPOPDF));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(darLPOController.getDarLPOById));
 router.get('/',                  asyncHandler(darLPOController.getAllDarLPOs));
 

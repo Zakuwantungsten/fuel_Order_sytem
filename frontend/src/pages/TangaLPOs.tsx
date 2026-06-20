@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, ChevronDown, BookOpen, List, BarChart2, FilePlus, Copy, Image as ImageIcon, MessageSquare, FileSpreadsheet, Download, Loader2 } from 'lucide-react';
+import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, ChevronDown, BookOpen, List, BarChart2, FilePlus, Copy, Image as ImageIcon, MessageSquare, FileSpreadsheet, Download, FileDown, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +11,7 @@ import TangaLPOSummary from '../components/TangaLPOSummary';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
+import { tangaLPOAPI } from '../services/api';
 import type { TangaLPO, LPOSummary as LPOSummaryType } from '../types';
 
 const WRITE_ROLES = ['super_admin', 'admin', 'manager', 'supervisor', 'tanga_yard'];
@@ -74,6 +75,7 @@ export default function TangaLPOs() {
   const [openDropdowns, setOpenDropdowns] = useState<{ [key: string]: boolean }>({});
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({ top: 0, left: 0 });
   const [downloadingImage, setDownloadingImage] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
 
   useRealtimeSync('tanga_lpo_documents', () => {}, 'rt-tanga-lpo-page');
 
@@ -292,6 +294,29 @@ export default function TangaLPOs() {
     }
   };
 
+  const handleDownloadPdf = async (lpo: TangaLPO) => {
+    closeAllDropdowns();
+    const key = (lpo._id ?? lpo.id ?? lpo.lpoNo) as string;
+    setDownloadingPdf(key);
+    const toastId = toast.loading(`Generating PDF — LPO ${lpo.lpoNo}...`, {
+      style: { background: '#2563eb', color: '#fff' },
+    });
+    try {
+      await tangaLPOAPI.downloadPDF(key);
+      toast.update(toastId, {
+        render: `PDF downloaded: LPO ${lpo.lpoNo}`,
+        type: 'success', isLoading: false, autoClose: 4000, style: undefined,
+      });
+    } catch (error: any) {
+      toast.update(toastId, {
+        render: `PDF download failed: ${error?.message || 'Unknown error'}`,
+        type: 'error', isLoading: false, autoClose: 6000, style: undefined,
+      });
+    } finally {
+      setDownloadingPdf(null);
+    }
+  };
+
   // Row click → open the parent LPO's sheet in the Workbook view
   const handleRowClick = (lpo: TangaLPO) => {
     const lpoId = (lpo._id ?? lpo.id) as string;
@@ -335,9 +360,19 @@ export default function TangaLPOs() {
           className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo)
-            ? <Loader2 className="w-4 h-4 mr-2 text-green-600 animate-spin" />
-            : <Download className="w-4 h-4 mr-2 text-green-600" />}
+            ? <Loader2 className="w-4 h-4 mr-2 text-blue-600 animate-spin" />
+            : <Download className="w-4 h-4 mr-2 text-blue-600" />}
           {downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo) ? 'Downloading...' : 'Download as Image'}
+        </button>
+        <button
+          onClick={() => handleDownloadPdf(lpo)}
+          disabled={downloadingPdf === (lpo._id ?? lpo.id ?? lpo.lpoNo)}
+          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {downloadingPdf === (lpo._id ?? lpo.id ?? lpo.lpoNo)
+            ? <Loader2 className="w-4 h-4 mr-2 text-red-500 animate-spin" />
+            : <FileDown className="w-4 h-4 mr-2 text-red-500" />}
+          {downloadingPdf === (lpo._id ?? lpo.id ?? lpo.lpoNo) ? 'Generating PDF...' : 'Download as PDF'}
         </button>
       </div>
     </div>

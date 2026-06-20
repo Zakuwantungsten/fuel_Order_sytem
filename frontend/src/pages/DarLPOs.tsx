@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, ChevronDown, BookOpen, List, BarChart2, FilePlus, Copy, Image as ImageIcon, MessageSquare, FileSpreadsheet, Download, Loader2 } from 'lucide-react';
+import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, ChevronDown, BookOpen, List, BarChart2, FilePlus, Copy, Image as ImageIcon, MessageSquare, FileSpreadsheet, Download, FileDown, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +11,7 @@ import DarLPOSummary from '../components/DarLPOSummary';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
+import { darLPOAPI } from '../services/api';
 import type { DarLPO, LPOSummary as LPOSummaryType } from '../types';
 
 const WRITE_ROLES = ['super_admin', 'admin', 'manager', 'supervisor', 'dar_yard'];
@@ -74,6 +75,7 @@ export default function DarLPOs() {
   const [openDropdowns, setOpenDropdowns] = useState<{ [key: string]: boolean }>({});
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({ top: 0, left: 0 });
   const [downloadingImage, setDownloadingImage] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
 
   useRealtimeSync('dar_lpo_documents', () => {}, 'rt-dar-lpo-page');
 
@@ -291,6 +293,29 @@ export default function DarLPOs() {
     }
   };
 
+  const handleDownloadPdf = async (lpo: DarLPO) => {
+    closeAllDropdowns();
+    const key = (lpo._id ?? lpo.id ?? lpo.lpoNo) as string;
+    setDownloadingPdf(key);
+    const toastId = toast.loading(`Generating PDF — LPO ${lpo.lpoNo}...`, {
+      style: { background: '#16a34a', color: '#fff' },
+    });
+    try {
+      await darLPOAPI.downloadPDF(key);
+      toast.update(toastId, {
+        render: `PDF downloaded: LPO ${lpo.lpoNo}`,
+        type: 'success', isLoading: false, autoClose: 4000, style: undefined,
+      });
+    } catch (error: any) {
+      toast.update(toastId, {
+        render: `PDF download failed: ${error?.message || 'Unknown error'}`,
+        type: 'error', isLoading: false, autoClose: 6000, style: undefined,
+      });
+    } finally {
+      setDownloadingPdf(null);
+    }
+  };
+
   // Row click → open the parent LPO's sheet in the Workbook view
   const handleRowClick = (lpo: DarLPO) => {
     const lpoId = (lpo._id ?? lpo.id) as string;
@@ -337,6 +362,16 @@ export default function DarLPOs() {
             ? <Loader2 className="w-4 h-4 mr-2 text-green-600 animate-spin" />
             : <Download className="w-4 h-4 mr-2 text-green-600" />}
           {downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo) ? 'Downloading...' : 'Download as Image'}
+        </button>
+        <button
+          onClick={() => handleDownloadPdf(lpo)}
+          disabled={downloadingPdf === (lpo._id ?? lpo.id ?? lpo.lpoNo)}
+          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {downloadingPdf === (lpo._id ?? lpo.id ?? lpo.lpoNo)
+            ? <Loader2 className="w-4 h-4 mr-2 text-red-500 animate-spin" />
+            : <FileDown className="w-4 h-4 mr-2 text-red-500" />}
+          {downloadingPdf === (lpo._id ?? lpo.id ?? lpo.lpoNo) ? 'Generating PDF...' : 'Download as PDF'}
         </button>
       </div>
     </div>

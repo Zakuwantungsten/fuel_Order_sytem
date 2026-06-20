@@ -2511,6 +2511,20 @@ export const tangaLPOAPI = {
     const response = await apiClient.post(`/tanga-lpo/${lpoId}/preview-bulk-link`, data);
     return response.data;
   },
+  downloadPDF: async (id: string): Promise<void> => {
+    const response = await apiClient.get(`/tanga-lpo/${id}/pdf`, { responseType: 'blob' });
+    const contentDisposition = (response.headers['content-disposition'] as string) || '';
+    const match = contentDisposition.match(/filename="(.+?)"/);
+    const filename = match ? match[1] : `LPO-${id}.pdf`;
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
 };
 
 // ── Dar LPO API ───────────────────────────────────────────────────────────────
@@ -2587,6 +2601,20 @@ export const darLPOAPI = {
   previewBulkLink: async (lpoId: string, data: { entryIds: string[] }) => {
     const response = await apiClient.post(`/dar-lpo/${lpoId}/preview-bulk-link`, data);
     return response.data;
+  },
+  downloadPDF: async (id: string): Promise<void> => {
+    const response = await apiClient.get(`/dar-lpo/${id}/pdf`, { responseType: 'blob' });
+    const contentDisposition = (response.headers['content-disposition'] as string) || '';
+    const match = contentDisposition.match(/filename="(.+?)"/);
+    const filename = match ? match[1] : `LPO-${id}.pdf`;
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 };
 

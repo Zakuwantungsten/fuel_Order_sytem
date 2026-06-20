@@ -19,6 +19,7 @@ router.get('/years',             asyncHandler(tangaLPOController.getTangaAvailab
 router.get('/filter-options',    asyncHandler(tangaLPOController.getTangaFilterOptions));
 router.get('/workbooks/:year',   asyncHandler(tangaLPOController.getTangaWorkbookByYear));
 router.get('/lpo/:lpoNo',        asyncHandler(tangaLPOController.getTangaLPOByLPONo));
+router.get('/:id/pdf', commonValidation.mongoId, validate, asyncHandler(tangaLPOController.downloadTangaLPOPDF));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(tangaLPOController.getTangaLPOById));
 router.get('/',                  asyncHandler(tangaLPOController.getAllTangaLPOs));
 

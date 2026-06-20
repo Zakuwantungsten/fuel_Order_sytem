@@ -925,39 +925,11 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
   };
 
   const handleExportPdf = async () => {
-    if (!printRef.current) return;
     setDownloadingPdf(true);
     setShowCopyDropdown(false);
     try {
-      const { default: html2canvas } = await import('html2canvas');
-      const { jsPDF } = await import('jspdf');
-      const el = printRef.current;
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: 794,
-        height: el.scrollHeight,
-        windowWidth: 794,
-        windowHeight: el.scrollHeight,
-      });
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      const imgWidthMm = 210;
-      const pageHeightMm = 297;
-      const imgHeightMm = (canvas.height * imgWidthMm) / canvas.width;
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      let position = 0;
-      let remaining = imgHeightMm;
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidthMm, imgHeightMm);
-      remaining -= pageHeightMm;
-      while (remaining > 0) {
-        position -= pageHeightMm;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidthMm, imgHeightMm);
-        remaining -= pageHeightMm;
-      }
-      pdf.save(`${lpo.lpoNo}-${lpo.date}.pdf`);
+      const id = lpoId;
+      await tangaLPOAPI.downloadPDF(id);
       toast.success('PDF downloaded');
     } catch (err) {
       console.error('PDF export failed:', err);

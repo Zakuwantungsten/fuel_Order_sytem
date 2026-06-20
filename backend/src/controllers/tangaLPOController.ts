@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { TangaLPODocument } from '../models/TangaLPODocument';
 import { FuelRecord } from '../models';
 import { SystemConfig } from '../models/SystemConfig';
+import { YardConfig } from '../models/YardConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
@@ -713,4 +714,52 @@ export const previewBulkAutoLinkTangaEntries = async (req: AuthRequest, res: Res
   }
 
   res.status(200).json({ success: true, message: 'Preview completed', results });
+};
+
+export const downloadTangaLPOPDF = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  const lpo = await TangaLPODocument.findById(id).lean();
+  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+
+  const { generateLPOPDF, getCompanyBranding } = await import('../utils/pdfGenerator');
+  const branding = await getCompanyBranding();
+
+  const yardConfig = await YardConfig.findOne({ yard: 'TANGA' }).lean();
+  const stationInfo = yardConfig ? {
+    supplierName: (yardConfig as any).supplierName,
+    supplierAddress: (yardConfig as any).supplierAddress,
+    supplierPlotNo: (yardConfig as any).supplierPlotNo,
+    supplierPoBox: (yardConfig as any).supplierPoBox,
+    description: (yardConfig as any).description,
+  } : undefined;
+
+  const lpoData: any = {
+    lpoNo: lpo.lpoNo,
+    date: lpo.date,
+    year: lpo.year,
+    station: 'TANGA YARD',
+    orderOf: '',
+    entries: (lpo.entries as any[]).map(e => ({
+      doNo: e.doNo || 'NIL',
+      truckNo: e.truckNo,
+      liters: e.liters,
+      rate: e.rate,
+      amount: e.amount,
+      dest: e.dest || '',
+      isCancelled: !!e.isCancelled,
+    })),
+    total: lpo.total,
+    currency: lpo.currency || 'TZS',
+  };
+
+  const doc = generateLPOPDF(lpoData, branding, req.user?.username, (lpo as any).approvedBy, stationInfo);
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="LPO-${lpo.lpoNo}-${dateStr}.pdf"`);
+  doc.pipe(res);
+  doc.end();
+
+  logger.info(`Tanga LPO PDF downloaded: ${lpo.lpoNo} by ${req.user?.username}`);
 };
