@@ -35,4 +35,7 @@ router.get('/yard-fuel-time-limit', configController.getYardFuelTimeLimit);
 // Company branding (read-only for all authenticated users)
 router.get('/branding', configController.getBranding);
 
+// Yard configs (read-only for all authenticated users)
+router.get('/yards', configController.getYardConfigs);
+
 export default router;

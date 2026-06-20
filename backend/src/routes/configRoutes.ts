@@ -29,4 +29,7 @@ router.get('/formula-variables', configController.getFormulaVariables);
 router.get('/yard-fuel-time-limit', configController.getYardFuelTimeLimit);
 router.put('/yard-fuel-time-limit', authorize('super_admin', 'admin'), configController.updateYardFuelTimeLimit);
 
+// Yard configs (rate, supplier info per yard)
+router.put('/yards/:yard', authorize('super_admin', 'admin'), configController.upsertYardConfig);
+
 export default router;

@@ -28,6 +28,7 @@ type BulkLinkResult = {
   truckNo: string;
   doNo: string;
   liters: number;
+  dispenseLiters?: number;
   existingValue?: number;
 };
 
@@ -37,6 +38,7 @@ type BulkPreviewResult = {
   truckNo: string;
   doNo: string;
   liters: number;
+  dispenseLiters: number;
   existingValue: number;
   fuelRecord: any | null;
 };
@@ -317,11 +319,14 @@ function ManualLinkModal({
   onClose: () => void;
 }) {
   const [doNo, setDoNo] = useState(entry.doNo);
+  const [dispense, setDispense] = useState(String(entry.dispenseLiters ?? entry.liters));
   const [step, setStep] = useState<'input' | 'preview'>('input');
   const [searching, setSearching] = useState(false);
   const [previewRecord, setPreviewRecord] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [inspectFrId, setInspectFrId] = useState<string | null>(null);
+
+  const dispenseNum = dispense === '' ? entry.liters : (parseFloat(dispense) || 0);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -341,8 +346,8 @@ function ManualLinkModal({
   const handleConfirm = async () => {
     setSaving(true);
     try {
-      const updated = await tangaLPOAPI.manualLink({ lpoId, entryId: entry._id!, doNo: doNo.trim() });
-      toast.success(`Entry linked — ${entry.liters}L added to tangaYard`);
+      const updated = await tangaLPOAPI.manualLink({ lpoId, entryId: entry._id!, doNo: doNo.trim(), dispenseLiters: dispenseNum });
+      toast.success(`Entry linked — ${dispenseNum}L added to tangaYard`);
       onDone(updated as TangaLPO);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to link entry');
@@ -370,8 +375,10 @@ function ManualLinkModal({
           {step === 'input' ? (
             <form onSubmit={handleSearch} className="p-4 space-y-3">
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Enter the DO number to find the matching FuelRecord. <strong>{entry.liters}L</strong> will be added to{' '}
+                Enter the DO number to find the matching FuelRecord. The dispensed liters (default{' '}
+                <strong>{entry.liters}L</strong>) will be added to{' '}
                 <span className="font-mono text-blue-600 dark:text-blue-400">tangaYard</span> and the balance recalculated.
+                You can adjust the amount on the next step.
               </p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">DO Number <span className="text-red-500">*</span></label>
@@ -422,11 +429,25 @@ function ManualLinkModal({
                   </div>
                   {(previewRecord.tangaYard ?? 0) > 0 && (
                     <p className="text-xs text-orange-600 dark:text-orange-400">
-                      Top-up: {previewRecord.tangaYard}L + {entry.liters}L = {(previewRecord.tangaYard ?? 0) + entry.liters}L
+                      Top-up: {previewRecord.tangaYard}L + {dispenseNum}L = {(previewRecord.tangaYard ?? 0) + dispenseNum}L
                     </p>
                   )}
                 </div>
               )}
+              <div className="flex items-center gap-2 px-1">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">Dispense to journey</label>
+                <input
+                  type="number"
+                  value={dispense}
+                  onChange={e => setDispense(e.target.value)}
+                  min={0}
+                  step="0.01"
+                  placeholder={String(entry.liters)}
+                  title="Liters added to tangaYard (defaults to the full liters)"
+                  className="w-24 px-2 py-1.5 text-sm text-right border border-amber-300 dark:border-amber-700 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+                <span className="text-xs text-gray-400">L · billed {entry.liters}L</span>
+              </div>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setStep('input')} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Back</button>
                 <button type="button" onClick={handleConfirm} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
@@ -483,7 +504,8 @@ function BulkLinkConflictModal({
         <div className="p-4 space-y-2 max-h-72 overflow-auto">
           {conflicts.map(c => {
             const checked = selected.has(c.entryId);
-            const newTotal = (c.existingValue ?? 0) + c.liters;
+            const disp = c.dispenseLiters ?? c.liters;
+            const newTotal = (c.existingValue ?? 0) + disp;
             return (
               <button
                 key={c.entryId}
@@ -509,8 +531,8 @@ function BulkLinkConflictModal({
                     <span className="text-gray-500">Current:</span>
                     <span className="font-semibold text-orange-600 dark:text-orange-400">{c.existingValue}L</span>
                     <span className="text-gray-400">+</span>
-                    <span className="text-gray-500">This LPO:</span>
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">{c.liters}L</span>
+                    <span className="text-gray-500">Dispense:</span>
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">{disp}L</span>
                     <span className="text-gray-400">=</span>
                     <span className="font-bold text-blue-700 dark:text-blue-300">{newTotal}L</span>
                   </div>
@@ -546,14 +568,23 @@ function BulkLinkPreviewModal({
   onClose,
 }: {
   results: BulkPreviewResult[];
-  onConfirm: (selectedIds: string[], topUpIds: string[]) => void;
+  onConfirm: (selectedIds: string[], topUpIds: string[], dispenseOverrides: Record<string, number>) => void;
   onClose: () => void;
 }) {
   const actionable = results.filter(r => r.status === 'found' || r.status === 'conflict');
   const notFound = results.filter(r => r.status === 'not_found');
   const [selected, setSelected] = useState<Set<string>>(new Set(actionable.map(r => r.entryId)));
+  const [dispense, setDispense] = useState<Record<string, string>>(
+    () => Object.fromEntries(actionable.map(r => [r.entryId, String(r.dispenseLiters ?? r.liters)]))
+  );
   const [inspectFrId, setInspectFrId] = useState<string | null>(null);
   const [inspectTruckNo, setInspectTruckNo] = useState<string | undefined>(undefined);
+
+  const setDisp = (id: string, v: string) => setDispense(prev => ({ ...prev, [id]: v }));
+  const dispVal = (r: BulkPreviewResult) => {
+    const raw = dispense[r.entryId];
+    return raw === '' || raw == null ? (r.dispenseLiters ?? r.liters) : (parseFloat(raw) || 0);
+  };
 
   const toggle = (id: string) => setSelected(prev => {
     const next = new Set(prev);
@@ -567,7 +598,11 @@ function BulkLinkPreviewModal({
   const handleConfirm = () => {
     const selectedArr = Array.from(selected);
     const topUpIds = results.filter(r => r.status === 'conflict' && selected.has(r.entryId)).map(r => r.entryId);
-    onConfirm(selectedArr, topUpIds);
+    const dispenseOverrides: Record<string, number> = {};
+    for (const r of actionable) {
+      if (selected.has(r.entryId)) dispenseOverrides[r.entryId] = dispVal(r);
+    }
+    onConfirm(selectedArr, topUpIds, dispenseOverrides);
   };
 
   return (
@@ -627,11 +662,23 @@ function BulkLinkPreviewModal({
                               <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 rounded font-medium">top-up</span>
                             )}
                           </div>
-                          <div className="text-xs mt-0.5">
-                            {isConflict
-                              ? <span className="text-orange-600 dark:text-orange-400">{r.existingValue}L + {r.liters}L = {r.existingValue + r.liters}L → tangaYard</span>
-                              : <span className="text-blue-700 dark:text-blue-400">+{r.liters}L → tangaYard</span>
-                            }
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">Dispense</span>
+                            <input
+                              type="number"
+                              value={dispense[r.entryId] ?? ''}
+                              onChange={e => setDisp(r.entryId, e.target.value)}
+                              onClick={e => e.stopPropagation()}
+                              min={0}
+                              step="0.01"
+                              placeholder={String(r.liters)}
+                              title={`Liters added to tangaYard (billed ${r.liters}L)`}
+                              className="w-16 px-1.5 py-0.5 text-xs text-right border border-amber-300 dark:border-amber-700 rounded bg-amber-50/50 dark:bg-amber-900/10 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-amber-500"
+                            />
+                            <span className="text-[11px] text-gray-400">L → tangaYard</span>
+                            {isConflict && (
+                              <span className="text-[11px] text-orange-600 dark:text-orange-400">({r.existingValue}L + {dispVal(r)}L = {r.existingValue + dispVal(r)}L)</span>
+                            )}
                           </div>
                         </div>
                         {r.fuelRecord && (
@@ -726,6 +773,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
   const [showBulkConflict, setShowBulkConflict] = useState(false);
   const [showBulkPreview, setShowBulkPreview] = useState(false);
   const [bulkPreviewResults, setBulkPreviewResults] = useState<BulkPreviewResult[]>([]);
+  const [lastDispenseOverrides, setLastDispenseOverrides] = useState<Record<string, number>>({});
 
   const lpoId = (lpo._id ?? lpo.id) as string;
 
@@ -823,11 +871,12 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
     }
   };
 
-  const handleBulkLink = async (entryIds: string[], topUpEntryIds: string[] = []) => {
+  const handleBulkLink = async (entryIds: string[], topUpEntryIds: string[] = [], dispenseOverrides: Record<string, number> = {}) => {
     if (entryIds.length === 0) return;
     setBulkLinking(true);
+    setLastDispenseOverrides(dispenseOverrides);
     try {
-      const res = await tangaLPOAPI.bulkLink(lpoId, { entryIds, topUpEntryIds });
+      const res = await tangaLPOAPI.bulkLink(lpoId, { entryIds, topUpEntryIds, dispenseOverrides });
       handleMutationResult(res.data as TangaLPO);
 
       const results: BulkLinkResult[] = res.results || [];
@@ -1608,10 +1657,10 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
       {showBulkPreview && (
         <BulkLinkPreviewModal
           results={bulkPreviewResults}
-          onConfirm={(selectedIds, topUpIds) => {
+          onConfirm={(selectedIds, topUpIds, dispenseOverrides) => {
             setShowBulkPreview(false);
             setBulkPreviewResults([]);
-            if (selectedIds.length > 0) handleBulkLink(selectedIds, topUpIds);
+            if (selectedIds.length > 0) handleBulkLink(selectedIds, topUpIds, dispenseOverrides);
           }}
           onClose={() => { setShowBulkPreview(false); setBulkPreviewResults([]); }}
         />
@@ -1623,7 +1672,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
           onConfirm={topUpIds => {
             setShowBulkConflict(false);
             setBulkConflicts([]);
-            if (topUpIds.length > 0) handleBulkLink(topUpIds, topUpIds);
+            if (topUpIds.length > 0) handleBulkLink(topUpIds, topUpIds, lastDispenseOverrides);
           }}
           onClose={() => { setShowBulkConflict(false); setBulkConflicts([]); }}
         />

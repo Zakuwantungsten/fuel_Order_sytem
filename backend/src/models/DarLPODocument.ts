@@ -35,6 +35,12 @@ const darLPOEntrySchema = new Schema<IDarLPOEntry>(
       required: [true, 'Destination is required'],
       trim: true,
     },
+    // Liters dispensed to the fuel record (defaults to `liters` when unset).
+    dispenseLiters: {
+      type: Number,
+      default: null,
+      min: [0, 'Dispense liters cannot be negative'],
+    },
     sortOrder: {
       type: Number,
       default: 0,

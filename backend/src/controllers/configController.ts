@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { FuelStationConfig } from '../models/FuelStationConfig';
+import { YardConfig } from '../models/YardConfig';
 import { RouteConfig } from '../models/RouteConfig';
 import { SystemConfig } from '../models/SystemConfig';
 import { AuditLog } from '../models/AuditLog';
@@ -945,6 +946,74 @@ export const getBranding = async (req: AuthRequest, res: Response): Promise<void
       success: false,
       message: 'Failed to fetch company branding',
     });
+  }
+};
+
+/**
+ * Get yard configs (DAR + TANGA)
+ * GET /config/yards
+ */
+export const getYardConfigs = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const yards = await YardConfig.find().lean();
+    res.json({ success: true, data: yards });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch yard configs' });
+  }
+};
+
+/**
+ * Upsert a yard config (DAR or TANGA)
+ * PUT /system-config/yards/:yard
+ */
+export const upsertYardConfig = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const yard = (req.params.yard || '').toUpperCase() as 'DAR' | 'TANGA';
+
+    if (yard !== 'DAR' && yard !== 'TANGA') {
+      res.status(400).json({ success: false, message: 'Invalid yard. Must be DAR or TANGA' });
+      return;
+    }
+
+    const { rate, description, supplierName, supplierAddress, supplierPlotNo, supplierPoBox } = req.body;
+
+    if (rate == null || isNaN(Number(rate)) || Number(rate) < 0) {
+      res.status(400).json({ success: false, message: 'Valid rate is required' });
+      return;
+    }
+
+    const updated = await YardConfig.findOneAndUpdate(
+      { yard },
+      {
+        $set: {
+          yard,
+          rate: Number(rate),
+          description: description?.trim() || undefined,
+          supplierName: supplierName?.trim() || undefined,
+          supplierAddress: supplierAddress?.trim() || undefined,
+          supplierPlotNo: supplierPlotNo?.trim() || undefined,
+          supplierPoBox: supplierPoBox?.trim() || undefined,
+          updatedBy: req.user?.username || 'system',
+        },
+      },
+      { new: true, upsert: true, runValidators: true }
+    );
+
+    await AuditLog.create({
+      username: req.user?.username || 'system',
+      action: 'UPDATE',
+      resourceType: 'yard_config',
+      resourceId: yard,
+      details: JSON.stringify({ yard, rate }),
+      severity: 'low',
+    });
+
+    setCacheBustingHeaders(res);
+    emitDataChange('yard_configs', 'update');
+
+    res.json({ success: true, data: updated, message: `${yard} Yard config updated successfully` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to update yard config' });
   }
 };
 

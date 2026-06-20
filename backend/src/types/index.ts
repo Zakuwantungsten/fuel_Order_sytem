@@ -672,6 +672,13 @@ export interface ITangaLPOEntry {
   rate: number;
   amount: number;
   dest: string;
+  /**
+   * Liters actually dispensed to the linked fuel record's yard column.
+   * Defaults to `liters` (the full billed amount). Can be overridden per-truck
+   * when the journey fuel differs from the billed quantity (e.g. yard reserve
+   * top-up that should not count against the journey balance).
+   */
+  dispenseLiters?: number | null;
   sortOrder?: number;
   originalLiters?: number | null;
   amendedAt?: Date | null;

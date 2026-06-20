@@ -1,11 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   X, Plus, Trash2, Loader2, Search, Eye,
   CheckCircle, AlertTriangle, Save,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useQueryClient } from '@tanstack/react-query';
-import { darLPOAPI, fuelRecordsAPI } from '../services/api';
+import { darLPOAPI, fuelRecordsAPI, configAPI } from '../services/api';
 import { darLPOKeys } from '../hooks/useDarLPOs';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
 import type { DarLPO, DarLPOEntry, FuelRecord } from '../types';
@@ -72,10 +72,21 @@ export default function DarYardLPOForm({
     isOpen: boolean; fuelRecordId: string | number; truckNumber?: string;
   }>({ isOpen: false, fuelRecordId: '' });
 
-  const updateEntry = (idx: number, field: keyof DraftEntry, value: string | number | boolean) => {
+  // Pre-fill rate from Dar yard config
+  useEffect(() => {
+    configAPI.getYardConfigs().then(configs => {
+      const cfg = configs.find(c => c.yard === 'DAR');
+      if (cfg && cfg.rate > 0) {
+        setEntries(prev => prev.map(e => e.rate === 0 ? { ...e, rate: cfg.rate } : e));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const updateEntry = (idx: number, field: keyof DraftEntry, value: string | number | boolean | null) => {
     setEntries(prev => prev.map((e, i) => {
       if (i !== idx) return e;
       const u = { ...e, [field]: value };
+      // Billed amount always tracks the full liters × rate — never the dispense amount.
       if (field === 'liters' || field === 'rate') {
         u.amount = +(u.liters * u.rate).toFixed(2);
       }
@@ -381,12 +392,12 @@ export default function DarYardLPOForm({
           {/* Desktop table */}
           <div className="hidden sm:block p-4">
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[1.5rem_2rem_1fr_10rem_minmax(6rem,7rem)_5.5rem_5.5rem_6.5rem_1fr_5rem] bg-green-50 dark:bg-green-900/20 border-b border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-[1.5rem_2rem_1fr_9rem_minmax(5.5rem,6.5rem)_5rem_5rem_5rem_6rem_1fr_4.5rem] bg-green-50 dark:bg-green-900/20 border-b border-gray-200 dark:border-gray-700">
                 <div className="px-1 py-2 flex items-center justify-center">
                   <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3.5 h-3.5 accent-green-600" />
                 </div>
-                {['#', 'Truck / Entity', 'Fuel Info', 'DO No', 'Liters', 'Rate', 'Amount', 'Destination', 'Actions'].map((h, i) => (
-                  <div key={h + i} className={`px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide ${i >= 4 && i <= 6 ? 'text-right' : ''}`}>
+                {['#', 'Truck / Entity', 'Fuel Info', 'DO No', 'Liters', 'Dispense', 'Rate', 'Amount', 'Destination', 'Actions'].map((h, i) => (
+                  <div key={h + i} className={`px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide ${i >= 4 && i <= 7 ? 'text-right' : ''}`}>
                     {h}
                   </div>
                 ))}
@@ -447,7 +458,7 @@ export default function DarYardLPOForm({
                 return (
                   <div
                     key={idx}
-                    className={`grid grid-cols-[1.5rem_2rem_1fr_10rem_minmax(6rem,7rem)_5.5rem_5.5rem_6.5rem_1fr_5rem] border-b border-gray-100 dark:border-gray-700 last:border-b-0 ${rowBorderCls} ${isSelected ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}
+                    className={`grid grid-cols-[1.5rem_2rem_1fr_9rem_minmax(5.5rem,6.5rem)_5rem_5rem_5rem_6rem_1fr_4.5rem] border-b border-gray-100 dark:border-gray-700 last:border-b-0 ${rowBorderCls} ${isSelected ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}
                   >
                     {/* Select */}
                     <div className="px-1 py-2 flex items-center justify-center">
@@ -543,6 +554,24 @@ export default function DarYardLPOForm({
                         step="0.01"
                         className="w-full px-2 py-1 text-sm text-right border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-green-500"
                       />
+                    </div>
+
+                    {/* Dispense — liters that actually go to the fuel record (defaults to full liters) */}
+                    <div className="px-1.5 py-1.5 flex items-center">
+                      {row.fetched && !row.warningType && row.linked ? (
+                        <input
+                          type="number"
+                          value={(entry.dispenseLiters ?? entry.liters) || ''}
+                          onChange={e => updateEntry(idx, 'dispenseLiters', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))}
+                          placeholder={String(entry.liters || 0)}
+                          min={0}
+                          step="0.01"
+                          title="Liters dispensed to the fuel record (defaults to the full liters)"
+                          className="w-full px-2 py-1 text-sm text-right border border-amber-300 dark:border-amber-700 rounded bg-amber-50/40 dark:bg-amber-900/10 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-amber-500"
+                        />
+                      ) : (
+                        <span className="w-full text-right text-gray-300 dark:text-gray-600">—</span>
+                      )}
                     </div>
 
                     {/* Rate */}
@@ -709,9 +738,25 @@ export default function DarYardLPOForm({
                           className="w-3.5 h-3.5 accent-green-600"
                         />
                         <span className="text-[11px] font-semibold text-green-700 dark:text-green-400">
-                          Link &amp; dispense{entry.liters > 0 ? ` ${entry.liters}L` : ''}
+                          Link &amp; dispense
                         </span>
                       </label>
+                      {row.linked && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Dispense to journey</span>
+                          <input
+                            type="number"
+                            value={(entry.dispenseLiters ?? entry.liters) || ''}
+                            onChange={e => updateEntry(idx, 'dispenseLiters', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))}
+                            placeholder={String(entry.liters || 0)}
+                            min={0}
+                            step="0.01"
+                            title="Liters dispensed to the fuel record (defaults to the full liters)"
+                            className="w-20 px-2 py-1 text-xs text-right border border-amber-300 dark:border-amber-700 rounded bg-amber-50/40 dark:bg-amber-900/10 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-amber-500"
+                          />
+                          <span className="text-[11px] text-gray-400">L</span>
+                        </div>
+                      )}
                     </div>
                   )}
                   {row.fetched && row.warningType && (

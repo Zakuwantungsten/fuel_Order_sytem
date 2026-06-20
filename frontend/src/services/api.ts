@@ -1542,6 +1542,20 @@ export interface YardTimeLimitSetting {
   timeLimitDays: number;
 }
 
+export interface YardConfig {
+  _id: string;
+  yard: 'DAR' | 'TANGA';
+  rate: number;
+  description?: string;
+  supplierName?: string;
+  supplierAddress?: string;
+  supplierPlotNo?: string;
+  supplierPoBox?: string;
+  updatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface YardFuelTimeLimitConfig {
   enabled: boolean;
   perYard: {
@@ -2188,6 +2202,24 @@ export const configAPI = {
     return response.data.data;
   },
 
+  // Yard Configs (rate + supplier info per yard, for LPO auto-fill)
+  getYardConfigs: async (): Promise<YardConfig[]> => {
+    const response = await apiClient.get('/config/yards');
+    return response.data.data;
+  },
+
+  updateYardConfig: async (yard: 'DAR' | 'TANGA', data: {
+    rate: number;
+    description?: string;
+    supplierName?: string;
+    supplierAddress?: string;
+    supplierPlotNo?: string;
+    supplierPoBox?: string;
+  }): Promise<YardConfig> => {
+    const response = await apiClient.put(`/system-config/yards/${yard}`, data);
+    return response.data.data;
+  },
+
   // Yard Fuel Time Limit Settings
   getYardFuelTimeLimit: async (): Promise<YardFuelTimeLimitConfig> => {
     const response = await apiClient.get('/config/yard-fuel-time-limit');
@@ -2463,7 +2495,7 @@ export const tangaLPOAPI = {
     const response = await apiClient.delete(`/tanga-lpo/${id}/lock`);
     return response.data.data;
   },
-  manualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
+  manualLink: async (data: { lpoId: string; entryId: string; doNo: string; dispenseLiters?: number }) => {
     const response = await apiClient.post('/tanga-lpo/manual-link', data);
     return response.data.data;
   },
@@ -2471,7 +2503,7 @@ export const tangaLPOAPI = {
     const response = await apiClient.post('/tanga-lpo/preview-manual-link', data);
     return response.data.data;
   },
-  bulkLink: async (lpoId: string, data: { entryIds: string[]; topUpEntryIds?: string[] }) => {
+  bulkLink: async (lpoId: string, data: { entryIds: string[]; topUpEntryIds?: string[]; dispenseOverrides?: Record<string, number> }) => {
     const response = await apiClient.post(`/tanga-lpo/${lpoId}/bulk-link`, data);
     return response.data;
   },
@@ -2540,7 +2572,7 @@ export const darLPOAPI = {
     const response = await apiClient.delete(`/dar-lpo/${id}/lock`);
     return response.data.data;
   },
-  manualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
+  manualLink: async (data: { lpoId: string; entryId: string; doNo: string; dispenseLiters?: number }) => {
     const response = await apiClient.post('/dar-lpo/manual-link', data);
     return response.data.data;
   },
@@ -2548,7 +2580,7 @@ export const darLPOAPI = {
     const response = await apiClient.post('/dar-lpo/preview-manual-link', data);
     return response.data.data;
   },
-  bulkLink: async (lpoId: string, data: { entryIds: string[]; topUpEntryIds?: string[] }) => {
+  bulkLink: async (lpoId: string, data: { entryIds: string[]; topUpEntryIds?: string[]; dispenseOverrides?: Record<string, number> }) => {
     const response = await apiClient.post(`/dar-lpo/${lpoId}/bulk-link`, data);
     return response.data;
   },

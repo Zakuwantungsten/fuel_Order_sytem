@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import ConfirmModal from './ConfirmModal';
-import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check } from 'lucide-react';
+import { Fuel, Plus, Edit2, Trash2, Save, X, ChevronDown, Check, Warehouse } from 'lucide-react';
 import { configAPI } from '../../services/api';
+import type { YardConfig } from '../../services/api';
 import { FuelStationConfig, FuelRecordFieldOption } from '../../types';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import UnifiedTabLoader from './common/UnifiedTabLoader';
@@ -36,6 +37,20 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
     supplierPlotNo: '',
     supplierPoBox: '',
     description: '',
+  });
+
+  // Yard config state
+  const [yardConfigs, setYardConfigs] = useState<YardConfig[]>([]);
+  const [showYardModal, setShowYardModal] = useState(false);
+  const [editingYard, setEditingYard] = useState<'DAR' | 'TANGA' | null>(null);
+  const [savingYard, setSavingYard] = useState(false);
+  const [yardForm, setYardForm] = useState({
+    rate: '',
+    description: '',
+    supplierName: '',
+    supplierAddress: '',
+    supplierPlotNo: '',
+    supplierPoBox: '',
   });
   
   // Dropdown states
@@ -82,13 +97,15 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [stationsData, formulaData] = await Promise.all([
+      const [stationsData, formulaData, yardsData] = await Promise.all([
         configAPI.getStations(),
         configAPI.getFormulaVariables(),
+        configAPI.getYardConfigs(),
       ]);
       setStations(stationsData);
       setFuelRecordFieldsGoing(formulaData.fuelRecordFieldsGoing || []);
       setFuelRecordFieldsReturning(formulaData.fuelRecordFieldsReturning || []);
+      setYardConfigs(yardsData || []);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to load fuel stations');
     } finally {
@@ -96,7 +113,49 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
     }
   };
 
-  useRealtimeSync(['fuel_stations'], loadData);
+  useRealtimeSync(['fuel_stations', 'yard_configs'], loadData);
+
+  const openYardModal = (yard: 'DAR' | 'TANGA') => {
+    const existing = yardConfigs.find(y => y.yard === yard);
+    setEditingYard(yard);
+    setYardForm({
+      rate: existing ? String(existing.rate) : '',
+      description: existing?.description || '',
+      supplierName: existing?.supplierName || '',
+      supplierAddress: existing?.supplierAddress || '',
+      supplierPlotNo: existing?.supplierPlotNo || '',
+      supplierPoBox: existing?.supplierPoBox || '',
+    });
+    setShowYardModal(true);
+  };
+
+  const handleSaveYard = async () => {
+    if (!editingYard || savingYard) return;
+    const rateVal = parseFloat(yardForm.rate);
+    if (isNaN(rateVal) || rateVal < 0) {
+      onMessage('error', 'Please enter a valid rate');
+      return;
+    }
+    setSavingYard(true);
+    try {
+      await configAPI.updateYardConfig(editingYard, {
+        rate: rateVal,
+        description: yardForm.description.trim() || undefined,
+        supplierName: yardForm.supplierName.trim() || undefined,
+        supplierAddress: yardForm.supplierAddress.trim() || undefined,
+        supplierPlotNo: yardForm.supplierPlotNo.trim() || undefined,
+        supplierPoBox: yardForm.supplierPoBox.trim() || undefined,
+      });
+      onMessage('success', `${editingYard} Yard config saved`);
+      setShowYardModal(false);
+      setEditingYard(null);
+      loadData();
+    } catch (error: any) {
+      onMessage('error', error.response?.data?.message || 'Failed to save yard config');
+    } finally {
+      setSavingYard(false);
+    }
+  };
 
   const handleCreateStation = async () => {
     if (savingStation) return;
@@ -436,6 +495,77 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         </table>
       </div>
 
+      {/* ── Yards Section ── */}
+      <div className="mt-6 space-y-3">
+        <div className="flex items-center gap-1.5">
+          <Warehouse className="w-5 h-5 text-orange-500 dark:text-orange-400" />
+          <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">Yards</h2>
+          <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">— rate &amp; supplier info used to auto-fill LPO entries</span>
+        </div>
+
+        {/* Mobile yard cards */}
+        <div className="md:hidden space-y-3">
+          {(['DAR', 'TANGA'] as const).map(yard => {
+            const cfg = yardConfigs.find(y => y.yard === yard);
+            return (
+              <div key={yard} className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{yard} YARD</h3>
+                  <button onClick={() => openYardModal(yard)} className={modifyButtonClass}>
+                    <Edit2 className="w-4 h-4" />Edit
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Rate</span>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{cfg ? `TZS ${cfg.rate.toLocaleString()}` : <span className="text-gray-400 italic">not set</span>}</div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Supplier</span>
+                    <div className="text-gray-700 dark:text-gray-300">{cfg?.supplierName || <span className="text-gray-400">—</span>}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop yard table */}
+        <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-900">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Yard</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Rate (TZS/L)</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Description</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400">Supplier</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y dark:divide-gray-700">
+              {(['DAR', 'TANGA'] as const).map(yard => {
+                const cfg = yardConfigs.find(y => y.yard === yard);
+                return (
+                  <tr key={yard} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                    <td className="px-3 py-2.5 font-medium text-gray-900 dark:text-gray-100">{yard} YARD</td>
+                    <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">
+                      {cfg ? cfg.rate.toLocaleString() : <span className="text-gray-400 italic text-xs">not set</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">{cfg?.description || <span className="text-gray-400">—</span>}</td>
+                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">{cfg?.supplierName || <span className="text-gray-400">—</span>}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button onClick={() => openYardModal(yard)} className={modifyButtonClass}>
+                        <Edit2 className="w-4 h-4" />Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {showStationModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
@@ -657,6 +787,80 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
       )}
 
         </>
+      )}
+
+      {showYardModal && editingYard && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{editingYard} Yard Config</h3>
+                <button onClick={() => { setShowYardModal(false); setEditingYard(null); }} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rate (TZS per Liter) *</label>
+                  <input
+                    type="number"
+                    value={yardForm.rate}
+                    onChange={e => setYardForm({ ...yardForm, rate: e.target.value })}
+                    className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                    placeholder="e.g. 2850"
+                    min={0}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">This rate auto-fills the Rate field when creating a {editingYard} LPO entry</p>
+                </div>
+
+                <div className="border-t dark:border-gray-600 pt-4">
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Supplier Info (shown on LPO PDF)</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supplier Name</label>
+                        <input type="text" value={yardForm.supplierName} onChange={e => setYardForm({ ...yardForm, supplierName: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g. TOTAL ENERGIES LTD" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (PDF column)</label>
+                        <input type="text" value={yardForm.description} onChange={e => setYardForm({ ...yardForm, description: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g. Diesel - Dar Yard" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supplier Address</label>
+                      <input type="text" value={yardForm.supplierAddress} onChange={e => setYardForm({ ...yardForm, supplierAddress: e.target.value })}
+                        className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g. Nyerere Road, Dar es Salaam" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Plot No</label>
+                        <input type="text" value={yardForm.supplierPlotNo} onChange={e => setYardForm({ ...yardForm, supplierPlotNo: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g. Plot No 123" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">P.O Box</label>
+                        <input type="text" value={yardForm.supplierPoBox} onChange={e => setYardForm({ ...yardForm, supplierPoBox: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="e.g. P.O Box 1234" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => { setShowYardModal(false); setEditingYard(null); }}
+                  className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+                <button onClick={handleSaveYard} disabled={savingYard}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {savingYard ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                  {savingYard ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       <ConfirmModal

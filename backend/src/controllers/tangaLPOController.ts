@@ -47,6 +47,12 @@ async function applyTangaYardDelta(
   emitDataChange('fuel_records', 'update', fuelRecord.toObject());
 }
 
+// The liters actually dispensed to the fuel record. Defaults to the full billed
+// `liters` when no per-truck override has been set.
+function dispenseAmount(entry: any): number {
+  return entry.dispenseLiters != null ? entry.dispenseLiters : entry.liters;
+}
+
 // ── LPO number helper ──────────────────────────────────────────────────────────
 
 async function resolveNextTangaLPONo(year: number): Promise<string> {
@@ -361,7 +367,7 @@ export const cancelEntryInTangaLPO = async (req: AuthRequest, res: Response): Pr
 
   if (entry.linkedFuelRecordId) {
     const fr = await FuelRecord.findById(entry.linkedFuelRecordId);
-    if (fr) await applyTangaYardDelta(fr, -entry.liters);
+    if (fr) await applyTangaYardDelta(fr, -dispenseAmount(entry));
   }
 
   await lpo.save();
@@ -390,7 +396,7 @@ export const cancelAllEntriesInTangaLPO = async (req: AuthRequest, res: Response
 
     if (entry.linkedFuelRecordId) {
       const fr = await FuelRecord.findById(entry.linkedFuelRecordId);
-      if (fr) await applyTangaYardDelta(fr, -entry.liters);
+      if (fr) await applyTangaYardDelta(fr, -dispenseAmount(entry));
     }
 
     entry.isCancelled = true;
@@ -437,13 +443,19 @@ export const amendEntryInTangaLPO = async (req: AuthRequest, res: Response): Pro
     throw new ApiError(400, 'Amendment must reduce liters (new value must be less than current)');
   }
 
-  const delta = newLiters - entry.liters; // negative — removes fuel
+  // Reconcile the dispensed amount. When dispense was left at its default (== the
+  // billed liters), it follows the new liters; a custom per-truck override is kept.
+  const oldDispense = dispenseAmount(entry);
+  const wasCustomized = entry.dispenseLiters != null && entry.dispenseLiters !== entry.liters;
   entry.originalLiters = entry.originalLiters ?? entry.liters;
   entry.amendedAt = new Date();
   entry.liters = newLiters;
   entry.amount = newLiters * entry.rate;
+  const newDispense = wasCustomized ? oldDispense : newLiters;
+  entry.dispenseLiters = newDispense;
+  const delta = newDispense - oldDispense; // <= 0 — removes fuel
 
-  if (entry.linkedFuelRecordId) {
+  if (entry.linkedFuelRecordId && delta !== 0) {
     const fr = await FuelRecord.findById(entry.linkedFuelRecordId);
     if (fr) await applyTangaYardDelta(fr, delta);
   }
@@ -472,7 +484,7 @@ export const amendEntryInTangaLPO = async (req: AuthRequest, res: Response): Pro
 };
 
 export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { lpoId, entryId, doNo } = req.body;
+  const { lpoId, entryId, doNo, dispenseLiters } = req.body;
   if (!lpoId || !entryId || !doNo) throw new ApiError(400, 'lpoId, entryId and doNo are required');
 
   const lpo = await TangaLPODocument.findOne({ _id: lpoId, isDeleted: false });
@@ -486,9 +498,12 @@ export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Pro
   const fr = await findLinkedFuelRecord(doNo as string, entry.truckNo);
   if (!fr) throw new ApiError(404, `No FuelRecord found for DO ${doNo} / truck ${entry.truckNo}`);
 
+  if (dispenseLiters != null && Number(dispenseLiters) >= 0) {
+    entry.dispenseLiters = Number(dispenseLiters);
+  }
   entry.doNo = doNo;
   entry.linkedFuelRecordId = fr._id.toString();
-  await applyTangaYardDelta(fr, entry.liters);
+  await applyTangaYardDelta(fr, dispenseAmount(entry));
   await lpo.save();
 
   await AuditService.log({
@@ -521,12 +536,13 @@ type BulkLinkResult = {
   truckNo: string;
   doNo: string;
   liters: number;
+  dispenseLiters: number;
   existingValue?: number;
 };
 
 export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { entryIds, topUpEntryIds = [] } = req.body;
+  const { entryIds, topUpEntryIds = [], dispenseOverrides = {} } = req.body;
 
   if (!Array.isArray(entryIds) || entryIds.length === 0) {
     throw new ApiError(400, 'entryIds must be a non-empty array');
@@ -547,32 +563,39 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
 
   const results: BulkLinkResult[] = [];
   const topUpSet = new Set<string>(topUpEntryIds as string[]);
+  const overrides = (dispenseOverrides || {}) as Record<string, number>;
   let didApply = false;
 
   for (const entryId of entryIds as string[]) {
     const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
     if (!entry || entry.isCancelled) continue;
 
+    // Apply any per-truck dispense override before resolving the amount.
+    if (overrides[entryId] != null && Number(overrides[entryId]) >= 0) {
+      entry.dispenseLiters = Number(overrides[entryId]);
+    }
+    const disp = dispenseAmount(entry);
+
     if (entry.linkedFuelRecordId) {
-      results.push({ entryId, status: 'already_linked', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters });
+      results.push({ entryId, status: 'already_linked', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp });
       continue;
     }
 
     const fr = await findLinkedFuelRecord(entry.doNo, entry.truckNo, afterDate);
     if (!fr) {
-      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters });
+      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp });
       continue;
     }
 
     const existingValue: number = fr.tangaYard ?? 0;
 
     if (existingValue > 0 && !topUpSet.has(entryId)) {
-      results.push({ entryId, status: 'conflict', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, existingValue });
+      results.push({ entryId, status: 'conflict', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp, existingValue });
       continue;
     }
 
     entry.linkedFuelRecordId = fr._id.toString();
-    await applyTangaYardDelta(fr, entry.liters);
+    await applyTangaYardDelta(fr, disp);
     didApply = true;
     results.push({
       entryId,
@@ -580,6 +603,7 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
       truckNo: entry.truckNo,
       doNo: entry.doNo,
       liters: entry.liters,
+      dispenseLiters: disp,
       existingValue: existingValue > 0 ? existingValue : undefined,
     });
   }
@@ -668,9 +692,10 @@ export const previewBulkAutoLinkTangaEntries = async (req: AuthRequest, res: Res
     const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
     if (!entry || entry.isCancelled || entry.linkedFuelRecordId) continue;
 
+    const disp = dispenseAmount(entry);
     const fr = await findLinkedFuelRecord(entry.doNo, entry.truckNo, afterDate);
     if (!fr) {
-      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, fuelRecord: null, existingValue: 0 });
+      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp, fuelRecord: null, existingValue: 0 });
       continue;
     }
 
@@ -681,6 +706,7 @@ export const previewBulkAutoLinkTangaEntries = async (req: AuthRequest, res: Res
       truckNo: entry.truckNo,
       doNo: entry.doNo,
       liters: entry.liters,
+      dispenseLiters: disp,
       existingValue,
       fuelRecord: fr.toObject(),
     });
