@@ -1567,6 +1567,9 @@ export interface YardFuelTimeLimitConfig {
 
 // Per-operation fuel-record automation toggles for DO operations.
 export interface FuelAutomationConfig {
+  lpoCreateDeduct: boolean;
+  lpoCancelRevert: boolean;
+  lpoEditAdjust: boolean;
   doImportCreate: boolean;
   doExportUpdate: boolean;
   doAmendCascade: boolean;

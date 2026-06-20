@@ -638,6 +638,9 @@ function StandardAllocationsCard() {
 // ── Fuel Record Automation ───────────────────────────────────────────────────
 
 const FUEL_AUTOMATION_DEFAULTS: FuelAutomationConfig = {
+  lpoCreateDeduct: true,
+  lpoCancelRevert: true,
+  lpoEditAdjust: true,
   doImportCreate: true,
   doExportUpdate: true,
   doAmendCascade: true,
