@@ -29,6 +29,18 @@ export interface TangaLPOFilters {
   sort?: string;
   order?: 'asc' | 'desc';
   filter?: 'unlinked';
+  month?: number;
+  entity?: string;
+  linked?: 'linked' | 'unlinked';
+  status?: 'active' | 'cancelled';
+}
+
+export interface TangaFilterOptionParams {
+  year?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  month?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,6 +60,10 @@ export function useTangaLPOList(filters: TangaLPOFilters = {}, enabled = true) {
   if (filters.search)   params.search   = filters.search;
   if (filters.lpoNo)    params.lpoNo    = filters.lpoNo;
   if (filters.filter)   params.filter   = filters.filter;
+  if (filters.month)    params.month    = filters.month;
+  if (filters.entity)   params.entity   = filters.entity;
+  if (filters.linked)   params.linked   = filters.linked;
+  if (filters.status)   params.status   = filters.status;
 
   return useQuery({
     queryKey: tangaLPOKeys.list(params),
@@ -88,6 +104,23 @@ export function useTangaWorkbook(year: number, enabled = true) {
     queryFn: () => tangaLPOAPI.getWorkbookYear(year),
     enabled: enabled && !!year,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useTangaFilterOptions(filters: TangaFilterOptionParams = {}, enabled = true) {
+  const params: Record<string, unknown> = {};
+  if (filters.year)     params.year     = filters.year;
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters.dateTo)   params.dateTo   = filters.dateTo;
+  if (filters.search)   params.search   = filters.search;
+  if (filters.month)    params.month    = filters.month;
+
+  return useQuery({
+    queryKey: [...tangaLPOKeys.all, 'filterOptions', params],
+    queryFn: () => tangaLPOAPI.getFilterOptions(params),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 }
 

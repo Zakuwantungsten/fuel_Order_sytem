@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTangaWorkbook, useTangaYears, tangaLPOKeys } from '../hooks/useTangaLPOs';
@@ -10,18 +10,28 @@ import type { TangaLPO } from '../types';
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const TABS_PER_PAGE = 8;
 
-export default function TangaLPOWorkbook({ onBack }: { onBack?: () => void } = {}) {
+export default function TangaLPOWorkbook({ onBack, initialLpoId, initialYear, initialMonth }: {
+  onBack?: () => void;
+  initialLpoId?: string | null;
+  initialYear?: number;
+  initialMonth?: number;
+} = {}) {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
   const queryClient = useQueryClient();
 
   const [selectedYear, setSelectedYear] = useState<number>(() => {
+    if (initialYear) return initialYear;
     const s = localStorage.getItem('tanga-lpo:selectedYear');
     return s ? parseInt(s, 10) : currentYear;
   });
-  const [activeMonth, setActiveMonth] = useState<number>(currentMonth);
-  const [activeLpoId, setActiveLpoId] = useState<string | null>(null);
+  const [activeMonth, setActiveMonth] = useState<number>(initialMonth ?? currentMonth);
+  const [activeLpoId, setActiveLpoId] = useState<string | null>(initialLpoId ?? null);
   const [tabPageStart, setTabPageStart] = useState(0);
+
+  // When navigated to from a list row, honour the requested LPO once the
+  // workbook data for its month has loaded, then fall back to default selection.
+  const pendingInitialLpoRef = useRef<string | null>(initialLpoId ?? null);
 
   const { data: years = [currentYear] } = useTangaYears();
   const { data: workbookData, isLoading } = useTangaWorkbook(selectedYear);
@@ -42,10 +52,15 @@ export default function TangaLPOWorkbook({ onBack }: { onBack?: () => void } = {
   }, [availableMonths.join(',')]);
 
   // When month or year changes, reset tabs and select first LPO
+  // (or the pending initial LPO requested via row-click navigation).
   useEffect(() => {
     setTabPageStart(0);
     const lpos: TangaLPO[] = months[activeMonth] ?? [];
-    if (lpos.length > 0) {
+    const pending = pendingInitialLpoRef.current;
+    if (pending && lpos.some(l => (l._id ?? l.id) === pending)) {
+      setActiveLpoId(pending);
+      pendingInitialLpoRef.current = null;
+    } else if (lpos.length > 0) {
       setActiveLpoId((lpos[0]._id ?? lpos[0].id) as string);
     } else {
       setActiveLpoId(null);

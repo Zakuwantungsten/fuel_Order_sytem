@@ -2427,6 +2427,10 @@ export const tangaLPOAPI = {
     const response = await apiClient.get('/tanga-lpo/years');
     return response.data.data || [];
   },
+  getFilterOptions: async (params?: Record<string, unknown>): Promise<{ months: number[]; entities: string[] }> => {
+    const response = await apiClient.get('/tanga-lpo/filter-options', { params });
+    return response.data.data || { months: [], entities: [] };
+  },
   getNextNumber: async (): Promise<string> => {
     const response = await apiClient.get('/tanga-lpo/next-number');
     return response.data.data?.nextLpoNo || '';
@@ -2499,6 +2503,10 @@ export const darLPOAPI = {
   getYears: async (): Promise<number[]> => {
     const response = await apiClient.get('/dar-lpo/years');
     return response.data.data || [];
+  },
+  getFilterOptions: async (params?: Record<string, unknown>): Promise<{ months: number[]; entities: string[] }> => {
+    const response = await apiClient.get('/dar-lpo/filter-options', { params });
+    return response.data.data || { months: [], entities: [] };
   },
   getNextNumber: async (): Promise<string> => {
     const response = await apiClient.get('/dar-lpo/next-number');

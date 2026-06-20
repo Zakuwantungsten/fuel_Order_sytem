@@ -1,16 +1,22 @@
-import { useState } from 'react';
-import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, BookOpen, List, BarChart2, FilePlus } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Search, X, FileText, Droplets, TrendingUp, Truck, AlertTriangle, ChevronLeft, ChevronRight, ChevronDown, BookOpen, List, BarChart2, FilePlus, Copy, Image as ImageIcon, MessageSquare, FileSpreadsheet, Download, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { useTangaLPOList, useTangaNextNumber, tangaLPOKeys } from '../hooks/useTangaLPOs';
+import { useTangaLPOList, useTangaNextNumber, useTangaFilterOptions, tangaLPOKeys } from '../hooks/useTangaLPOs';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import TangaYardLPOForm from '../components/TangaYardLPOForm';
 import TangaLPOWorkbook from '../components/TangaLPOWorkbook';
 import TangaLPOSummary from '../components/TangaLPOSummary';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
-import type { TangaLPO } from '../types';
+import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
+import type { TangaLPO, LPOSummary as LPOSummaryType } from '../types';
 
 const WRITE_ROLES = ['super_admin', 'admin', 'manager', 'supervisor', 'tanga_yard'];
+const STATION_LABEL = 'Tanga Yard';
+const LIMIT = 20;
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function StatCard({ label, value, sub, icon: Icon, accent, onClick }: {
   label: string;
@@ -37,6 +43,8 @@ function StatCard({ label, value, sub, icon: Icon, accent, onClick }: {
   );
 }
 
+const monthOf = (date: string) => parseInt(date.slice(5, 7), 10) || 0;
+
 export default function TangaLPOs() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -47,33 +55,59 @@ export default function TangaLPOs() {
 
   const [viewMode, setViewMode] = useState<'list' | 'workbook' | 'summary'>('list');
   const [page, setPage] = useState(1);
+  // Server-side filters (drive the paginated fetch)
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [filterUnlinked, setFilterUnlinked] = useState(false);
+  // Client-side filters (refine the fetched page)
+  const [filterMonth, setFilterMonth] = useState<number | 'all'>('all');
+  const [entityFilter, setEntityFilter] = useState('');
+  const [linkedFilter, setLinkedFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'cancelled'>('all');
   const [showForm, setShowForm] = useState(false);
   const [showAddEntries, setShowAddEntries] = useState(false);
 
+  // Row → workbook navigation target (set on row click, cleared on plain tab switch)
+  const [workbookInitial, setWorkbookInitial] = useState<{ lpoId: string; year: number; month: number } | null>(null);
+
+  // Copy/Download dropdown state
+  const [openDropdowns, setOpenDropdowns] = useState<{ [key: string]: boolean }>({});
+  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({ top: 0, left: 0 });
+  const [downloadingImage, setDownloadingImage] = useState<string | null>(null);
+
   useRealtimeSync('tanga_lpo_documents', () => {}, 'rt-tanga-lpo-page');
 
-  const LIMIT = 20;
-
-  // Main list query
+  // Server-side paginated list — every filter is applied on the server so
+  // pagination stays correct across the whole dataset.
   const { data, isLoading } = useTangaLPOList({
     page,
     limit: LIMIT,
     search: search || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    month: filterMonth === 'all' ? undefined : filterMonth,
+    entity: entityFilter || undefined,
+    linked: linkedFilter === 'all' ? undefined : linkedFilter,
+    status: statusFilter === 'all' ? undefined : statusFilter,
     order: 'desc',
-    filter: filterUnlinked ? 'unlinked' : undefined,
   });
+  const lpos: TangaLPO[] = data?.lpos ?? [];
+  const pagination = data?.pagination;
+
+  // Dynamic dropdown options across the whole (scoped) dataset
+  const { data: filterOptions } = useTangaFilterOptions({
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    search: search || undefined,
+    month: filterMonth === 'all' ? undefined : filterMonth,
+  });
+  const availableMonths = filterOptions?.months ?? [];
+  const availableEntities = filterOptions?.entities ?? [];
 
   // Stats: this-month aggregations from a separate query
   const thisMonthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
   const lastDay = new Date(currentYear, currentMonth, 0).getDate();
   const thisMonthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${lastDay}`;
-
   const { data: monthData } = useTangaLPOList(
     { limit: 1000, dateFrom: thisMonthStart, dateTo: thisMonthEnd },
     true
@@ -81,8 +115,37 @@ export default function TangaLPOs() {
 
   const { data: nextLpoNo = '' } = useTangaNextNumber();
 
-  const lpos: TangaLPO[] = data?.lpos ?? [];
-  const pagination = data?.pagination;
+  // Flatten the fetched page into one row per entry
+  const allRows = useMemo(
+    () => lpos.flatMap(lpo => lpo.entries.map((entry, entryIdx) => ({ lpo, entry, entryIdx }))),
+    [lpos]
+  );
+
+  // The server already returns only documents that contain a matching entry, but a
+  // multi-entry LPO still carries its other entries — trim the displayed rows to the
+  // ones that match the active entry-level filters.
+  const filteredRows = useMemo(() => {
+    return allRows.filter(({ lpo, entry }) => {
+      if (filterMonth !== 'all' && monthOf(lpo.date) !== filterMonth) return false;
+      if (entityFilter && entry.truckNo !== entityFilter) return false;
+      if (linkedFilter === 'linked' && (entry.isCancelled || !entry.linkedFuelRecordId)) return false;
+      if (linkedFilter === 'unlinked' && (entry.isCancelled || entry.linkedFuelRecordId)) return false;
+      if (statusFilter === 'active' && entry.isCancelled) return false;
+      if (statusFilter === 'cancelled' && !entry.isCancelled) return false;
+      return true;
+    });
+  }, [allRows, filterMonth, entityFilter, linkedFilter, statusFilter]);
+
+  // Reset to page 1 whenever any filter changes
+  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, filterMonth, entityFilter, linkedFilter, statusFilter]);
+
+  // Keep Month / Entity selections valid when the available options change
+  useEffect(() => {
+    if (filterMonth !== 'all' && availableMonths.length > 0 && !availableMonths.includes(filterMonth)) setFilterMonth('all');
+  }, [availableMonths.join(','), filterMonth]);
+  useEffect(() => {
+    if (entityFilter && availableEntities.length > 0 && !availableEntities.includes(entityFilter)) setEntityFilter('');
+  }, [availableEntities.join('|'), entityFilter]);
 
   // Compute month stats from full month fetch
   const monthLpos: TangaLPO[] = monthData?.lpos ?? [];
@@ -106,11 +169,181 @@ export default function TangaLPOs() {
     setSearch('');
     setDateFrom('');
     setDateTo('');
-    setFilterUnlinked(false);
+    setFilterMonth('all');
+    setEntityFilter('');
+    setLinkedFilter('all');
+    setStatusFilter('all');
     setPage(1);
   };
 
-  const hasFilters = search || dateFrom || dateTo || filterUnlinked;
+  const hasFilters = !!search || !!dateFrom || !!dateTo || filterMonth !== 'all' || !!entityFilter || linkedFilter !== 'all' || statusFilter !== 'all';
+
+  // ── Copy / Download helpers (whole parent LPO, same as LPO management) ──────
+  const convertToLPOSummary = (lpo: TangaLPO): LPOSummaryType => {
+    const entries = lpo.entries.map(e => ({
+      doNo: e.doNo || 'NIL',
+      truckNo: e.truckNo,
+      liters: e.liters,
+      rate: e.rate,
+      amount: e.amount,
+      dest: e.dest || 'NIL',
+    }));
+    const total = entries.reduce((sum, e) => sum + e.amount, 0);
+    return {
+      lpoNo: lpo.lpoNo,
+      date: lpo.date,
+      station: STATION_LABEL,
+      orderOf: 'TAHMEED',
+      entries,
+      total,
+    };
+  };
+
+  const closeAllDropdowns = () => setOpenDropdowns({});
+
+  const toggleDropdown = (key: string, event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const DROPDOWN_HEIGHT = 260;
+    const DROPDOWN_WIDTH = 224;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const left = Math.max(10, Math.min(rect.right - DROPDOWN_WIDTH, window.innerWidth - DROPDOWN_WIDTH - 10));
+    if (spaceBelow >= DROPDOWN_HEIGHT) {
+      setDropdownPosition({ top: rect.bottom + 4, bottom: undefined, left });
+    } else {
+      setDropdownPosition({ top: undefined, bottom: window.innerHeight - rect.top + 4, left });
+    }
+    setOpenDropdowns(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Close dropdowns on scroll / outside click
+  useEffect(() => {
+    const handleScroll = () => setOpenDropdowns({});
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as Element).closest('.tanga-copy-dropdown')) setOpenDropdowns({});
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleCopyImage = async (lpo: TangaLPO) => {
+    closeAllDropdowns();
+    try {
+      const ok = await copyLPOImageToClipboard(convertToLPOSummary(lpo), user?.username);
+      ok
+        ? toast.success('LPO image copied to clipboard. You can now paste it anywhere.')
+        : toast.error('Failed to copy LPO image to clipboard. Please try again.');
+    } catch (error) {
+      console.error('Error copying image to clipboard:', error);
+      toast.error('Failed to copy LPO image. Your browser may not support this feature.');
+    }
+  };
+
+  const handleCopyWhatsApp = async (lpo: TangaLPO) => {
+    closeAllDropdowns();
+    try {
+      const ok = await copyLPOForWhatsApp(convertToLPOSummary(lpo));
+      ok
+        ? toast.success('LPO text for WhatsApp copied. You can now paste it in WhatsApp.')
+        : toast.error('Failed to copy LPO text to clipboard. Please try again.');
+    } catch (error) {
+      console.error('Error copying WhatsApp text:', error);
+      toast.error('Failed to copy LPO text to clipboard.');
+    }
+  };
+
+  const handleCopyCsv = async (lpo: TangaLPO) => {
+    closeAllDropdowns();
+    try {
+      const ok = await copyLPOTextToClipboard(convertToLPOSummary(lpo));
+      ok
+        ? toast.success('LPO CSV text copied to clipboard successfully!')
+        : toast.error('Failed to copy LPO CSV text to clipboard. Please try again.');
+    } catch (error) {
+      console.error('Error copying CSV text:', error);
+      toast.error('Failed to copy LPO CSV text to clipboard.');
+    }
+  };
+
+  const handleDownloadImage = async (lpo: TangaLPO) => {
+    closeAllDropdowns();
+    const key = (lpo._id ?? lpo.id ?? lpo.lpoNo) as string;
+    setDownloadingImage(key);
+    const toastId = toast.loading(`Preparing image — LPO ${lpo.lpoNo}...`, {
+      style: { background: '#2563eb', color: '#fff' },
+    });
+    try {
+      await downloadLPOImage(convertToLPOSummary(lpo), undefined, user?.username);
+      toast.update(toastId, {
+        render: `Image downloaded: LPO ${lpo.lpoNo}`,
+        type: 'success', isLoading: false, autoClose: 4000, style: undefined,
+      });
+    } catch (error: any) {
+      console.error('Error downloading image:', error);
+      toast.update(toastId, {
+        render: `Image download failed: ${error?.message || 'Unknown error'}`,
+        type: 'error', isLoading: false, autoClose: 6000, style: undefined,
+      });
+    } finally {
+      setDownloadingImage(null);
+    }
+  };
+
+  // Row click → open the parent LPO's sheet in the Workbook view
+  const handleRowClick = (lpo: TangaLPO) => {
+    const lpoId = (lpo._id ?? lpo.id) as string;
+    const month = monthOf(lpo.date) || currentMonth;
+    setWorkbookInitial({ lpoId, year: lpo.year ?? currentYear, month });
+    setViewMode('workbook');
+  };
+
+  const goToWorkbookTab = () => {
+    setWorkbookInitial(null);
+    setViewMode('workbook');
+  };
+
+  // Reusable Copy/Download dropdown menu
+  const CopyDownloadMenu = ({ lpo }: { lpo: TangaLPO }) => (
+    <div
+      className="fixed w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl z-[9999]"
+      style={{
+        top: dropdownPosition.top !== undefined ? `${dropdownPosition.top}px` : 'auto',
+        bottom: dropdownPosition.bottom !== undefined ? `${dropdownPosition.bottom}px` : 'auto',
+        left: `${dropdownPosition.left}px`,
+        maxWidth: 'calc(100vw - 20px)',
+      }}
+    >
+      <div className="py-1">
+        <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Copy Options</div>
+        <button onClick={() => handleCopyImage(lpo)} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+          <ImageIcon className="w-4 h-4 mr-2" /> Copy as Image
+        </button>
+        <button onClick={() => handleCopyWhatsApp(lpo)} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+          <MessageSquare className="w-4 h-4 mr-2" /> Copy for WhatsApp
+        </button>
+        <button onClick={() => handleCopyCsv(lpo)} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+          <FileSpreadsheet className="w-4 h-4 mr-2" /> Copy as CSV Text
+        </button>
+        <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
+        <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Download Options</div>
+        <button
+          onClick={() => handleDownloadImage(lpo)}
+          disabled={downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo)}
+          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo)
+            ? <Loader2 className="w-4 h-4 mr-2 text-green-600 animate-spin" />
+            : <Download className="w-4 h-4 mr-2 text-green-600" />}
+          {downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo) ? 'Downloading...' : 'Download as Image'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const fieldCls = 'w-full px-3 h-[38px] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent';
 
   return (
     <div className="p-4 lg:p-6 space-y-5 min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -136,7 +369,7 @@ export default function TangaLPOs() {
               <List className="w-3.5 h-3.5" /> List
             </button>
             <button
-              onClick={() => setViewMode('workbook')}
+              onClick={goToWorkbookTab}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border-l border-gray-200 dark:border-gray-700 transition-colors ${
                 viewMode === 'workbook'
                   ? 'bg-blue-600 text-white'
@@ -209,14 +442,28 @@ export default function TangaLPOs() {
           sub={unlinkedCount > 0 ? 'Click to view & fix' : 'All linked'}
           icon={unlinkedCount > 0 ? AlertTriangle : Truck}
           accent={unlinkedCount > 0 ? 'bg-amber-500' : 'bg-indigo-500'}
-          onClick={unlinkedCount > 0 ? () => { setFilterUnlinked(true); setViewMode('list'); setPage(1); } : undefined}
+          onClick={unlinkedCount > 0 ? () => {
+            setDateFrom(thisMonthStart);
+            setDateTo(thisMonthEnd);
+            setFilterMonth('all');
+            setEntityFilter('');
+            setLinkedFilter('unlinked');
+            setStatusFilter('all');
+            setViewMode('list');
+            setPage(1);
+          } : undefined}
         />
       </div>
 
       {/* Workbook view */}
       {viewMode === 'workbook' && (
         <div className="flex-1 min-h-[600px]">
-          <TangaLPOWorkbook onBack={() => setViewMode('list')} />
+          <TangaLPOWorkbook
+            onBack={() => { setWorkbookInitial(null); setViewMode('list'); }}
+            initialLpoId={workbookInitial?.lpoId ?? null}
+            initialYear={workbookInitial?.year}
+            initialMonth={workbookInitial?.month}
+          />
         </div>
       )}
 
@@ -228,60 +475,76 @@ export default function TangaLPOs() {
       {/* Filters + table (list view) */}
       {viewMode === 'list' && <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Filter bar */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search LPO, truck, DO…"
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => { setDateFrom(e.target.value); setPage(1); }}
-            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <span className="text-gray-400 text-sm">—</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => { setDateTo(e.target.value); setPage(1); }}
-            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          {filterUnlinked && (
-            <button
-              onClick={() => { setFilterUnlinked(false); setPage(1); }}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+            {/* Search */}
+            <div className="relative col-span-2 md:col-span-1 xl:col-span-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search LPO, truck/entity, DO…"
+                className={`${fieldCls} pl-9`}
+              />
+            </div>
+
+            {/* Date range */}
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={fieldCls} title="From date" />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={fieldCls} title="To date" />
+
+            {/* Month — dynamic */}
+            <select
+              value={filterMonth === 'all' ? 'all' : String(filterMonth)}
+              onChange={e => setFilterMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className={fieldCls}
+              title="Month"
             >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              Unlinked only
-              <X className="w-3.5 h-3.5 ml-0.5" />
-            </button>
-          )}
-          {hasFilters && (
+              <option value="all">All Months</option>
+              {availableMonths.map(m => <option key={m} value={m}>{MONTH_NAMES[m - 1]}</option>)}
+            </select>
+
+            {/* Entity — dynamic */}
+            <select value={entityFilter} onChange={e => setEntityFilter(e.target.value)} className={fieldCls} title="Truck / Entity">
+              <option value="">All Trucks / Entities</option>
+              {availableEntities.map(en => <option key={en} value={en}>{en}</option>)}
+            </select>
+
+            {/* Linked */}
+            <select value={linkedFilter} onChange={e => setLinkedFilter(e.target.value as 'all' | 'linked' | 'unlinked')} className={fieldCls} title="Link status">
+              <option value="all">All Links</option>
+              <option value="linked">Linked</option>
+              <option value="unlinked">Unlinked</option>
+            </select>
+
+            {/* Status */}
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'cancelled')} className={fieldCls} title="Status">
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+
+            {/* Clear */}
             <button
               onClick={handleClearFilters}
-              className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              disabled={!hasFilters}
+              className="col-span-2 md:col-span-1 inline-flex items-center justify-center gap-1 px-3 h-[38px] text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <X className="w-4 h-4" /> Clear
             </button>
-          )}
+          </div>
         </div>
 
         {/* Table */}
         {isLoading ? (
           <UnifiedTabLoader label="Loading Tanga LPOs…" heightClassName="h-48" />
-        ) : lpos.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <div className="py-16 text-center">
             <FileText className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
             <p className="text-gray-500 dark:text-gray-400 font-medium">
-              {hasFilters ? 'No LPOs match your filters' : 'No Tanga LPOs yet'}
+              {hasFilters || allRows.length > 0 ? 'No entries match your filters' : 'No Tanga LPOs yet'}
             </p>
-            {!hasFilters && canWrite && (
+            {!hasFilters && allRows.length === 0 && canWrite && (
               <button
                 onClick={() => setShowForm(true)}
                 className="mt-3 text-sm text-blue-600 hover:underline"
@@ -291,83 +554,146 @@ export default function TangaLPOs() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">LPO No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Date</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Trucks</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Liters</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Amount</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Currency</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Created By</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {lpos.map(lpo => {
-                  const activeEntries = lpo.entries.filter(e => !e.isCancelled);
-                  const liters = activeEntries.reduce((s, e) => s + e.liters, 0);
-                  const allCancelled = lpo.entries.length > 0 && activeEntries.length === 0;
-                  const hasUnlinked = activeEntries.some(e => !e.linkedFuelRecordId);
+          <>
+            {/* Card view — mobile/tablet (below lg) */}
+            <div className="lg:hidden space-y-3 p-4">
+              {filteredRows.map(({ lpo, entry, entryIdx }, index) => {
+                const rowKey = (entry._id ?? `${lpo._id ?? lpo.id ?? lpo.lpoNo}-${entryIdx}`) as string;
+                return (
+                  <div
+                    key={rowKey}
+                    onClick={() => handleRowClick(lpo)}
+                    className={`border rounded-xl p-4 transition-all cursor-pointer ${
+                      entry.isCancelled
+                        ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
+                        : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">#{index + 1}</span>
+                          <span className={`text-sm font-bold ${entry.isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-blue-600 dark:text-blue-400'}`}>{lpo.lpoNo}</span>
+                          {entry.isCancelled && <span className="px-1.5 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
+                          {!entry.isCancelled && !entry.linkedFuelRecordId && <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded">UNLINKED</span>}
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{lpo.date}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{entry.amount.toLocaleString()}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{entry.liters.toLocaleString()}L @ {entry.rate.toFixed(2)}</p>
+                      </div>
+                    </div>
 
-                  return (
-                    <tr key={lpo._id ?? lpo.id} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
-                      <td className="px-4 py-3">
-                        <span className="font-mono font-semibold text-blue-700 dark:text-blue-400">
-                          {lpo.lpoNo}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{lpo.date}</td>
-                      <td className="px-4 py-3 text-right text-gray-900 dark:text-gray-100">
-                        {activeEntries.length}
-                        {lpo.entries.length !== activeEntries.length && (
-                          <span className="text-xs text-gray-400 ml-1">/ {lpo.entries.length}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900 dark:text-gray-100">
-                        {liters.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-100">
-                        {lpo.total.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                          {lpo.currency}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {allCancelled ? (
-                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                            Cancelled
-                          </span>
-                        ) : hasUnlinked ? (
-                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
-                            Unlinked
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                            Active
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
-                        {lpo.createdBy ?? '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Station:</span>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{STATION_LABEL}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">DO/SDO:</span>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{entry.doNo}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Truck/Entity:</span>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{entry.truckNo}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Destination:</span>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{entry.dest}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative flex-1 tanga-copy-dropdown">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleDropdown(rowKey, e); }}
+                          className="w-full px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 inline-flex items-center justify-center"
+                        >
+                          <Copy className="w-4 h-4 mr-1" />
+                          Copy/Download
+                          <ChevronDown className="w-3 h-3 ml-1" />
+                        </button>
+                        {openDropdowns[rowKey] && <CopyDownloadMenu lpo={lpo} />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Table view — desktop (lg and up) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">S/N</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">LPO#</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Station</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">DO/SDO</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Truck/Entity</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Liters</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">$/L</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Destination</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Amount</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {filteredRows.map(({ lpo, entry, entryIdx }, index) => {
+                    const rowKey = (entry._id ?? `${lpo._id ?? lpo.id ?? lpo.lpoNo}-${entryIdx}`) as string;
+                    return (
+                      <tr
+                        key={rowKey}
+                        className={`cursor-pointer transition-colors ${
+                          entry.isCancelled
+                            ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
+                            : 'hover:bg-blue-50/40 dark:hover:bg-blue-900/10'
+                        }`}
+                        onClick={() => handleRowClick(lpo)}
+                      >
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900 dark:text-gray-100">{index + 1}</td>
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{lpo.date}</td>
+                        <td className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 underline">
+                          <span className={entry.isCancelled ? 'line-through text-red-500 dark:text-red-400' : ''}>{lpo.lpoNo}</span>
+                          {entry.isCancelled && <span className="ml-1 px-1 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
+                          {!entry.isCancelled && !entry.linkedFuelRecordId && <span className="ml-1 px-1 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded">UNLINKED</span>}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{STATION_LABEL}</td>
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.doNo}</td>
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.truckNo}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-900 dark:text-gray-100">{entry.liters.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-900 dark:text-gray-100">{entry.rate.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.dest}</td>
+                        <td className="px-3 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">{entry.amount.toLocaleString()}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative tanga-copy-dropdown">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleDropdown(rowKey, e); }}
+                              className="flex items-center px-2 py-1 text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                              title="Copy/Download LPO"
+                            >
+                              <Copy className="w-4 h-4 mr-1" />
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                            {openDropdowns[rowKey] && <CopyDownloadMenu lpo={lpo} />}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
-        {/* Pagination */}
+        {/* Pagination (server-side) */}
         {pagination && pagination.totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700">
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Showing {((page - 1) * LIMIT) + 1}–{Math.min(page * LIMIT, pagination.total)} of {pagination.total}
+              Page {page} of {pagination.totalPages} · {pagination.total} LPOs
             </p>
             <div className="flex items-center gap-2">
               <button

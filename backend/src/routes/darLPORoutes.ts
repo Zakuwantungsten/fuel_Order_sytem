@@ -16,6 +16,7 @@ router.use(authenticate);
 // Read routes — all authenticated users
 router.get('/next-number',       asyncHandler(darLPOController.getNextDarLPONumber));
 router.get('/years',             asyncHandler(darLPOController.getDarAvailableYears));
+router.get('/filter-options',    asyncHandler(darLPOController.getDarFilterOptions));
 router.get('/workbooks/:year',   asyncHandler(darLPOController.getDarWorkbookByYear));
 router.get('/lpo/:lpoNo',        asyncHandler(darLPOController.getDarLPOByLPONo));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(darLPOController.getDarLPOById));

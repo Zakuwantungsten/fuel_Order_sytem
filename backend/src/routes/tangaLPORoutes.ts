@@ -16,6 +16,7 @@ router.use(authenticate);
 // Read routes — all authenticated users
 router.get('/next-number',       asyncHandler(tangaLPOController.getNextTangaLPONumber));
 router.get('/years',             asyncHandler(tangaLPOController.getTangaAvailableYears));
+router.get('/filter-options',    asyncHandler(tangaLPOController.getTangaFilterOptions));
 router.get('/workbooks/:year',   asyncHandler(tangaLPOController.getTangaWorkbookByYear));
 router.get('/lpo/:lpoNo',        asyncHandler(tangaLPOController.getTangaLPOByLPONo));
 router.get('/:id', commonValidation.mongoId, validate, asyncHandler(tangaLPOController.getTangaLPOById));

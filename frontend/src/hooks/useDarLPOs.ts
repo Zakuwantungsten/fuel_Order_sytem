@@ -29,6 +29,18 @@ export interface DarLPOFilters {
   sort?: string;
   order?: 'asc' | 'desc';
   filter?: 'unlinked';
+  month?: number;
+  entity?: string;
+  linked?: 'linked' | 'unlinked';
+  status?: 'active' | 'cancelled';
+}
+
+export interface DarFilterOptionParams {
+  year?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  month?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,6 +60,10 @@ export function useDarLPOList(filters: DarLPOFilters = {}, enabled = true) {
   if (filters.search)   params.search   = filters.search;
   if (filters.lpoNo)    params.lpoNo    = filters.lpoNo;
   if (filters.filter)   params.filter   = filters.filter;
+  if (filters.month)    params.month    = filters.month;
+  if (filters.entity)   params.entity   = filters.entity;
+  if (filters.linked)   params.linked   = filters.linked;
+  if (filters.status)   params.status   = filters.status;
 
   return useQuery({
     queryKey: darLPOKeys.list(params),
@@ -88,6 +104,23 @@ export function useDarWorkbook(year: number, enabled = true) {
     queryFn: () => darLPOAPI.getWorkbookYear(year),
     enabled: enabled && !!year,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useDarFilterOptions(filters: DarFilterOptionParams = {}, enabled = true) {
+  const params: Record<string, unknown> = {};
+  if (filters.year)     params.year     = filters.year;
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters.dateTo)   params.dateTo   = filters.dateTo;
+  if (filters.search)   params.search   = filters.search;
+  if (filters.month)    params.month    = filters.month;
+
+  return useQuery({
+    queryKey: [...darLPOKeys.all, 'filterOptions', params],
+    queryFn: () => darLPOAPI.getFilterOptions(params),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 }
 

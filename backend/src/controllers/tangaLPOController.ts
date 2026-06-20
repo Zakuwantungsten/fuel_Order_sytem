@@ -65,6 +65,75 @@ async function resolveNextTangaLPONo(year: number): Promise<string> {
   return `TY-${year}-${String(seq).padStart(3, '0')}`;
 }
 
+// ── List filter builder ─────────────────────────────────────────────────────────
+// Shared by the paginated list and the filter-options endpoint so both honour the
+// same scoping. Month / entity / linked / status are applied server-side so the
+// filters and dropdowns reflect the whole dataset, not just the current page.
+
+type YardFilterInput = {
+  year?: unknown; dateFrom?: unknown; dateTo?: unknown; lpoNo?: unknown; search?: unknown;
+  filterMode?: unknown; month?: unknown; entity?: unknown; linked?: unknown; status?: unknown;
+};
+
+function buildTangaLPOFilter(q: YardFilterInput): any {
+  const { year, dateFrom, dateTo, lpoNo, search, filterMode, month, entity, linked, status } = q;
+  const filter: any = { isDeleted: false };
+
+  if (year) filter.year = parseInt(year as string, 10);
+
+  // Date range + month both constrain the "YYYY-MM-DD" string date. Compose them
+  // with $and so they can coexist without clobbering each other.
+  const dateConds: any[] = [];
+  if (dateFrom || dateTo) {
+    const range: any = {};
+    if (dateFrom) range.$gte = dateFrom as string;
+    if (dateTo) range.$lte = dateTo as string;
+    dateConds.push({ date: range });
+  }
+  if (month) {
+    const mm = String(parseInt(month as string, 10)).padStart(2, '0');
+    dateConds.push({ date: { $regex: `^\\d{4}-${mm}-` } });
+  }
+  if (dateConds.length === 1) filter.date = dateConds[0].date;
+  else if (dateConds.length > 1) filter.$and = dateConds;
+
+  if (search) {
+    const safe = sanitizeRegexInput(search as string);
+    if (safe) {
+      filter.$or = [
+        { lpoNo: { $regex: safe, $options: 'i' } },
+        { 'entries.truckNo': { $regex: safe, $options: 'i' } },
+        { 'entries.doNo': { $regex: safe, $options: 'i' } },
+      ];
+    }
+  } else if (lpoNo) {
+    filter.lpoNo = { $regex: sanitizeRegexInput(lpoNo as string) || lpoNo, $options: 'i' };
+  }
+
+  // Entry-level filters: a document matches when ONE entry satisfies all of
+  // entity / linked / status together ($elemMatch).
+  const entryCond: any = {};
+  if (status === 'active') entryCond.isCancelled = { $ne: true };
+  else if (status === 'cancelled') entryCond.isCancelled = true;
+  if (entity) entryCond.truckNo = entity as string;
+
+  const linkedMode = linked || (filterMode === 'unlinked' ? 'unlinked' : undefined);
+  if (linkedMode === 'linked') {
+    entryCond.isCancelled = { $ne: true };
+    entryCond.linkedFuelRecordId = { $exists: true, $nin: [null, ''] };
+  } else if (linkedMode === 'unlinked') {
+    entryCond.isCancelled = { $ne: true };
+    entryCond.$or = [
+      { linkedFuelRecordId: { $exists: false } },
+      { linkedFuelRecordId: null },
+      { linkedFuelRecordId: '' },
+    ];
+  }
+  if (Object.keys(entryCond).length > 0) filter.entries = { $elemMatch: entryCond };
+
+  return filter;
+}
+
 // ── Controllers ───────────────────────────────────────────────────────────────
 
 export const getNextTangaLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -89,45 +158,45 @@ export const getTangaAvailableYears = async (req: AuthRequest, res: Response): P
   });
 };
 
+// Distinct months + truck/entity values for the list filter dropdowns. Scoped by
+// year / date range / search so the options reflect the current view, and by month
+// for the entity list so it narrows to the selected month. The month list itself
+// ignores the month filter so the user can always switch months.
+export const getTangaFilterOptions = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { year, dateFrom, dateTo, search, month } = req.query;
+  const filter = buildTangaLPOFilter({ year, dateFrom, dateTo, search });
+
+  const docs = await TangaLPODocument.find(filter).select('date entries.truckNo').lean();
+
+  const monthsSet = new Set<number>();
+  const entitiesSet = new Set<string>();
+  const m = month ? parseInt(month as string, 10) : null;
+
+  for (const d of docs as any[]) {
+    const docMonth = parseInt(String(d.date).slice(5, 7), 10);
+    if (docMonth) monthsSet.add(docMonth);
+    if (!m || docMonth === m) {
+      for (const e of (d.entries || [])) {
+        if (e?.truckNo) entitiesSet.add(e.truckNo);
+      }
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Tanga filter options retrieved successfully',
+    data: {
+      months: [...monthsSet].sort((a, b) => a - b),
+      entities: [...entitiesSet].sort(),
+    },
+  });
+};
+
 export const getAllTangaLPOs = async (req: AuthRequest, res: Response): Promise<void> => {
   const { page, limit, sort, order } = getPaginationParams(req.query);
-  const { year, dateFrom, dateTo, lpoNo, search, filter: filterMode } = req.query;
+  const { year, dateFrom, dateTo, lpoNo, search, filter: filterMode, month, entity, linked, status } = req.query;
 
-  const filter: any = { isDeleted: false };
-
-  if (year) filter.year = parseInt(year as string, 10);
-
-  if (dateFrom || dateTo) {
-    filter.date = {};
-    if (dateFrom) filter.date.$gte = dateFrom as string;
-    if (dateTo) filter.date.$lte = dateTo as string;
-  }
-
-  if (search) {
-    const safe = sanitizeRegexInput(search as string);
-    if (safe) {
-      filter.$or = [
-        { lpoNo: { $regex: safe, $options: 'i' } },
-        { 'entries.truckNo': { $regex: safe, $options: 'i' } },
-        { 'entries.doNo': { $regex: safe, $options: 'i' } },
-      ];
-    }
-  } else if (lpoNo) {
-    filter.lpoNo = { $regex: sanitizeRegexInput(lpoNo as string) || lpoNo, $options: 'i' };
-  }
-
-  if (filterMode === 'unlinked') {
-    filter['entries'] = {
-      $elemMatch: {
-        isCancelled: { $ne: true },
-        $or: [
-          { linkedFuelRecordId: { $exists: false } },
-          { linkedFuelRecordId: null },
-          { linkedFuelRecordId: '' },
-        ],
-      },
-    };
-  }
+  const filter: any = buildTangaLPOFilter({ year, dateFrom, dateTo, lpoNo, search, filterMode, month, entity, linked, status });
 
   const skip = calculateSkip(page, limit);
   const sortOrder = order === 'asc' ? 1 : -1;
