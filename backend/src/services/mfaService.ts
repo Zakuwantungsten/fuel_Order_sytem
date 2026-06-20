@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { MFA, IMFA } from '../models/MFA';
 import UserMFA from '../models/UserMFA';
+import Passkey from '../models/Passkey';
 import { User } from '../models/User';
 import { SystemConfig } from '../models/SystemConfig';
 import PendingOTP from '../models/PendingOTP';
@@ -416,6 +417,14 @@ class MFAService {
 
     // If MFA is globally disabled or not configured, nobody is required — full stop.
     if (!mfaSettings?.globalEnabled) return false;
+
+    // "Passkey counts as MFA" (policy — see PASSKEY_IMPLEMENTATION.md §9): a user with
+    // at least one registered passkey already holds a phishing-resistant second factor,
+    // so they are not additionally required to set up TOTP/email MFA. This overrides
+    // both role-based and per-user mandatory requirements (but not the global kill-switch
+    // above). Passkey login itself is a separate, phishing-resistant path.
+    const passkeyCount = await Passkey.countDocuments({ userId: user._id });
+    if (passkeyCount > 0) return false;
 
     // Check consolidated MFA model first, then fall back to UserMFA for backward compat
     const mfa = await MFA.findOne({ userId });

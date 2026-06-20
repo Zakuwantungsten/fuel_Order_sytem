@@ -27,6 +27,7 @@ import { SystemConfig } from '../../../models/SystemConfig';
 import { User } from '../../../models/User';
 import { MFA } from '../../../models/MFA';
 import UserMFA from '../../../models/UserMFA';
+import Passkey from '../../../models/Passkey';
 
 // ── services & utils ─────────────────────────────────────────────────────────
 import mfaService from '../../../services/mfaService';
@@ -528,6 +529,28 @@ describe('isMFARequired – global kill-switch', () => {
 
     const result = await mfaService.isMFARequired(user._id.toString());
     expect(result).toBe(false);
+  });
+
+  it('"passkey counts as MFA": returns false when the user has a registered passkey, even if role is required', async () => {
+    await createSystemConfig({
+      securitySettings: {
+        mfa: { globalEnabled: true, requiredRoles: ['admin'], allowedMethods: ['totp'], roleMethodOverrides: {} },
+      },
+    });
+    const user = await createTestUser({ role: 'admin' });
+
+    // Sanity: without a passkey, an admin IS required.
+    expect(await mfaService.isMFARequired(user._id.toString())).toBe(true);
+
+    // After registering a passkey, the requirement is satisfied.
+    await Passkey.create({
+      userId: user._id,
+      credentialID: 'cred-' + crypto.randomBytes(6).toString('hex'),
+      publicKey: 'cHVibGljLWtleQ',
+      counter: 0,
+    });
+
+    expect(await mfaService.isMFARequired(user._id.toString())).toBe(false);
   });
 
   it('isMandatory user is required when globalEnabled is true', async () => {

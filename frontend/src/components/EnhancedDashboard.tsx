@@ -65,6 +65,7 @@ const PendingYardFuel = lazyWithRetry(() => import('./PendingYardFuel'));
 const NotificationsPage = lazyWithRetry(() => import('./NotificationsPage'));
 const ChangePasswordModal = lazyWithRetry(() => import('./ChangePasswordModal'));
 const MFASettings = lazyWithRetry(() => import('./MFASettings').then(m => ({ default: m.MFASettings })));
+const PasskeySettings = lazyWithRetry(() => import('./PasskeySettings').then(m => ({ default: m.PasskeySettings })));
 const DevicesSessionsPanel = lazyWithRetry(() => import('./DevicesSessionsPanel'));
 
 // Lazy-loaded pages
@@ -1099,6 +1100,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             <Suspense fallback={null}>
               <MFASettings />
             </Suspense>
+            <div className="border-t border-gray-200 dark:border-gray-700">
+              <Suspense fallback={null}>
+                <PasskeySettings />
+              </Suspense>
+            </div>
           </div>
         </div>
       )}

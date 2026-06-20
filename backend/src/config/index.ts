@@ -99,6 +99,18 @@ export const config = {
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
   // Accept either VAPID_SUBJECT (new) or VAPID_EMAIL (legacy) from .env
   vapidEmail: process.env.VAPID_SUBJECT || process.env.VAPID_EMAIL || 'mailto:admin@fuelorder.local',
+
+  // WebAuthn / Passkeys (see PASSKEY_IMPLEMENTATION.md §2).
+  //   rpId   — registrable domain; must equal or be a parent of the page origin host.
+  //            Prod: 'tahfuelorder.dev' (a suffix of www.tahfuelorder.dev). Dev: 'localhost'.
+  //   rpName — human-readable name shown in the OS/browser passkey prompt.
+  //   origins — exact browser origin(s) allowed to perform ceremonies (comma-separated).
+  webauthnRpId: process.env.WEBAUTHN_RP_ID || 'localhost',
+  webauthnRpName: process.env.WEBAUTHN_RP_NAME || 'TAH Fuel Order',
+  webauthnOrigins: (process.env.WEBAUTHN_ORIGINS || 'http://localhost:5173')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean),
 };
 
 // Validate required environment variables

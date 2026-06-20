@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { authController } from '../controllers';
+import { authController, passkeyController } from '../controllers';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth';
 import { userValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
-import { 
-  authRateLimiter, 
+import {
+  authRateLimiter,
   mfaSetupRateLimiter,
-  passwordResetRateLimiter, 
-  registrationRateLimiter 
+  passwordResetRateLimiter,
+  registrationRateLimiter
 } from '../middleware/rateLimiters';
 
 const router = Router();
@@ -64,6 +64,36 @@ router.post(
 );
 
 router.post('/refresh', asyncHandler(authController.refreshToken));
+
+// ── Passkeys / WebAuthn (see PASSKEY_IMPLEMENTATION.md) ──────────────────
+// Passwordless login (public, rate-limited)
+router.post(
+  '/passkey/login/options',
+  authRateLimiter,
+  asyncHandler(passkeyController.passkeyLoginOptions)
+);
+router.post(
+  '/passkey/login/verify',
+  authRateLimiter,
+  asyncHandler(passkeyController.passkeyLoginVerify)
+);
+
+// Enrollment & management (must be authenticated)
+router.post(
+  '/passkey/register/options',
+  authenticate,
+  mfaSetupRateLimiter,
+  asyncHandler(passkeyController.passkeyRegisterOptions)
+);
+router.post(
+  '/passkey/register/verify',
+  authenticate,
+  mfaSetupRateLimiter,
+  asyncHandler(passkeyController.passkeyRegisterVerify)
+);
+router.get('/passkey', authenticate, asyncHandler(passkeyController.listPasskeys));
+router.delete('/passkey/:id', authenticate, asyncHandler(passkeyController.deletePasskey));
+router.patch('/passkey/:id', authenticate, asyncHandler(passkeyController.renamePasskey));
 
 // Magic-link account activation (public — token acts as the credential)
 router.post(

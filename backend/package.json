@@ -68,6 +68,7 @@
     "@aws-sdk/client-s3": "^3.943.0",
     "@aws-sdk/lib-storage": "^3.943.0",
     "@aws-sdk/s3-request-presigner": "^3.943.0",
+    "@simplewebauthn/server": "^13.3.1",
     "@socket.io/redis-adapter": "^8.3.0",
     "@types/archiver": "^7.0.0",
     "@types/cookie-parser": "^1.4.10",

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, LogIn, User, Lock, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, LogIn, User, Lock, AlertCircle, Fingerprint } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { MFAVerification } from './MFAVerification';
 import { MFASetupLogin } from './MFASetupLogin';
+import { loginWithPasskey, isPasskeySupported, describePasskeyError } from '../services/passkeyService';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
 import { useLocation, Link } from 'react-router-dom';
@@ -16,6 +17,11 @@ const Login: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const [sessionMessageTitle, setSessionMessageTitle] = useState<string>('Session Expired');
+
+  // Passkey (WebAuthn) state
+  const [passkeySupported, setPasskeySupported] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
 
   // MFA Challenge State
   const [mfaChallenge, setMfaChallenge] = useState<{
@@ -44,6 +50,7 @@ const Login: React.FC = () => {
     setCredentials({ username: savedUsername, password: '' });
     setShowPassword(false);
     setRememberMe(wasRemembered && !!savedUsername);
+    setPasskeySupported(isPasskeySupported());
   }, []);
 
   // Check for session expiration or inactivity message
@@ -164,6 +171,35 @@ const Login: React.FC = () => {
     }
   };
   
+  const handlePasskeyLogin = async () => {
+    setPasskeyError(null);
+    if (error) clearError();
+    if (!credentials.username) {
+      setPasskeyError('Enter your username first, then sign in with your passkey.');
+      return;
+    }
+
+    setPasskeyBusy(true);
+    try {
+      // Persist username for next time, mirroring the password flow.
+      if (rememberMe) {
+        localStorage.setItem('fuel_order_last_username', credentials.username);
+      }
+      const resp = await loginWithPasskey(credentials.username, rememberMe);
+      const authData = resp.data;
+      // Normalize the user id (toJSON exposes `id`, but guard for `_id`) like the MFA path.
+      await completeLogin(
+        { ...authData, user: { ...authData.user, id: authData.user._id || authData.user.id } } as any,
+        rememberMe
+      );
+    } catch (err: any) {
+      console.error('Passkey login failed:', err);
+      setPasskeyError(describePasskeyError(err));
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+
   const handleMFASuccess = async (tokens: { accessToken: string; refreshToken: string; user: any }) => {
     // Propagate rememberMe so AuthContext stores the flag in localStorage
     const rm = mfaChallenge?.rememberMe ?? mfaSetupChallenge?.rememberMe ?? false;
@@ -260,12 +296,12 @@ const Login: React.FC = () => {
           )}
 
           {/* Error banner */}
-          {error && (
+          {(error || passkeyError) && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 18, padding: '12px 14px', background: '#fef2f2', border: '1px solid #fbd0d0', borderRadius: 14 }}>
               <AlertCircle size={17} style={{ flexShrink: 0, marginTop: 1, color: '#dc2626' }} />
               <div>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: '#b91c1c' }}>Login Failed</div>
-                <div style={{ fontSize: 12, fontWeight: 500, color: '#dc2626', marginTop: 1 }}>{error}</div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: '#dc2626', marginTop: 1 }}>{error || passkeyError}</div>
               </div>
             </div>
           )}
@@ -372,6 +408,32 @@ const Login: React.FC = () => {
             </button>
           </form>
 
+          {/* Passkey sign-in (only when the browser supports WebAuthn) */}
+          {passkeySupported && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 16px' }}>
+                <div style={{ flex: 1, height: 1, background: '#e3e8f0' }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#9aa4b6' }}>or</span>
+                <div style={{ flex: 1, height: 1, background: '#e3e8f0' }} />
+              </div>
+              <button
+                type="button"
+                onClick={handlePasskeyLogin}
+                disabled={passkeyBusy || isLoading}
+                style={{
+                  width: '100%', height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+                  border: '1.5px solid #d4dbe6', borderRadius: 15, background: '#fff', color: '#1f2937',
+                  fontFamily: 'inherit', fontSize: 15, fontWeight: 700,
+                  cursor: (passkeyBusy || isLoading) ? 'not-allowed' : 'pointer',
+                  opacity: (passkeyBusy || isLoading) ? 0.6 : 1,
+                }}
+              >
+                <Fingerprint size={18} />
+                <span>{passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}</span>
+              </button>
+            </>
+          )}
+
           {/* Trust line */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 22 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9aa4b6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -410,12 +472,12 @@ const Login: React.FC = () => {
               )}
 
               {/* Error Alert */}
-              {error && (
+              {(error || passkeyError) && (
                 <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-3">
                   <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" />
                   <div>
                     <h4 className="text-sm font-medium text-red-800 dark:text-red-300">Login Failed</h4>
-                    <p className="text-sm text-red-700 dark:text-red-400 mt-1">{error}</p>
+                    <p className="text-sm text-red-700 dark:text-red-400 mt-1">{error || passkeyError}</p>
                   </div>
                 </div>
               )}
@@ -504,6 +566,26 @@ const Login: React.FC = () => {
                   )}
                 </button>
               </form>
+
+              {/* Passkey sign-in (only when the browser supports WebAuthn) */}
+              {passkeySupported && (
+                <>
+                  <div className="flex items-center gap-3 my-6">
+                    <div className="flex-1 h-px bg-slate-200 dark:bg-gray-700" />
+                    <span className="text-xs font-semibold text-slate-400 dark:text-gray-500">OR</span>
+                    <div className="flex-1 h-px bg-slate-200 dark:bg-gray-700" />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePasskeyLogin}
+                    disabled={passkeyBusy || isLoading}
+                    className="w-full flex items-center justify-center gap-2 py-4 px-6 text-base font-semibold border-2 border-slate-200 dark:border-gray-600 rounded-xl text-slate-700 dark:text-gray-200 bg-white/80 dark:bg-gray-700 hover:bg-slate-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  >
+                    <Fingerprint className="w-5 h-5" />
+                    {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -124,6 +124,19 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Passkey discovery endpoint. Browsers and password managers automatically probe
+// this well-known path to learn whether the site supports passkeys (WebAuthn) and
+// where users enroll/manage them. Registered EARLY (before security middleware) so
+// it always returns a clean 200 and never shows up as a 404 / blocklist strike.
+// See PASSKEY_IMPLEMENTATION.md (Phase 1).
+app.get('/.well-known/passkey-endpoints', (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.status(200).json({
+    enroll: 'https://www.tahfuelorder.dev/settings/security',
+    manage: 'https://www.tahfuelorder.dev/settings/security',
+  });
+});
+
 // CORS configuration
 app.use(
   cors({
@@ -254,7 +267,7 @@ const applyCsrfProtection = (basePath: string) => {
       return;
     }
     // Skip CSRF for login/register routes (initial auth)
-    if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/refresh' || req.path === '/auth/first-login-password' || req.path === '/auth/verify-mfa' || req.path === '/auth/setup-mfa/generate' || req.path === '/auth/setup-mfa/verify' || req.path === '/auth/setup-mfa/email/send' || req.path === '/auth/setup-mfa/email/verify' || req.path === '/mfa/send-otp') {
+    if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/refresh' || req.path === '/auth/first-login-password' || req.path === '/auth/verify-mfa' || req.path === '/auth/setup-mfa/generate' || req.path === '/auth/setup-mfa/verify' || req.path === '/auth/setup-mfa/email/send' || req.path === '/auth/setup-mfa/email/verify' || req.path === '/auth/passkey/login/options' || req.path === '/auth/passkey/login/verify' || req.path === '/mfa/send-otp') {
       return next();
     }
     // Apply CSRF protection

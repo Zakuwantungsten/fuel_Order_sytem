@@ -37,6 +37,15 @@ export const responseSanitizationMiddleware = (
     '/auth/setup-mfa/verify',
     '/auth/setup-mfa/email/send',
     '/auth/setup-mfa/email/verify',
+    // Passkey/WebAuthn ceremonies. The options payloads contain `allowCredentials`
+    // / `excludeCredentials` arrays — both end in "credentials", which the sanitizer
+    // would redact to the string "[REDACTED]", breaking the browser ceremony
+    // (`allowCredentials.map is not a function`). The login/verify response also
+    // returns access/refresh tokens. So these must bypass body sanitization.
+    '/auth/passkey/login/options',
+    '/auth/passkey/login/verify',
+    '/auth/passkey/register/options',
+    '/auth/passkey/register/verify',
     '/csrf-token',
   ];
 

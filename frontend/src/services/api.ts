@@ -172,8 +172,12 @@ apiClient.interceptors.response.use(
     
     // Handle auth errors
     if (error.response?.status === 401) {
-      // Don't redirect if this is a login attempt or first-login-password - let the component handle it
-      const isLoginRequest = error.config?.url?.includes('/auth/login');
+      // Don't redirect if this is a login attempt or first-login-password - let the component handle it.
+      // Passkey login (a public ceremony) must also be exempt so a wrong/cancelled
+      // passkey surfaces inline instead of bouncing to /login?reason=unauthorized.
+      const isLoginRequest =
+        error.config?.url?.includes('/auth/login') ||
+        error.config?.url?.includes('/auth/passkey/login');
       const isFirstLoginPassword = error.config?.url?.includes('/auth/first-login-password');
       const isRefreshRequest = error.config?.url?.includes('/auth/refresh');
       
@@ -1119,6 +1123,42 @@ export const authAPI = {
   activateAccount: async (token: string, rememberMe?: boolean): Promise<any> => {
     const response = await apiClient.post('/auth/activate-account', { token, rememberMe });
     return response.data.data;
+  },
+};
+
+// Passkey / WebAuthn API. The browser ceremony (navigator.credentials) is driven
+// by services/passkeyService.ts; this object is the thin transport layer.
+export const passkeyAPI = {
+  // ── Login (public) ──
+  loginOptions: async (username?: string): Promise<{ options: any; challengeToken: string }> => {
+    const response = await apiClient.post('/auth/passkey/login/options', { username });
+    return response.data.data;
+  },
+  loginVerify: async (payload: { challengeToken: string; response: any; rememberMe?: boolean }): Promise<any> => {
+    const response = await apiClient.post('/auth/passkey/login/verify', payload);
+    return response.data;
+  },
+
+  // ── Enrollment & management (authenticated) ──
+  registerOptions: async (): Promise<any> => {
+    const response = await apiClient.post('/auth/passkey/register/options');
+    return response.data.data;
+  },
+  registerVerify: async (payload: any): Promise<void> => {
+    await apiClient.post('/auth/passkey/register/verify', payload);
+  },
+  list: async (): Promise<Array<{
+    _id: string; label: string; deviceType: string; backedUp: boolean;
+    transports: string[]; lastUsedAt: string | null; createdAt: string;
+  }>> => {
+    const response = await apiClient.get('/auth/passkey');
+    return response.data.data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await apiClient.delete(`/auth/passkey/${id}`);
+  },
+  rename: async (id: string, label: string): Promise<void> => {
+    await apiClient.patch(`/auth/passkey/${id}`, { label });
   },
 };
 

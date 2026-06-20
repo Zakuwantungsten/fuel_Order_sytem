@@ -57,6 +57,193 @@ function parseUA(ua: string) {
 }
 
 /**
+ * Options controlling how a session is issued. Defaults preserve the behavior of
+ * the original inline password-login issuance.
+ */
+export interface IssueSessionOptions {
+  /** Success message returned to the client. */
+  message?: string;
+  /** Whether the client asked for a persistent (remember-me) session. */
+  rememberMe?: boolean;
+  /** The resolved system_settings config doc (for session/notification settings). */
+  sessionConfig?: any;
+  /** Access-token expiry string (e.g. "12h"); undefined → library default. */
+  accessExpiry?: string;
+  /** Refresh-token expiry string (e.g. "30d"); undefined → library default. */
+  refreshExpiry?: string;
+  /** Refresh-token lifetime in days, used for the remember-me cookie maxAge. */
+  refreshExpiryDays?: number;
+  /** Single-session policy: when false, existing sessions are force-logged out. */
+  allowMultipleSessions?: boolean;
+  /** Audit-log context phrase, e.g. "new login" / "new passkey login". */
+  sessionKillContext?: string;
+  /** Method label recorded on the LoginActivity entry (e.g. "totp", "passkey"). */
+  loginMethod?: string;
+  /** When true, driver-format usernames (T###-ABC) never get a remember-me cookie. */
+  guardDriverRememberMe?: boolean;
+  /** UEBA risk result; when present, adds riskScore/riskLevel to the response and
+   *  logs an ELEVATED_RISK_LOGIN audit entry for scores > 30. */
+  riskResult?: { score: number; level: string; factors?: any } | null;
+  /** Extra fields merged into the response `data` object. */
+  extraResponseData?: Record<string, any>;
+}
+
+/**
+ * Issue an authenticated session: enforce single-session policy, generate the
+ * access/refresh tokens, persist the hashed refresh token, write audit + login
+ * activity, set the remember-me cookie, and send the success response.
+ *
+ * Extracted from `login()` so every authentication path (password, MFA-verified,
+ * and — from Phase 3 — passkey) produces an identical session. See
+ * PASSKEY_IMPLEMENTATION.md §6.4.
+ */
+export async function issueSession(
+  user: IUserDocument,
+  req: AuthRequest,
+  res: Response,
+  opts: IssueSessionOptions = {}
+): Promise<void> {
+  const {
+    message = 'Login successful',
+    rememberMe = false,
+    sessionConfig,
+    accessExpiry,
+    refreshExpiry,
+    refreshExpiryDays,
+    allowMultipleSessions = true,
+    sessionKillContext = 'new login',
+    loginMethod,
+    guardDriverRememberMe = false,
+    riskResult = null,
+    extraResponseData = {},
+  } = opts;
+
+  if (!allowMultipleSessions) {
+    // Single-session policy: revoke the existing refresh token in the DB *before*
+    // issuing a new one so that any session not connected via WebSocket also loses
+    // the ability to refresh its access token once the current JWT expires.
+    // The WebSocket force_logout is the fast path for connected clients; this DB
+    // revocation is the reliable fallback for offline/disconnected browsers.
+    user.refreshToken = undefined;
+    await user.save();
+
+    emitToUser(user.username, 'session_event', {
+      type: 'force_logout',
+      message: 'You have been logged out because a new session was started from another location.',
+    });
+    await AuditService.log({
+      userId: user._id.toString(),
+      username: user.username,
+      action: 'CONCURRENT_SESSION_KILL',
+      resourceType: 'auth',
+      resourceId: user._id.toString(),
+      details: `Existing session terminated by single-session policy — ${sessionKillContext} from ${req.ip}`,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      severity: 'medium',
+    });
+    logger.info(`Single-session policy: existing session(s) for '${user.username}' were force-logged out and refresh token revoked`);
+  }
+
+  // Generate tokens
+  const payload: JWTPayload = {
+    userId: user._id.toString(),
+    username: user.username,
+    role: user.role,
+  };
+
+  const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
+
+  // Hash refresh token before storage, update last login (Gap 2)
+  user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  user.lastLogin = new Date();
+  await user.save();
+
+  logger.info(`User logged in: ${user.username}`);
+
+  // Log successful login
+  await AuditService.logLogin(
+    user.username,
+    true,
+    req.ip,
+    req.get('user-agent'),
+    user._id.toString()
+  );
+
+  // Log risk score if elevated
+  if (riskResult && riskResult.score > 30) {
+    await AuditService.log({
+      userId: user._id.toString(),
+      username: user.username,
+      action: 'ELEVATED_RISK_LOGIN',
+      resourceType: 'auth',
+      details: JSON.stringify({ riskScore: riskResult.score, riskLevel: riskResult.level, factors: riskResult.factors }),
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+  }
+
+  const response: AuthResponse = {
+    user: user.toJSON() as unknown as AuthResponse['user'],
+    accessToken,
+    refreshToken,
+  };
+
+  // Record login activity & send notification email (fire-and-forget)
+  const notifSettings = sessionConfig?.systemSettings?.notifications;
+  const deviceTrackingEnabled = notifSettings?.deviceTracking !== false; // default true
+  const loginNotifsEnabled = notifSettings?.loginNotifications !== false; // default true
+  const ua = req.get('user-agent') || '';
+  const ip = req.ip || 'unknown';
+  const parsed = parseUA(ua);
+  if (deviceTrackingEnabled) {
+    (LoginActivity as any).recordLogin(
+      user._id.toString(), user.refreshToken, ip, ua, loginMethod
+    ).then((activity: any) => {
+      (KnownDevice as any).recordDevice(user._id.toString(), user.username, parsed.browser, parsed.os, parsed.deviceType, ip).catch(() => {});
+      if (loginNotifsEnabled) {
+        emailService.sendLoginNotification(user.email, user.firstName || user.username, {
+          browser: parsed.browser, os: parsed.os, ipAddress: ip,
+          time: new Date(), isNewDevice: activity.isNewDevice, deviceType: parsed.deviceType,
+        }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
+      }
+    }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
+  }
+
+  // ── Remember Me: set rotating HttpOnly refresh-token cookie ──────────
+  // Only for non-driver, voluntarily persistent sessions. JS cannot read this
+  // cookie (httpOnly) and CSRF cannot forge it (already protected by XSRF token).
+  //
+  // IMPORTANT: do NOT establish a persistent session for an un-activated user
+  // (one who still mustChangePassword). Otherwise, if they reach the
+  // "Set Your Password" screen and close the browser without finishing, the
+  // cookie silently logs them back in on the next visit and re-shows the
+  // temp-password flow — making them look like a brand-new user. The cookie is
+  // instead set once they complete first-login password setup (firstLoginPassword).
+  const isDriverUsername = /^T\d{3,4}[-\s]?[A-Z]{3}$/i.test(user.username);
+  if (rememberMe && !user.mustChangePassword && !(guardDriverRememberMe && isDriverUsername)) {
+    const rmDays = refreshExpiryDays ?? 30;
+    const cookieOpts = refreshCookieOptions(rmDays);
+    logger.info(`[RememberMe] Setting cookie for ${user.username}, maxAge=${rmDays}d, opts=${JSON.stringify(cookieOpts)}`);
+    res.cookie('fuel_order_refresh', refreshToken, cookieOpts);
+  } else {
+    logger.info(`[RememberMe] Cookie NOT set: rememberMe=${rememberMe}, mustChangePassword=${user.mustChangePassword}, username=${user.username}`);
+  }
+
+  res.status(200).json({
+    success: true,
+    message,
+    data: {
+      ...response,
+      rememberMe: !!rememberMe,
+      sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
+      ...(riskResult ? { riskScore: riskResult.score, riskLevel: riskResult.level } : {}),
+      ...extraResponseData,
+    },
+  });
+}
+
+/**
  * Heal a *stale* `mustChangePassword` flag on an established account.
  *
  * The "Set Your Password" gate fires whenever `mustChangePassword` is true.
@@ -597,127 +784,19 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    if (!allowMultipleSessions) {
-      // Single-session policy: revoke the existing refresh token in the DB *before*
-      // issuing a new one so that any session not connected via WebSocket also loses
-      // the ability to refresh its access token once the current JWT expires.
-      // The WebSocket force_logout is the fast path for connected clients; this DB
-      // revocation is the reliable fallback for offline/disconnected browsers.
-      user.refreshToken = undefined;
-      await user.save();
-
-      emitToUser(user.username, 'session_event', {
-        type: 'force_logout',
-        message: 'You have been logged out because a new session was started from another location.',
-      });
-      await AuditService.log({
-        userId: user._id.toString(),
-        username: user.username,
-        action: 'CONCURRENT_SESSION_KILL',
-        resourceType: 'auth',
-        resourceId: user._id.toString(),
-        details: `Existing session terminated by single-session policy — new login from ${req.ip}`,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        severity: 'medium',
-      });
-      logger.info(`Single-session policy: existing session(s) for '${username}' were force-logged out and refresh token revoked`);
-    }
-
-    // Generate tokens
-    const payload: JWTPayload = {
-      userId: user._id.toString(),
-      username: user.username,
-      role: user.role,
-    };
-
-    const { accessToken, refreshToken } = generateTokens(payload, accessExpiry, refreshExpiry);
-
-    // Hash refresh token before storage, update last login (Gap 2)
-    user.refreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    user.lastLogin = new Date();
-    await user.save();
-
-    logger.info(`User logged in: ${username}`);
-
-    // Log successful login
-    await AuditService.logLogin(
-      user.username,
-      true,
-      req.ip,
-      req.get('user-agent'),
-      user._id.toString()
-    );
-
-    // Log risk score if elevated
-    if (riskResult.score > 30) {
-      await AuditService.log({
-        userId: user._id.toString(),
-        username,
-        action: 'ELEVATED_RISK_LOGIN',
-        resourceType: 'auth',
-        details: JSON.stringify({ riskScore: riskResult.score, riskLevel: riskResult.level, factors: riskResult.factors }),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
-    }
-
-    const response: AuthResponse = {
-      user: user.toJSON(),
-      accessToken,
-      refreshToken,
-    };
-
-    // Record login activity & send notification email (fire-and-forget)
-    const notifSettings = sessionConfig?.systemSettings?.notifications;
-    const deviceTrackingEnabled = notifSettings?.deviceTracking !== false; // default true
-    const loginNotifsEnabled = notifSettings?.loginNotifications !== false; // default true
-    const ua = req.get('user-agent') || '';
-    const ip = req.ip || 'unknown';
-    const parsed = parseUA(ua);
-    if (deviceTrackingEnabled) {
-      (LoginActivity as any).recordLogin(
-        user._id.toString(), user.refreshToken, ip, ua
-      ).then((activity: any) => {
-        (KnownDevice as any).recordDevice(user._id.toString(), user.username, parsed.browser, parsed.os, parsed.deviceType, ip).catch(() => {});
-        if (loginNotifsEnabled) {
-          emailService.sendLoginNotification(user.email, user.firstName || user.username, {
-            browser: parsed.browser, os: parsed.os, ipAddress: ip,
-            time: new Date(), isNewDevice: activity.isNewDevice, deviceType: parsed.deviceType,
-          }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
-        }
-      }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
-    }
-
-    // ── Remember Me: set rotating HttpOnly refresh-token cookie ──────────
-    // Only for non-driver, voluntarily persistent sessions. JS cannot read this
-    // cookie (httpOnly) and CSRF cannot forge it (already protected by XSRF token).
-    //
-    // IMPORTANT: do NOT establish a persistent session for an un-activated user
-    // (one who still mustChangePassword). Otherwise, if they reach the
-    // "Set Your Password" screen and close the browser without finishing, the
-    // cookie silently logs them back in on the next visit and re-shows the
-    // temp-password flow — making them look like a brand-new user. The cookie is
-    // instead set once they complete first-login password setup (firstLoginPassword).
-    if (rememberMe && !user.mustChangePassword && !username.match(/^T\d{3,4}[-\s]?[A-Z]{3}$/i)) {
-      const rmDays = refreshExpiryDays ?? 30;
-      const cookieOpts = refreshCookieOptions(rmDays);
-      logger.info(`[RememberMe] Setting cookie for ${username}, maxAge=${rmDays}d, opts=${JSON.stringify(cookieOpts)}`);
-      res.cookie('fuel_order_refresh', refreshToken, cookieOpts);
-    } else {
-      logger.info(`[RememberMe] Cookie NOT set: rememberMe=${rememberMe}, mustChangePassword=${user.mustChangePassword}, username=${username}`);
-    }
-
-    res.status(200).json({
-      success: true,
+    // Issue the authenticated session (tokens, single-session policy, audit,
+    // login activity, remember-me cookie, response). Shared with other auth paths.
+    await issueSession(user, req, res, {
       message: 'Login successful',
-      data: {
-        ...response,
-        rememberMe: !!rememberMe,
-        sessionTimeoutMinutes: sessionConfig?.systemSettings?.session?.sessionTimeout ?? 30,
-        riskScore: riskResult.score,
-        riskLevel: riskResult.level,
-      },
+      rememberMe,
+      sessionConfig,
+      accessExpiry,
+      refreshExpiry,
+      refreshExpiryDays,
+      allowMultipleSessions,
+      sessionKillContext: 'new login',
+      guardDriverRememberMe: true,
+      riskResult,
     });
   } catch (error: any) {
     throw error;

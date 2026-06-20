@@ -50,6 +50,13 @@ export function suspicious404Middleware(req: Request, res: Response, next: NextF
   res.on('finish', () => {
     if (res.statusCode !== 404) return;
 
+    // Standardized .well-known/ probes (passkeys, security.txt, change-password,
+    // etc.) are issued automatically by browsers and password managers. A 404 for
+    // an unimplemented well-known path is benign and must NOT count as a suspicious
+    // strike — otherwise routine browser behavior auto-blocks legitimate IPs.
+    const probePath = req.path || req.originalUrl || req.url;
+    if (probePath.startsWith('/.well-known/')) return;
+
     const ip = getClientIP(req);
     const now = Date.now();
 

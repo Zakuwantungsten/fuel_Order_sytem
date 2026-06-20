@@ -18,6 +18,8 @@ export { FuelPriceHistory, FuelPriceSchedule, IFuelPriceHistory, IFuelPriceSched
 export { FeatureFlag, IFeatureFlag } from './FeatureFlag';
 export { default as Webhook, IWebhook, WEBHOOK_EVENTS } from './Webhook';
 export { PendingOTP, IPendingOTP } from './PendingOTP';
+export { default as Passkey, IPasskey } from './Passkey';
+export { default as PasskeyChallenge, IPasskeyChallenge } from './PasskeyChallenge';
 export { LoginActivity, ILoginActivity } from './LoginActivity';
 export { SecurityScoreSnapshot, ISecurityScoreSnapshot } from './SecurityScoreSnapshot';
 export { SecurityAlert, ISecurityAlertDocument } from './SecurityAlert';

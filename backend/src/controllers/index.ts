@@ -11,3 +11,4 @@ export * as driverAccountController from './driverAccountController';
 export * as notificationController from './notificationController';
 export * as tangaLPOController from './tangaLPOController';
 export * as darLPOController from './darLPOController';
+export * as passkeyController from './passkeyController';
