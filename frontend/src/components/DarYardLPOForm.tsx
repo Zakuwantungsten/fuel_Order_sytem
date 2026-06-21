@@ -75,6 +75,7 @@ export default function DarYardLPOForm({
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [bulkLiters, setBulkLiters] = useState('');
   const [bulkRate, setBulkRate] = useState('');
+  const [autoSearch, setAutoSearch] = useState(true);
 
   const [inspectModal, setInspectModal] = useState<{
     isOpen: boolean; fuelRecordId: string | number; truckNumber?: string;
@@ -198,10 +199,12 @@ export default function DarYardLPOForm({
       }
       return next;
     });
-    lines.forEach((line, i) => {
-      setTimeout(() => fetchTruck(idx + i, line), i * 80);
-    });
-  }, [fetchTruck]);
+    if (autoSearch) {
+      lines.forEach((line, i) => {
+        setTimeout(() => fetchTruck(idx + i, line), i * 80);
+      });
+    }
+  }, [fetchTruck, autoSearch]);
 
   const handleLitersPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text');
@@ -418,9 +421,9 @@ export default function DarYardLPOForm({
           </button>
         </div>
 
-        {/* ── LPO Header Fields (new mode only) ── */}
-        {mode === 'new' && (
-          <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+        {/* ── LPO Header Fields ── */}
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+          {mode === 'new' ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Date</label>
@@ -439,7 +442,21 @@ export default function DarYardLPOForm({
                   <option value="USD">USD</option>
                 </select>
               </div>
-              <div className="sm:col-span-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Auto-search</label>
+                <label className="flex items-center gap-2 h-[34px] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoSearch}
+                    onChange={e => setAutoSearch(e.target.checked)}
+                    className="w-4 h-4 accent-green-600 cursor-pointer"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    {autoSearch ? 'On (paste & Enter)' : 'Off (manual only)'}
+                  </span>
+                </label>
+              </div>
+              <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Notes</label>
                 <input
                   type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional"
@@ -447,8 +464,21 @@ export default function DarYardLPOForm({
                 />
               </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoSearch}
+                onChange={e => setAutoSearch(e.target.checked)}
+                className="w-4 h-4 accent-green-600 cursor-pointer"
+              />
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Auto-search</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {autoSearch ? '— fetches truck details on paste & Enter' : '— off, use the search button manually'}
+              </span>
+            </label>
+          )}
+        </div>
 
         {/* ── Entry Table ── */}
         <div className="flex-1 overflow-auto">
@@ -552,7 +582,7 @@ export default function DarYardLPOForm({
                           type="text"
                           value={entry.truckNo}
                           onChange={e => updateEntry(idx, 'truckNo', e.target.value.toUpperCase())}
-                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); fetchTruck(idx, entry.truckNo); } }}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (autoSearch) fetchTruck(idx, entry.truckNo); } }}
                           onPaste={e => handleTruckPaste(idx, e)}
                           placeholder="T 000 XXX / Entity"
                           style={{ flex: 1, minWidth: 0, padding: '7px 9px', fontSize: '13px', fontFamily: "'Geist Mono', ui-monospace, monospace", fontWeight: 500, border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
