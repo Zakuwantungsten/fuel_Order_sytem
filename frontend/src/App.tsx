@@ -8,6 +8,7 @@ import { AmendedDOsProvider } from './contexts/AmendedDOsContext';
 import Login from './components/Login';
 import ProtectedRoute, { UnauthorizedPage } from './components/ProtectedRoute';
 import EnhancedDashboard from './components/EnhancedDashboard';
+import PasskeyEnrollPrompt from './components/PasskeyEnrollPrompt';
 
 const ForgotPassword = lazyWithRetry(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
@@ -338,23 +339,27 @@ function AppContent() {
   }
 
   return (
-    <Routes>
-      <Route
-        path="/*"
-        element={
-          <ProtectedRoute>
-            <div className="flex flex-col min-h-screen">
-              <SystemBanner userRole={user?.role} />
-              <div className="flex-1">
-                <EnhancedDashboard user={user} onLogout={logout} />
+    <>
+      {/* One-time nudge to enroll a passkey (self-gating; renders nothing if N/A). */}
+      <PasskeyEnrollPrompt userId={user?.id != null ? String(user.id) : undefined} />
+      <Routes>
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <div className="flex flex-col min-h-screen">
+                <SystemBanner userRole={user?.role} />
+                <div className="flex-1">
+                  <EnhancedDashboard user={user} onLogout={logout} />
+                </div>
               </div>
-            </div>
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/unauthorized" element={<UnauthorizedPage />} />
-      <Route path="/login" element={<Navigate to="/" replace />} />
-    </Routes>
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
+        <Route path="/login" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }
 

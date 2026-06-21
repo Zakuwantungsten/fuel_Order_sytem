@@ -51,18 +51,34 @@ export async function enrollPasskey(label: string): Promise<void> {
 
 /**
  * Normalize WebAuthn ceremony errors into a friendly message. The browser throws
- * a DOMException for user cancellation / timeouts.
+ * a DOMException for user cancellation / timeouts; Android's Credential Manager
+ * throws a generic "unknown error" when there is simply no passkey to offer.
  */
 export function describePasskeyError(err: any): string {
   const name = err?.name;
+  const raw = (err?.message || '').toLowerCase();
+
+  // Android Chrome surfaces "no passkey available" as a generic Credential Manager
+  // error (often NotReadableError / UnknownError). Treat these as "none enrolled".
+  if (
+    raw.includes('credential manager') ||
+    name === 'NotReadableError' ||
+    name === 'UnknownError'
+  ) {
+    return 'No passkey found on this device yet. Sign in with your password, then add a passkey under Settings → Security.';
+  }
   if (name === 'NotAllowedError') {
-    return 'Passkey prompt was cancelled or timed out.';
+    // Fires both on user cancel/timeout AND when there are no matching credentials.
+    return 'No passkey was used — the prompt was cancelled, timed out, or there is no passkey on this device yet. Add one under Settings → Security.';
   }
   if (name === 'InvalidStateError') {
     return 'This device already has a passkey registered for your account.';
   }
   if (name === 'SecurityError') {
     return 'Passkeys are not available on this domain. Please contact your administrator.';
+  }
+  if (name === 'AbortError') {
+    return 'Passkey sign-in was cancelled.';
   }
   return err?.response?.data?.message || err?.message || 'Passkey operation failed.';
 }

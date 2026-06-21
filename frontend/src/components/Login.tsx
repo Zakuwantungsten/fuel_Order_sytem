@@ -429,6 +429,10 @@ const Login: React.FC = () => {
                 <Fingerprint size={18} />
                 <span>{passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}</span>
               </button>
+              <p style={{ fontSize: 11.5, color: '#9aa4b6', textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>
+                First time? Log in with your password, then add a passkey in
+                Settings → Security to use your fingerprint or face.
+              </p>
             </>
           )}
 
@@ -582,6 +586,10 @@ const Login: React.FC = () => {
                     <Fingerprint className="w-5 h-5" />
                     {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
                   </button>
+                  <p className="text-xs text-center text-slate-400 dark:text-gray-500 mt-2.5 leading-relaxed">
+                    First time? Log in with your password, then add a passkey in
+                    Settings → Security to use your fingerprint or face.
+                  </p>
                 </>
               )}
             </div>
