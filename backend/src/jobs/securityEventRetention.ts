@@ -8,7 +8,7 @@
  * observable, auditable cleanup with logging and dashboard visibility.
  */
 
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { config } from '../config';
 import { securityLogService } from '../services/securityLogService';
 import { jobRegistry } from './jobRegistry';

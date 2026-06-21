@@ -6,7 +6,7 @@
  * SuperAdmin Cron Job Manager Dashboard.
  */
 
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import logger from '../utils/logger';
 
 export type JobStatus = 'idle' | 'running' | 'error' | 'disabled';

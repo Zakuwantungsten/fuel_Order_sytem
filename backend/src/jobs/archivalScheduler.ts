@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import archivalService from '../services/archivalService';
 import { SystemConfig } from '../models';
 import logger from '../utils/logger';

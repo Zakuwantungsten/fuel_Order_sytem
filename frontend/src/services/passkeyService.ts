@@ -27,10 +27,13 @@ export async function hasPlatformAuthenticator(): Promise<boolean> {
 }
 
 /**
- * Run the login ceremony for `username` and return the backend's auth response
- * ({ data: { user, accessToken, ... } }). Throws on cancellation or failure.
+ * Run the usernameless login ceremony and return the backend's auth response
+ * ({ data: { user, accessToken, ... } }). The authenticator offers any
+ * discoverable passkey for this site (tap → biometric, no username typing).
+ * An optional `username` falls back to the legacy username-first flow.
+ * Throws on cancellation or failure.
  */
-export async function loginWithPasskey(username: string, rememberMe = false): Promise<any> {
+export async function loginWithPasskey(rememberMe = false, username?: string): Promise<any> {
   const { options, challengeToken } = await passkeyAPI.loginOptions(username);
   const assertion = await startAuthentication({ optionsJSON: options });
   return passkeyAPI.loginVerify({ challengeToken, response: assertion, rememberMe });

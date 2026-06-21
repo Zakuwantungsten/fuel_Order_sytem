@@ -49,7 +49,11 @@ export const passkeyRegisterOptions = async (req: AuthRequest, res: Response): P
       transports: p.transports as any,
     })),
     authenticatorSelection: {
-      residentKey: 'preferred',
+      // 'required' forces a DISCOVERABLE (resident) credential so the user can log
+      // in usernameless — the authenticator stores the user handle and offers the
+      // passkey at the login screen without us pre-supplying allowCredentials.
+      residentKey: 'required',
+      requireResidentKey: true,
       userVerification: 'preferred',
     },
   });
@@ -118,8 +122,13 @@ export const passkeyRegisterVerify = async (req: AuthRequest, res: Response): Pr
 // ─── Authentication / login (public) ─────────────────────────────────────────
 
 /**
- * Step 1 of login: issue request options + an opaque challenge token. Always
- * returns options (even for unknown users) to avoid username enumeration.
+ * Step 1 of login: issue request options + an opaque challenge token.
+ *
+ * Usernameless by default: with no `username`, we send EMPTY allowCredentials so
+ * the authenticator offers any discoverable passkey for this RP (tap → biometric,
+ * no typing). An optional `username` still narrows the offered credentials for the
+ * legacy username-first flow. Always returns options (even for unknown users) to
+ * avoid username enumeration.
  */
 export const passkeyLoginOptions = async (req: Request, res: Response): Promise<void> => {
   const { username } = req.body || {};
@@ -132,6 +141,7 @@ export const passkeyLoginOptions = async (req: Request, res: Response): Promise<
   const options = await generateAuthenticationOptions({
     rpID,
     userVerification: 'preferred',
+    // Empty array ⇒ usernameless/discoverable; populated ⇒ username-first.
     allowCredentials: creds.map(c => ({
       id: c.credentialID,
       transports: c.transports as any,

@@ -86,7 +86,7 @@ export const config = {
   security404WindowMs: parseInt(process.env.SECURITY_404_WINDOW_MS || '300000', 10),         // 5 min
   securityEventLogging: process.env.SECURITY_EVENT_LOGGING !== 'false',   // enabled by default
   securityAlertEmail: process.env.SECURITY_ALERT_EMAIL || '',
-  securityAlertCooldownMs: parseInt(process.env.SECURITY_ALERT_COOLDOWN_MS || '300000', 10), // 5 min
+  securityAlertCooldownMs: parseInt(process.env.SECURITY_ALERT_COOLDOWN_MS || '21600000', 10), // 6 hours
   securityUaBlocking: process.env.SECURITY_UA_BLOCKING !== 'false',       // enabled by default
   securityIpGating: process.env.SECURITY_IP_GATING === 'true',           // disabled by default
   securityEventRetentionDays: parseInt(process.env.SECURITY_EVENT_RETENTION_DAYS || '90', 10),

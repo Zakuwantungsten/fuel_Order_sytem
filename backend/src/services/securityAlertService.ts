@@ -71,6 +71,30 @@ const SEVERITY_TO_PRIORITY: Record<AlertSeverity, 'critical' | 'high' | 'medium'
   low: 'low',
 };
 
+/**
+ * Event types that warrant an email even at HIGH severity — these require a
+ * human decision (account compromise, policy violation, first IP block, etc.).
+ *
+ * Everything else (path_probe, rate_limited, ua_blocked, suspicious_404) only
+ * goes to DB + WebSocket + Slack. The block is already working; no action needed.
+ */
+const HIGH_SEVERITY_EMAIL_EVENTS = new Set([
+  'ip_blocked',        // new IP auto-blocked — situational awareness
+  'brute_force',       // targeted account attack
+  'break_glass',       // emergency access used
+  'impossible_travel', // account likely compromised
+  'policy_change',     // security config modified
+  'mfa_bypass',        // MFA defeated
+  'bulk_export',       // potential data exfiltration
+  'off_hours',         // sensitive off-hours bulk operation
+]);
+
+function shouldSendEmail(severity: AlertSeverity, eventType: string): boolean {
+  if (severity === 'critical') return true;
+  if (severity === 'high') return HIGH_SEVERITY_EMAIL_EVENTS.has(eventType);
+  return false; // medium / low → dashboard + Slack only
+}
+
 const SEVERITY_EMOJI: Record<AlertSeverity, string> = {
   critical: '🚨',
   high: '⚠️',
@@ -118,20 +142,26 @@ class SecurityAlertService {
       logger.error('[SecurityAlert] WebSocket dispatch failed:', err);
     }
 
-    // 2.  Email → all super_admins (+ optional extra recipient from config)
-    try {
-      const additionalRecipients = config.securityAlertEmail
-        ? [config.securityAlertEmail]
-        : undefined;
+    // 2.  Email → only for critical severity or high-severity events that need human action.
+    //     Routine scanner blocks (path_probe, ua_blocked, rate_limited, suspicious_404)
+    //     go to DB + WebSocket + Slack only — the block is already working.
+    if (shouldSendEmail(input.severity, input.eventType)) {
+      try {
+        const additionalRecipients = config.securityAlertEmail
+          ? [config.securityAlertEmail]
+          : undefined;
 
-      await sendCriticalEmail({
-        subject: `${emoji} Security Alert: ${input.title}`,
-        message: this.buildEmailBody(input),
-        priority: SEVERITY_TO_PRIORITY[input.severity],
-        additionalRecipients,
-      });
-    } catch (err) {
-      logger.error('[SecurityAlert] Email dispatch failed:', err);
+        await sendCriticalEmail({
+          subject: `${emoji} Security Alert: ${input.title}`,
+          message: this.buildEmailBody(input),
+          priority: SEVERITY_TO_PRIORITY[input.severity],
+          additionalRecipients,
+        });
+      } catch (err) {
+        logger.error('[SecurityAlert] Email dispatch failed:', err);
+      }
+    } else {
+      logger.debug(`[SecurityAlert] Email skipped for ${input.eventType} (${input.severity}) — dashboard/Slack only`);
     }
 
     // 3.  Slack → webhook notification

@@ -339,15 +339,16 @@ export const exportUnifiedData = async (req: AuthRequest, res: Response): Promis
 
       // Auto-fit columns
       worksheet.columns.forEach((column) => {
-        if (column && column.eachCell) {
+        const col = column as ExcelJS.Column;
+        if (col && col.eachCell) {
           let maxLength = 0;
-          column.eachCell!({ includeEmpty: true }, (cell) => {
+          col.eachCell({ includeEmpty: true }, (cell: ExcelJS.Cell) => {
             const columnLength = cell.value ? cell.value.toString().length : 10;
             if (columnLength > maxLength) {
               maxLength = columnLength;
             }
           });
-          column.width = maxLength < 10 ? 10 : maxLength + 2;
+          col.width = maxLength < 10 ? 10 : maxLength + 2;
         }
       });
 

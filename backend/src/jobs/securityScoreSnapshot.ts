@@ -5,7 +5,7 @@
  * Runs daily at 2:00 AM. Also provides a manual trigger for the first snapshot.
  */
 
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { calculateSecurityScore } from '../utils/securityScoreService';
 import { SecurityScoreSnapshot } from '../models/SecurityScoreSnapshot';
 import { jobRegistry } from './jobRegistry';

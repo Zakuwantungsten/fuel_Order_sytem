@@ -174,19 +174,17 @@ const Login: React.FC = () => {
   const handlePasskeyLogin = async () => {
     setPasskeyError(null);
     if (error) clearError();
-    if (!credentials.username) {
-      setPasskeyError('Enter your username first, then sign in with your passkey.');
-      return;
-    }
 
     setPasskeyBusy(true);
     try {
-      // Persist username for next time, mirroring the password flow.
-      if (rememberMe) {
-        localStorage.setItem('fuel_order_last_username', credentials.username);
-      }
-      const resp = await loginWithPasskey(credentials.username, rememberMe);
+      // Usernameless: the authenticator picks the discoverable passkey. We pass the
+      // typed username only as an optional narrowing hint if one was entered.
+      const resp = await loginWithPasskey(rememberMe, credentials.username || undefined);
       const authData = resp.data;
+      // Persist the resolved username for next time, mirroring the password flow.
+      if (rememberMe && authData?.user?.username) {
+        localStorage.setItem('fuel_order_last_username', authData.user.username);
+      }
       // Normalize the user id (toJSON exposes `id`, but guard for `_id`) like the MFA path.
       await completeLogin(
         { ...authData, user: { ...authData.user, id: authData.user._id || authData.user.id } } as any,

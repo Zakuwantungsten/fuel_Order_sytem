@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import BackupSchedule from '../models/BackupSchedule';
 import backupService from '../services/backupService';
 import logger from '../utils/logger';
