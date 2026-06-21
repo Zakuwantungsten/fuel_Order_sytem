@@ -19,13 +19,14 @@ const STATION_LABEL = 'Tanga Yard';
 const LIMIT = 20;
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-function StatCard({ label, value, sub, icon: Icon, accent, onClick }: {
+function StatCard({ label, value, sub, icon: Icon, accent, onClick, isLoading }: {
   label: string;
   value: string | number;
   sub?: string;
   icon: React.ElementType;
   accent: string;
   onClick?: () => void;
+  isLoading?: boolean;
 }) {
   return (
     <div
@@ -37,8 +38,12 @@ function StatCard({ label, value, sub, icon: Icon, accent, onClick }: {
       </div>
       <div>
         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</p>
-        <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-0.5">{value}</p>
-        {sub && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{sub}</p>}
+        {isLoading ? (
+          <div className="h-7 w-20 mt-0.5 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+        ) : (
+          <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-0.5">{value}</p>
+        )}
+        {sub && !isLoading && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{sub}</p>}
       </div>
     </div>
   );
@@ -110,7 +115,7 @@ export default function TangaLPOs() {
   const thisMonthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
   const lastDay = new Date(currentYear, currentMonth, 0).getDate();
   const thisMonthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${lastDay}`;
-  const { data: monthData } = useTangaLPOList(
+  const { data: monthData, isLoading: isMonthLoading } = useTangaLPOList(
     { limit: 1000, dateFrom: thisMonthStart, dateTo: thisMonthEnd },
     true
   );
@@ -454,6 +459,7 @@ export default function TangaLPOs() {
           value={monthLpos.length}
           icon={FileText}
           accent="bg-blue-500"
+          isLoading={isMonthLoading}
         />
         <StatCard
           label="Total Liters"
@@ -461,6 +467,7 @@ export default function TangaLPOs() {
           sub="This month"
           icon={Droplets}
           accent="bg-cyan-500"
+          isLoading={isMonthLoading}
         />
         <StatCard
           label="Total Amount (TZS)"
@@ -470,6 +477,7 @@ export default function TangaLPOs() {
           sub="This month"
           icon={TrendingUp}
           accent="bg-green-500"
+          isLoading={isMonthLoading}
         />
         <StatCard
           label={unlinkedCount > 0 ? 'Unlinked Entries' : 'Trucks Served'}
@@ -477,6 +485,7 @@ export default function TangaLPOs() {
           sub={unlinkedCount > 0 ? 'Click to view & fix' : 'All linked'}
           icon={unlinkedCount > 0 ? AlertTriangle : Truck}
           accent={unlinkedCount > 0 ? 'bg-amber-500' : 'bg-indigo-500'}
+          isLoading={isMonthLoading}
           onClick={unlinkedCount > 0 ? () => {
             setDateFrom(thisMonthStart);
             setDateTo(thisMonthEnd);
@@ -511,7 +520,7 @@ export default function TangaLPOs() {
       {viewMode === 'list' && <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Filter bar */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-3">
             {/* Search */}
             <div className="relative col-span-2 md:col-span-1 xl:col-span-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -524,9 +533,12 @@ export default function TangaLPOs() {
               />
             </div>
 
-            {/* Date range */}
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={fieldCls} title="From date" />
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={fieldCls} title="To date" />
+            {/* Date range with dash */}
+            <div className="col-span-2 md:col-span-2 xl:col-span-2 flex items-center gap-2">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="flex-1 min-w-0 px-3 h-[38px] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent" title="From date" />
+              <span className="text-gray-400 dark:text-gray-500 text-sm font-medium shrink-0">—</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="flex-1 min-w-0 px-3 h-[38px] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent" title="To date" />
+            </div>
 
             {/* Month — dynamic */}
             <select

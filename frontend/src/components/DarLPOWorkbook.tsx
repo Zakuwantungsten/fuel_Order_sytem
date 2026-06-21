@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDarWorkbook, useDarYears, darLPOKeys } from '../hooks/useDarLPOs';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -34,7 +34,7 @@ export default function DarLPOWorkbook({ onBack, initialLpoId, initialYear, init
   const pendingInitialLpoRef = useRef<string | null>(initialLpoId ?? null);
 
   const { data: years = [currentYear] } = useDarYears();
-  const { data: workbookData, isLoading } = useDarWorkbook(selectedYear);
+  const { data: workbookData, isLoading, isFetching } = useDarWorkbook(selectedYear);
 
   const months: Record<number, DarLPO[]> = (workbookData?.months as Record<number, DarLPO[]>) ?? {};
   const availableMonths = Object.keys(months).map(Number).sort((a, b) => a - b);
@@ -95,6 +95,9 @@ export default function DarLPOWorkbook({ onBack, initialLpoId, initialYear, init
       {/* Year + Month header */}
       <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 px-3 py-2 flex items-center gap-3 flex-wrap">
         <BookOpen className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+        {isFetching && !!workbookData && (
+          <Loader2 className="w-3.5 h-3.5 text-green-500 animate-spin flex-shrink-0" />
+        )}
         <select
           value={selectedYear}
           onChange={e => {
@@ -123,16 +126,11 @@ export default function DarLPOWorkbook({ onBack, initialLpoId, initialYear, init
                     ? 'bg-green-600 text-white shadow-sm'
                     : hasData
                     ? 'bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-500'
-                    : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                    : 'opacity-40 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 }`}
                 title={hasData ? `${lpoCount} LPO${lpoCount !== 1 ? 's' : ''}` : 'No LPOs'}
               >
                 {name}
-                {hasData && (
-                  <span className={`ml-1 text-[10px] ${activeMonth === month ? 'text-green-200' : 'text-gray-400 dark:text-gray-500'}`}>
-                    {lpoCount}
-                  </span>
-                )}
               </button>
             );
           })}
