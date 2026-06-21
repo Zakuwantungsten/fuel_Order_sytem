@@ -21,9 +21,10 @@ interface LPOSheetViewProps {
   workbookId: string | number;
   onUpdate: (updatedSheet: LPOSheet) => void;
   lpoNo?: string;
+  onBack?: () => void;
 }
 
-const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate, lpoNo }) => {
+const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate, lpoNo, onBack }) => {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editedSheet, setEditedSheet] = useState<LPOSheet>(sheet);
@@ -637,7 +638,14 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       {/* Mobile Header */}
       <div className="lg:hidden bg-gradient-to-br from-[#1b2433] to-[#0f1722] px-[18px] pt-[14px] pb-[22px] rounded-b-[26px] relative" style={{boxShadow: '0 12px 28px -14px rgba(15,23,34,0.6)'}}>
         <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px'}}>
-          <div className="text-[17px] font-extrabold text-white tracking-tight">LPO {editedSheet.lpoNo}</div>
+          <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+            {onBack && (
+              <button onClick={onBack} style={{width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)'}}>
+                <X className="w-4 h-4 text-[#c4cedd]" />
+              </button>
+            )}
+            <div className="text-[17px] font-extrabold text-white tracking-tight">LPO {editedSheet.lpoNo}</div>
+          </div>
           <div className="relative">
             <button
               onClick={() => setShowCopyDropdown(!showCopyDropdown)}
@@ -969,7 +977,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       )}
 
       {/* Sheet Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
 
         {/* ===== MOBILE VIEW (lg:hidden) ===== */}
         <div className="lg:hidden bg-[#eef1f5] min-h-full">

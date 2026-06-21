@@ -1026,9 +1026,9 @@ const LPOs = () => {
   // Show workbook view if selected
   if (viewMode === 'workbook' && selectedWorkbookId) {
     return (
-      <div className="h-screen">
-        <LPOWorkbook 
-          workbookId={selectedWorkbookId} 
+      <div className="fixed inset-0 z-50">
+        <LPOWorkbook
+          workbookId={selectedWorkbookId}
           onClose={handleCloseWorkbook}
           initialLpoNo={selectedLpoNo || undefined}
         />

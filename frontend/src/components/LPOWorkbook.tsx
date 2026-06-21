@@ -336,6 +336,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
             sheet={activeSheet}
             workbookId={workbook.id!}
             lpoNo={activeSheet?.lpoNo}
+            onBack={onClose}
             onUpdate={(updatedSheet) => {
               setWorkbook(prev => prev ? {
                 ...prev,
