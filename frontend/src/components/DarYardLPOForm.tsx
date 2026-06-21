@@ -203,6 +203,62 @@ export default function DarYardLPOForm({
     });
   }, [fetchTruck]);
 
+  const handleLitersPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text');
+    const lines = text.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return;
+    e.preventDefault();
+    setEntries(prev => {
+      const lastRate = prev[prev.length - 1]?.rate || 0;
+      const next = [...prev];
+      lines.forEach((line, i) => {
+        const rowIdx = idx + i;
+        const liters = parseFloat(line.replace(/,/g, '')) || 0;
+        if (rowIdx < next.length) {
+          const rate = next[rowIdx].rate;
+          next[rowIdx] = { ...next[rowIdx], liters, amount: +(liters * rate).toFixed(2) };
+        } else {
+          next.push({ ...makeEmptyEntry(lastRate), liters, amount: +(liters * lastRate).toFixed(2) });
+        }
+      });
+      return next;
+    });
+    setRows(prev => {
+      const next = [...prev];
+      for (let i = 1; i < lines.length; i++) {
+        if (idx + i >= next.length) next.push(makeEmptyRow());
+      }
+      return next;
+    });
+  }, []);
+
+  const handleDoPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text');
+    const lines = text.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return;
+    e.preventDefault();
+    setEntries(prev => {
+      const lastRate = prev[prev.length - 1]?.rate || 0;
+      const next = [...prev];
+      lines.forEach((line, i) => {
+        const rowIdx = idx + i;
+        if (rowIdx < next.length) {
+          next[rowIdx] = { ...next[rowIdx], doNo: line.toUpperCase() };
+        } else {
+          next.push({ ...makeEmptyEntry(lastRate), doNo: line.toUpperCase() });
+        }
+      });
+      return next;
+    });
+    setRows(prev => {
+      const next = [...prev];
+      for (let i = 1; i < lines.length; i++) {
+        if (idx + i >= next.length) next.push(makeEmptyRow());
+      }
+      return next;
+    });
+  }, []);
+
   const validEntries = entries.filter(
     e => e.truckNo.trim() && e.liters > 0 && e.rate > 0
   );
@@ -545,6 +601,7 @@ export default function DarYardLPOForm({
                         type="text"
                         value={entry.doNo}
                         onChange={e => updateEntry(idx, 'doNo', e.target.value.toUpperCase())}
+                        onPaste={e => handleDoPaste(idx, e)}
                         placeholder="DO #"
                         style={{ width: '100%', padding: '7px 9px', fontSize: '13px', fontFamily: "'Geist Mono', ui-monospace, monospace", border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
@@ -556,6 +613,7 @@ export default function DarYardLPOForm({
                         type="number"
                         value={entry.liters || ''}
                         onChange={e => updateEntry(idx, 'liters', parseFloat(e.target.value) || 0)}
+                        onPaste={e => handleLitersPaste(idx, e)}
                         placeholder="0" min={0.01} step="0.01"
                         style={{ width: '100%', padding: '7px 9px', fontSize: '13px', textAlign: 'right', border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
@@ -777,6 +835,7 @@ export default function DarYardLPOForm({
                         type="text"
                         value={entry.doNo}
                         onChange={e => updateEntry(idx, 'doNo', e.target.value.toUpperCase())}
+                        onPaste={e => handleDoPaste(idx, e)}
                         placeholder="DO #"
                         className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono focus:ring-1 focus:ring-green-500"
                       />
@@ -801,6 +860,7 @@ export default function DarYardLPOForm({
                         type="number"
                         value={entry.liters || ''}
                         onChange={e => updateEntry(idx, 'liters', parseFloat(e.target.value) || 0)}
+                        onPaste={e => handleLitersPaste(idx, e)}
                         placeholder="0"
                         min={0.01}
                         step="0.01"
