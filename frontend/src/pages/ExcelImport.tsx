@@ -20,7 +20,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Upload, FileSpreadsheet, Eye, Play, RotateCcw, CheckCircle2,
   AlertTriangle, Info, ChevronDown, ChevronUp, Loader2,
-  Fuel, PackageCheck, Receipt, HelpCircle, X
+  Fuel, PackageCheck, Receipt, HelpCircle, X, Droplets
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import apiClient from '../services/api';
@@ -28,7 +28,7 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SheetType = 'fuelRecord' | 'deliveryOrder' | 'lpoEntry' | 'unknown';
+type SheetType = 'fuelRecord' | 'deliveryOrder' | 'lpoEntry' | 'darYardLPO' | 'unknown';
 
 interface SheetPreview {
   name: string;
@@ -62,6 +62,7 @@ const TYPE_META: Record<SheetType, { label: string; color: string; bg: string; i
   fuelRecord:    { label: 'Fuel Record',    color: 'text-blue-700 dark:text-blue-300',   bg: 'bg-blue-50 dark:bg-blue-900/30',   icon: Fuel },
   deliveryOrder: { label: 'Delivery Order', color: 'text-green-700 dark:text-green-300', bg: 'bg-green-50 dark:bg-green-900/30', icon: PackageCheck },
   lpoEntry:      { label: 'LPO Entry',      color: 'text-purple-700 dark:text-purple-300', bg: 'bg-purple-50 dark:bg-purple-900/30', icon: Receipt },
+  darYardLPO:    { label: 'Dar Yard LPO',   color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50 dark:bg-amber-900/30', icon: Droplets },
   unknown:       { label: 'Unknown',        color: 'text-gray-500 dark:text-gray-400',  bg: 'bg-gray-50 dark:bg-gray-800',      icon: HelpCircle },
 };
 
@@ -571,7 +572,7 @@ export default function ExcelImport() {
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide flex items-center gap-2">
             <HelpCircle className="w-4 h-4" /> How sheet detection works
           </h2>
-          <div className="grid sm:grid-cols-3 gap-4 text-xs text-gray-600 dark:text-gray-400">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs text-gray-600 dark:text-gray-400">
             <div className="space-y-1">
               <p className="font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1"><Fuel className="w-3.5 h-3.5" /> Fuel Record</p>
               <p>Sheets named after a month (<em>Jan, Feb, Mar 2025…</em>) or containing columns like <em>Going DO, Truck No, Dar Going</em>.</p>
@@ -583,6 +584,10 @@ export default function ExcelImport() {
             <div className="space-y-1">
               <p className="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> LPO Entry</p>
               <p>Sheets named <em>LPO</em> or containing columns like <em>LPO No, Diesel At, Price/Ltr</em>.</p>
+            </div>
+            <div className="space-y-1">
+              <p className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Dar Yard LPO</p>
+              <p>Dar Yard LPO sheet with columns <em>LPO No, Date, Truck No, Ltrs, Station</em> — rows grouped by LPO No (volumes only, no price). Also accepts the dispensing-log layout <em>Date, Vehicle Number, Ltrs Out/In/Balance</em>. Routes to the Dar Yard LPO tab.</p>
             </div>
           </div>
         </section>

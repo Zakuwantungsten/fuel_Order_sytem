@@ -1051,3 +1051,38 @@ export const generateLPOPDF = (
 
   return doc;
 };
+
+/**
+ * Render one LPO to a Buffer by ending its PDFDocument stream internally.
+ */
+export function generateLPOPDFBuffer(
+  lpo: ILPOSummary,
+  branding: CompanyBranding,
+  preparedBy?: string,
+  approvedBy?: string,
+  stationInfo?: LPOStationInfo
+): Promise<Buffer> {
+  const doc = generateLPOPDF(lpo, branding, preparedBy, approvedBy, stationInfo);
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    doc.end();
+  });
+}
+
+/**
+ * Merge an array of PDF Buffers into a single PDF Buffer using pdf-lib.
+ */
+export async function mergeMonthLPOsPDF(pdfBuffers: Buffer[]): Promise<Buffer> {
+  const { PDFDocument } = await import('pdf-lib');
+  const merged = await PDFDocument.create();
+  for (const buf of pdfBuffers) {
+    const src = await PDFDocument.load(buf);
+    const copied = await merged.copyPages(src, src.getPageIndices());
+    copied.forEach(page => merged.addPage(page));
+  }
+  const bytes = await merged.save();
+  return Buffer.from(bytes);
+}

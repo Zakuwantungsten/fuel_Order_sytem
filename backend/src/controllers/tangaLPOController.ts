@@ -57,18 +57,34 @@ function dispenseAmount(entry: any): number {
 // ── LPO number helper ──────────────────────────────────────────────────────────
 
 async function resolveNextTangaLPONo(year: number): Promise<string> {
-  const lastLPO = await TangaLPODocument.findOne({
-    lpoNo: { $regex: `^TY-${year}-` },
-    isDeleted: false,
-  }).sort({ lpoNo: -1 });
+  // Highest sequence already used for this year. Scoping the match to
+  // `^TY-${year}-` is what makes the counter reset to 001 each new year — a
+  // fresh year has no matching documents, so `maxSeq` is null and seq starts at 1.
+  //
+  // We take the numeric MAX via aggregation rather than a `.sort({ lpoNo: -1 })`
+  // string sort: lexically "TY-2026-1000" sorts BELOW "TY-2026-999", which would
+  // make the counter stall and collide once a year passes 999 entries. `$convert`
+  // with onError keeps any malformed imported number from breaking the pipeline.
+  const result = await TangaLPODocument.aggregate([
+    { $match: { lpoNo: { $regex: `^TY-${year}-` }, isDeleted: false } },
+    {
+      $group: {
+        _id: null,
+        maxSeq: {
+          $max: {
+            $convert: {
+              input: { $arrayElemAt: [{ $split: ['$lpoNo', '-'] }, 2] },
+              to: 'int',
+              onError: 0,
+              onNull: 0,
+            },
+          },
+        },
+      },
+    },
+  ]);
 
-  let seq = 1;
-  if (lastLPO) {
-    const parts = lastLPO.lpoNo.split('-');
-    const parsed = parseInt(parts[2], 10);
-    if (!isNaN(parsed)) seq = parsed + 1;
-  }
-
+  const seq = (result[0]?.maxSeq ?? 0) + 1;
   return `TY-${year}-${String(seq).padStart(3, '0')}`;
 }
 
@@ -144,7 +160,17 @@ function buildTangaLPOFilter(q: YardFilterInput): any {
 // ── Controllers ───────────────────────────────────────────────────────────────
 
 export const getNextTangaLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
-  const year = new Date().getFullYear();
+  // Preview only — the authoritative number is re-resolved at save time from the
+  // LPO's own date. Honour an optional ?date= / ?year= so the preview can match
+  // the year of the LPO being entered (e.g. backdated across a New Year boundary);
+  // default to the current calendar year.
+  const { date, year: yearParam } = req.query;
+  let year = new Date().getFullYear();
+  if (yearParam && !isNaN(parseInt(yearParam as string, 10))) {
+    year = parseInt(yearParam as string, 10);
+  } else if (date && !isNaN(new Date(date as string).getTime())) {
+    year = new Date(date as string).getFullYear();
+  }
   const nextLpoNo = await resolveNextTangaLPONo(year);
 
   res.status(200).json({
@@ -277,14 +303,28 @@ export const createTangaLPO = async (req: AuthRequest, res: Response): Promise<v
   const dateObj = new Date(data.date);
   const year = dateObj.getFullYear();
 
-  const lpoNo = await resolveNextTangaLPONo(year);
-
-  const lpo = await TangaLPODocument.create({
-    ...data,
-    lpoNo,
-    year,
-    createdBy: req.user?.username || 'Unknown',
-  });
+  // Resolve-then-insert with a bounded retry on the unique `lpoNo` index. Two
+  // concurrent creates (or a collision with an imported number) re-pick the next
+  // free number instead of failing with a 500 — this is what makes the
+  // read-modify-write counter safe without a separate atomic sequence.
+  let lpo: InstanceType<typeof TangaLPODocument> | undefined;
+  let lpoNo = '';
+  for (let attempt = 0; attempt < 5; attempt++) {
+    lpoNo = await resolveNextTangaLPONo(year);
+    try {
+      lpo = await TangaLPODocument.create({
+        ...data,
+        lpoNo,
+        year,
+        createdBy: req.user?.username || 'Unknown',
+      });
+      break;
+    } catch (err: any) {
+      if (err?.code === 11000 && attempt < 4) continue; // duplicate lpoNo — retry
+      throw err;
+    }
+  }
+  if (!lpo) throw new ApiError(500, 'Could not allocate a Tanga LPO number, please retry');
 
   await AuditService.log({
     userId: req.user?.userId,
@@ -762,4 +802,66 @@ export const downloadTangaLPOPDF = async (req: AuthRequest, res: Response): Prom
   doc.end();
 
   logger.info(`Tanga LPO PDF downloaded: ${lpo.lpoNo} by ${req.user?.username}`);
+};
+
+export const downloadTangaMonthPDF = async (req: AuthRequest, res: Response): Promise<void> => {
+  const year = parseInt(req.params.year, 10);
+  const month = parseInt(req.params.month, 10);
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+    throw new ApiError(400, 'Invalid year or month');
+  }
+
+  const mm = String(month).padStart(2, '0');
+  const lpos = await TangaLPODocument.find({
+    year,
+    date: { $regex: `^${year}-${mm}-` },
+    isDeleted: false,
+  }).sort({ date: 1, lpoNo: 1 }).lean();
+
+  if (lpos.length === 0) throw new ApiError(404, 'No LPOs found for this month');
+
+  const { generateLPOPDFBuffer, mergeMonthLPOsPDF, getCompanyBranding } = await import('../utils/pdfGenerator');
+  const branding = await getCompanyBranding();
+
+  const yardConfig = await YardConfig.findOne({ yard: 'TANGA' }).lean();
+  const stationInfo = yardConfig ? {
+    supplierName: (yardConfig as any).supplierName,
+    supplierAddress: (yardConfig as any).supplierAddress,
+    supplierPlotNo: (yardConfig as any).supplierPlotNo,
+    supplierPoBox: (yardConfig as any).supplierPoBox,
+    description: (yardConfig as any).description,
+  } : undefined;
+
+  const buffers = await Promise.all(
+    lpos.map(lpo => {
+      const lpoData: any = {
+        lpoNo: lpo.lpoNo,
+        date: lpo.date,
+        year: lpo.year,
+        station: 'TANGA YARD',
+        orderOf: '',
+        entries: (lpo.entries as any[]).map(e => ({
+          doNo: e.doNo || 'NIL',
+          truckNo: e.truckNo,
+          liters: e.liters,
+          rate: e.rate,
+          amount: e.amount,
+          dest: e.dest || '',
+          isCancelled: !!e.isCancelled,
+        })),
+        total: lpo.total,
+        currency: (lpo as any).currency || 'TZS',
+      };
+      return generateLPOPDFBuffer(lpoData, branding, req.user?.username, (lpo as any).approvedBy, stationInfo);
+    })
+  );
+
+  const merged = await mergeMonthLPOsPDF(buffers);
+  const monthName = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long' });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="TANGA-LPOs-${monthName}-${year}.pdf"`);
+  res.send(merged);
+
+  logger.info(`Tanga month PDF downloaded: ${monthName} ${year} (${lpos.length} LPOs) by ${req.user?.username}`);
 };

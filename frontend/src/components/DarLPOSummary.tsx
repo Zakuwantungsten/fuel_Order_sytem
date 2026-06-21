@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { BarChart2, Droplets, TrendingUp, Truck, FileText } from 'lucide-react';
+import { BarChart2, Droplets, TrendingUp, Truck, FileText, Download } from 'lucide-react';
 import { useDarWorkbook, useDarYears } from '../hooks/useDarLPOs';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
+import { darLPOAPI } from '../services/api';
+import { toast } from 'react-toastify';
 import type { DarLPO } from '../types';
 
 const MONTH_NAMES = [
@@ -35,6 +37,19 @@ export default function DarLPOSummary() {
     const s = localStorage.getItem('dar-lpo:selectedYear');
     return s ? parseInt(s, 10) : currentYear;
   });
+  const [downloadingMonth, setDownloadingMonth] = useState<number | null>(null);
+
+  const handleDownloadMonth = async (month: number) => {
+    setDownloadingMonth(month);
+    try {
+      await darLPOAPI.downloadMonthPDF(selectedYear, month);
+      toast.success('PDF downloaded');
+    } catch {
+      toast.error('Failed to generate PDF');
+    } finally {
+      setDownloadingMonth(null);
+    }
+  };
 
   const { data: years = [currentYear] } = useDarYears();
   const { data: workbookData, isLoading } = useDarWorkbook(selectedYear);
@@ -141,6 +156,7 @@ export default function DarLPOSummary() {
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Trucks Served</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Liters</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Amount (TZS)</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">PDF</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -155,6 +171,21 @@ export default function DarLPOSummary() {
                     <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-100">
                       {row.totalAmount.toLocaleString()}
                     </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => handleDownloadMonth(row.month)}
+                        disabled={downloadingMonth === row.month}
+                        title={`Download all LPOs for ${MONTH_NAMES[row.month - 1]} ${selectedYear}`}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {downloadingMonth === row.month ? (
+                          <span className="w-3.5 h-3.5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        PDF
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -165,6 +196,7 @@ export default function DarLPOSummary() {
                   <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-gray-100">{totals.truckCount}</td>
                   <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-gray-100">{totals.totalLiters.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-gray-100">{totals.totalAmount.toLocaleString()}</td>
+                  <td />
                 </tr>
               </tfoot>
             </table>

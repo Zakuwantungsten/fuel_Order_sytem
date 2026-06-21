@@ -2528,6 +2528,20 @@ export const tangaLPOAPI = {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
   },
+  downloadMonthPDF: async (year: number, month: number): Promise<void> => {
+    const response = await apiClient.get(`/tanga-lpo/workbooks/${year}/${month}/pdf`, { responseType: 'blob' });
+    const contentDisposition = (response.headers['content-disposition'] as string) || '';
+    const match = contentDisposition.match(/filename="(.+?)"/);
+    const filename = match ? match[1] : `TANGA-LPOs-${year}-${month}.pdf`;
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
 };
 
 // ── Dar LPO API ───────────────────────────────────────────────────────────────
@@ -2610,6 +2624,20 @@ export const darLPOAPI = {
     const contentDisposition = (response.headers['content-disposition'] as string) || '';
     const match = contentDisposition.match(/filename="(.+?)"/);
     const filename = match ? match[1] : `LPO-${id}.pdf`;
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+  downloadMonthPDF: async (year: number, month: number): Promise<void> => {
+    const response = await apiClient.get(`/dar-lpo/workbooks/${year}/${month}/pdf`, { responseType: 'blob' });
+    const contentDisposition = (response.headers['content-disposition'] as string) || '';
+    const match = contentDisposition.match(/filename="(.+?)"/);
+    const filename = match ? match[1] : `DAR-LPOs-${year}-${month}.pdf`;
     const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
     const link = document.createElement('a');
     link.href = url;

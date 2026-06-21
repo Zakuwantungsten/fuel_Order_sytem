@@ -1388,7 +1388,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
               {['#', 'DO No', 'Truck', 'Liters', 'Rate', 'Amount', 'Destination', 'Actions'].map((h, i) => (
                 <div
                   key={h}
-                  className={`px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide ${i > 1 && i < 6 ? 'text-right' : ''} ${i < 7 ? 'border-r border-gray-200 dark:border-gray-700' : 'text-center'}`}
+                  className={`px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide ${i > 2 && i < 6 ? 'text-right' : ''} ${i < 7 ? 'border-r border-gray-200 dark:border-gray-700' : 'text-center'}`}
                 >
                   {h}
                 </div>

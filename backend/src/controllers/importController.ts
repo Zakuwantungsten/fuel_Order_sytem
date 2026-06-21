@@ -11,7 +11,7 @@
 
 import { Response } from 'express';
 import * as XLSX from 'xlsx';
-import { FuelRecord, DeliveryOrder, LPOSummary, LPOWorkbook } from '../models';
+import { FuelRecord, DeliveryOrder, LPOSummary, LPOWorkbook, DarLPODocument } from '../models';
 import { computeMonthKey } from '../models/FuelRecord';
 import { AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
@@ -24,7 +24,7 @@ type ImportRequest = AuthRequest & { file?: Express.Multer.File };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SheetType = 'fuelRecord' | 'deliveryOrder' | 'lpoEntry' | 'unknown';
+type SheetType = 'fuelRecord' | 'deliveryOrder' | 'lpoEntry' | 'darYardLPO' | 'unknown';
 
 interface ImportResult {
   inserted: number;
@@ -257,12 +257,26 @@ function detectSheetType(sheetName: string, headers: string[]): SheetType {
   // ── Header-based detection FIRST (most reliable) ──────────────────────────
   // Headers unambiguously identify the collection regardless of sheet name.
   // This handles DO/LPO/FuelRecord workbooks where each sheet is named after a month.
+
+  // Dar Yard fuel log: DATE | VEHICLE NUMBER | LTRS OUT | LTRS IN | LTRS BALANCE
+  // Must be checked before the fuelRecord month-name fallback because sheets are
+  // named JAN/FEB/… which would otherwise match MONTH_NAMES → fuelRecord.
+  if (/vehicle number/.test(headerStr) && /ltrs out/.test(headerStr)) {
+    return 'darYardLPO';
+  }
+
   if (/going do|return do|dar going|mbeya going|tanga return|mbeya return/.test(headerStr)) {
     return 'fuelRecord';
   }
   if (/d\.o no|do no\b|do number|donumber|haulier|loading point|import or export/.test(headerStr)) {
     return 'deliveryOrder';
   }
+  // Dar Yard LPO document: LPO NO | DATE | TRUCK NO | LTRS | STATION (no price columns)
+  // Must be checked before the generic lpoEntry rule because "LPO NO" would otherwise match "lpo n".
+  if (/\blpo no\b/.test(headerStr) && /\bstation\b/.test(headerStr) && /\bltrs\b/.test(headerStr) && !/diesel @|diesel at|price per|price\/l/.test(headerStr)) {
+    return 'darYardLPO';
+  }
+
   // LPO detection: match both full and truncated header variants
   // "lpo n" covers: "lpo no", "lpo number", "lpo n -", "lpo n."
   // "diesel" covers: "diesel at", "diesel @", "diesel"
@@ -692,6 +706,210 @@ async function importLPOEntries(
 }
 
 /**
+ * Dar Yard LPO document importer.
+ *
+ * Format: LPO NO | DATE | TRUCK NO | LTRS | STATION
+ * Groups rows by LPO NO and upserts into the DarLPODocument collection
+ * (shown in the Dar LPO tab). Rate and amount are 0 — this file contains volumes only.
+ */
+async function importDarYardLPODocuments(
+  rows: Record<string, unknown>[],
+  dryRun: boolean,
+  year?: number,
+): Promise<ImportResult> {
+  const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: 0 };
+
+  type Entry = { truckNo: string; liters: number };
+  type LPOGroup = { lpoNo: string; date: string; year: number; entries: Entry[] };
+
+  const groups = new Map<string, LPOGroup>();
+  const order: string[] = [];
+
+  for (const row of rows) {
+    if (isEmptyRow(row)) continue;
+
+    const lpoNo = safeStr(row['LPO NO']);
+    const truckNo = safeStr(row['TRUCK NO']);
+    const ltrs = safeNum(row['LTRS']);
+    const rawDate = row['DATE'];
+
+    if (!lpoNo || !truckNo || ltrs === null || ltrs <= 0) continue;
+
+    const date = normalizeToISODate(rawDate, year);
+    const entryYear = date ? parseInt(date.substring(0, 4), 10) : (year ?? new Date().getFullYear());
+
+    if (!groups.has(lpoNo)) {
+      groups.set(lpoNo, { lpoNo, date: date || `${entryYear}-01-01`, year: entryYear, entries: [] });
+      order.push(lpoNo);
+    }
+    groups.get(lpoNo)!.entries.push({ truckNo, liters: ltrs });
+  }
+
+  for (const lpoNo of order) {
+    const group = groups.get(lpoNo)!;
+    if (group.entries.length === 0) continue;
+
+    const entryDocs = group.entries.map((e) => ({
+      doNo: 'DAR-YARD',
+      truckNo: e.truckNo,
+      liters: e.liters,
+      rate: 0,
+      amount: 0,
+      dest: 'DAR YARD',
+      isCancelled: false,
+      isDriverAccount: false,
+      isRefer: false,
+    }));
+
+    try {
+      if (dryRun) {
+        const exists = await DarLPODocument.exists({ lpoNo, isDeleted: false });
+        exists ? result.updated++ : result.inserted++;
+        continue;
+      }
+
+      const existing = await DarLPODocument.findOne({ lpoNo, isDeleted: false });
+      if (existing) {
+        (existing.entries as any[]) = entryDocs;
+        existing.total = 0;
+        await existing.save();
+        result.updated++;
+      } else {
+        await DarLPODocument.create({
+          lpoNo,
+          date: group.date,
+          year: group.year,
+          entries: entryDocs,
+          total: 0,
+          currency: 'TZS',
+          isDeleted: false,
+        });
+        result.inserted++;
+      }
+    } catch (err: unknown) {
+      logger.error(`[ImportCtrl][DarLPODocument] lpoNo=${lpoNo}: ${(err as Error).message}`);
+      result.errors++;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Dar Yard fuel dispensing log importer.
+ *
+ * Format: DATE | VEHICLE NUMBER | LTRS OUT | LTRS IN | LTRS BALANCE
+ *   - Rows where DATE changes: update the running current date.
+ *   - Rows where LTRS IN > 0 and VEHICLE NUMBER is empty: fuel delivery to yard — skip.
+ *   - Rows where VEHICLE NUMBER is present + LTRS OUT > 0: dispensing entry.
+ *
+ * One LPOSummary is created per unique date (lpoNo = "DAR-YYYY-MM-DD").
+ * Rate and amount are set to 0 because the yard report contains only volumes.
+ */
+async function importDarYardLPOs(
+  rows: Record<string, unknown>[],
+  dryRun: boolean,
+  year?: number,
+): Promise<ImportResult> {
+  // Route LPO NO + STATION + LTRS format to DarLPODocument
+  const firstRow = rows.find((r) => !isEmptyRow(r));
+  if (firstRow && 'LPO NO' in firstRow) {
+    return importDarYardLPODocuments(rows, dryRun, year);
+  }
+
+  const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: 0 };
+
+  // ── Step 1: parse rows into date-keyed groups ─────────────────────────────
+  type Entry = { truckNo: string; liters: number };
+  type DayGroup = { date: string; year: number; entries: Entry[] };
+
+  const groups = new Map<string, DayGroup>();
+  const order: string[] = [];
+  let currentDate: string | null = null;
+
+  for (const row of rows) {
+    const rawDate = row['DATE'];
+    const vehicle = safeStr(row['VEHICLE NUMBER']);
+    const ltrsOut = safeNum(row['LTRS OUT']);
+
+    // Update the running date whenever the DATE cell is filled
+    if (rawDate !== null && rawDate !== undefined && safeStr(rawDate) !== '') {
+      currentDate = normalizeToISODate(rawDate, year);
+    }
+
+    // Skip rows without a dispensing (no vehicle or zero/null liters out)
+    if (!vehicle || ltrsOut === null || ltrsOut <= 0) continue;
+    if (!currentDate) continue;
+
+    const entryYear = parseInt(currentDate.substring(0, 4), 10) || (year ?? new Date().getFullYear());
+
+    if (!groups.has(currentDate)) {
+      groups.set(currentDate, { date: currentDate, year: entryYear, entries: [] });
+      order.push(currentDate);
+    }
+    groups.get(currentDate)!.entries.push({ truckNo: vehicle, liters: ltrsOut });
+  }
+
+  // ── Step 2: upsert one LPOSummary per date group ─────────────────────────
+  for (const dateKey of order) {
+    const group = groups.get(dateKey)!;
+    if (group.entries.length === 0) continue;
+
+    const lpoNo = `DAR-${dateKey}`; // e.g. DAR-2026-01-03
+
+    const entryDocs = group.entries.map((e) => ({
+      doNo: 'DAR-YARD',
+      truckNo: e.truckNo,
+      liters: e.liters,
+      rate: 0,
+      amount: 0,
+      dest: 'DAR YARD',
+      isCancelled: false,
+      isDriverAccount: false,
+      isRefer: false,
+    }));
+
+    try {
+      if (dryRun) {
+        const exists = await LPOSummary.exists({ lpoNo, isDeleted: false });
+        exists ? result.updated++ : result.inserted++;
+        continue;
+      }
+
+      const existing = await LPOSummary.findOne({ lpoNo, isDeleted: false });
+      if (existing) {
+        (existing.entries as any[]) = entryDocs;
+        existing.total = 0;
+        await existing.save();
+        result.updated++;
+      } else {
+        await LPOSummary.create({
+          lpoNo,
+          date: group.date,
+          year: group.year,
+          station: 'DAR YARD',
+          orderOf: 'TAHMEED',
+          entries: entryDocs,
+          total: 0,
+          currency: 'TZS',
+          isDeleted: false,
+        });
+        const wbExists = await LPOWorkbook.exists({ year: group.year, isDeleted: false });
+        if (!wbExists) {
+          await LPOWorkbook.create({ year: group.year, name: `LPOS ${group.year}` });
+        }
+        result.inserted++;
+      }
+    } catch (err: unknown) {
+      logger.error(`[ImportCtrl][DarYardLPO] lpoNo=${lpoNo}: ${(err as Error).message}`);
+      result.errors++;
+    }
+  }
+
+  return result;
+}
+
+/**
  * POST /api/import/migrate-lpo-data
  * Repairs LPOSummary docs where the stored `year` doesn't match their ISO `date`,
  * and ensures LPOWorkbook documents exist for every year present.
@@ -768,6 +986,8 @@ async function processSheet(
     result = await importFuelRecords(rawRows, dryRun, year, sheetMonth);
   } else if (sheetType === 'deliveryOrder') {
     result = await importDeliveryOrders(rawRows, dryRun);
+  } else if (sheetType === 'darYardLPO') {
+    result = await importDarYardLPOs(rawRows, dryRun, year);
   } else {
     // Pass year + sheetMonth so LPO date "01-Oct" resolves to "2025-10-01"
     result = await importLPOEntries(rawRows, dryRun, year, sheetMonth);

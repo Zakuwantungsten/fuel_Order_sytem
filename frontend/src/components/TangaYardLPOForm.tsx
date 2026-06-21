@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import {
   X, Plus, Trash2, Loader2, Search, Eye,
   CheckCircle, AlertTriangle, Save,
@@ -40,6 +41,13 @@ const makeEmptyRow = (): RowState => ({
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
 }
+
+// Imported "Dar Yard LPO Form" design — table layout (Tanga uses a blue accent)
+const GRID_COLS = '34px 28px minmax(96px,1.4fr) minmax(104px,1.3fr) minmax(64px,1fr) minmax(48px,0.7fr) minmax(56px,0.8fr) minmax(48px,0.7fr) minmax(58px,0.9fr) minmax(72px,1.2fr) 60px';
+const HEAD_CELL: CSSProperties = {
+  fontSize: '10.5px', fontWeight: 600, color: '#8a8f84',
+  textTransform: 'uppercase', letterSpacing: '0.05em',
+};
 
 function isRecordComplete(r: FuelRecord): boolean {
   if (r.journeyStatus === 'completed') return true;
@@ -323,7 +331,7 @@ export default function TangaYardLPOForm({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] flex flex-col">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -389,241 +397,235 @@ export default function TangaYardLPOForm({
         {/* ── Entry Table ── */}
         <div className="flex-1 overflow-auto">
 
-          {/* Desktop table */}
-          <div className="hidden sm:block p-4">
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[1.5rem_2rem_1fr_9rem_minmax(5.5rem,6.5rem)_5rem_5rem_5rem_6rem_1fr_4.5rem] bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700">
-                <div className="px-1 py-2 flex items-center justify-center">
-                  <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3.5 h-3.5 accent-blue-600" />
+          {/* Desktop table — imported "Dar Yard LPO Form" design (Tanga blue accent) */}
+          <div className="tlpo-table hidden sm:block" style={{ padding: '16px 22px' }}>
+            <style>{`
+.tlpo-table input:focus, .tlpo-table select:focus { border-color:#1d6fc9 !important; box-shadow:0 0 0 3px rgba(29,111,201,0.14) !important; }
+.tlpo-table input.disp-input:focus { border-color:#c2820a !important; box-shadow:0 0 0 3px rgba(180,105,14,0.14) !important; }
+.tlpo-table input::placeholder { color:#b4b8ae; }
+.tlpo-table .fetch-btn:hover:not(:disabled) { background:#e2edfb !important; }
+.tlpo-table .row-action:hover:not(:disabled) { background:#fdf2f1 !important; color:#c2362c !important; }
+.tlpo-table .inspect-btn:hover { background:#eaf1fb !important; color:#2563c9 !important; }
+.tlpo-table .apply-btn:hover:not(:disabled) { background:#1a63b4 !important; }
+.tlpo-table .delete-btn:hover { background:#fdf2f1 !important; }
+.tlpo-table .clear-btn:hover { color:#161a16 !important; }
+.tlpo-table .addrow-btn:hover { border-color:#9cc2e8 !important; color:#1d6fc9 !important; background:#f5f9fe !important; }
+.tlpo-table input[type=number]::-webkit-inner-spin-button, .tlpo-table input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.tlpo-table input[type=number] { -moz-appearance:textfield; }
+            `}</style>
+            <div style={{ border: '1px solid #e8eae3', borderRadius: '12px', overflow: 'hidden' }}>
+
+              {/* Column header */}
+              <div style={{ display: 'grid', gridTemplateColumns: GRID_COLS, background: '#eff5fc', borderBottom: '1px solid #dde8f5' }}>
+                <div style={{ padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ width: 14, height: 14, accentColor: '#1d6fc9', cursor: 'pointer' }} />
                 </div>
-                {['#', 'Truck / Entity', 'Fuel Info', 'DO No', 'Liters', 'Dispense', 'Rate', 'Amount', 'Destination', 'Actions'].map((h, i) => (
-                  <div key={h + i} className={`px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide ${i >= 4 && i <= 7 ? 'text-right' : ''}`}>
-                    {h}
-                  </div>
-                ))}
+                <div style={{ ...HEAD_CELL, padding: '10px 4px' }}>#</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px' }}>Truck / Entity</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px' }}>Fuel Record</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px' }}>DO No</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px', textAlign: 'right' }}>Liters</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px', textAlign: 'right' }}>Dispense</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px', textAlign: 'right' }}>Rate</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px', textAlign: 'right' }}>Amount</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px' }}>Destination</div>
+                <div style={{ ...HEAD_CELL, padding: '10px 8px', textAlign: 'center' }}>Actions</div>
               </div>
 
+              {/* Bulk bar */}
               {selectedRows.size > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-700 flex-wrap">
-                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">{selectedRows.size} selected</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '9px 14px', background: '#eef5fc', borderBottom: '1px solid #d6e4f5' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#1d6fc9' }}>{selectedRows.size} selected</span>
+                  <div style={{ width: '1px', height: '18px', background: '#cddff5' }} />
                   <input
-                    type="number"
-                    value={bulkLiters}
-                    onChange={e => setBulkLiters(e.target.value)}
-                    placeholder="New liters"
-                    className="w-24 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500"
+                    type="number" value={bulkLiters} onChange={e => setBulkLiters(e.target.value)} placeholder="Set liters"
+                    style={{ width: '104px', padding: '6px 9px', fontSize: '12px', border: '1px solid #cfdef2', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none', textAlign: 'right' }}
                   />
                   <input
-                    type="number"
-                    value={bulkRate}
-                    onChange={e => setBulkRate(e.target.value)}
-                    placeholder="New rate"
-                    className="w-24 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500"
+                    type="number" value={bulkRate} onChange={e => setBulkRate(e.target.value)} placeholder="Set rate"
+                    style={{ width: '104px', padding: '6px 9px', fontSize: '12px', border: '1px solid #cfdef2', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none', textAlign: 'right' }}
                   />
                   <button
-                    type="button"
-                    onClick={handleBulkApply}
-                    disabled={bulkLiters === '' && bulkRate === ''}
-                    className="px-2.5 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-40 transition-colors"
+                    type="button" className="apply-btn" onClick={handleBulkApply} disabled={bulkLiters === '' && bulkRate === ''}
+                    style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 600, color: '#fff', background: '#1d6fc9', border: 'none', borderRadius: '7px', cursor: 'pointer', opacity: bulkLiters === '' && bulkRate === '' ? 0.4 : 1 }}
                   >
                     Apply
                   </button>
                   <button
-                    type="button"
-                    onClick={handleBulkDelete}
-                    className="px-2.5 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
+                    type="button" className="delete-btn" onClick={handleBulkDelete}
+                    style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', fontSize: '12px', fontWeight: 600, color: '#c2362c', background: '#fff', border: '1px solid #efcfca', borderRadius: '7px', cursor: 'pointer' }}
                   >
-                    Delete
+                    <Trash2 className="w-3 h-3" /> Delete
                   </button>
                   <button
-                    type="button"
-                    onClick={() => setSelectedRows(new Set())}
-                    className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                    type="button" className="clear-btn" onClick={() => setSelectedRows(new Set())}
+                    style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: '#7c8278', background: 'none', border: 'none', cursor: 'pointer' }}
                   >
                     Clear
                   </button>
                 </div>
               )}
 
+              {/* Rows */}
               {entries.map((entry, idx) => {
                 const row = rows[idx] || makeEmptyRow();
-                const rowBorderCls =
-                  row.fetched && !row.warningType
-                    ? 'border-l-2 border-l-blue-400'
-                    : row.warningType
-                    ? 'border-l-2 border-l-amber-400'
-                    : '';
                 const isSelected = selectedRows.has(idx);
+                const showFuel = row.fetched && !row.warningType && !!row.fuelRecord;
+                const showDispense = row.fetched && !row.warningType && row.linked;
+                const accent = row.warningType ? '#e2b24a' : (showFuel ? '#5a9be0' : 'transparent');
 
                 return (
                   <div
                     key={idx}
-                    className={`grid grid-cols-[1.5rem_2rem_1fr_9rem_minmax(5.5rem,6.5rem)_5rem_5rem_5rem_6rem_1fr_4.5rem] border-b border-gray-100 dark:border-gray-700 last:border-b-0 ${rowBorderCls} ${isSelected ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
+                    style={{ display: 'grid', gridTemplateColumns: GRID_COLS, borderBottom: '1px solid #f0f1ec', borderLeft: `3px solid ${accent}`, background: isSelected ? '#f2f7fd' : '#fff' }}
                   >
                     {/* Select */}
-                    <div className="px-1 py-2 flex items-center justify-center">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectRow(idx)}
-                        className="w-3.5 h-3.5 accent-blue-600"
-                      />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 0' }}>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelectRow(idx)} style={{ width: 14, height: 14, accentColor: '#1d6fc9', cursor: 'pointer' }} />
                     </div>
 
                     {/* # */}
-                    <div className="px-2 py-2 flex items-center text-xs text-gray-400 font-mono">
-                      {idx + 1}
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '10px 4px', fontFamily: "'Geist Mono', ui-monospace, monospace", fontSize: '12px', color: '#aab0a4' }}>
+                      {String(idx + 1).padStart(2, '0')}
                     </div>
 
                     {/* Truck / Entity + fetch */}
-                    <div className="px-1.5 py-1.5">
-                      <div className="flex items-center gap-1">
+                    <div style={{ padding: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <input
                           type="text"
                           value={entry.truckNo}
                           onChange={e => updateEntry(idx, 'truckNo', e.target.value.toUpperCase())}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') { e.preventDefault(); fetchTruck(idx, entry.truckNo); }
-                          }}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); fetchTruck(idx, entry.truckNo); } }}
                           onPaste={e => handleTruckPaste(idx, e)}
                           placeholder="T 000 XXX / Entity"
-                          className="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 font-mono"
+                          style={{ flex: 1, minWidth: 0, padding: '7px 9px', fontSize: '13px', fontFamily: "'Geist Mono', ui-monospace, monospace", fontWeight: 500, border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                         />
                         <button
                           type="button"
+                          className="fetch-btn"
                           onClick={() => fetchTruck(idx, entry.truckNo)}
                           disabled={row.autoFetching || !entry.truckNo.trim()}
                           title="Fetch details (Enter)"
-                          className="flex-shrink-0 p-1 rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-40 transition-colors"
+                          style={{ flexShrink: 0, width: '30px', height: '30px', border: '1px solid #cfdef2', background: '#eef5fc', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#1d6fc9', opacity: row.autoFetching || !entry.truckNo.trim() ? 0.5 : 1 }}
                         >
-                          {row.autoFetching
-                            ? <Loader2 className="w-4 h-4 animate-spin" />
-                            : <Search className="w-4 h-4" />}
+                          {row.autoFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                         </button>
                       </div>
-                      {row.fetched && row.warningType && (
-                        <div className="flex items-center gap-1 mt-0.5 px-0.5">
-                          <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400">No active record</span>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Fuel Info */}
-                    <div className="px-1.5 py-1.5 flex flex-col justify-center">
-                      {row.fetched && !row.warningType && row.fuelRecord && (
-                        <>
-                          <div className="flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3 text-blue-500 flex-shrink-0" />
-                            <span className="text-[10px] text-blue-700 dark:text-blue-400 whitespace-nowrap">
-                              Tanga Yard: {row.alreadyDispensed}L · Bal: {row.fuelRecord.balance}L
+                    {/* Fuel Record */}
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8px' }}>
+                      {showFuel ? (
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <CheckCircle className="w-3 h-3" style={{ color: '#2575d6', flexShrink: 0 }} />
+                            <span style={{ fontSize: '11px', color: '#3a6ea5', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                              Bal {fmt(row.fuelRecord!.balance)}L · Tanga {fmt(row.alreadyDispensed)}L
                             </span>
                           </div>
-                          <label className="flex items-center gap-1 mt-1 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={row.linked}
-                              onChange={e => updateRow(idx, { linked: e.target.checked })}
-                              className="w-3 h-3 accent-blue-600"
-                            />
-                            <span className="text-[10px] text-gray-500 dark:text-gray-400">Link &amp; dispense</span>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input type="checkbox" checked={row.linked} onChange={e => updateRow(idx, { linked: e.target.checked })} style={{ width: 13, height: 13, accentColor: '#1d6fc9', cursor: 'pointer' }} />
+                            <span style={{ fontSize: '11px', color: '#7c8278', fontWeight: 500 }}>Link &amp; dispense</span>
                           </label>
-                        </>
+                        </div>
+                      ) : row.warningType ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#fdf4e3', border: '1px solid #f2e0b8', borderRadius: '6px', padding: '4px 7px' }}>
+                          <AlertTriangle className="w-3 h-3" style={{ color: '#b4690e', flexShrink: 0 }} />
+                          <span style={{ fontSize: '11px', color: '#b4690e', fontWeight: 500 }}>No active record</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '13px', color: '#d3d6cf' }}>—</span>
                       )}
                     </div>
 
                     {/* DO No */}
-                    <div className="px-1.5 py-1.5 flex items-center">
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px' }}>
                       <input
                         type="text"
                         value={entry.doNo}
                         onChange={e => updateEntry(idx, 'doNo', e.target.value.toUpperCase())}
                         placeholder="DO #"
-                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 font-mono"
+                        style={{ width: '100%', padding: '7px 9px', fontSize: '13px', fontFamily: "'Geist Mono', ui-monospace, monospace", border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
                     </div>
 
                     {/* Liters */}
-                    <div className="px-1.5 py-1.5 flex items-center">
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px' }}>
                       <input
                         type="number"
                         value={entry.liters || ''}
                         onChange={e => updateEntry(idx, 'liters', parseFloat(e.target.value) || 0)}
-                        placeholder="0"
-                        min={0.01}
-                        step="0.01"
-                        className="w-full px-2 py-1 text-sm text-right border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500"
+                        placeholder="0" min={0.01} step="0.01"
+                        style={{ width: '100%', padding: '7px 9px', fontSize: '13px', textAlign: 'right', border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
                     </div>
 
                     {/* Dispense — liters that actually go to the fuel record (defaults to full liters) */}
-                    <div className="px-1.5 py-1.5 flex items-center">
-                      {row.fetched && !row.warningType && row.linked ? (
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px' }}>
+                      {showDispense ? (
                         <input
+                          className="disp-input"
                           type="number"
                           value={(entry.dispenseLiters ?? entry.liters) || ''}
                           onChange={e => updateEntry(idx, 'dispenseLiters', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))}
                           placeholder={String(entry.liters || 0)}
-                          min={0}
-                          step="0.01"
+                          min={0} step="0.01"
                           title="Liters dispensed to the fuel record (defaults to the full liters)"
-                          className="w-full px-2 py-1 text-sm text-right border border-amber-300 dark:border-amber-700 rounded bg-amber-50/40 dark:bg-amber-900/10 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-amber-500"
+                          style={{ width: '100%', padding: '7px 9px', fontSize: '13px', textAlign: 'right', border: '1px solid #ecc98f', borderRadius: '7px', background: '#fdf6e8', color: '#161a16', outline: 'none' }}
                         />
                       ) : (
-                        <span className="w-full text-right text-gray-300 dark:text-gray-600">—</span>
+                        <span style={{ width: '100%', textAlign: 'right', fontSize: '13px', color: '#d3d6cf' }}>—</span>
                       )}
                     </div>
 
                     {/* Rate */}
-                    <div className="px-1.5 py-1.5 flex items-center">
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px' }}>
                       <input
                         type="number"
                         value={entry.rate || ''}
                         onChange={e => updateEntry(idx, 'rate', parseFloat(e.target.value) || 0)}
-                        placeholder="0"
-                        min={0.01}
-                        step="0.01"
-                        className="w-full px-2 py-1 text-sm text-right border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500"
+                        placeholder="0" min={0.01} step="0.01"
+                        style={{ width: '100%', padding: '7px 9px', fontSize: '13px', textAlign: 'right', border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
                     </div>
 
                     {/* Amount */}
-                    <div className="px-2 py-2 flex items-center justify-end text-sm font-semibold text-gray-700 dark:text-gray-300 tabular-nums">
-                      {entry.amount > 0 ? fmt(entry.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '8px', fontSize: '13px', fontWeight: 600, color: '#2a2f29', fontVariantNumeric: 'tabular-nums' }}>
+                      {entry.amount > 0 ? <span>{fmt(entry.amount)}</span> : <span style={{ color: '#d3d6cf', fontWeight: 400 }}>—</span>}
                     </div>
 
                     {/* Destination */}
-                    <div className="px-1.5 py-1.5 flex items-center">
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px' }}>
                       <input
                         type="text"
                         value={entry.dest}
                         onChange={e => updateEntry(idx, 'dest', e.target.value)}
                         placeholder="Destination"
-                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500"
+                        style={{ width: '100%', padding: '7px 9px', fontSize: '13px', border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
                     </div>
 
                     {/* Actions */}
-                    <div className="px-1 py-1.5 flex items-center justify-center gap-0.5">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px', padding: '8px 4px' }}>
                       {row.fetched && row.fuelRecordId && (
                         <button
                           type="button"
+                          className="inspect-btn"
                           title="Inspect fuel record"
-                          onClick={() => setInspectModal({
-                            isOpen: true,
-                            fuelRecordId: row.fuelRecordId!,
-                            truckNumber: entry.truckNo,
-                          })}
-                          className="p-1.5 rounded text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                          onClick={() => setInspectModal({ isOpen: true, fuelRecordId: row.fuelRecordId!, truckNumber: entry.truckNo })}
+                          style={{ width: '28px', height: '28px', border: 'none', background: 'none', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#9aa094' }}
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                       )}
                       <button
                         type="button"
+                        className="row-action"
                         onClick={() => removeRow(idx)}
                         disabled={entries.length === 1}
-                        className="p-1.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-30 transition-colors"
+                        title="Remove row"
+                        style={{ width: '28px', height: '28px', border: 'none', background: 'none', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#9aa094', opacity: entries.length === 1 ? 0.3 : 1 }}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -635,8 +637,9 @@ export default function TangaYardLPOForm({
 
             <button
               type="button"
+              className="addrow-btn"
               onClick={addRow}
-              className="mt-3 w-full py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:border-blue-400 dark:hover:border-blue-600 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center justify-center gap-1.5"
+              style={{ marginTop: '12px', width: '100%', padding: '11px', border: '1.5px dashed #d4d8cf', background: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 500, color: '#7c8278', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', transition: 'all .15s' }}
             >
               <Plus className="w-4 h-4" /> Add Row
             </button>
