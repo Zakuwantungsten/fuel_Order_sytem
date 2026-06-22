@@ -870,7 +870,7 @@ async function importDarYardLPOs(
     groups.get(currentDate)!.entries.push({ truckNo: vehicle, liters: ltrsOut, rate: entryRate, amount: entryAmount });
   }
 
-  // ── Step 2: upsert one LPOSummary per date group ─────────────────────────
+  // ── Step 2: upsert one DarLPODocument per date group ────────────────────
   for (const dateKey of order) {
     const group = groups.get(dateKey)!;
     if (group.entries.length === 0) continue;
@@ -885,41 +885,33 @@ async function importDarYardLPOs(
       amount: e.amount,
       dest: 'DAR YARD',
       isCancelled: false,
-      isDriverAccount: false,
-      isRefer: false,
     }));
 
     const groupTotal = entryDocs.reduce((s, e) => s + e.amount, 0);
 
     try {
       if (dryRun) {
-        const exists = await LPOSummary.exists({ lpoNo, isDeleted: false });
+        const exists = await DarLPODocument.exists({ lpoNo, isDeleted: false });
         exists ? result.updated++ : result.inserted++;
         continue;
       }
 
-      const existing = await LPOSummary.findOne({ lpoNo, isDeleted: false });
+      const existing = await DarLPODocument.findOne({ lpoNo, isDeleted: false });
       if (existing) {
         (existing.entries as any[]) = entryDocs;
         existing.total = groupTotal;
         await existing.save();
         result.updated++;
       } else {
-        await LPOSummary.create({
+        await DarLPODocument.create({
           lpoNo,
           date: group.date,
           year: group.year,
-          station: 'DAR YARD',
-          orderOf: 'TAHMEED',
           entries: entryDocs,
           total: groupTotal,
           currency: 'TZS',
           isDeleted: false,
         });
-        const wbExists = await LPOWorkbook.exists({ year: group.year, isDeleted: false });
-        if (!wbExists) {
-          await LPOWorkbook.create({ year: group.year, name: `LPOS ${group.year}` });
-        }
         result.inserted++;
       }
     } catch (err: unknown) {
