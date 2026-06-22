@@ -241,7 +241,7 @@ const MONTH_NAMES = /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(
 
 function monthFromSheetName(sheetName: string): number | null {
   const abbr: Record<string, number> = {
-    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3,
+    jan: 1, january: 1, feb: 2, february: 2, fab: 2, mar: 3, march: 3,
     apr: 4, april: 4, may: 5, jun: 6, june: 6, jul: 7, july: 7,
     aug: 8, august: 8, sep: 9, september: 9, oct: 10, october: 10,
     nov: 11, november: 11, dec: 12, december: 12,
@@ -810,6 +810,7 @@ async function importDarYardLPOs(
   rows: Record<string, unknown>[],
   dryRun: boolean,
   year?: number,
+  sheetMonth?: number,
 ): Promise<ImportResult> {
   // Route LPO NO + STATION + LTRS format to DarLPODocument
   const firstRow = rows.find((r) => !isEmptyRow(r));
@@ -820,7 +821,7 @@ async function importDarYardLPOs(
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: 0 };
 
   // ── Step 1: parse rows into date-keyed groups ─────────────────────────────
-  type Entry = { truckNo: string; liters: number };
+  type Entry = { truckNo: string; liters: number; rate: number; amount: number };
   type DayGroup = { date: string; year: number; entries: Entry[] };
 
   const groups = new Map<string, DayGroup>();
@@ -835,6 +836,20 @@ async function importDarYardLPOs(
     // Update the running date whenever the DATE cell is filled
     if (rawDate !== null && rawDate !== undefined && safeStr(rawDate) !== '') {
       currentDate = normalizeToISODate(rawDate, year);
+      // Tanzania files are often typed in DD/MM/YYYY but Excel stores them as
+      // MM/DD, swapping day and month. Detect and correct when the sheet name
+      // tells us the expected month: if parsedDay equals sheetMonth but
+      // parsedMonth does not, the values were swapped.
+      if (currentDate && sheetMonth) {
+        const parts = currentDate.split('-');
+        const parsedMonth = parseInt(parts[1], 10);
+        const parsedDay   = parseInt(parts[2], 10);
+        if (parsedMonth !== sheetMonth && parsedDay === sheetMonth) {
+          const candidate = `${parts[0]}-${String(parsedDay).padStart(2, '0')}-${String(parsedMonth).padStart(2, '0')}`;
+          const test = new Date(candidate);
+          if (!isNaN(test.getTime())) currentDate = candidate;
+        }
+      }
     }
 
     // Skip rows without a dispensing (no vehicle or zero/null liters out)
@@ -843,11 +858,16 @@ async function importDarYardLPOs(
 
     const entryYear = parseInt(currentDate.substring(0, 4), 10) || (year ?? new Date().getFullYear());
 
+    // Read rate; compute amount from total column when present, else calculate
+    const entryRate = safeNum(row['rate']) ?? safeNum(row['RATE']) ?? 0;
+    const rawTotal = safeNum(row['total']) ?? safeNum(row['TOTAL']);
+    const entryAmount = rawTotal !== null ? rawTotal : ltrsOut * entryRate;
+
     if (!groups.has(currentDate)) {
       groups.set(currentDate, { date: currentDate, year: entryYear, entries: [] });
       order.push(currentDate);
     }
-    groups.get(currentDate)!.entries.push({ truckNo: vehicle, liters: ltrsOut });
+    groups.get(currentDate)!.entries.push({ truckNo: vehicle, liters: ltrsOut, rate: entryRate, amount: entryAmount });
   }
 
   // ── Step 2: upsert one LPOSummary per date group ─────────────────────────
@@ -861,13 +881,15 @@ async function importDarYardLPOs(
       doNo: 'DAR-YARD',
       truckNo: e.truckNo,
       liters: e.liters,
-      rate: 0,
-      amount: 0,
+      rate: e.rate,
+      amount: e.amount,
       dest: 'DAR YARD',
       isCancelled: false,
       isDriverAccount: false,
       isRefer: false,
     }));
+
+    const groupTotal = entryDocs.reduce((s, e) => s + e.amount, 0);
 
     try {
       if (dryRun) {
@@ -879,7 +901,7 @@ async function importDarYardLPOs(
       const existing = await LPOSummary.findOne({ lpoNo, isDeleted: false });
       if (existing) {
         (existing.entries as any[]) = entryDocs;
-        existing.total = 0;
+        existing.total = groupTotal;
         await existing.save();
         result.updated++;
       } else {
@@ -890,7 +912,7 @@ async function importDarYardLPOs(
           station: 'DAR YARD',
           orderOf: 'TAHMEED',
           entries: entryDocs,
-          total: 0,
+          total: groupTotal,
           currency: 'TZS',
           isDeleted: false,
         });
@@ -987,7 +1009,7 @@ async function processSheet(
   } else if (sheetType === 'deliveryOrder') {
     result = await importDeliveryOrders(rawRows, dryRun);
   } else if (sheetType === 'darYardLPO') {
-    result = await importDarYardLPOs(rawRows, dryRun, year);
+    result = await importDarYardLPOs(rawRows, dryRun, year, sheetMonth);
   } else {
     // Pass year + sheetMonth so LPO date "01-Oct" resolves to "2025-10-01"
     result = await importLPOEntries(rawRows, dryRun, year, sheetMonth);
