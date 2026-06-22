@@ -318,7 +318,7 @@ function ManualLinkModal({
   onDone: (updatedLpo: TangaLPO) => void;
   onClose: () => void;
 }) {
-  const [doNo, setDoNo] = useState(entry.doNo);
+  const [doNo, setDoNo] = useState(entry.doNo ?? '');
   const [dispense, setDispense] = useState(String(entry.dispenseLiters ?? entry.liters));
   const [step, setStep] = useState<'input' | 'preview'>('input');
   const [searching, setSearching] = useState(false);
@@ -964,8 +964,8 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack }
         const t = entrySearch.toLowerCase();
         return (
           e.truckNo.toLowerCase().includes(t) ||
-          e.doNo.toLowerCase().includes(t) ||
-          e.dest.toLowerCase().includes(t)
+          (e.doNo ?? '').toLowerCase().includes(t) ||
+          (e.dest ?? '').toLowerCase().includes(t)
         );
       })
     : lpo.entries;

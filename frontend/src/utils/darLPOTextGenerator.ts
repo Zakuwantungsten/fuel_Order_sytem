@@ -68,7 +68,7 @@ export const generateDarLPOForWhatsApp = (lpo: DarLPO): string => {
 
   lpo.entries.forEach(entry => {
     const prefix = entry.isCancelled ? '❌ ' : entry.originalLiters != null ? '✏️ ' : '';
-    const doNo = (entry.isCancelled ? 'CANCLD' : entry.doNo).padEnd(7);
+    const doNo = (entry.isCancelled ? 'CANCLD' : (entry.doNo ?? '')).padEnd(7);
     const truckNo = entry.truckNo.padEnd(9);
     const liters = entry.liters.toString().padStart(6);
     const rate = entry.rate.toFixed(1).padStart(5);
