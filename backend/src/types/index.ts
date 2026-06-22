@@ -666,7 +666,7 @@ export interface IStandardAllocations {
 
 export interface ITangaLPOEntry {
   _id?: string;
-  doNo: string;
+  doNo?: string;
   truckNo: string;
   liters: number;
   rate: number;

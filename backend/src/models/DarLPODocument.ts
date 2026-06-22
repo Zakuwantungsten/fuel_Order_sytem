@@ -7,8 +7,8 @@ const darLPOEntrySchema = new Schema<IDarLPOEntry>(
   {
     doNo: {
       type: String,
-      required: [true, 'DO number is required'],
       trim: true,
+      default: '',
     },
     truckNo: {
       type: String,

@@ -1185,7 +1185,7 @@ export interface Notification {
 
 export interface TangaLPOEntry {
   _id?: string;
-  doNo: string;
+  doNo?: string;
   truckNo: string;
   liters: number;
   rate: number;
@@ -1229,7 +1229,7 @@ export interface TangaLPO {
 
 export interface DarLPOEntry {
   _id?: string;
-  doNo: string;
+  doNo?: string;
   truckNo: string;
   liters: number;
   rate: number;
