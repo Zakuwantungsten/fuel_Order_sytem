@@ -1190,7 +1190,7 @@ export interface TangaLPOEntry {
   liters: number;
   rate: number;
   amount: number;
-  dest: string;
+  dest?: string;
   /** Liters dispensed to the linked fuel record. Defaults to the billed `liters`. */
   dispenseLiters?: number | null;
   sortOrder?: number;
@@ -1234,7 +1234,7 @@ export interface DarLPOEntry {
   liters: number;
   rate: number;
   amount: number;
-  dest: string;
+  dest?: string;
   /** Liters dispensed to the linked fuel record. Defaults to the billed `liters`. */
   dispenseLiters?: number | null;
   sortOrder?: number;

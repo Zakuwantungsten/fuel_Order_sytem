@@ -671,7 +671,7 @@ export interface ITangaLPOEntry {
   liters: number;
   rate: number;
   amount: number;
-  dest: string;
+  dest?: string;
   /**
    * Liters actually dispensed to the linked fuel record's yard column.
    * Defaults to `liters` (the full billed amount). Can be overridden per-truck
