@@ -25,6 +25,7 @@ import {
   periodsToDateRange,
   useLPOList,
   useDriverAccountEntries,
+  useReferEntries,
   useLPOWorkbooks,
   useLPOAvailableYears,
   useLPOAvailableFilters,
@@ -149,6 +150,7 @@ const LPOs = () => {
     status: statusFilter !== 'all' ? statusFilter : undefined,
   });
   const { data: driverEntries = [] } = useDriverAccountEntries();
+  const { data: referEntries = [] } = useReferEntries();
   const lpoEntries: LPOEntry[] = lpoQuery.data?.lpos ?? [];
 
   // Separate query to discover all stations for the current search term,
@@ -171,6 +173,7 @@ const LPOs = () => {
   // Apply client-side search, date range, station and status filters to driver account entries
   const orders = useMemo(() => {
     let filteredDriverEntries = driverEntries;
+    let filteredReferEntries = referEntries;
 
     // Mirror the server-side search: filter by truckNo, lpoNo, dieselAt, or doSdo
     if (searchTerm) {
@@ -181,13 +184,23 @@ const LPOs = () => {
         (e.dieselAt || '').toLowerCase().startsWith(term) ||
         (e.doSdo || '').toLowerCase().startsWith(term)
       );
+      filteredReferEntries = filteredReferEntries.filter(e =>
+        (e.truckNo || '').toLowerCase().startsWith(term) ||
+        (e.lpoNo || '').toLowerCase().startsWith(term) ||
+        (e.dieselAt || '').toLowerCase().startsWith(term) ||
+        (e.doSdo || '').toLowerCase().startsWith(term)
+      );
     }
 
-    // Respect the selected period so driver entries from other months don't bleed in
+    // Respect the selected period so driver/reefer entries from other months don't bleed in
     if (dateRange.dateFrom || dateRange.dateTo) {
       const from = dateRange.dateFrom ? new Date(dateRange.dateFrom).getTime() : 0;
       const to = dateRange.dateTo ? new Date(dateRange.dateTo).getTime() : Infinity;
       filteredDriverEntries = filteredDriverEntries.filter(e => {
+        const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+        return ts >= from && ts <= to;
+      });
+      filteredReferEntries = filteredReferEntries.filter(e => {
         const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
         return ts >= from && ts <= to;
       });
@@ -197,11 +210,16 @@ const LPOs = () => {
       filteredDriverEntries = filteredDriverEntries.filter(
         e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase()
       );
+      filteredReferEntries = filteredReferEntries.filter(
+        e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase()
+      );
     }
     if (statusFilter === 'active') {
       filteredDriverEntries = filteredDriverEntries.filter(e => !e.isCancelled);
+      filteredReferEntries = filteredReferEntries.filter(e => !e.isCancelled);
     } else if (statusFilter === 'cancelled') {
       filteredDriverEntries = filteredDriverEntries.filter(e => e.isCancelled);
+      filteredReferEntries = filteredReferEntries.filter(e => e.isCancelled);
     }
 
     // Guard against stale placeholder data: enforce station filter client-side on
@@ -211,9 +229,9 @@ const LPOs = () => {
       ? lpoEntries.filter(e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase())
       : lpoEntries;
 
-    return [...filteredLpoEntries, ...filteredDriverEntries];
-  }, [lpoEntries, driverEntries, stationFilter, statusFilter, searchTerm, dateRange.dateFrom, dateRange.dateTo]);
-  const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
+    return [...filteredLpoEntries, ...filteredDriverEntries, ...filteredReferEntries];
+  }, [lpoEntries, driverEntries, referEntries, stationFilter, statusFilter, searchTerm, dateRange.dateFrom, dateRange.dateTo]);
+  const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length + referEntries.length;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
   const loading = lpoQuery.isLoading;
   const isFetching = lpoQuery.isFetching;
@@ -246,15 +264,27 @@ const LPOs = () => {
         )
         .map(e => (e.dieselAt || '').trim().toUpperCase())
         .filter(Boolean);
-      return [...new Set([...lpoStations, ...driverStations])].sort();
+      const referStationsSearch = referEntries
+        .filter(e =>
+          (e.truckNo || '').toLowerCase().startsWith(term) ||
+          (e.lpoNo || '').toLowerCase().startsWith(term) ||
+          (e.dieselAt || '').toLowerCase().startsWith(term) ||
+          (e.doSdo || '').toLowerCase().startsWith(term)
+        )
+        .map(e => (e.dieselAt || '').trim().toUpperCase())
+        .filter(Boolean);
+      return [...new Set([...lpoStations, ...driverStations, ...referStationsSearch])].sort();
     }
     const serverStations = filtersData?.stations ?? [];
-    // Include stations from driver account entries so they appear in the filter
+    // Include stations from driver account and reefer entries so they appear in the filter
     const driverStations = driverEntries
       .map(e => (e.dieselAt || '').trim().toUpperCase())
       .filter(Boolean);
-    return [...new Set([...serverStations, ...driverStations])].sort();
-  }, [filtersData, driverEntries, discoveryEntries, searchTerm]);
+    const referStations = referEntries
+      .map(e => (e.dieselAt || '').trim().toUpperCase())
+      .filter(Boolean);
+    return [...new Set([...serverStations, ...driverStations, ...referStations])].sort();
+  }, [filtersData, driverEntries, referEntries, discoveryEntries, searchTerm]);
 
   const availableYears = useMemo(() => {
     const yearsFromPeriods = availablePeriods.map((p: {year: number}) => p.year);
@@ -1049,7 +1079,7 @@ const LPOs = () => {
       <div>
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Refer Trucks</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Reefer Trucks</h1>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
               Track fuel entries for partner/third-party trucks
             </p>
@@ -1090,7 +1120,7 @@ const LPOs = () => {
                 className="px-2.5 py-1.5 text-sm font-medium rounded-r-md border bg-orange-600 text-white border-orange-600"
               >
                 <Truck className="w-4 h-4 mr-1 inline" />
-                Refer
+                Reefer
               </button>
             </div>
           </div>
@@ -1147,7 +1177,7 @@ const LPOs = () => {
                 className="px-2.5 py-1.5 text-sm font-medium rounded-r-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <Truck className="w-4 h-4 mr-1 inline" />
-                Refer
+                Reefer
               </button>
             </div>
           </div>
@@ -1204,7 +1234,7 @@ const LPOs = () => {
                 className="px-2.5 py-1.5 text-sm font-medium rounded-r-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <Truck className="w-4 h-4 mr-1 inline" />
-                Refer
+                Reefer
               </button>
             </div>
           </div>
@@ -1285,7 +1315,7 @@ const LPOs = () => {
               }`}
             >
               <Truck className="w-4 h-4 mr-1 inline" />
-              Refer
+              Reefer
             </button>
           </div>
           

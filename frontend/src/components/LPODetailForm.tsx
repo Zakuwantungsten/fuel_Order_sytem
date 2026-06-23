@@ -4002,7 +4002,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
                 const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
                 const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
-                const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5;
+                const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && autoFill.entryType !== 'ref';
                 return (
                   <div key={index} className={`border rounded-lg p-2 transition-colors ${
                     autoFill.entryType === 'ref' ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/10'
@@ -4228,7 +4228,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
                       const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
                       const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
-                      const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5;
+                      const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && (autoFill as EntryAutoFillData).entryType !== 'ref';
                       return (
                         <tr key={index} className={`${(autoFill as EntryAutoFillData).entryType === 'ref' ? 'bg-orange-50 dark:bg-orange-900/10' : (autoFill as EntryAutoFillData).entryType === 'da' ? 'bg-blue-50 dark:bg-blue-900/10' : autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : ''} ${hasNoRecordWarning ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${!autoFill.fetched && !(autoFill as EntryAutoFillData).entryType && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'dark:bg-gray-800' : ''}`}>
                           <td className="px-3 py-3 w-8">
@@ -4404,7 +4404,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 )}
                                 {autoFill.entryType === 'ref' && (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 w-fit">
-                                    Refer (Partner)
+                                    Reefer
                                   </span>
                                 )}
                                 {/* No fuel record / in-form duplicate warning */}

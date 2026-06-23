@@ -284,7 +284,7 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
       'Ltrs': entry.ltrs,
       'Rate': entry.pricePerLtr,
       'Amount': (entry.ltrs || 0) * (entry.pricePerLtr || 0),
-      'Destination': entry.destinations || 'REFER',
+      'Destination': entry.destinations || 'REEFER',
       'Status': entry.isCancelled ? 'CANCELLED' : 'ACTIVE',
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -301,15 +301,15 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
     }
     ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 10 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Refer Entries');
-    XLSX.writeFile(wb, 'REFER_ENTRIES.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'Reefer Entries');
+    XLSX.writeFile(wb, 'REEFER_ENTRIES.xlsx');
   };
 
   const copyToClipboard = async (format: 'text' | 'whatsapp') => {
     if (filteredEntries.length === 0) return;
     let text = '';
     if (format === 'whatsapp') {
-      text = '*REFER ENTRIES*\n\n';
+      text = '*REEFER ENTRIES*\n\n';
       filteredEntries.forEach((entry, index) => {
         text += `${index + 1}. *${entry.truckNo}*${entry.isCancelled ? ' [CANCELLED]' : ''}\n`;
         text += `   Date: ${entry.date}\n`;
@@ -321,7 +321,7 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
       const totAmt = filteredEntries.filter(e => !e.isCancelled).reduce((s, e) => s + (e.ltrs || 0) * (e.pricePerLtr || 0), 0);
       text += `*TOTAL (active): ${totLtrs}L - ${totAmt.toLocaleString()}*`;
     } else {
-      text = `REFER ENTRIES\n${'='.repeat(50)}\n\n`;
+      text = `REEFER ENTRIES\n${'='.repeat(50)}\n\n`;
       filteredEntries.forEach((entry, index) => {
         text += `${index + 1}. ${entry.truckNo} - ${entry.date}${entry.isCancelled ? ' [CANCELLED]' : ''}\n`;
         text += `   ${entry.ltrs}L @ ${entry.pricePerLtr} = ${(entry.ltrs || 0) * (entry.pricePerLtr || 0)}\n`;
@@ -369,7 +369,7 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center space-x-3">
             <Truck className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Refer Trucks</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Reefer Trucks</h1>
             <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-sm rounded-full">
               {filteredEntries.length} entries
             </span>
@@ -548,8 +548,8 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
         {filteredEntries.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-gray-500 dark:text-gray-400">
             <Truck className="w-12 h-12 mb-3 text-orange-300 dark:text-orange-700" />
-            <p>No refer entries found</p>
-            <p className="text-sm mt-1">Create refer entries by typing "REF" in the DO field of the main LPO form</p>
+            <p>No reefer entries found</p>
+            <p className="text-sm mt-1">Create reefer entries by typing "REF" in the DO field of the main LPO form</p>
           </div>
         ) : (
           <>
@@ -622,7 +622,7 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
                     <div><span className="text-gray-400 dark:text-gray-500">Date: </span><span className="text-gray-700 dark:text-gray-300">{entry.date || formatEntryDate(entry.createdAt)}</span></div>
                     <div><span className="text-gray-400 dark:text-gray-500">Station: </span><span className="text-gray-700 dark:text-gray-300">{entry.dieselAt}</span></div>
                     <div><span className="text-gray-400 dark:text-gray-500">LPO: </span><span className="text-orange-600 dark:text-orange-400">{entry.lpoNo}</span></div>
-                    <div><span className="text-gray-400 dark:text-gray-500">Dest: </span><span className="text-gray-700 dark:text-gray-300">{entry.destinations || 'REFER'}</span></div>
+                    <div><span className="text-gray-400 dark:text-gray-500">Dest: </span><span className="text-gray-700 dark:text-gray-300">{entry.destinations || 'REEFER'}</span></div>
                   </div>
                   <div className="mt-2 flex items-center gap-3 text-xs border-t border-gray-100 dark:border-gray-700 pt-2">
                     <div><span className="text-gray-400 dark:text-gray-500">Ltrs: </span><span className="font-semibold text-gray-900 dark:text-gray-100">{(entry.ltrs || 0).toLocaleString()}</span></div>
@@ -677,7 +677,7 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.truckNo}</td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{(entry.ltrs || 0).toLocaleString()}</td>
                       <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{(entry.pricePerLtr || 0).toFixed(2)}</td>
-                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.destinations || 'REFER'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{entry.destinations || 'REEFER'}</td>
                       <td className="px-3 py-2 text-xs font-semibold text-gray-900 dark:text-gray-100">{formatCurrency((entry.ltrs || 0) * (entry.pricePerLtr || 0))}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
                         <div className="relative">

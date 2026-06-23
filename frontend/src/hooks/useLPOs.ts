@@ -121,7 +121,7 @@ export function useDriverAccountEntries() {
 }
 
 // ---------------------------------------------------------------------------
-// Refer entries (partner/third-party trucks)
+// Reefer entries (partner/third-party trucks)
 // ---------------------------------------------------------------------------
 export function useReferEntries() {
   return useQuery({
@@ -144,7 +144,7 @@ export function useReferEntries() {
         truckNo: entry.truckNo,
         ltrs: entry.ltrs,
         pricePerLtr: entry.pricePerLtr,
-        destinations: entry.destinations || 'REFER',
+        destinations: entry.destinations || 'REEFER',
         createdAt: entry.createdAt,
         isCancelled: entry.isCancelled || false,
         isRefer: true,
