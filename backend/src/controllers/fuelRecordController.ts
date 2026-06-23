@@ -3,7 +3,7 @@ import { matchedData } from 'express-validator';
 import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
 import { enforceEditLock } from './editLockController';
@@ -195,14 +195,16 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       if (dateTo) filter.date.$lte = dateTo;
     }
 
-    // Multi-field search - searches truckNo, goingDo, and returnDo
+    // Multi-field search - searches truckNo, goingDo, and returnDo.
+    // Whitespace/separator-tolerant prefix match so spacing/format drift
+    // ("T598 DTB" vs "T598DTB") still matches.
     if (search) {
-      const sanitized = sanitizeRegexInput(search as string);
-      if (sanitized) {
+      const fuzzy = buildFuzzyRegex(search as string);
+      if (fuzzy) {
         filter.$or = [
-          { truckNo: { $regex: `^${sanitized}`, $options: 'i' } },
-          { goingDo: { $regex: `^${sanitized}`, $options: 'i' } },
-          { returnDo: { $regex: `^${sanitized}`, $options: 'i' } }
+          { truckNo: { $regex: fuzzy, $options: 'i' } },
+          { goingDo: { $regex: fuzzy, $options: 'i' } },
+          { returnDo: { $regex: fuzzy, $options: 'i' } }
         ];
       }
     } else if (truckNo) {

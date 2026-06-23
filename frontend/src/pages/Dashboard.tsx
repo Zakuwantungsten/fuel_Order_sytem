@@ -132,6 +132,13 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     setSearching(true);
     
     try {
+      // Format a Date as a local "YYYY-MM-DD" string. Using toISOString() here
+      // would convert to UTC and, for timezones ahead of UTC (e.g. EAT/UTC+3),
+      // shift the day backward in the early hours — dropping today's records
+      // from the date-windowed search even though they exist.
+      const toLocalDateStr = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
       // Calculate date restrictions from config
       const doFromDate = new Date();
       doFromDate.setMonth(doFromDate.getMonth() - searchConfig.doMonths);
@@ -145,8 +152,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       const [dosResponse, lposResponse, fuelsResponse] = await Promise.all([
         deliveryOrdersAPI.getAll({
           search: query,
-          dateFrom: doFromDate.toISOString().split('T')[0],
-          dateTo: today.toISOString().split('T')[0],
+          dateFrom: toLocalDateStr(doFromDate),
+          dateTo: toLocalDateStr(today),
           limit: searchConfig.doMaxResults,
           sortBy: 'date',
           sortOrder: 'desc'
@@ -157,8 +164,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
         lposAPI.getAll({
           search: query,
-          dateFrom: lpoFromDate.toISOString().split('T')[0],
-          dateTo: today.toISOString().split('T')[0],
+          dateFrom: toLocalDateStr(lpoFromDate),
+          dateTo: toLocalDateStr(today),
           limit: searchConfig.lpoMaxResults
         }).catch((err) => {
           console.error('LPO search error:', err);

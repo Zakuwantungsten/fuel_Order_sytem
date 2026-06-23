@@ -6,7 +6,7 @@ import { RouteConfig } from '../models/RouteConfig';
 import { ArchivedDeliveryOrder } from '../models/ArchivedData';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
@@ -697,10 +697,14 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
     // Unified search parameter - searches across multiple fields
     if (search) {
       const sanitized = sanitizeRegexInput(search as string);
-      if (sanitized) {
+      // Identifier fields (DO number, truck no) use a whitespace/separator-tolerant
+      // prefix match so spacing/format drift ("T598 DTB" vs "T598DTB") still matches.
+      const fuzzy = buildFuzzyRegex(search as string);
+      if (sanitized || fuzzy) {
+        const idRegex = fuzzy || `^${sanitized}`;
         filter.$or = [
-          { doNumber: { $regex: `^${sanitized}`, $options: 'i' } },
-          { truckNo: { $regex: `^${sanitized}`, $options: 'i' } },
+          { doNumber: { $regex: idRegex, $options: 'i' } },
+          { truckNo: { $regex: idRegex, $options: 'i' } },
           { clientName: { $regex: sanitized, $options: 'i' } },
           { destination: { $regex: sanitized, $options: 'i' } },
           { haulier: { $regex: sanitized, $options: 'i' } }

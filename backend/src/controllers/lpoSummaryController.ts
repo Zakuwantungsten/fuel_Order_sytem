@@ -4,7 +4,7 @@ import { ArchivedLPOSummary } from '../models/ArchivedData';
 import { FuelStationConfig } from '../models/FuelStationConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
 import { AuditService } from '../utils/auditService';
 import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
@@ -2790,15 +2790,17 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
     pipeline.push(ENTRY_DERIVE_STAGE);
 
     if (search) {
-      const s = sanitizeRegexInput(search as string);
-      if (s) {
+      // Whitespace/separator-tolerant prefix match so "t598 dtb" also finds
+      // "T598DTB", "T598  DTB", "T598-DTB", etc.
+      const fuzzy = buildFuzzyRegex(search as string);
+      if (fuzzy) {
         pipeline.push({
           $match: {
             $or: [
-              { lpoNo: { $regex: `^${s}`, $options: 'i' } },
-              { 'entries.truckNo': { $regex: `^${s}`, $options: 'i' } },
-              { station: { $regex: `^${s}`, $options: 'i' } },
-              { doSdoDisplay: { $regex: `^${s}`, $options: 'i' } },
+              { lpoNo: { $regex: fuzzy, $options: 'i' } },
+              { 'entries.truckNo': { $regex: fuzzy, $options: 'i' } },
+              { station: { $regex: fuzzy, $options: 'i' } },
+              { doSdoDisplay: { $regex: fuzzy, $options: 'i' } },
             ],
           },
         });
