@@ -27,9 +27,14 @@ function recalcBalance(fr: any): number {
 // ── FuelRecord link helper ─────────────────────────────────────────────────────
 
 async function findLinkedFuelRecord(doNo: string, truckNo: string, afterDate?: Date): Promise<any | null> {
+  const safeTruck = sanitizeRegexInput(truckNo);
+  const safeDo    = sanitizeRegexInput(doNo);
   const query: any = {
-    truckNo,
-    $or: [{ goingDo: doNo }, { returnDo: doNo }],
+    truckNo: { $regex: new RegExp(`^${safeTruck}$`, 'i') },
+    $or: [
+      { goingDo:  { $regex: new RegExp(`^${safeDo}$`, 'i') } },
+      { returnDo: { $regex: new RegExp(`^${safeDo}$`, 'i') } },
+    ],
     isDeleted: false,
     isCancelled: { $ne: true },
   };
@@ -596,8 +601,8 @@ export const bulkAutoLinkDarEntries = async (req: AuthRequest, res: Response): P
   const timeLimitCfg = await SystemConfig.findOne({ configType: 'yard_fuel_time_limit', isDeleted: false }).lean();
   let afterDate: Date | undefined;
   const tlCfg = (timeLimitCfg as any)?.yardFuelTimeLimit;
-  if (tlCfg?.enabled && tlCfg.perYard?.darYard?.enabled) {
-    const days: number = tlCfg.perYard.darYard.timeLimitDays ?? 2;
+  if (tlCfg?.enabled && tlCfg.perYard?.darYard?.enabled && tlCfg.perYard.darYard.timeLimitDays != null) {
+    const days: number = tlCfg.perYard.darYard.timeLimitDays;
     afterDate = new Date();
     afterDate.setDate(afterDate.getDate() - days);
   }
@@ -721,8 +726,8 @@ export const previewBulkAutoLinkDarEntries = async (req: AuthRequest, res: Respo
   const timeLimitCfg = await SystemConfig.findOne({ configType: 'yard_fuel_time_limit', isDeleted: false }).lean();
   let afterDate: Date | undefined;
   const tlCfg = (timeLimitCfg as any)?.yardFuelTimeLimit;
-  if (tlCfg?.enabled && tlCfg.perYard?.darYard?.enabled) {
-    const days: number = tlCfg.perYard.darYard.timeLimitDays ?? 2;
+  if (tlCfg?.enabled && tlCfg.perYard?.darYard?.enabled && tlCfg.perYard.darYard.timeLimitDays != null) {
+    const days: number = tlCfg.perYard.darYard.timeLimitDays;
     afterDate = new Date();
     afterDate.setDate(afterDate.getDate() - days);
   }
