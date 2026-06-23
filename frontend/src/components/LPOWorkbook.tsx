@@ -10,11 +10,12 @@ interface LPOWorkbookProps {
   workbookId?: string | number; // Can be year number or ID
   onClose?: () => void;
   initialLpoNo?: string; // LPO number to open by default
+  initialTruckNo?: string; // Truck number to scroll to and highlight on open
 }
 
 const TABS_PER_PAGE = 8;
 
-const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialLpoNo }) => {
+const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialLpoNo, initialTruckNo }) => {
   const [workbook, setWorkbook] = useState<LPOWorkbook | null>(null);
   const [activeSheetId, setActiveSheetId] = useState<string | number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -336,6 +337,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
             sheet={activeSheet}
             workbookId={workbook.id!}
             lpoNo={activeSheet?.lpoNo}
+            initialTruckNo={initialTruckNo}
             onBack={onClose}
             onUpdate={(updatedSheet) => {
               setWorkbook(prev => prev ? {

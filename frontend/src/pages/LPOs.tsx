@@ -115,6 +115,7 @@ const LPOs = () => {
   const [dropdownPosition, setDropdownPosition] = useState<{top?: number, bottom?: number, left: number}>({top: 0, left: 0});
   const [exportingYear, setExportingYear] = useState<number | null>(null);
   const [selectedLpoNo, setSelectedLpoNo] = usePersistedState<string | null>('lpo:selectedLpoNo', null);
+  const [selectedTruckNo, setSelectedTruckNo] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | number | null>(null);
   const [downloadingImage, setDownloadingImage] = useState<string | number | null>(null);
   
@@ -936,8 +937,9 @@ const LPOs = () => {
       // since driver account creation also creates an LPOSummary document)
       const lpoDoc = await lpoDocumentsAPI.getByLpoNo(lpo.lpoNo);
       const year = lpoDoc.year || new Date().getFullYear();
-      
+
       setSelectedLpoNo(lpo.lpoNo);
+      setSelectedTruckNo(lpo.truckNo || null);
       setSelectedYear(year);
       setSelectedWorkbookId(year);
       setViewMode('workbook');
@@ -946,6 +948,7 @@ const LPOs = () => {
       // Fallback to current year if fetch fails
       const year = new Date().getFullYear();
       setSelectedLpoNo(lpo.lpoNo);
+      setSelectedTruckNo(lpo.truckNo || null);
       setSelectedYear(year);
       setSelectedWorkbookId(year);
       setViewMode('workbook');
@@ -955,6 +958,7 @@ const LPOs = () => {
   const handleCloseWorkbook = () => {
     setSelectedWorkbookId(null);
     setSelectedLpoNo(null);
+    setSelectedTruckNo(null);
     setViewMode('list');
     queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
     queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
@@ -1068,6 +1072,7 @@ const LPOs = () => {
           workbookId={selectedWorkbookId}
           onClose={handleCloseWorkbook}
           initialLpoNo={selectedLpoNo || undefined}
+          initialTruckNo={selectedTruckNo || undefined}
         />
       </div>
     );
