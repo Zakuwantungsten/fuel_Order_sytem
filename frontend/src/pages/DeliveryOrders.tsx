@@ -305,11 +305,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
         if (targetPage !== currentPage) {
           setCurrentPage(targetPage);
-          // Wait for the page change + DOM update before scrolling
-          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 1000);
-        } else {
-          setTimeout(() => scrollToAndHighlightDO(pendingHighlight), 500);
         }
+        // scrollToAndHighlightDO polls for the row, so it tolerates the
+        // page-change refetch finishing whenever it does — no fixed guess needed.
+        scrollToAndHighlightDO(pendingHighlight);
       } catch (error) {
         console.error('❌ Error finding DO position:', error);
         if (!cancelled) clearDOHighlight();
@@ -323,31 +322,41 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingHighlight]);
   
-  // Helper function to scroll and highlight
-  const scrollToAndHighlightDO = (doNumber: string) => {
-    console.log('=== DO HIGHLIGHT ATTEMPT ===');
-    console.log('DO Number:', doNumber);
-    
+  // Helper function to scroll and highlight.
+  // The target row may not be in the DOM yet when a page/period change triggers
+  // a fresh server fetch (common for older records that need an extra refetch).
+  // Instead of guessing a single delay, poll for the element to appear and only
+  // give up after a max number of attempts.
+  const scrollToAndHighlightDO = (doNumber: string, attempt = 0) => {
+    const MAX_ATTEMPTS = 20; // ~3s total at 150ms intervals
+    const RETRY_DELAY = 150;
+
     // Find all elements with this DO number
     const allElements = document.querySelectorAll(`[data-do-number="${doNumber}"]`);
-    console.log('Total elements found:', allElements.length);
-    
+
     // Find visible element (mobile or desktop depending on screen size)
     const visibleElements = Array.from(allElements).filter(el => {
       return (el as HTMLElement).offsetParent !== null; // offsetParent is null for hidden elements
     });
-    console.log('Visible elements:', visibleElements.length);
-    
+
     // Prefer visible element, fall back to first element
     let element = visibleElements[0] as HTMLElement;
     if (!element && allElements.length > 0) {
       element = allElements[0] as HTMLElement;
     }
-    
-    console.log('Element found:', !!element);
-    console.log('Element is visible:', element?.offsetParent !== null);
-    
-    if (element) {
+
+    // Row not rendered yet (still fetching/paginating) — retry until it appears
+    if (!element) {
+      if (attempt < MAX_ATTEMPTS) {
+        setTimeout(() => scrollToAndHighlightDO(doNumber, attempt + 1), RETRY_DELAY);
+        return;
+      }
+      console.error('❌ DO Element not found after retries:', doNumber);
+      clearDOHighlight();
+      return;
+    }
+
+    {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // Store original styles
@@ -379,9 +388,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         console.log('❌ Removed DO highlight');
         clearDOHighlight();
       }, 3000);
-    } else {
-      console.error('❌ DO Element not found:', doNumber);
-      clearDOHighlight();
     }
   };
   

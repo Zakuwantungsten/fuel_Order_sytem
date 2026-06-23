@@ -358,16 +358,10 @@ const FuelRecords = () => {
             // Navigate to the correct page if needed
             if (targetPage !== currentPage) {
               setCurrentPage(targetPage);
-              // Wait for page change to complete and DOM to update
-              setTimeout(() => {
-                scrollToAndHighlight(pendingHighlight);
-              }, 1200);
-            } else {
-              // Already on correct page
-              setTimeout(() => {
-                scrollToAndHighlight(pendingHighlight);
-              }, 600);
             }
+            // scrollToAndHighlight polls for the row, so it tolerates the
+            // page-change refetch finishing whenever it does — no fixed guess needed.
+            scrollToAndHighlight(pendingHighlight);
           } else {
             clearHighlight();
           }
@@ -381,8 +375,15 @@ const FuelRecords = () => {
     }
   }, [pendingHighlight, selectedMonth, itemsPerPage, currentPage]);
   
-  // Helper function to scroll to and highlight a record
-  const scrollToAndHighlight = (truckNo: string) => {
+  // Helper function to scroll to and highlight a record.
+  // The target row may not be in the DOM yet when a page/month change triggers
+  // a fresh server fetch (common for older records that need an extra refetch).
+  // Instead of guessing a single delay, poll for the element to appear and only
+  // give up after a max number of attempts.
+  const scrollToAndHighlight = (truckNo: string, attempt = 0) => {
+    const MAX_ATTEMPTS = 20; // ~3s total at 150ms intervals
+    const RETRY_DELAY = 150;
+
     // Find all elements with this truck number
     const allElements = document.querySelectorAll(`[data-truck-number="${truckNo}"]`);
     // Find visible element (mobile or desktop depending on screen size)
@@ -394,8 +395,18 @@ const FuelRecords = () => {
     if (!element && allElements.length > 0) {
       element = allElements[0] as HTMLElement;
     }
-    
-    if (element) {
+
+    // Row not rendered yet (still fetching/paginating) — retry until it appears
+    if (!element) {
+      if (attempt < MAX_ATTEMPTS) {
+        setTimeout(() => scrollToAndHighlight(truckNo, attempt + 1), RETRY_DELAY);
+        return;
+      }
+      clearHighlight();
+      return;
+    }
+
+    {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // Store original styles
@@ -428,8 +439,6 @@ const FuelRecords = () => {
         element.style.zIndex = '';
         clearHighlight();
       }, 3000);
-    } else {
-      clearHighlight();
     }
   };
   

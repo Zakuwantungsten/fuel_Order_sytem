@@ -388,7 +388,7 @@ const LPOs = () => {
       // false "not found" that would clear the highlight.
       const isDriverEntry = driverEntries.some((e: any) => e.lpoNo === pendingHighlight);
       if (isDriverEntry) {
-        setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 400);
+        scrollToAndHighlightLPO(pendingHighlight);
         return;
       }
 
@@ -413,11 +413,10 @@ const LPOs = () => {
         const targetPage = Math.floor(recordIndex / itemsPerPage) + 1;
         if (targetPage !== currentPage) {
           setCurrentPage(targetPage);
-          // Wait for the page change + DOM update before scrolling
-          setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 1000);
-        } else {
-          setTimeout(() => scrollToAndHighlightLPO(pendingHighlight), 400);
         }
+        // scrollToAndHighlightLPO polls for the row, so it tolerates the
+        // page-change refetch finishing whenever it does — no fixed guess needed.
+        scrollToAndHighlightLPO(pendingHighlight);
       } catch (error) {
         console.error('❌ Error finding LPO position:', error);
         if (!cancelled) clearLPOHighlight();
@@ -431,31 +430,41 @@ const LPOs = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingHighlight]);
   
-  // Helper function to scroll and highlight
-  const scrollToAndHighlightLPO = (lpoNo: string) => {
-    console.log('=== LPO HIGHLIGHT ATTEMPT ===');
-    console.log('LPO Number:', lpoNo);
-    
+  // Helper function to scroll and highlight.
+  // The target row may not be in the DOM yet when a page/period change triggers
+  // a fresh server fetch (common for older records that need an extra refetch).
+  // Instead of guessing a single delay, poll for the element to appear and only
+  // give up after a max number of attempts.
+  const scrollToAndHighlightLPO = (lpoNo: string, attempt = 0) => {
+    const MAX_ATTEMPTS = 20; // ~3s total at 150ms intervals
+    const RETRY_DELAY = 150;
+
     // Find all elements with this LPO number
     const allElements = document.querySelectorAll(`[data-lpo-number="${lpoNo}"]`);
-    console.log('Total elements found:', allElements.length);
-    
+
     // Find visible element (mobile or desktop depending on screen size)
     const visibleElements = Array.from(allElements).filter(el => {
       return (el as HTMLElement).offsetParent !== null; // offsetParent is null for hidden elements
     });
-    console.log('Visible elements:', visibleElements.length);
-    
+
     // Prefer visible element, fall back to first element
     let element = visibleElements[0] as HTMLElement;
     if (!element && allElements.length > 0) {
       element = allElements[0] as HTMLElement;
     }
-    
-    console.log('Element found:', !!element);
-    console.log('Element is visible:', element?.offsetParent !== null);
-    
-    if (element) {
+
+    // Row not rendered yet (still fetching/paginating) — retry until it appears
+    if (!element) {
+      if (attempt < MAX_ATTEMPTS) {
+        setTimeout(() => scrollToAndHighlightLPO(lpoNo, attempt + 1), RETRY_DELAY);
+        return;
+      }
+      console.error('❌ LPO Element not found after retries:', lpoNo);
+      clearLPOHighlight();
+      return;
+    }
+
+    {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // Store original styles
@@ -487,9 +496,6 @@ const LPOs = () => {
         console.log('❌ Removed LPO highlight');
         clearLPOHighlight();
       }, 3000);
-    } else {
-      console.error('❌ LPO Element not found:', lpoNo);
-      clearLPOHighlight();
     }
   };
   
