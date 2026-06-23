@@ -348,9 +348,12 @@ const FuelRecords = () => {
           });
           
           const allMonthRecords = response.data;
-          
-          // Find the record by truck number
-          const recordIndex = allMonthRecords.findIndex(r => r.truckNo === pendingHighlight);
+
+          // Find the record by its unique id (a truck can have many records in a
+          // month; matching by truckNo would land on the wrong DO's row).
+          const recordIndex = allMonthRecords.findIndex(
+            r => ((r as any)._id || (r as any).id) === pendingHighlight
+          );
           
           if (recordIndex >= 0) {
             // Calculate which page this record is on
@@ -380,12 +383,12 @@ const FuelRecords = () => {
   // a fresh server fetch (common for older records that need an extra refetch).
   // Instead of guessing a single delay, poll for the element to appear and only
   // give up after a max number of attempts.
-  const scrollToAndHighlight = (truckNo: string, attempt = 0) => {
+  const scrollToAndHighlight = (recordId: string, attempt = 0) => {
     const MAX_ATTEMPTS = 20; // ~3s total at 150ms intervals
     const RETRY_DELAY = 150;
 
-    // Find all elements with this truck number
-    const allElements = document.querySelectorAll(`[data-truck-number="${truckNo}"]`);
+    // Find all elements for this specific record id
+    const allElements = document.querySelectorAll(`[data-record-id="${recordId}"]`);
     // Find visible element (mobile or desktop depending on screen size)
     const visibleElements = Array.from(allElements).filter(el => {
       return (el as HTMLElement).offsetParent !== null; // offsetParent is null for hidden elements
@@ -399,7 +402,7 @@ const FuelRecords = () => {
     // Row not rendered yet (still fetching/paginating) — retry until it appears
     if (!element) {
       if (attempt < MAX_ATTEMPTS) {
-        setTimeout(() => scrollToAndHighlight(truckNo, attempt + 1), RETRY_DELAY);
+        setTimeout(() => scrollToAndHighlight(recordId, attempt + 1), RETRY_DELAY);
         return;
       }
       clearHighlight();
@@ -1287,6 +1290,7 @@ const FuelRecords = () => {
                   <div
                     key={recordId || `record-${index}`}
                     data-truck-number={record.truckNo}
+                    data-record-id={recordId}
                     onClick={() => handleRowClick(record)}
                     className={`border rounded-xl p-4 transition-all cursor-pointer ${
                       isCancelled
@@ -1547,9 +1551,10 @@ const FuelRecords = () => {
                   const recordId = record.id || (record as any)._id;
 
                   return (
-                    <tr 
+                    <tr
                       key={recordId || `record-${index}`}
                       data-truck-number={record.truckNo}
+                      data-record-id={recordId}
                       className={`cursor-pointer transition-colors ${
                         isCancelled 
                           ? 'hover:bg-red-100 dark:hover:bg-red-900/30' 

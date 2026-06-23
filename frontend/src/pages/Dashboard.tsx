@@ -39,6 +39,7 @@ interface SearchResult {
   month: string;
   primaryText: string;
   secondaryText: string;
+  isCancelled: boolean;
   metadata: any;
 }
 
@@ -213,6 +214,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
             month: new Date(DO.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
             primaryText: `${DO.doNumber} - ${DO.to || DO.destination || 'N/A'}`,
             secondaryText: `${importExportLabel} | ${DO.truckNo} | ${DO.tonnages} tons | ${DO.haulier}`,
+            isCancelled: DO.isCancelled === true,
             metadata: DO
           };
         });
@@ -275,6 +277,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
             month: displayDate,
             primaryText: `${lpo.lpoNo} - ${lpo.dieselAt}`,
             secondaryText: `${lpo.truckNo} | ${lpo.ltrs}L | ${lpo.doSdo}`,
+            isCancelled: lpo.isCancelled === true,
             metadata: lpo
           };
         });
@@ -287,6 +290,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           month: new Date(fuel.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
           primaryText: `${fuel.truckNo} | ${fuel.goingDo} → ${fuel.to || 'N/A'}`,
           secondaryText: `${fuel.totalLts}L | Status: ${fuel.journeyStatus}`,
+          isCancelled: (fuel as any).isCancelled === true,
           metadata: fuel
         }));
 
@@ -368,11 +372,14 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           onNavigate('lpo', `highlight=${result.metadata.lpoNo}`);
         }
       } else if (result.type === 'fuel') {
-        // For fuel records, pass truck number, year, and month
+        // For fuel records, highlight by the unique record id — a truck can have
+        // many fuel records (different DOs) in a month, so highlighting by truckNo
+        // would land on the wrong row (e.g. an active DO instead of the searched one).
         const fuelDate = new Date(result.metadata.date);
         const year = fuelDate.getFullYear();
         const month = fuelDate.getMonth() + 1; // 1-indexed
-        onNavigate('fuel_records', `highlight=${result.metadata.truckNo}&year=${year}&month=${month}`);
+        const recordId = result.metadata._id || result.metadata.id;
+        onNavigate('fuel_records', `highlight=${recordId}&year=${year}&month=${month}`);
       }
     } else {
       // Fallback to route-based navigation
@@ -395,7 +402,8 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         const fuelDate = new Date(result.metadata.date);
         const year = fuelDate.getFullYear();
         const month = fuelDate.getMonth() + 1;
-        navigate(`/fuel-records?highlight=${result.metadata.truckNo}&year=${year}&month=${month}`);
+        const recordId = result.metadata._id || result.metadata.id;
+        navigate(`/fuel-records?highlight=${recordId}&year=${year}&month=${month}`);
       }
     }
   };
@@ -599,18 +607,25 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                   <div
                     key={result.id}
                     onClick={() => handleResultClick(result)}
-                    className="p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all hover:shadow-sm"
+                    className={`p-2 border rounded-md cursor-pointer transition-all hover:shadow-sm ${
+                      result.isCancelled
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30'
+                        : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-1">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1 mb-0.5">
-                          <Calendar className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                          <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 truncate">{result.month}</p>
+                          <Calendar className={`w-2.5 h-2.5 flex-shrink-0 ${result.isCancelled ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`} />
+                          <p className={`text-[10px] font-semibold truncate ${result.isCancelled ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>{result.month}</p>
+                          {result.isCancelled && (
+                            <span className="text-[8px] font-bold uppercase px-1 py-px rounded bg-red-600 text-white flex-shrink-0">Cancelled</span>
+                          )}
                         </div>
-                        <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{result.primaryText}</p>
+                        <p className={`text-xs font-medium truncate ${result.isCancelled ? 'text-red-700 dark:text-red-300 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{result.primaryText}</p>
                         <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5 truncate">{result.secondaryText}</p>
                       </div>
-                      <ArrowRight className="w-3 h-3 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                      <ArrowRight className={`w-3 h-3 flex-shrink-0 mt-0.5 ${result.isCancelled ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`} />
                     </div>
                   </div>
                 ))}
@@ -631,28 +646,38 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                 </h3>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
-                {searchResults.lpos.map((result) => (
+                {searchResults.lpos.map((result) => {
+                  const baseBg = isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE';
+                  const hoverBg = isDark ? 'rgba(8,145,178,0.25)' : '#BAE6FD';
+                  const cancelBg = isDark ? 'rgba(220,38,38,0.18)' : '#FEE2E2';
+                  const cancelHoverBg = isDark ? 'rgba(220,38,38,0.28)' : '#FECACA';
+                  const accent = result.isCancelled ? '#DC2626' : '#0891B2';
+                  return (
                   <div
                     key={result.id}
                     onClick={() => handleResultClick(result)}
                     className="p-2 rounded-md cursor-pointer transition-all hover:shadow-sm"
-                    style={{ background: isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE', border: `1px solid ${isDark ? 'rgba(8,145,178,0.3)' : '#BAE6FD'}` }}
-                    onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(8,145,178,0.25)' : '#BAE6FD')}
-                    onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE')}
+                    style={{ background: result.isCancelled ? cancelBg : baseBg, border: `1px solid ${result.isCancelled ? (isDark ? 'rgba(220,38,38,0.4)' : '#FCA5A5') : (isDark ? 'rgba(8,145,178,0.3)' : '#BAE6FD')}` }}
+                    onMouseEnter={e => (e.currentTarget.style.background = result.isCancelled ? cancelHoverBg : hoverBg)}
+                    onMouseLeave={e => (e.currentTarget.style.background = result.isCancelled ? cancelBg : baseBg)}
                   >
                     <div className="flex items-start justify-between gap-1">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1 mb-0.5">
-                          <Calendar className="w-2.5 h-2.5 flex-shrink-0" style={{ color: '#0891B2' }} />
-                          <p className="text-[10px] font-semibold truncate" style={{ color: '#0891B2' }}>{result.month}</p>
+                          <Calendar className="w-2.5 h-2.5 flex-shrink-0" style={{ color: accent }} />
+                          <p className="text-[10px] font-semibold truncate" style={{ color: accent }}>{result.month}</p>
+                          {result.isCancelled && (
+                            <span className="text-[8px] font-bold uppercase px-1 py-px rounded bg-red-600 text-white flex-shrink-0">Cancelled</span>
+                          )}
                         </div>
-                        <p className="text-xs font-medium truncate" style={{ color: isDark ? '#E2E8F0' : '#0F172A' }}>{result.primaryText}</p>
+                        <p className="text-xs font-medium truncate" style={{ color: result.isCancelled ? '#B91C1C' : (isDark ? '#E2E8F0' : '#0F172A'), textDecoration: result.isCancelled ? 'line-through' : 'none' }}>{result.primaryText}</p>
                         <p className="text-[10px] mt-0.5 truncate" style={{ color: '#64748B' }}>{result.secondaryText}</p>
                       </div>
-                      <ArrowRight className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#0891B2' }} />
+                      <ArrowRight className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: accent }} />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -674,18 +699,25 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                   <div
                     key={result.id}
                     onClick={() => handleResultClick(result)}
-                    className="p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/30 transition-all hover:shadow-sm"
+                    className={`p-2 border rounded-md cursor-pointer transition-all hover:shadow-sm ${
+                      result.isCancelled
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30'
+                        : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/30'
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-1">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1 mb-0.5">
-                          <Calendar className="w-2.5 h-2.5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                          <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 truncate">{result.month}</p>
+                          <Calendar className={`w-2.5 h-2.5 flex-shrink-0 ${result.isCancelled ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
+                          <p className={`text-[10px] font-semibold truncate ${result.isCancelled ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{result.month}</p>
+                          {result.isCancelled && (
+                            <span className="text-[8px] font-bold uppercase px-1 py-px rounded bg-red-600 text-white flex-shrink-0">Cancelled</span>
+                          )}
                         </div>
-                        <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{result.primaryText}</p>
+                        <p className={`text-xs font-medium truncate ${result.isCancelled ? 'text-red-700 dark:text-red-300 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{result.primaryText}</p>
                         <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5 truncate">{result.secondaryText}</p>
                       </div>
-                      <ArrowRight className="w-3 h-3 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                      <ArrowRight className={`w-3 h-3 flex-shrink-0 mt-0.5 ${result.isCancelled ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
                     </div>
                   </div>
                 ))}
