@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import { FuelRecord, DeliveryOrder, LPOSummary, LPOWorkbook, DarLPODocument } from '../models';
 import { TangaLPODocument } from '../models/TangaLPODocument';
 import { resolveNextTangaLPONo } from './tangaLPOController';
+import { resolveNextDarLPONo } from './darLPOController';
 import { computeMonthKey } from '../models/FuelRecord';
 import { AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
@@ -780,20 +781,21 @@ async function importDarYardLPODocuments(
 
     try {
       if (dryRun) {
-        const exists = await DarLPODocument.exists({ lpoNo, isDeleted: false });
+        const exists = await DarLPODocument.exists({ date: group.date, isDeleted: false });
         exists ? result.updated++ : result.inserted++;
         continue;
       }
 
-      const existing = await DarLPODocument.findOne({ lpoNo, isDeleted: false });
+      const existing = await DarLPODocument.findOne({ date: group.date, isDeleted: false });
       if (existing) {
         (existing.entries as any[]) = entryDocs;
         existing.total = 0;
         await existing.save();
         result.updated++;
       } else {
+        const assignedLpoNo = await resolveNextDarLPONo(group.year);
         await DarLPODocument.create({
-          lpoNo,
+          lpoNo: assignedLpoNo,
           date: group.date,
           year: group.year,
           entries: entryDocs,
