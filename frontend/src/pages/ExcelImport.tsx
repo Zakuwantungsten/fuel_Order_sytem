@@ -28,7 +28,7 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SheetType = 'fuelRecord' | 'deliveryOrder' | 'lpoEntry' | 'darYardLPO' | 'unknown';
+type SheetType = 'fuelRecord' | 'deliveryOrder' | 'lpoEntry' | 'darYardLPO' | 'tangaYardLPO' | 'unknown';
 
 interface SheetPreview {
   name: string;
@@ -62,7 +62,8 @@ const TYPE_META: Record<SheetType, { label: string; color: string; bg: string; i
   fuelRecord:    { label: 'Fuel Record',    color: 'text-blue-700 dark:text-blue-300',   bg: 'bg-blue-50 dark:bg-blue-900/30',   icon: Fuel },
   deliveryOrder: { label: 'Delivery Order', color: 'text-green-700 dark:text-green-300', bg: 'bg-green-50 dark:bg-green-900/30', icon: PackageCheck },
   lpoEntry:      { label: 'LPO Entry',      color: 'text-purple-700 dark:text-purple-300', bg: 'bg-purple-50 dark:bg-purple-900/30', icon: Receipt },
-  darYardLPO:    { label: 'Dar Yard LPO',   color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50 dark:bg-amber-900/30', icon: Droplets },
+  darYardLPO:    { label: 'Dar Yard LPO',   color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50 dark:bg-amber-900/30',  icon: Droplets },
+  tangaYardLPO:  { label: 'Tanga Yard LPO', color: 'text-teal-700 dark:text-teal-300',  bg: 'bg-teal-50 dark:bg-teal-900/30',   icon: Droplets },
   unknown:       { label: 'Unknown',        color: 'text-gray-500 dark:text-gray-400',  bg: 'bg-gray-50 dark:bg-gray-800',      icon: HelpCircle },
 };
 

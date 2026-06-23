@@ -12,6 +12,8 @@
 import { Response } from 'express';
 import * as XLSX from 'xlsx';
 import { FuelRecord, DeliveryOrder, LPOSummary, LPOWorkbook, DarLPODocument } from '../models';
+import { TangaLPODocument } from '../models/TangaLPODocument';
+import { resolveNextTangaLPONo } from './tangaLPOController';
 import { computeMonthKey } from '../models/FuelRecord';
 import { AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
@@ -24,7 +26,7 @@ type ImportRequest = AuthRequest & { file?: Express.Multer.File };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SheetType = 'fuelRecord' | 'deliveryOrder' | 'lpoEntry' | 'darYardLPO' | 'unknown';
+type SheetType = 'fuelRecord' | 'deliveryOrder' | 'lpoEntry' | 'darYardLPO' | 'tangaYardLPO' | 'unknown';
 
 interface ImportResult {
   inserted: number;
@@ -197,6 +199,15 @@ function normalizeToISODate(value: unknown, overrideYear?: number): string {
     }
   }
 
+  // "DD.MM.YYYY" or "D.M.YYYY"  (dot-delimited – used by Tanga yard Excel files)
+  const dotted = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (dotted) {
+    const d = parseInt(dotted[1]);
+    const m = parseInt(dotted[2]);
+    const y = overrideYear ?? parseInt(dotted[3]);
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
   // "DD/MM/YYYY" or "D/M/YYYY"  (day-first – common in East Africa)
   const slashed = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if (slashed) {
@@ -257,6 +268,12 @@ function detectSheetType(sheetName: string, headers: string[]): SheetType {
   // ── Header-based detection FIRST (most reliable) ──────────────────────────
   // Headers unambiguously identify the collection regardless of sheet name.
   // This handles DO/LPO/FuelRecord workbooks where each sheet is named after a month.
+
+  // Tanga Yard fuel log: DATE | TRUCK/ENTITY | LITERS | RATE | TOTAL
+  // Must be checked before darYardLPO because "liters" alone could be ambiguous.
+  if (/truck\/entity/.test(headerStr)) {
+    return 'tangaYardLPO';
+  }
 
   // Dar Yard fuel log: DATE | VEHICLE NUMBER | LTRS OUT | LTRS IN | LTRS BALANCE
   // Must be checked before the fuelRecord month-name fallback because sheets are
@@ -750,12 +767,12 @@ async function importDarYardLPODocuments(
     if (group.entries.length === 0) continue;
 
     const entryDocs = group.entries.map((e) => ({
-      doNo: 'DAR-YARD',
+      doNo: '',
       truckNo: e.truckNo,
       liters: e.liters,
       rate: 0,
       amount: 0,
-      dest: 'DAR YARD',
+      dest: '',
       isCancelled: false,
       isDriverAccount: false,
       isRefer: false,
@@ -788,6 +805,102 @@ async function importDarYardLPODocuments(
       }
     } catch (err: unknown) {
       logger.error(`[ImportCtrl][DarLPODocument] lpoNo=${lpoNo}: ${(err as Error).message}`);
+      result.errors++;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Tanga Yard fuel dispensing log importer.
+ *
+ * Format: DATE | TRUCK/ENTITY | LITERS | RATE | TOTAL
+ *   - Dates are in DD.MM.YYYY format.
+ *   - One TangaLPODocument is created per unique date.
+ *   - LPO numbers are auto-assigned as TY-YYYY-NNN via resolveNextTangaLPONo().
+ *   - On re-import, existing docs are found by date and their entries overwritten.
+ */
+async function importTangaYardLPOs(
+  rows: Record<string, unknown>[],
+  dryRun: boolean,
+  year?: number,
+): Promise<ImportResult> {
+  const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: 0 };
+
+  type Entry = { truckNo: string; liters: number; rate: number; amount: number };
+  type DayGroup = { date: string; year: number; entries: Entry[] };
+
+  const groups = new Map<string, DayGroup>();
+  const order: string[] = [];
+
+  for (const row of rows) {
+    if (isEmptyRow(row)) continue;
+
+    const rawDate = row['date'] ?? row['DATE'];
+    const truckNo = safeStr(row['truck/entity'] ?? row['TRUCK/ENTITY']);
+    const liters = safeNum(row['liters'] ?? row['LITERS']);
+    const rate = safeNum(row['rate'] ?? row['RATE']) ?? 0;
+    const amount = safeNum(row['total'] ?? row['TOTAL']) ?? (liters !== null ? liters * rate : 0);
+
+    if (!truckNo || liters === null || liters <= 0) continue;
+
+    const date = normalizeToISODate(rawDate, year);
+    if (!date) continue;
+
+    const entryYear = parseInt(date.substring(0, 4), 10) || (year ?? new Date().getFullYear());
+
+    if (!groups.has(date)) {
+      groups.set(date, { date, year: entryYear, entries: [] });
+      order.push(date);
+    }
+    groups.get(date)!.entries.push({ truckNo, liters, rate, amount });
+  }
+
+  for (const dateKey of order) {
+    const group = groups.get(dateKey)!;
+    if (group.entries.length === 0) continue;
+
+    const entryDocs = group.entries.map((e) => ({
+      doNo: '',
+      truckNo: e.truckNo,
+      liters: e.liters,
+      rate: e.rate,
+      amount: e.amount,
+      dest: '',
+      isCancelled: false,
+    }));
+
+    const groupTotal = entryDocs.reduce((s, e) => s + e.amount, 0);
+
+    try {
+      if (dryRun) {
+        const exists = await TangaLPODocument.exists({ date: dateKey, isDeleted: false });
+        exists ? result.updated++ : result.inserted++;
+        continue;
+      }
+
+      const existing = await TangaLPODocument.findOne({ date: dateKey, isDeleted: false });
+      if (existing) {
+        (existing.entries as any[]) = entryDocs;
+        existing.total = groupTotal;
+        await existing.save();
+        result.updated++;
+      } else {
+        const lpoNo = await resolveNextTangaLPONo(group.year);
+        await TangaLPODocument.create({
+          lpoNo,
+          date: group.date,
+          year: group.year,
+          entries: entryDocs,
+          total: groupTotal,
+          currency: 'TZS',
+          isDeleted: false,
+        });
+        result.inserted++;
+      }
+    } catch (err: unknown) {
+      logger.error(`[ImportCtrl][TangaYardLPO] date=${dateKey}: ${(err as Error).message}`);
       result.errors++;
     }
   }
@@ -878,12 +991,12 @@ async function importDarYardLPOs(
     const lpoNo = `DAR-${dateKey}`; // e.g. DAR-2026-01-03
 
     const entryDocs = group.entries.map((e) => ({
-      doNo: 'DAR-YARD',
+      doNo: '',
       truckNo: e.truckNo,
       liters: e.liters,
       rate: e.rate,
       amount: e.amount,
-      dest: 'DAR YARD',
+      dest: '',
       isCancelled: false,
     }));
 
@@ -1002,6 +1115,8 @@ async function processSheet(
     result = await importDeliveryOrders(rawRows, dryRun);
   } else if (sheetType === 'darYardLPO') {
     result = await importDarYardLPOs(rawRows, dryRun, year, sheetMonth);
+  } else if (sheetType === 'tangaYardLPO') {
+    result = await importTangaYardLPOs(rawRows, dryRun, year);
   } else {
     // Pass year + sheetMonth so LPO date "01-Oct" resolves to "2025-10-01"
     result = await importLPOEntries(rawRows, dryRun, year, sheetMonth);
@@ -1157,7 +1272,8 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
       emitDataChange('fuel_records', 'create');
       emitDataChange('delivery_orders', 'create');
       emitDataChange('lpo_summaries', 'create');
-      emitDataChange('lpo_summaries', 'create');
+      emitDataChange('tanga_lpo_documents', 'create');
+      emitDataChange('dar_lpo_documents', 'create');
     }
   } catch (err: unknown) {
     logger.error('[ImportCtrl] Import error:', err);

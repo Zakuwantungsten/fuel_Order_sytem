@@ -56,7 +56,7 @@ function dispenseAmount(entry: any): number {
 
 // ── LPO number helper ──────────────────────────────────────────────────────────
 
-async function resolveNextTangaLPONo(year: number): Promise<string> {
+export async function resolveNextTangaLPONo(year: number): Promise<string> {
   // Highest sequence already used for this year. Scoping the match to
   // `^TY-${year}-` is what makes the counter reset to 001 each new year — a
   // fresh year has no matching documents, so `maxSeq` is null and seq starts at 1.
