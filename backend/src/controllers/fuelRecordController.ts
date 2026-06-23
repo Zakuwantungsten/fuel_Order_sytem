@@ -862,6 +862,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     const YardFuelDispense = require('../models').YardFuelDispense;
     const DriverAccountEntry = require('../models').DriverAccountEntry;
     const LPOSummary = require('../models').LPOSummary;
+    const TangaLPODocument = require('../models').TangaLPODocument;
+    const DarLPODocument = require('../models').DarLPODocument;
 
     // Get the going delivery order
     const goingDO = await DeliveryOrder.findOne({
@@ -1021,9 +1023,63 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
       }
     }
 
+    // Fetch Tanga depot LPOs for this truck's going/return DO
+    const tangaLpoEntries = await TangaLPODocument.aggregate([
+      { $match: { isDeleted: false, $or: doConditions } },
+      { $unwind: '$entries' },
+      { $match: { $or: doConditions } },
+      {
+        $project: {
+          _id: '$entries._id',
+          lpoNo: 1,
+          date: 1,
+          dieselAt: { $literal: 'Tanga' },
+          doSdo: { $ifNull: ['$entries.doNo', 'PENDING'] },
+          truckNo: '$entries.truckNo',
+          ltrs: { $ifNull: ['$entries.dispenseLiters', '$entries.liters'] },
+          pricePerLtr: '$entries.rate',
+          destinations: { $ifNull: ['$entries.dest', 'PENDING'] },
+          isDriverAccount: { $literal: false },
+          isCancelled: { $ifNull: ['$entries.isCancelled', false] },
+          originalLtrs: '$entries.liters',
+          goingCheckpoint: { $literal: null },
+          returningCheckpoint: { $literal: null },
+          source: { $literal: 'tanga' },
+        },
+      },
+      { $sort: { date: 1 } },
+    ]);
+
+    // Fetch Dar depot LPOs for this truck's going/return DO
+    const darLpoEntries = await DarLPODocument.aggregate([
+      { $match: { isDeleted: false, $or: doConditions } },
+      { $unwind: '$entries' },
+      { $match: { $or: doConditions } },
+      {
+        $project: {
+          _id: '$entries._id',
+          lpoNo: 1,
+          date: 1,
+          dieselAt: { $literal: 'Dar' },
+          doSdo: { $ifNull: ['$entries.doNo', 'PENDING'] },
+          truckNo: '$entries.truckNo',
+          ltrs: { $ifNull: ['$entries.dispenseLiters', '$entries.liters'] },
+          pricePerLtr: '$entries.rate',
+          destinations: { $ifNull: ['$entries.dest', 'PENDING'] },
+          isDriverAccount: { $literal: false },
+          isCancelled: { $ifNull: ['$entries.isCancelled', false] },
+          originalLtrs: '$entries.liters',
+          goingCheckpoint: { $literal: null },
+          returningCheckpoint: { $literal: null },
+          source: { $literal: 'dar' },
+        },
+      },
+      { $sort: { date: 1 } },
+    ]);
+
     // Combine regular LPO entries with CASH/NIL entries
     const allLpoEntries = [...lpoEntries];
-    
+
     // Add CASH entries that aren't already included (check by _id to avoid duplicates)
     const existingIds = new Set(lpoEntries.map((e: any) => e._id?.toString()));
     for (const cashEntry of cashLpoEntries) {
@@ -1031,12 +1087,20 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
         allLpoEntries.push(cashEntry);
       }
     }
-    
+
     // Add driver account entries (with unique check)
     for (const daEntry of driverAccountEntryFormat) {
       if (!existingIds.has(daEntry._id?.toString())) {
         allLpoEntries.push(daEntry);
         existingIds.add(daEntry._id?.toString());
+      }
+    }
+
+    // Add Tanga and Dar depot LPO entries (with unique check)
+    for (const entry of [...tangaLpoEntries, ...darLpoEntries]) {
+      if (!existingIds.has(entry._id?.toString())) {
+        allLpoEntries.push(entry);
+        existingIds.add(entry._id?.toString());
       }
     }
     
@@ -1188,7 +1252,6 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
         totalYardDispenses: yardDispenses.length,
         totalFuelOrdered: filteredLPOs.reduce((sum: number, lpo: any) => sum + (lpo.ltrs || 0), 0),
         totalYardFuel: yardDispenses.reduce((sum: number, d: any) => sum + (d.liters || 0), 0),
-        // Count by journey type
         goingLPOs: filteredLPOs.filter((lpo: any) => lpo.doSdo === fuelRecord.goingDo).length,
         returnLPOs: filteredLPOs.filter((lpo: any) => lpo.doSdo === fuelRecord.returnDo).length,
         cashLPOs: filteredLPOs.filter((lpo: any) => {
@@ -1196,6 +1259,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           return isNilDo && !lpo.isDriverAccount;
         }).length,
         driverAccountLPOs: filteredLPOs.filter((lpo: any) => lpo.isDriverAccount === true).length,
+        tangaLPOs: filteredLPOs.filter((lpo: any) => lpo.source === 'tanga').length,
+        darLPOs: filteredLPOs.filter((lpo: any) => lpo.source === 'dar').length,
       },
     };
 

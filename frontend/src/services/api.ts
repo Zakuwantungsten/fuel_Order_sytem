@@ -904,6 +904,7 @@ export interface FuelRecordDetails {
     isDriverAccount?: boolean;
     originalDoNo?: string;
     checkpoint?: string;
+    source?: 'main' | 'tanga' | 'dar';
   })[];
   yardDispenses: YardFuelDispense[];
   summary: {
@@ -915,6 +916,8 @@ export interface FuelRecordDetails {
     returnLPOs?: number;
     cashLPOs?: number;
     driverAccountLPOs?: number;
+    tangaLPOs?: number;
+    darLPOs?: number;
   };
 }
 

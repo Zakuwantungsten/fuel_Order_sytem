@@ -388,6 +388,16 @@ export default function FuelRecordDetailsModal({
                             {details.summary.driverAccountLPOs} Driver Acc.
                           </span>
                         ) : null}
+                        {details.summary.tangaLPOs && details.summary.tangaLPOs > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-xs bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400">
+                            {details.summary.tangaLPOs} Tanga
+                          </span>
+                        ) : null}
+                        {details.summary.darLPOs && details.summary.darLPOs > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-xs bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400">
+                            {details.summary.darLPOs} Dar
+                          </span>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -422,6 +432,8 @@ export default function FuelRecordDetailsModal({
                                   <td className="py-2 pr-3 font-medium whitespace-nowrap">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className={lpo.isCancelled ? 'line-through text-red-400 dark:text-red-500' : 'text-slate-900 dark:text-slate-100'}>{lpo.lpoNo}</span>
+                                      {lpo.source === 'tanga' && <span className="px-1 py-0.5 text-[10px] font-bold bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 rounded">TNG</span>}
+                                      {lpo.source === 'dar' && <span className="px-1 py-0.5 text-[10px] font-bold bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded">DAR</span>}
                                       {lpo.isCancelled && <span className="px-1 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
                                       {!lpo.isCancelled && lpo.originalLtrs != null && lpo.originalLtrs !== lpo.ltrs && <span className="px-1 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded">AMENDED</span>}
                                     </div>
