@@ -918,7 +918,7 @@ async function importTangaYardLPOs(
  *   - Rows where LTRS IN > 0 and VEHICLE NUMBER is empty: fuel delivery to yard — skip.
  *   - Rows where VEHICLE NUMBER is present + LTRS OUT > 0: dispensing entry.
  *
- * One LPOSummary is created per unique date (lpoNo = "DAR-YYYY-MM-DD").
+ * One DarLPODocument is created per unique date; lpoNo is auto-assigned as DY-YYYY-NNN.
  * Rate and amount are set to 0 because the yard report contains only volumes.
  */
 async function importDarYardLPOs(
@@ -990,8 +990,6 @@ async function importDarYardLPOs(
     const group = groups.get(dateKey)!;
     if (group.entries.length === 0) continue;
 
-    const lpoNo = `DAR-${dateKey}`; // e.g. DAR-2026-01-03
-
     const entryDocs = group.entries.map((e) => ({
       doNo: '',
       truckNo: e.truckNo,
@@ -1006,20 +1004,21 @@ async function importDarYardLPOs(
 
     try {
       if (dryRun) {
-        const exists = await DarLPODocument.exists({ lpoNo, isDeleted: false });
+        const exists = await DarLPODocument.exists({ date: group.date, isDeleted: false });
         exists ? result.updated++ : result.inserted++;
         continue;
       }
 
-      const existing = await DarLPODocument.findOne({ lpoNo, isDeleted: false });
+      const existing = await DarLPODocument.findOne({ date: group.date, isDeleted: false });
       if (existing) {
         (existing.entries as any[]) = entryDocs;
         existing.total = groupTotal;
         await existing.save();
         result.updated++;
       } else {
+        const assignedLpoNo = await resolveNextDarLPONo(group.year);
         await DarLPODocument.create({
-          lpoNo,
+          lpoNo: assignedLpoNo,
           date: group.date,
           year: group.year,
           entries: entryDocs,
@@ -1030,7 +1029,7 @@ async function importDarYardLPOs(
         result.inserted++;
       }
     } catch (err: unknown) {
-      logger.error(`[ImportCtrl][DarYardLPO] lpoNo=${lpoNo}: ${(err as Error).message}`);
+      logger.error(`[ImportCtrl][DarYardLPO] date=${dateKey}: ${(err as Error).message}`);
       result.errors++;
     }
   }
