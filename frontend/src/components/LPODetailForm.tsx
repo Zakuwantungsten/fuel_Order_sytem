@@ -51,8 +51,9 @@ interface EntryAutoFillData {
   fuelRecordId?: string | number;  // Store fuel record ID for inspect modal
   goingDestination?: string;  // Store original going destination for proper fuel allocation
   returnDoMissing?: boolean;  // Track if return DO is not yet inputted
-  // Entry type: regular, DA (driver account), or REF (refer/partner truck)
-  entryType?: 'regular' | 'da' | 'ref';
+  // Entry type: regular (NORM), DA (driver account), REF (refer/partner truck),
+  // or NIL (truck with no DO / not in fuel records — manual entry, no fetch)
+  entryType?: 'regular' | 'da' | 'ref' | 'nil';
   referenceDoNo?: string;  // For DA: the real journey DO number
   // Warning states for trucks without valid fuel records
   warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | null;
@@ -95,6 +96,21 @@ interface LPODetailFormProps {
 
 // Local storage key for persisting form draft
 const LPO_FORM_STORAGE_KEY = 'lpo_form_draft';
+
+// Per-row DO entry modes (selected explicitly via the mode chip)
+type EntryMode = 'regular' | 'da' | 'ref' | 'nil';
+const ENTRY_MODE_OPTIONS: { value: EntryMode; label: string; title: string }[] = [
+  { value: 'regular', label: 'NORM', title: 'Normal — enter a DO number for a truck in the fuel records' },
+  { value: 'da',      label: 'DA',   title: 'Driver Account — fuel charged to the driver (saved as NIL DO)' },
+  { value: 'ref',     label: 'REF',  title: 'Reefer / partner truck' },
+  { value: 'nil',     label: 'NIL',  title: 'No DO — truck not in the fuel records (manual entry)' },
+];
+// Border colour per mode (shared by both render copies)
+const modeBorderClass = (mode?: EntryMode): string =>
+  mode === 'da' ? 'border-blue-400 dark:border-blue-500'
+  : mode === 'ref' ? 'border-orange-400 dark:border-orange-500'
+  : mode === 'nil' ? 'border-purple-400 dark:border-purple-500'
+  : 'border-gray-300 dark:border-gray-600';
 
 // Interface for stored form data
 interface StoredFormData {
@@ -944,6 +960,26 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   useEffect(() => {
     if (initialData) {
       setFormData(initialData);
+
+      // Re-derive each row's mode so saved DA/REF/NIL/NORM entries reopen in the right mode
+      const derived: Record<number, EntryAutoFillData> = {};
+      (initialData.entries || []).forEach((entry, idx) => {
+        const doNoUpper = (entry.doNo || '').trim().toUpperCase();
+        const entryType: EntryAutoFillData['entryType'] =
+          entry.isDriverAccount ? 'da'
+          : entry.isRefer ? 'ref'
+          : (doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A') ? 'nil'
+          : 'regular';
+        derived[idx] = {
+          direction: (entry as { journeyDirection?: 'going' | 'returning' }).journeyDirection || 'going',
+          loading: false,
+          fetched: false,
+          fuelRecord: null,
+          entryType,
+          referenceDoNo: entry.isDriverAccount ? entry.referenceDoNo : undefined,
+        };
+      });
+      setEntryAutoFillData(derived);
     }
   }, [initialData]);
 
@@ -2059,18 +2095,64 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   };
 
   /**
+   * Explicitly set the entry mode for a row via the per-row mode chip.
+   *  - regular (NORM): fetch-by-DO, free DO entry for a truck in the fuel records
+   *  - da: driver account — fetch-by-DO/truck, submits as NIL DO + referenceDoNo
+   *  - ref: reefer/partner truck — no fetch, submits as REF
+   *  - nil: truck with no DO / not in the fuel records — no fetch, no warning
+   */
+  const handleModeChange = (
+    index: number,
+    mode: 'regular' | 'da' | 'ref' | 'nil'
+  ) => {
+    // Cancel any in-flight fetch for this row before switching modes
+    if (fetchDebounceTimers.current[index]) {
+      clearTimeout(fetchDebounceTimers.current[index]);
+      delete fetchDebounceTimers.current[index];
+    }
+
+    setEntryAutoFillData(prev => ({
+      ...prev,
+      [index]: {
+        ...prev[index],
+        direction: prev[index]?.direction || 'going',
+        entryType: mode,
+        loading: false,
+        // REF/NIL never carry a fetched record or a "no record" warning
+        ...(mode === 'ref' || mode === 'nil'
+          ? { fetched: false, fuelRecord: null, fuelRecordId: undefined, warningType: null, warningMessage: undefined }
+          : {}),
+        // Only DA tracks a reference DO
+        ...(mode === 'da' ? {} : { referenceDoNo: undefined }),
+      },
+    }));
+
+    // When switching into a fetching mode, re-run the lookup for any DO already typed.
+    if (mode === 'regular' || mode === 'da') {
+      const currentDo = formData.entries?.[index]?.doNo;
+      if (currentDo && currentDo !== 'NIL' && currentDo.trim().length >= 3) {
+        handleDONoChange(index, currentDo, mode);
+      }
+    }
+  };
+
+  /**
    * Handle DO number change (for DO-first search)
    * Fetches journey by DO and auto-fills truck number
    */
-  const handleDONoChange = async (index: number, doNo: string) => {
+  const handleDONoChange = async (
+    index: number,
+    doNo: string,
+    modeOverride?: 'regular' | 'da' | 'ref' | 'nil'
+  ) => {
     const doNoUpper = doNo.trim().toUpperCase();
-    
-    // Detect entry type from DO input
-    const entryType: 'regular' | 'da' | 'ref' =
-      doNoUpper === 'DA'  ? 'da'  :
-      doNoUpper === 'REF' ? 'ref' :
-      'regular';
-    
+
+    // Mode is chosen explicitly via the per-row mode chip (handleModeChange),
+    // not detected from the typed text — so the DO box stays free in every mode.
+    // modeOverride lets handleModeChange re-run a fetch with the new mode before
+    // the entryType state update has flushed.
+    const mode = modeOverride || entryAutoFillData[index]?.entryType || 'regular';
+
     // Update DO number immediately (keep empty if user clears it, only default to NIL on blur if still empty)
     setFormData(prev => {
       const updatedEntries = [...(prev.entries || [])];
@@ -2088,26 +2170,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return { ...prev, entries: updatedEntries };
     });
 
-    // REF entry: no fetch, just mark the entry type
-    if (entryType === 'ref') {
-      setEntryAutoFillData(prev => ({
-        ...prev,
-        [index]: {
-          ...prev[index],
-          direction: 'going',
-          loading: false,
-          fetched: false,
-          fuelRecord: null,
-          entryType: 'ref',
-          warningType: null,
-          warningMessage: undefined,
-        }
-      }));
-      return;
-    }
-
-    // DA entry: mark the type, but still proceed with fetch when truck is entered
-    if (entryType === 'da') {
+    // REF and NIL: never fetch. REF = reefer/partner truck; NIL = truck with no DO,
+    // not in the fuel records — manual entry, no journey lookup and no warning.
+    if (mode === 'ref' || mode === 'nil') {
       setEntryAutoFillData(prev => ({
         ...prev,
         [index]: {
@@ -2115,8 +2180,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           direction: prev[index]?.direction || 'going',
           loading: false,
           fetched: false,
-          fuelRecord: prev[index]?.fuelRecord || null,
-          entryType: 'da',
+          fuelRecord: null,
+          entryType: mode,
           warningType: null,
           warningMessage: undefined,
         }
@@ -2124,18 +2189,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return;
     }
 
-    // Clear entry type if user changed from DA/REF back to a regular DO
-    if (entryType === 'regular') {
-      setEntryAutoFillData(prev => ({
-        ...prev,
-        [index]: {
-          ...prev[index],
-          entryType: 'regular',
-          referenceDoNo: undefined,
-        }
-      }));
-    }
-
+    // NORM (regular) and DA both fetch the journey by DO and auto-fill the truck.
+    // The only difference is at submit time (DA → doNo NIL + referenceDoNo).
     // If DO number is valid, debounce the fetch — same pattern as truck number.
     // Without debouncing, every keystroke fires a concurrent request; the partial-DO
     // fetches ("003", "0036", etc.) resolve after the correct one and wipe the auto-fill.
@@ -2230,6 +2285,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             fuelRecordId: result.fuelRecord?.id || result.fuelRecord?._id,
             goingDestination: result.goingDestination,
             returnDoMissing,
+            // Preserve the explicitly-chosen mode (regular/da) across the fetch
+            entryType: prev[index]?.entryType || 'regular',
+            // DA tracks the typed/resolved DO as the reference journey DO
+            referenceDoNo: prev[index]?.entryType === 'da' ? doNoUpper : prev[index]?.referenceDoNo,
             warningType: result.warningType || null,
             warningMessage: result.message,
             balanceInfo,
@@ -2686,9 +2745,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const af = entryAutoFillData[idx];
       const isDA = af?.entryType === 'da';
       const isREF = af?.entryType === 'ref';
+      const isNIL = af?.entryType === 'nil';
       return {
         ...entry,
-        doNo: isDA ? 'NIL' : isREF ? 'REF' : ((entry.doNo && entry.doNo.trim()) || 'NIL'),
+        // NIL = truck with no DO / not in fuel records → store as NIL (backend classifies as nil-do)
+        doNo: isDA || isNIL ? 'NIL' : isREF ? 'REF' : ((entry.doNo && entry.doNo.trim()) || 'NIL'),
         truckNo: entry.truckNo.trim(),
         dest: (entry.dest && entry.dest.trim()) || 'NIL',
         liters: Number(entry.liters) || 0,
@@ -2855,9 +2916,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         const af = entryAutoFillData[idx];
         const isDA = af?.entryType === 'da';
         const isREF = af?.entryType === 'ref';
+        const isNIL = af?.entryType === 'nil';
         return {
           ...entry,
-          doNo: isDA ? 'NIL' : isREF ? 'REF' : ((entry.doNo && entry.doNo.trim()) || 'NIL'),
+          // NIL = truck with no DO / not in fuel records → store as NIL (backend classifies as nil-do)
+          doNo: isDA || isNIL ? 'NIL' : isREF ? 'REF' : ((entry.doNo && entry.doNo.trim()) || 'NIL'),
           truckNo: entry.truckNo.trim(),
           dest: (entry.dest && entry.dest.trim()) || 'NIL',
           liters: Number(entry.liters) || 0,
@@ -4039,17 +4102,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                         {isExactDuplicate && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-red-500" />}
                         {isDifferentAmount && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-blue-500" />}
                       </div>
-                      {/* DO */}
+                      {/* Mode chip — NORM/DA/REF/NIL */}
+                      <select
+                        value={autoFill.entryType || 'regular'}
+                        onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
+                        title="Entry mode"
+                        className={`flex-shrink-0 px-1 py-0.5 border rounded text-[10px] font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
+                      >
+                        {ENTRY_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {/* DO — free to type in every mode */}
                       <div className="relative flex-1 min-w-0">
-                        <input type="text" value={autoFill.entryType === 'da' ? 'DA' : (entry?.doNo || '')} onChange={(e) => handleDONoChange(index, e.target.value)}
+                        <input type="text" value={entry?.doNo || ''} onChange={(e) => handleDONoChange(index, e.target.value)}
                           onBlur={(e) => { if (!e.target.value.trim()) handleEntryChange(index, 'doNo', 'NIL'); }}
                           onPaste={(e) => handleDOPaste(index, e)}
-                          placeholder="DO#" title="Enter DO number, DA, or REF — paste multiple (one per line) to fill down"
-                          className={`w-full px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
-                            autoFill.entryType === 'da' ? 'border-blue-400 dark:border-blue-500' : autoFill.entryType === 'ref' ? 'border-orange-400 dark:border-orange-500' : 'border-gray-300 dark:border-gray-600'
-                          }`} />
-                        {autoFill.entryType === 'da' && <span className="absolute right-1 top-0.5 text-[8px] font-bold text-blue-600 dark:text-blue-400">DA</span>}
-                        {autoFill.entryType === 'ref' && <span className="absolute right-1 top-0.5 text-[8px] font-bold text-orange-600 dark:text-orange-400">REF</span>}
+                          placeholder="DO#" title="Enter DO number — paste multiple (one per line) to fill down"
+                          className={`w-full px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`} />
                       </div>
                       {/* Direction toggle — hidden for REF entries */}
                       {autoFill.entryType !== 'ref' && (
@@ -4274,38 +4342,41 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           
                           {/* DO Number Input Cell - for DO-first search */}
                           <td className="px-3 py-3">
-                            <div className="relative">
-                              <input
-                                type="text"
-                                value={autoFill.entryType === 'da' ? 'DA' : (entry?.doNo || '')}
-                                onChange={(e) => handleDONoChange(index, e.target.value)}
-                                onBlur={(e) => {
-                                  // Set to NIL only on blur if field is still empty
-                                  if (!e.target.value.trim()) {
-                                    handleEntryChange(index, 'doNo', 'NIL');
-                                  }
-                                }}
-                                onPaste={(e) => handleDOPaste(index, e)}
-                                placeholder="0001/26"
-                                title="Enter DO number, DA, or REF — paste multiple (one per line) to fill down"
-                                className={`w-24 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
-                                  autoFill.entryType === 'da' ? 'border-blue-400 dark:border-blue-500' : autoFill.entryType === 'ref' ? 'border-orange-400 dark:border-orange-500' : 'border-gray-300 dark:border-gray-600'
-                                }`}
-                              />
-                              {autoFill.loading && (
-                                <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
-                              )}
-                              {autoFill.entryType === 'da' && !autoFill.loading && (
-                                <span className="absolute -top-2 right-0 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-1 rounded">DA</span>
-                              )}
-                              {autoFill.entryType === 'ref' && !autoFill.loading && (
-                                <span className="absolute -top-2 right-0 text-[9px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/40 px-1 rounded">REF</span>
-                              )}
-                              {autoFill.entryType === 'da' && autoFill.referenceDoNo && (
-                                <span className="absolute -bottom-4 left-0 text-[9px] text-gray-500 dark:text-gray-400 truncate max-w-[90px]" title={`Ref DO: ${autoFill.referenceDoNo}`}>
-                                  →{autoFill.referenceDoNo}
-                                </span>
-                              )}
+                            <div className="flex items-center gap-1.5">
+                              {/* Mode chip — NORM/DA/REF/NIL */}
+                              <select
+                                value={autoFill.entryType || 'regular'}
+                                onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
+                                title={ENTRY_MODE_OPTIONS.find(o => o.value === (autoFill.entryType || 'regular'))?.title}
+                                className={`flex-shrink-0 px-1 py-1 border rounded text-xs font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
+                              >
+                                {ENTRY_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                              </select>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={entry?.doNo || ''}
+                                  onChange={(e) => handleDONoChange(index, e.target.value)}
+                                  onBlur={(e) => {
+                                    // Set to NIL only on blur if field is still empty
+                                    if (!e.target.value.trim()) {
+                                      handleEntryChange(index, 'doNo', 'NIL');
+                                    }
+                                  }}
+                                  onPaste={(e) => handleDOPaste(index, e)}
+                                  placeholder="0001/26"
+                                  title="Enter DO number — paste multiple (one per line) to fill down"
+                                  className={`w-24 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
+                                />
+                                {autoFill.loading && (
+                                  <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
+                                )}
+                                {autoFill.entryType === 'da' && autoFill.referenceDoNo && (
+                                  <span className="absolute -bottom-4 left-0 text-[9px] text-gray-500 dark:text-gray-400 truncate max-w-[90px]" title={`Ref DO: ${autoFill.referenceDoNo}`}>
+                                    →{autoFill.referenceDoNo}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           
@@ -4405,6 +4476,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 {autoFill.entryType === 'ref' && (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 w-fit">
                                     Reefer
+                                  </span>
+                                )}
+                                {autoFill.entryType === 'nil' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 w-fit">
+                                    No DO (not in fuel records)
                                   </span>
                                 )}
                                 {/* No fuel record / in-form duplicate warning */}
