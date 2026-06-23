@@ -712,6 +712,9 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
   const [showBulkPreview, setShowBulkPreview] = useState(false);
   const [bulkPreviewResults, setBulkPreviewResults] = useState<BulkPreviewResult[]>([]);
   const [lastDispenseOverrides, setLastDispenseOverrides] = useState<Record<string, number>>({});
+  const [editingDate, setEditingDate] = useState(false);
+  const [dateValue, setDateValue] = useState(lpo.date);
+  const [savingDate, setSavingDate] = useState(false);
 
   const lpoId = (lpo._id ?? lpo.id) as string;
 
@@ -747,6 +750,26 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
     }).catch(() => {});
     onUpdated();
   }, [lpo.lpoNo, onUpdated]);
+
+  const handleSaveDate = async () => {
+    if (!dateValue || dateValue === lpo.date) { setEditingDate(false); return; }
+    setSavingDate(true);
+    try {
+      await darLPOAPI.acquireLock(lpoId);
+      try {
+        const updated = await darLPOAPI.update(lpoId, { date: dateValue } as any);
+        toast.success('Date updated');
+        handleMutationResult(updated as DarLPO);
+        setEditingDate(false);
+      } finally {
+        await darLPOAPI.releaseLock(lpoId).catch(() => {});
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to update date');
+    } finally {
+      setSavingDate(false);
+    }
+  };
 
   const handleEditEntry = async (updatedEntry: Omit<DarLPOEntry, '_id'>) => {
     if (!editingEntry) return;
@@ -920,7 +943,37 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
             )}
             <div>
               <div className="text-[17px] font-extrabold text-white tracking-tight">{lpo.lpoNo}</div>
-              <div className="text-xs text-[#6b9a7a] mt-0.5">{lpo.date} · {lpo.currency}</div>
+              <div className="text-xs text-[#6b9a7a] mt-0.5 flex items-center gap-1">
+                {editingDate ? (
+                  <>
+                    <input
+                      type="date"
+                      value={dateValue}
+                      onChange={e => setDateValue(e.target.value)}
+                      className="px-1 py-0.5 text-xs border border-green-400/60 rounded bg-white/10 text-white focus:outline-none w-28"
+                      disabled={savingDate}
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') handleSaveDate(); if (e.key === 'Escape') setEditingDate(false); }}
+                    />
+                    <button onClick={handleSaveDate} disabled={savingDate} className="text-green-400 disabled:opacity-50">
+                      {savingDate ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    </button>
+                    <button onClick={() => setEditingDate(false)} disabled={savingDate} className="text-[#6b9a7a]">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span>{lpo.date}</span>
+                    {canWrite && !allCancelled && (
+                      <button onClick={() => { setDateValue(lpo.date); setEditingDate(true); }} className="text-[#4a7a5a] hover:text-green-400">
+                        <Edit2 className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                    <span>· {lpo.currency}</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -979,7 +1032,37 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
             </button>
           )}
           <span className="font-bold text-green-600 dark:text-green-400 font-mono">{lpo.lpoNo}</span>
-          <span className="text-sm text-gray-600 dark:text-gray-400">Date: <strong className="text-gray-900 dark:text-gray-100">{lpo.date}</strong></span>
+          <span className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+            Date:
+            {editingDate ? (
+              <>
+                <input
+                  type="date"
+                  value={dateValue}
+                  onChange={e => setDateValue(e.target.value)}
+                  className="ml-1 px-1.5 py-0.5 text-sm border border-green-400 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500"
+                  disabled={savingDate}
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveDate(); if (e.key === 'Escape') setEditingDate(false); }}
+                />
+                <button onClick={handleSaveDate} disabled={savingDate} className="p-0.5 text-green-600 hover:text-green-700 disabled:opacity-50">
+                  {savingDate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                </button>
+                <button onClick={() => setEditingDate(false)} disabled={savingDate} className="p-0.5 text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            ) : (
+              <>
+                <strong className="text-gray-900 dark:text-gray-100 ml-1">{lpo.date}</strong>
+                {canWrite && !allCancelled && (
+                  <button onClick={() => { setDateValue(lpo.date); setEditingDate(true); }} className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                )}
+              </>
+            )}
+          </span>
           <span className="text-sm text-gray-600 dark:text-gray-400">Currency: <strong className="text-gray-900 dark:text-gray-100">{lpo.currency}</strong></span>
           {lpo.notes && <span className="text-sm text-gray-500 dark:text-gray-400 italic truncate max-w-xs">{lpo.notes}</span>}
           {allCancelled && (
