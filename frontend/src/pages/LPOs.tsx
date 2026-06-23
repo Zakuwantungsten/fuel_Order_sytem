@@ -772,6 +772,7 @@ const LPOs = () => {
   // automatically switch to the most recent period that does.
   useEffect(() => {
     if (loading || !filtersInitialized) return;
+    if (searchTerm) return;
     const now = new Date();
     const defYear = now.getFullYear(), defMonth = now.getMonth() + 1;
     if (selectedPeriods.length !== 1 || selectedPeriods[0].year !== defYear || selectedPeriods[0].month !== defMonth) return;
@@ -780,7 +781,7 @@ const LPOs = () => {
       const fallback = availablePeriods.find(p => !(p.year === defYear && p.month === defMonth));
       if (fallback) setSelectedPeriods([fallback]);
     }
-  }, [orders, loading, filtersInitialized, availablePeriods]);
+  }, [orders, loading, filtersInitialized, availablePeriods, searchTerm]);
 
   // Assign serial numbers to LPOs — always continuous across all entries/months
   const lposWithMonthlySerialNumbers = useMemo(() => {

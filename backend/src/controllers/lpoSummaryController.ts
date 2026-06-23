@@ -2850,8 +2850,17 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     const baseMatch: any = { isDeleted: false };
     if (req.user?.role === 'driver') baseMatch['entries.truckNo'] = req.user.username;
 
+    const { dateFrom, dateTo } = req.query;
+
+    const periodsMatch: any = { ...baseMatch };
+    if (dateFrom || dateTo) {
+      periodsMatch.date = {};
+      if (dateFrom) periodsMatch.date.$gte = (dateFrom as string).substring(0, 10);
+      if (dateTo) periodsMatch.date.$lte = (dateTo as string).substring(0, 10);
+    }
+
     const periodResults = await LPOSummary.aggregate([
-      { $match: baseMatch },
+      { $match: periodsMatch },
       {
         $group: {
           _id: {
@@ -2875,8 +2884,6 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     const periods = Array.from(seen.values()).sort((a, b) =>
       b.year !== a.year ? b.year - a.year : b.month - a.month
     );
-
-    const { dateFrom, dateTo } = req.query;
     const stationsMatch: any = { ...baseMatch, station: { $nin: [null, ''] } };
     if (dateFrom || dateTo) {
       stationsMatch.date = {};
