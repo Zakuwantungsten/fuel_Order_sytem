@@ -96,12 +96,13 @@ LoginActivitySchema.statics.recordLogin = async function (
 ) {
   const { browser, os, deviceType } = parseUA(userAgent);
 
-  // Determine if device is new (never seen this browser+os+ip combination)
+  // Determine if device is new (never seen this browser+os combination).
+  // IP is intentionally excluded: the same device on a new network / dynamic
+  // IP must not be treated as a new device.
   const existingDevice = await this.findOne({
     userId,
     browser,
     os,
-    ipAddress: ip,
   }).lean();
 
   const isNewDevice = !existingDevice;

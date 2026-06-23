@@ -199,12 +199,15 @@ export async function issueSession(
   if (deviceTrackingEnabled) {
     (LoginActivity as any).recordLogin(
       user._id.toString(), user.refreshToken, ip, ua, loginMethod
-    ).then((activity: any) => {
-      (KnownDevice as any).recordDevice(user._id.toString(), user.username, parsed.browser, parsed.os, parsed.deviceType, ip).catch(() => {});
-      if (loginNotifsEnabled) {
+    ).then(() =>
+      (KnownDevice as any).recordDevice(user._id.toString(), user.username, parsed.browser, parsed.os, parsed.deviceType, ip)
+    ).then((deviceResult: any) => {
+      // Only alert on a genuinely new, untrusted device — like professional
+      // services, we don't email on every sign-in from a known device.
+      if (loginNotifsEnabled && deviceResult?.isNewDevice && !deviceResult?.trusted) {
         emailService.sendLoginNotification(user.email, user.firstName || user.username, {
           browser: parsed.browser, os: parsed.os, ipAddress: ip,
-          time: new Date(), isNewDevice: activity.isNewDevice, deviceType: parsed.deviceType,
+          time: new Date(), isNewDevice: true, deviceType: parsed.deviceType,
         }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
       }
     }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
@@ -944,12 +947,13 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
     if (mfaDeviceTracking) {
       (LoginActivity as any).recordLogin(
         user._id.toString(), user.refreshToken, mfaIP, mfaUA, verificationResult.methodUsed
-      ).then((activity: any) => {
-        (KnownDevice as any).recordDevice(user._id.toString(), user.username, mfaParsed.browser, mfaParsed.os, mfaParsed.deviceType, mfaIP).catch(() => {});
-        if (mfaLoginNotifs) {
+      ).then(() =>
+        (KnownDevice as any).recordDevice(user._id.toString(), user.username, mfaParsed.browser, mfaParsed.os, mfaParsed.deviceType, mfaIP)
+      ).then((deviceResult: any) => {
+        if (mfaLoginNotifs && deviceResult?.isNewDevice && !deviceResult?.trusted) {
           emailService.sendLoginNotification(user.email, user.firstName || user.username, {
             browser: mfaParsed.browser, os: mfaParsed.os, ipAddress: mfaIP,
-            time: new Date(), isNewDevice: activity.isNewDevice, deviceType: mfaParsed.deviceType,
+            time: new Date(), isNewDevice: true, deviceType: mfaParsed.deviceType,
           }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
         }
       }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
@@ -1180,12 +1184,13 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
     if (setupDeviceTracking) {
       (LoginActivity as any).recordLogin(
         user._id.toString(), user.refreshToken, setupIP, setupUA, 'totp_setup'
-      ).then((activity: any) => {
-        (KnownDevice as any).recordDevice(user._id.toString(), user.username, setupParsed.browser, setupParsed.os, setupParsed.deviceType, setupIP).catch(() => {});
-        if (setupLoginNotifs) {
+      ).then(() =>
+        (KnownDevice as any).recordDevice(user._id.toString(), user.username, setupParsed.browser, setupParsed.os, setupParsed.deviceType, setupIP)
+      ).then((deviceResult: any) => {
+        if (setupLoginNotifs && deviceResult?.isNewDevice && !deviceResult?.trusted) {
           emailService.sendLoginNotification(user.email, user.firstName || user.username, {
             browser: setupParsed.browser, os: setupParsed.os, ipAddress: setupIP,
-            time: new Date(), isNewDevice: activity.isNewDevice, deviceType: setupParsed.deviceType,
+            time: new Date(), isNewDevice: true, deviceType: setupParsed.deviceType,
           }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
         }
       }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
@@ -1417,12 +1422,13 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
     if (emailDeviceTracking) {
       (LoginActivity as any).recordLogin(
         user._id.toString(), user.refreshToken, emailIP, emailUA, 'email_setup'
-      ).then((activity: any) => {
-        (KnownDevice as any).recordDevice(user._id.toString(), user.username, emailParsed.browser, emailParsed.os, emailParsed.deviceType, emailIP).catch(() => {});
-        if (emailLoginNotifs) {
+      ).then(() =>
+        (KnownDevice as any).recordDevice(user._id.toString(), user.username, emailParsed.browser, emailParsed.os, emailParsed.deviceType, emailIP)
+      ).then((deviceResult: any) => {
+        if (emailLoginNotifs && deviceResult?.isNewDevice && !deviceResult?.trusted) {
           emailService.sendLoginNotification(user.email, user.firstName || user.username, {
             browser: emailParsed.browser, os: emailParsed.os, ipAddress: emailIP,
-            time: new Date(), isNewDevice: activity.isNewDevice, deviceType: emailParsed.deviceType,
+            time: new Date(), isNewDevice: true, deviceType: emailParsed.deviceType,
           }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
         }
       }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
