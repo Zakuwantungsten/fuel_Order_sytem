@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check, Save, CalendarDays, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -176,6 +176,72 @@ const clearFormStorage = () => {
     console.error('Error clearing form from local storage:', error);
   }
 };
+
+// Scoped stylesheet for the redesigned desktop form. Everything is namespaced
+// under `.lpo-rd` so it never leaks into the rest of the app, and theme-sensitive
+// surfaces have explicit `.dark` overrides (inline styles alone can't react to the
+// `dark` class on <html>). Inline `<style>` is permitted by the app CSP
+// (style-src 'self' 'unsafe-inline'); the fonts are self-hosted (see index.css).
+const LPO_RD_STYLES = `
+.lpo-rd{font-family:'Plus Jakarta Sans',ui-sans-serif,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
+.lpo-rd .mono{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.2px;}
+.lpo-rd input[type=number]::-webkit-inner-spin-button,.lpo-rd input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+.lpo-rd input[type=number]{-moz-appearance:textfield;}
+.lpo-rd .lpo-scroll::-webkit-scrollbar{width:11px;height:11px;}
+.lpo-rd .lpo-scroll::-webkit-scrollbar-thumb{background:#cdd5e0;border-radius:9px;border:3px solid #fff;}
+.lpo-rd .lpo-scroll::-webkit-scrollbar-track{background:transparent;}
+.dark .lpo-rd .lpo-scroll::-webkit-scrollbar-thumb{background:#334155;border-color:#0b1220;}
+@keyframes lpospin{to{transform:rotate(360deg);}}
+.lpo-rd .lpo-spin{animation:lpospin 1s linear infinite;}
+/* Uppercase field label */
+.lpo-rd .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px;}
+.dark .lpo-rd .lbl{color:#8a97a8;}
+/* Header field */
+.lpo-rd .fld{width:100%;box-sizing:border-box;height:40px;padding:0 13px;border:1px solid #e3e8ef;border-radius:10px;background:#fff;color:#0f1729;font-size:13.5px;font-weight:600;outline:none;transition:border-color .12s,box-shadow .12s;}
+.lpo-rd .fld:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.12);}
+.lpo-rd .fld::placeholder{color:#a3aebd;font-weight:500;}
+.dark .lpo-rd .fld{background:#0f172a;border-color:#334155;color:#e2e8f0;}
+.lpo-rd .fld-ro{background:#f3f5f9;color:#475569;}
+.dark .lpo-rd .fld-ro{background:#0b1220;border-color:#1e293b;color:#94a3b8;}
+/* Table cell input */
+.lpo-rd .cell-input{width:100%;box-sizing:border-box;height:34px;padding:0 10px;border:1px solid #e6eaf1;border-radius:8px;background:#fff;color:#0f1729;font-size:13px;font-weight:500;outline:none;transition:border-color .12s,box-shadow .12s;}
+.lpo-rd .cell-input:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.12);}
+.lpo-rd .cell-input::placeholder{color:#a3aebd;}
+.dark .lpo-rd .cell-input{background:#0f172a;border-color:#334155;color:#e2e8f0;}
+/* Small inline input (bulk bar / amend) */
+.lpo-rd .mini-input{height:30px;border:1px solid #c9cdf6;border-radius:7px;padding:0 8px;font-size:12px;font-weight:600;color:#0f1729;outline:none;background:#fff;}
+.dark .lpo-rd .mini-input{background:#0f172a;border-color:#4338ca;color:#e2e8f0;}
+/* Section card surfaces */
+.lpo-rd .panel{border:1px solid #eef1f6;border-radius:14px;background:#fbfcfe;}
+.dark .lpo-rd .panel{border-color:#1e293b;background:#0f172a;}
+/* Dropdown menu */
+.lpo-rd .menu{background:#fff;border:1px solid #e6eaf1;border-radius:12px;box-shadow:0 18px 40px -12px rgba(15,23,42,.3);}
+.dark .lpo-rd .menu{background:#0f172a;border-color:#334155;box-shadow:0 18px 40px -12px rgba(0,0,0,.6);}
+.lpo-rd .menu-item:hover{background:#f1f4f9;}
+.dark .lpo-rd .menu-item:hover{background:#1e293b;}
+/* Entries table */
+.lpo-rd .lpo-table{width:100%;border-collapse:collapse;min-width:1020px;}
+.lpo-rd .lpo-table thead tr{background:#f7f9fc;}
+.dark .lpo-rd .lpo-table thead tr{background:#0f172a;}
+.lpo-rd .lpo-th{padding:11px 12px;text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#94a3b8;white-space:nowrap;}
+.lpo-rd .lpo-row{border-top:1px solid #eef1f6;}
+.dark .lpo-rd .lpo-row{border-top-color:#1e293b;}
+.lpo-rd .lpo-row td{padding:9px 12px;vertical-align:middle;}
+.lpo-rd .row-green{background:#f6fdf9;} .dark .lpo-rd .row-green{background:rgba(34,197,94,.09);}
+.lpo-rd .row-blue{background:#f5f8ff;} .dark .lpo-rd .row-blue{background:rgba(59,130,246,.11);}
+.lpo-rd .row-orange{background:#fff8f1;} .dark .lpo-rd .row-orange{background:rgba(249,115,22,.11);}
+.lpo-rd .row-amber{background:#fffaf0;} .dark .lpo-rd .row-amber{background:rgba(245,158,11,.12);}
+.lpo-rd .row-red{background:#fef2f2;} .dark .lpo-rd .row-red{background:rgba(239,68,68,.11);}
+.lpo-rd .amount-cell{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;font-weight:600;color:#0f1729;}
+.dark .lpo-rd .amount-cell{color:#e2e8f0;}
+.lpo-rd .mode-chip{font-size:10px;font-weight:700;border:1px solid #dde3ec;border-radius:6px;padding:4px 4px;background:#fff;color:#64748b;outline:none;cursor:pointer;}
+.dark .lpo-rd .mode-chip{background:#0f172a;border-color:#334155;color:#cbd5e1;}
+.lpo-rd .icon-btn{width:28px;height:28px;border:1px solid #e6eaf1;border-radius:7px;background:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}
+.dark .lpo-rd .icon-btn{background:#0f172a;border-color:#334155;}
+.lpo-rd .icon-btn-danger{border-color:#f3dada;} .dark .lpo-rd .icon-btn-danger{border-color:#7f1d1d;}
+.lpo-rd .addrow-btn{width:100%;padding:13px;border:none;background:#fbfcff;color:#4f46e5;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;}
+.dark .lpo-rd .addrow-btn{background:#0f172a;color:#818cf8;}
+`;
 
 const LPODetailForm: React.FC<LPODetailFormProps> = ({
   isOpen,
@@ -3159,7 +3225,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4" onClick={handleCancel}>
-      <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-lg shadow-xl max-w-6xl w-full h-full sm:h-auto max-h-screen sm:max-h-[90vh] overflow-y-auto transition-colors" onClick={(e) => e.stopPropagation()}>
+      {/* ===== Scoped styles for the redesigned LPO form (CSP-safe: 'unsafe-inline' allowed).
+           Theme-sensitive surfaces flip via `.dark` selectors so dark mode stays reactive. ===== */}
+      <style>{LPO_RD_STYLES}</style>
+
+      <div className="lpo-rd bg-white dark:bg-[#0b1220] rounded-none sm:rounded-[18px] shadow-xl max-w-[1140px] w-full h-full sm:h-auto max-h-screen sm:max-h-[92vh] overflow-hidden border border-[#eef1f6] dark:border-[#1e293b] flex flex-col transition-colors" onClick={(e) => e.stopPropagation()}>
         {/* Forwarding mode banner */}
         {isForwardingMode && forwardedFromInfo && (
           <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 px-6 py-3">
@@ -3172,39 +3242,49 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           </div>
         )}
 
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              {initialData ? 'Edit LPO Document' : 'New LPO Document'}
-            </h2>
-            {/* Draft indicator */}
-            {hasDraft && !initialData && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                Draft saved
-              </span>
-            )}
+        {/* ===== HEADER ===== */}
+        <div className="flex items-center justify-between px-5 sm:px-[26px] py-4 sm:py-5 border-b border-[#eef1f6] dark:border-[#1e293b] bg-gradient-to-b from-[#fbfcfe] to-white dark:from-[#0f172a] dark:to-[#0b1220]">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-[42px] h-[42px] rounded-[12px] flex items-center justify-center text-white shrink-0" style={{ background: 'linear-gradient(155deg,#4f46e5,#6366f1)', boxShadow: '0 6px 14px -4px rgba(79,70,229,.55)' }}>
+              <Fuel className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="m-0 text-[19px] font-bold text-[#0f1729] dark:text-gray-100 tracking-tight">
+                  {initialData ? 'Edit LPO Document' : 'New LPO Document'}
+                </h2>
+                {hasDraft && !initialData && (
+                  <span className="inline-flex items-center gap-1.5 px-[9px] py-[3px] rounded-full bg-[#eef0fe] dark:bg-indigo-900/40 text-[#4338ca] dark:text-indigo-300 text-[11px] font-bold">
+                    <Save className="w-3 h-3" />Draft saved
+                  </span>
+                )}
+              </div>
+              <p className="m-0 mt-[3px] text-[12.5px] text-[#8a97a8] dark:text-gray-400 font-medium truncate">
+                Local Purchase Order · Fuel allocation &amp; checkpoint tracking
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Discard draft button */}
+          <div className="flex items-center gap-2.5 shrink-0">
             {hasDraft && !initialData && (
               <button
                 type="button"
                 onClick={handleDiscardDraft}
-                className="text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 px-3 py-1 rounded border border-red-300 dark:border-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-[9px] border border-[#f0c9c9] dark:border-red-900/60 bg-white dark:bg-transparent text-[#c0392b] dark:text-red-400 text-[12.5px] font-semibold hover:bg-red-50 dark:hover:bg-red-900/20"
               >
-                Discard Draft
+                <Trash2 className="w-4 h-4" />Discard
               </button>
             )}
             <button
+              type="button"
               onClick={handleCancel}
-              className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+              className="w-[34px] h-[34px] rounded-[9px] border border-[#eef1f6] dark:border-[#1e293b] bg-white dark:bg-transparent text-[#64748b] dark:text-gray-400 flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800"
             >
-              <X className="w-6 h-6" />
+              <X className="w-[18px] h-[18px]" />
             </button>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        <form onSubmit={handleSubmit} className="lpo-scroll flex-1 overflow-y-auto p-5 sm:p-[26px]">
           {/* Duplicate Allocation Warning Banner */}
           {duplicateWarnings.size > 0 && formData.station?.toUpperCase() !== 'CASH' && (() => {
             const exactDuplicates = Array.from(duplicateWarnings.entries()).filter(([_, info]) => !info.isDifferentAmount);
@@ -3268,14 +3348,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             );
           })()}
 
-          {/* Header Information */}
-          <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">LPO Header</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ===== 01 · ORDER DETAILS ===== */}
+          <div className="panel mb-[22px] p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-[11px] font-bold tracking-[.08em] uppercase text-[#4f46e5] dark:text-indigo-400">01</span>
+              <span className="text-[14px] font-bold text-[#0f1729] dark:text-gray-100">Order details</span>
+              <div className="flex-1 h-px bg-[#eef1f6] dark:bg-[#1e293b]" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* LPO No */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  LPO No. *
-                </label>
+                <label className="lbl">LPO No.</label>
                 <div className="relative">
                   <input
                     type="text"
@@ -3284,90 +3367,102 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     onChange={handleHeaderChange}
                     required
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200 font-semibold"
+                    className="fld mono fld-ro"
+                    style={{ letterSpacing: '.02em' }}
                   />
-                  {isLoadingLpoNumber && (
-                    <Loader2 className="absolute right-3 top-2.5 w-5 h-5 text-gray-400 animate-spin" />
-                  )}
+                  <span className="absolute right-3 top-[11px] text-[#94a3b8]">
+                    {isLoadingLpoNumber ? <Loader2 className="w-[15px] h-[15px] animate-spin" /> : <Lock className="w-[15px] h-[15px]" />}
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Auto-generated LPO number</p>
+                <p className="m-0 mt-1.5 text-[11px] text-[#a3aebd] font-medium">Auto-generated</p>
               </div>
 
+              {/* Date */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Date *
-                </label>
-                <input
-                  type="date"
-                  name="date"
-                  value={formData.date}
-                  onChange={handleHeaderChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                />
+                <label className="lbl">Date</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    name="date"
+                    value={formData.date}
+                    onChange={handleHeaderChange}
+                    required
+                    className="fld"
+                    style={{ paddingLeft: '38px' }}
+                  />
+                  <span className="absolute left-[13px] top-[11px] text-[#94a3b8] pointer-events-none">
+                    <CalendarDays className="w-[15px] h-[15px]" />
+                  </span>
+                </div>
               </div>
 
+              {/* Station */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Station *
-                </label>
+                <label className="lbl">Station</label>
                 <div className="relative" ref={stationDropdownRef}>
                   <button
                     type="button"
                     onClick={() => !loadingStations && setShowStationDropdown(!showStationDropdown)}
                     disabled={loadingStations}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="fld flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ color: formData.station ? undefined : '#94a3b8' }}
                   >
-                    <span className={!formData.station ? 'text-gray-400' : ''}>
-                      {loadingStations ? 'Loading stations...' : (formData.station || 'Select Station')}
+                    <span className="inline-flex items-center gap-2 truncate">
+                      <MapPin className="w-[15px] h-[15px] text-[#4f46e5] shrink-0" />
+                      {loadingStations ? 'Loading stations...' : (formData.station || 'Select station')}
                     </span>
-                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-4 h-4 shrink-0 text-[#94a3b8] transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
                   </button>
-                  
+
                   {showStationDropdown && !loadingStations && (
-                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    <div className="menu absolute z-40 left-0 right-0 top-[46px] p-1.5 max-h-[280px] overflow-y-auto">
                       <button
                         type="button"
                         onClick={() => {
                           handleHeaderChange({ target: { name: 'station', value: '' } } as any);
                           setShowStationDropdown(false);
                         }}
-                        className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                          !formData.station ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
-                        }`}
+                        className={`menu-item w-full flex items-center justify-between gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-semibold ${!formData.station ? 'text-[#4f46e5] dark:text-indigo-400' : 'text-[#0f1729] dark:text-gray-100'}`}
                       >
-                        <span>Select Station</span>
+                        <span>Select station</span>
                         {!formData.station && <Check className="w-4 h-4" />}
                       </button>
-                      {availableStations.map(station => (
-                        <button
-                          key={station._id}
-                          type="button"
-                          onClick={() => {
-                            handleHeaderChange({ target: { name: 'station', value: station.stationName } } as any);
-                            setShowStationDropdown(false);
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                            formData.station === station.stationName ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
-                          }`}
-                        >
-                          <span>{station.stationName}</span>
-                          {formData.station === station.stationName && <Check className="w-4 h-4" />}
-                        </button>
-                      ))}
-                      <div className="border-t border-gray-200 dark:border-gray-600"></div>
+                      {availableStations.map(station => {
+                        const cur = station.currency ?? (station.defaultRate < 10 ? 'USD' : 'TZS');
+                        const active = formData.station === station.stationName;
+                        return (
+                          <button
+                            key={station._id}
+                            type="button"
+                            onClick={() => {
+                              handleHeaderChange({ target: { name: 'station', value: station.stationName } } as any);
+                              setShowStationDropdown(false);
+                            }}
+                            className="menu-item w-full flex items-center justify-between gap-2.5 px-[11px] py-2 rounded-lg text-left"
+                          >
+                            <span className="flex flex-col gap-0.5 min-w-0">
+                              <span className={`text-[13px] font-semibold truncate ${active ? 'text-[#4f46e5] dark:text-indigo-400' : 'text-[#0f1729] dark:text-gray-100'}`}>{station.stationName}</span>
+                              <span className="text-[11px] text-[#9aa6b6] font-medium truncate">
+                                Going {station.defaultLitersGoing}L · Return {station.defaultLitersReturning}L · @{station.defaultRate}/L
+                              </span>
+                            </span>
+                            {active
+                              ? <Check className="w-4 h-4 text-[#4f46e5] dark:text-indigo-400 shrink-0" />
+                              : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#f1f4f9] dark:bg-[#1e293b] text-[#64748b] dark:text-gray-300 shrink-0">{cur}</span>}
+                          </button>
+                        );
+                      })}
+                      <div className="h-px bg-[#eef1f6] dark:bg-[#1e293b] my-1.5 mx-1" />
                       <button
                         type="button"
                         onClick={() => {
                           handleHeaderChange({ target: { name: 'station', value: 'CASH' } } as any);
                           setShowStationDropdown(false);
                         }}
-                        className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                          formData.station === 'CASH' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
-                        }`}
+                        className="menu-item w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold text-[#c2410c]"
                       >
-                        <span>CASH</span>
-                        {formData.station === 'CASH' && <Check className="w-4 h-4" />}
+                        <Banknote className="w-4 h-4" />CASH purchase
+                        {formData.station === 'CASH' && <Check className="w-4 h-4 ml-auto" />}
                       </button>
                       <button
                         type="button"
@@ -3375,12 +3470,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           handleHeaderChange({ target: { name: 'station', value: 'CUSTOM' } } as any);
                           setShowStationDropdown(false);
                         }}
-                        className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                          formData.station === 'CUSTOM' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
-                        }`}
+                        className="menu-item w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold text-[#6d28d9] dark:text-violet-400"
                       >
-                        <span>CUSTOM</span>
-                        {formData.station === 'CUSTOM' && <Check className="w-4 h-4" />}
+                        <PlusCircle className="w-4 h-4" />CUSTOM station
+                        {formData.station === 'CUSTOM' && <Check className="w-4 h-4 ml-auto" />}
                       </button>
                     </div>
                   )}
@@ -3389,8 +3482,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     if (station) {
                       const currency = station.currency ?? (station.defaultRate < 10 ? 'USD' : 'TZS');
                       return (
-                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                          Default: Going {station.defaultLitersGoing}L, Returning {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
+                        <p className="m-0 mt-1.5 text-[11px] text-[#16a34a] dark:text-green-400 font-semibold flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5" />
+                          Going {station.defaultLitersGoing}L · Return {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
                         </p>
                       );
                     }
@@ -3399,17 +3493,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 </div>
               </div>
 
+              {/* Order Of */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Order Of *
-                </label>
+                <label className="lbl">Order of</label>
                 <input
                   type="text"
                   name="orderOf"
                   value={formData.orderOf}
                   onChange={handleHeaderChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="fld"
                 />
               </div>
             </div>
@@ -3417,14 +3510,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
           {/* Cash Cancellation Point - Only shown when CASH is selected */}
           {formData.station === 'CASH' && (
-            <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-300 dark:border-orange-600 rounded-lg">
-              <div className="flex items-center space-x-2 mb-3">
-                  <Ban className="w-5 h-5 text-orange-600" />
-                  <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-200">Cash Purchase Checkpoint (Required)</h4>
+            <div className="mb-[22px] p-[18px] rounded-[14px] border border-orange-200 dark:border-orange-900/50 bg-gradient-to-b from-orange-50/70 to-white dark:from-orange-900/10 dark:to-transparent">
+              <div className="flex items-center gap-2.5 mb-4">
+                  <span className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center shrink-0 bg-orange-200/70 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300">
+                    <Ban className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <div className="text-[13.5px] font-bold text-orange-800 dark:text-orange-200">Cash purchase checkpoint <span className="text-[11px] font-semibold text-orange-500">(required)</span></div>
+                    <div className="text-[11.5px] font-medium text-orange-600 dark:text-orange-400">Select where cash fuel was bought. Existing LPOs at these checkpoints are cancelled or amended.</div>
+                  </div>
                 </div>
-                <p className="text-xs text-orange-700 dark:text-orange-300 mb-4">
-                  <strong>Required:</strong> Select direction(s) and checkpoint(s) where cash fuel was purchased. You can select one or both directions. Any existing LPOs at selected checkpoints will be automatically cancelled.
-                </p>
 
                 {/* All controls on one row: Going | Returning | Rate | Default Liters — all same height */}
                 <div className="flex flex-wrap gap-3 mb-4 items-end">
@@ -3747,17 +3842,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
           {/* Custom Station Section - Only shown when CUSTOM is selected */}
           {formData.station === 'CUSTOM' && (
-            <div className="mt-4 p-4 border-2 border-purple-300 dark:border-purple-700 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-              <div className="flex items-center space-x-2 mb-4">
-                  <MapPin className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                  <span className="font-medium text-purple-800 dark:text-purple-300">
-                    Custom Station (Unlisted Station)
+            <div className="mb-[22px] p-[18px] rounded-[14px] border border-purple-200 dark:border-purple-900/50 bg-gradient-to-b from-violet-50/70 to-white dark:from-violet-900/10 dark:to-transparent">
+              <div className="flex items-center gap-2.5 mb-4">
+                  <span className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center shrink-0 bg-violet-200/70 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
+                    <MapPin className="w-4 h-4" />
                   </span>
+                  <div>
+                    <div className="text-[13.5px] font-bold text-violet-800 dark:text-violet-300">Custom station (unlisted)</div>
+                    <div className="text-[11.5px] font-medium text-violet-600 dark:text-violet-400">For ad-hoc stations. Name it and map which fuel-record column each direction updates.</div>
+                  </div>
                 </div>
-                
-                <p className="text-sm text-purple-600 dark:text-purple-400 mb-4">
-                  Use this for small stations in Zambia or other unlisted locations. Enter the station name and select which fuel record column(s) should be updated based on truck direction.
-                </p>
 
                 {/* Custom Station Name, Rate and Default Liters */}
                 <div className="mb-4 flex flex-col sm:flex-row gap-3">
@@ -3976,57 +4070,64 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             )}
 
 
-          {/* LPO Entries */}
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Fuel Supply Details</h3>
+          {/* ===== 02 · FUEL SUPPLY DETAILS ===== */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3.5 flex-wrap">
+              <span className="text-[11px] font-bold tracking-[.08em] uppercase text-[#4f46e5] dark:text-indigo-400">02</span>
+              <span className="text-[14px] font-bold text-[#0f1729] dark:text-gray-100">Fuel supply details</span>
+              {(() => { const n = (formData.entries?.filter(e => e != null).length || 0); return (
+                <span className="text-[12px] text-[#9aa6b6] font-medium">{n} {n === 1 ? 'truck' : 'trucks'}</span>
+              ); })()}
               {isCheckingDuplicates && (
-                <span className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
-                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                  Checking for duplicates...
+                <span className="text-[12px] text-[#9aa6b6] inline-flex items-center gap-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />Checking duplicates…
                 </span>
               )}
+              <div className="flex-1 h-px bg-[#eef1f6] dark:bg-[#1e293b] min-w-[20px]" />
+              <span className="text-[11.5px] text-[#9aa6b6] font-medium hidden md:inline-flex items-center gap-1.5">
+                <ClipboardPaste className="w-3.5 h-3.5" />Paste a column to fill multiple rows
+              </span>
             </div>
 
             {/* Bulk action bar — visible when 1+ entries are selected */}
             {selectedEntries.size > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mb-3 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-700 rounded-lg">
-                <span className="text-xs font-semibold text-primary-700 dark:text-primary-300 flex-shrink-0">
-                  {selectedEntries.size} selected
+              <div className="flex flex-wrap items-center gap-2.5 mb-3 px-3.5 py-2.5 rounded-[11px] bg-[#eef0fe] dark:bg-indigo-900/20 border border-[#d9dcfb] dark:border-indigo-800">
+                <span className="text-[12px] font-bold text-[#4338ca] dark:text-indigo-300 inline-flex items-center gap-1.5">
+                  <CheckCheck className="w-4 h-4" />{selectedEntries.size} selected
                 </span>
-                <div className="flex items-center gap-1">
-                  <label className="text-xs text-gray-600 dark:text-gray-400">Liters:</label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11.5px] text-[#5b62d6] dark:text-indigo-300 font-semibold">Liters</span>
                   <input
                     type="number"
                     value={bulkLiters}
                     onChange={e => setBulkLiters(e.target.value)}
                     placeholder="0"
-                    className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    className="mini-input mono w-16"
                   />
                   <button
                     type="button"
                     onClick={() => { applyBulkField('liters', parseFloat(bulkLiters) || 0); setBulkLiters(''); }}
                     disabled={!bulkLiters || parseFloat(bulkLiters) <= 0}
-                    className="px-2 py-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white rounded text-xs"
+                    className="h-[30px] px-2.5 rounded-[7px] bg-[#4f46e5] hover:bg-[#4338ca] disabled:opacity-40 text-white text-[11.5px] font-bold"
                   >
                     Apply
                   </button>
                 </div>
-                <div className="flex items-center gap-1">
-                  <label className="text-xs text-gray-600 dark:text-gray-400">Rate:</label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11.5px] text-[#5b62d6] dark:text-indigo-300 font-semibold">Rate</span>
                   <input
                     type="number"
                     value={bulkRate}
                     onChange={e => setBulkRate(e.target.value)}
                     placeholder="0"
                     step="0.01"
-                    className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    className="mini-input mono w-16"
                   />
                   <button
                     type="button"
                     onClick={() => { applyBulkField('rate', parseFloat(bulkRate) || 0); setBulkRate(''); }}
                     disabled={!bulkRate || parseFloat(bulkRate) <= 0}
-                    className="px-2 py-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white rounded text-xs"
+                    className="h-[30px] px-2.5 rounded-[7px] bg-[#4f46e5] hover:bg-[#4338ca] disabled:opacity-40 text-white text-[11.5px] font-bold"
                   >
                     Apply
                   </button>
@@ -4034,23 +4135,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 <button
                   type="button"
                   onClick={handleBulkToggleDirection}
-                  className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40 rounded text-xs font-medium"
+                  className="inline-flex items-center gap-1.5 h-[30px] px-2.5 rounded-[7px] bg-[#dbe4ff] dark:bg-blue-900/40 text-[#1d4ed8] dark:text-blue-300 hover:bg-[#cdd9fb] dark:hover:bg-blue-800/50 text-[11.5px] font-bold"
                 >
-                  <ArrowLeft className="w-3 h-3" /><ArrowRight className="w-3 h-3" />
-                  Toggle Dir
+                  <ArrowLeftRight className="w-3.5 h-3.5" />Toggle direction
                 </button>
                 <button
                   type="button"
                   onClick={handleBulkDelete}
-                  className="flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800/40 rounded text-xs font-medium"
+                  className="inline-flex items-center gap-1.5 h-[30px] px-2.5 rounded-[7px] bg-[#fde2e2] dark:bg-red-900/40 text-[#b91c1c] dark:text-red-300 hover:bg-[#fbd0d0] dark:hover:bg-red-800/50 text-[11.5px] font-bold"
                 >
-                  <Trash2 className="w-3 h-3" />
-                  Delete
+                  <Trash2 className="w-3.5 h-3.5" />Delete
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedEntries(new Set())}
-                  className="ml-auto text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  className="ml-auto text-[11.5px] text-[#6b73c9] dark:text-indigo-300 font-semibold hover:underline"
                 >
                   Clear
                 </button>
@@ -4239,11 +4338,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             </div>
 
             {/* Desktop Table View (md+) */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border dark:border-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700">
+            <div className="hidden md:block">
+             <div className="rounded-[13px] border border-[#eaedf3] dark:border-[#1e293b] overflow-hidden">
+              <div className="lpo-scroll overflow-x-auto">
+              <table className="lpo-table">
+                <thead>
                   <tr>
-                    <th className="px-3 py-3 w-8">
+                    <th className="lpo-th" style={{ width: '38px', paddingLeft: '14px' }}>
                       <input
                         type="checkbox"
                         checked={(formData.entries?.filter(e => e != null).length || 0) > 0 && selectedEntries.size === (formData.entries?.filter(e => e != null).length || 0)}
@@ -4254,42 +4355,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             setSelectedEntries(new Set());
                           }
                         }}
-                        className="rounded border-gray-300 dark:border-gray-600 text-primary-600"
+                        className="w-[15px] h-[15px] cursor-pointer accent-[#4f46e5]"
                         title="Select all"
                       />
                     </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      Truck No.
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      DO No.
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      Direction
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      Liters
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      Rate
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      Dest.
-                    </th>
+                    <th className="lpo-th">Truck</th>
+                    <th className="lpo-th">DO number</th>
+                    <th className="lpo-th">Direction</th>
+                    <th className="lpo-th" style={{ textAlign: 'right' }}>Liters</th>
+                    <th className="lpo-th" style={{ textAlign: 'right' }}>Rate</th>
+                    <th className="lpo-th" style={{ textAlign: 'right' }}>Amount</th>
+                    <th className="lpo-th">Dest.</th>
                     {hasAnyIssue && (
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                        Status
-                      </th>
+                      <th className="lpo-th">Status</th>
                     )}
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-200 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    <th className="lpo-th" style={{ width: '74px', textAlign: 'right' }} />
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody>
                   {(formData.entries || []).filter(entry => entry != null).map((entry, index) => {
                       const autoFill = entryAutoFillData[index] || { direction: 'going', loading: false, fetched: false };
                       const duplicateInfo = duplicateWarnings.get(entry?.truckNo || '');
@@ -4298,8 +4381,23 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
                       const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && (autoFill as EntryAutoFillData).entryType !== 'ref';
                       return (
-                        <tr key={index} className={`${(autoFill as EntryAutoFillData).entryType === 'ref' ? 'bg-orange-50 dark:bg-orange-900/10' : (autoFill as EntryAutoFillData).entryType === 'da' ? 'bg-blue-50 dark:bg-blue-900/10' : autoFill.fetched ? 'bg-green-50 dark:bg-green-900/20' : ''} ${hasNoRecordWarning ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isExactDuplicate ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDifferentAmount ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${!autoFill.fetched && !(autoFill as EntryAutoFillData).entryType && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'dark:bg-gray-800' : ''}`}>
-                          <td className="px-3 py-3 w-8">
+                        <tr key={index} className={`lpo-row ${
+                          (autoFill as EntryAutoFillData).entryType === 'ref' ? 'row-orange'
+                          : (autoFill as EntryAutoFillData).entryType === 'da' ? 'row-blue'
+                          : isExactDuplicate ? 'row-red'
+                          : isDifferentAmount ? 'row-blue'
+                          : hasNoRecordWarning ? 'row-amber'
+                          : autoFill.fetched ? 'row-green'
+                          : ''
+                        }`}>
+                          <td style={{ paddingLeft: '14px', borderLeft: `3px solid ${
+                            (autoFill as EntryAutoFillData).entryType === 'ref' ? '#f97316'
+                            : (autoFill as EntryAutoFillData).entryType === 'da' ? '#3b82f6'
+                            : isExactDuplicate ? '#ef4444'
+                            : isDifferentAmount ? '#3b82f6'
+                            : hasNoRecordWarning ? '#f59e0b'
+                            : autoFill.fetched ? '#22c55e'
+                            : 'transparent'}` }}>
                             <input
                               type="checkbox"
                               checked={selectedEntries.has(index)}
@@ -4308,10 +4406,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 if (e.target.checked) next.add(index); else next.delete(index);
                                 setSelectedEntries(next);
                               }}
-                              className="rounded border-gray-300 dark:border-gray-600 text-primary-600"
+                              className="w-[15px] h-[15px] cursor-pointer accent-[#4f46e5]"
                             />
                           </td>
-                          <td className="px-3 py-3">
+                          <td>
                             <div className="flex items-center gap-1.5">
                               <input
                                 type="text"
@@ -4320,7 +4418,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 onPaste={(e) => handleTruckPaste(index, e)}
                                 placeholder="T762 DWK"
                                 title="Paste multiple trucks (one per line) to auto-fill multiple rows"
-                                className={`w-28 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${isExactDuplicate ? 'border-red-500 dark:border-red-400' : ''} ${isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : ''} ${hasNoRecordWarning ? 'border-amber-500 dark:border-amber-400' : ''} ${!hasDuplicate && !hasNoRecordWarning ? 'border-gray-300 dark:border-gray-600' : ''}`}
+                                className="cell-input mono"
+                                style={{ width: '104px', ...(isExactDuplicate ? { borderColor: '#ef4444' } : isDifferentAmount ? { borderColor: '#3b82f6' } : hasNoRecordWarning ? { borderColor: '#f59e0b' } : {}) }}
                               />
                               {autoFill.loading && (
                                 <Loader2 className="w-4 h-4 text-primary-500 animate-spin flex-shrink-0" />
@@ -4339,16 +4438,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               )}
                             </div>
                           </td>
-                          
+
                           {/* DO Number Input Cell - for DO-first search */}
-                          <td className="px-3 py-3">
+                          <td>
                             <div className="flex items-center gap-1.5">
                               {/* Mode chip — NORM/DA/REF/NIL */}
                               <select
                                 value={autoFill.entryType || 'regular'}
                                 onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
                                 title={ENTRY_MODE_OPTIONS.find(o => o.value === (autoFill.entryType || 'regular'))?.title}
-                                className={`flex-shrink-0 px-1 py-1 border rounded text-xs font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
+                                className="mode-chip flex-shrink-0"
+                                style={autoFill.entryType === 'da' ? { borderColor: '#93c5fd', color: '#1d4ed8' } : autoFill.entryType === 'ref' ? { borderColor: '#f8c89a', color: '#c2410c' } : autoFill.entryType === 'nil' ? { borderColor: '#d8b4fe', color: '#7c3aed' } : {}}
                               >
                                 {ENTRY_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                               </select>
@@ -4366,41 +4466,42 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                   onPaste={(e) => handleDOPaste(index, e)}
                                   placeholder="0001/26"
                                   title="Enter DO number — paste multiple (one per line) to fill down"
-                                  className={`w-24 px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
+                                  className="cell-input mono"
+                                  style={{ width: '88px', ...(autoFill.entryType === 'da' ? { borderColor: '#93c5fd' } : autoFill.entryType === 'ref' ? { borderColor: '#f8c89a' } : autoFill.entryType === 'nil' ? { borderColor: '#d8b4fe' } : {}) }}
                                 />
                                 {autoFill.loading && (
                                   <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
                                 )}
                                 {autoFill.entryType === 'da' && autoFill.referenceDoNo && (
-                                  <span className="absolute -bottom-4 left-0 text-[9px] text-gray-500 dark:text-gray-400 truncate max-w-[90px]" title={`Ref DO: ${autoFill.referenceDoNo}`}>
+                                  <span className="absolute -bottom-4 left-0 text-[9px] text-gray-500 dark:text-gray-400 truncate max-w-[90px] mono" title={`Ref DO: ${autoFill.referenceDoNo}`}>
                                     →{autoFill.referenceDoNo}
                                   </span>
                                 )}
                               </div>
                             </div>
                           </td>
-                          
-                          <td className="px-3 py-3">
+
+                          <td>
                             {autoFill.entryType === 'ref' ? (
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300">
                                 REF
                               </span>
                             ) : autoFill.entryType === 'da' ? (
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => toggleDirection(index)}
-                                  className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-bold ${
                                     autoFill.direction === 'going'
-                                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
-                                      : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
+                                      ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/50'
+                                      : 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/50'
                                   }`}
                                   title="Click to toggle direction"
                                 >
                                   {autoFill.direction === 'going' ? (
-                                    <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
+                                    <>Going <ArrowRight className="w-3.5 h-3.5" /></>
                                   ) : (
-                                    <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
+                                    <><ArrowLeft className="w-3.5 h-3.5" /> Return</>
                                   )}
                                 </button>
                                 <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400">DA</span>
@@ -4409,32 +4510,33 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               <button
                                 type="button"
                                 onClick={() => toggleDirection(index)}
-                                className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-bold ${
                                   autoFill.direction === 'going'
-                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
-                                    : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/40'
+                                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/50'
+                                    : 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/50'
                                 }`}
                                 title="Click to toggle direction"
                               >
                                 {autoFill.direction === 'going' ? (
-                                  <>Going <ArrowRight className="w-3 h-3 ml-1" /></>
+                                  <>Going <ArrowRight className="w-3.5 h-3.5" /></>
                                 ) : (
-                                  <><ArrowLeft className="w-3 h-3 mr-1" /> Return</>
+                                  <><ArrowLeft className="w-3.5 h-3.5" /> Return</>
                                 )}
                               </button>
                             )}
                           </td>
-                          <td className="px-3 py-3">
+                          <td style={{ textAlign: 'right' }}>
                             <input
                               type="number"
                               value={entry?.liters || 0}
                               onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
                               onPaste={(e) => handleNumberFieldPaste(index, 'liters', e)}
                               title="Paste a column of numbers to fill down"
-                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              className="cell-input mono"
+                              style={{ width: '62px', textAlign: 'right' }}
                             />
                           </td>
-                          <td className="px-3 py-3">
+                          <td style={{ textAlign: 'right' }}>
                             <input
                               type="number"
                               value={entry?.rate || 0}
@@ -4442,24 +4544,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               onPaste={(e) => handleNumberFieldPaste(index, 'rate', e)}
                               title="Paste a column of numbers to fill down"
                               step="0.01"
-                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              className="cell-input mono"
+                              style={{ width: '62px', textAlign: 'right' }}
                             />
                           </td>
-                          <td className="px-3 py-3">
-                            <input
-                              type="number"
-                              value={(entry?.amount || 0).toFixed(2)}
-                              readOnly
-                              className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-gray-100"
-                            />
+                          <td className="amount-cell" style={{ textAlign: 'right' }}>
+                            {(entry?.amount || 0).toFixed(2)}
                           </td>
-                          <td className="px-3 py-3">
+                          <td>
                             <input
                               type="text"
                               value={entry?.dest || 'NIL'}
                               onChange={(e) => handleEntryChange(index, 'dest', e.target.value)}
                               placeholder="NIL"
-                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              className="cell-input"
+                              style={{ width: '72px' }}
                             />
                           </td>
                           {/* Status column — warnings, journey info, navigation */}
@@ -4617,14 +4716,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               </div>
                             </td>
                           )}
-                          <td className="px-3 py-3">
-                            <div className="flex items-center space-x-1">
+                          <td style={{ textAlign: 'right' }}>
+                            <span className="inline-flex gap-1 justify-end">
                               {/* Inspect button - Quick view fuel record */}
                               {autoFill.fuelRecord && (
                                 <button
                                   type="button"
                                   onClick={() => handleInspectRecord(index)}
-                                  className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                                  className="icon-btn text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                                   title="Inspect fuel record (view consumption & balance)"
                                 >
                                   <Eye className="w-4 h-4" />
@@ -4634,122 +4733,125 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleRemoveEntry(index)}
-                                className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                                className="icon-btn icon-btn-danger text-[#dc2626] dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
                                 title="Remove entry"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
-                            </div>
+                            </span>
                           </td>
                         </tr>
                       );
                     })}
-                  <tr
-                    onClick={handleAddEntry}
-                    className="cursor-pointer hover:bg-primary-50 dark:hover:bg-primary-900/20 border-t border-dashed border-primary-300 dark:border-primary-600"
-                  >
-                    <td colSpan={hasAnyIssue ? 10 : 9} className="px-4 py-3 text-center text-sm text-primary-600 dark:text-primary-400">
-                      <span className="inline-flex items-center gap-1">
+                  <tr style={{ borderTop: '1px dashed #c9cdf6' }}>
+                    <td colSpan={hasAnyIssue ? 10 : 9} style={{ padding: 0 }}>
+                      <button type="button" onClick={handleAddEntry} className="addrow-btn">
                         <Plus className="w-4 h-4" />
                         Add new entry
-                      </span>
+                      </button>
                     </td>
                   </tr>
                 </tbody>
               </table>
+              </div>
+             </div>
             </div>
           </div>
 
-          {/* Total Display */}
-          <div className="mb-6 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-            <div className="flex justify-between items-center">
-              <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">TOTAL:</span>
-              <span className="text-2xl font-bold text-primary-700 dark:text-primary-400">
-                {(() => {
-                  const stationUpper = (formData.station || '').toUpperCase();
-                  const stationConfig = availableStations.find(s => s.stationName.toUpperCase() === stationUpper);
-                  const currency = formData.station === 'CUSTOM' ? customCurrency : (stationConfig?.currency ?? 'TZS');
-                  const total = formData.total || 0;
-                  return currency === 'USD'
-                    ? `$ ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                    : `TZS ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                })()}
-              </span>
+          {/* ===== TOTAL + ACTIONS ===== */}
+          <div className="flex items-center justify-between gap-4 p-4 sm:px-5 rounded-[14px] border border-[#eef1f6] dark:border-[#1e293b] bg-gradient-to-b from-[#fbfcfe] to-[#f7f9fc] dark:from-[#0f172a] dark:to-[#0b1220] flex-wrap">
+            <div className="flex items-center gap-5 sm:gap-[22px]">
+              <div>
+                <div className="text-[10.5px] font-bold tracking-[.07em] uppercase text-[#94a3b8]">Total amount</div>
+                <div className="mono text-[26px] sm:text-[28px] font-extrabold text-[#0f1729] dark:text-gray-100 leading-[1.1] tracking-tight mt-0.5">
+                  {(() => {
+                    const stationUpper = (formData.station || '').toUpperCase();
+                    const stationConfig = availableStations.find(s => s.stationName.toUpperCase() === stationUpper);
+                    const currency = formData.station === 'CUSTOM' ? customCurrency : (stationConfig?.currency ?? 'TZS');
+                    const total = formData.total || 0;
+                    return currency === 'USD'
+                      ? `$ ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `TZS ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                  })()}
+                </div>
+              </div>
+              <div className="w-px h-[38px] bg-[#e6eaf1] dark:bg-[#1e293b]" />
+              <div>
+                <div className="text-[10.5px] font-bold tracking-[.07em] uppercase text-[#94a3b8]">Total liters</div>
+                <div className="mono text-[20px] font-bold text-[#475569] dark:text-gray-300 mt-1">
+                  {(formData.entries || []).filter(e => e != null).reduce((sum, e) => sum + (e.liters || 0), 0).toLocaleString('en-US')} L
+                </div>
+              </div>
             </div>
-            {formData.entries && formData.entries.length > 0 && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Total Liters: {formData.entries.filter(e => e != null).reduce((sum, e) => sum + e.liters, 0)}L
-              </p>
-            )}
-          </div>
 
-          {/* Form Actions */}
-          <div className="flex items-center justify-end gap-2 pt-4 border-t dark:border-gray-700">
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="flex-shrink-0 px-2 py-1.5 sm:px-4 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
-            >
-              Cancel
-            </button>
-            
-            {/* Forward LPO Button - Show for EXISTING saved LPOs */}
-            {initialData && initialData.id && formData.entries && formData.entries.filter(e => !e.isCancelled).length > 0 && (
+            <div className="flex items-center gap-2.5 flex-wrap">
               <button
                 type="button"
-                onClick={handleOpenForwardModal}
-                className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
-                title="Forward this LPO to another station"
+                onClick={handleCancel}
+                className="h-[42px] px-[18px] rounded-[11px] border border-[#e3e8ef] dark:border-[#334155] bg-white dark:bg-transparent text-[#475569] dark:text-gray-200 text-[13.5px] font-bold hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                <span className="whitespace-nowrap">Forward LPO</span>
+                Cancel
               </button>
-            )}
-            
-            {/* Create & Forward Button - Show for NEW LPOs with entries */}
-            {!initialData && formData.entries && formData.entries.length > 0 && formData.station && formData.lpoNo && !isForwardingMode && (
+
+              {/* Forward LPO Button - Show for EXISTING saved LPOs */}
+              {initialData && initialData.id && formData.entries && formData.entries.filter(e => !e.isCancelled).length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleOpenForwardModal}
+                  className="inline-flex items-center gap-1.5 h-[42px] px-[18px] rounded-[11px] border border-[#bbf0cf] dark:border-green-800 bg-[#f0fdf4] dark:bg-green-900/20 text-[#15803d] dark:text-green-300 text-[13.5px] font-bold hover:bg-green-100 dark:hover:bg-green-900/40"
+                  title="Forward this LPO to another station"
+                >
+                  <GitFork className="w-4 h-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">Forward LPO</span>
+                </button>
+              )}
+
+              {/* Create & Forward Button - Show for NEW LPOs with entries */}
+              {!initialData && formData.entries && formData.entries.length > 0 && formData.station && formData.lpoNo && !isForwardingMode && (
+                <button
+                  type="button"
+                  onClick={handleCreateAndForward}
+                  disabled={isCreatingAndForwarding}
+                  className="inline-flex items-center gap-1.5 h-[42px] px-[18px] rounded-[11px] border border-[#bbf0cf] dark:border-green-800 bg-[#f0fdf4] dark:bg-green-900/20 text-[#15803d] dark:text-green-300 text-[13.5px] font-bold hover:bg-green-100 dark:hover:bg-green-900/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Create this LPO and forward trucks to another station"
+                >
+                  {isCreatingAndForwarding ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                      <span className="whitespace-nowrap">Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <GitFork className="w-4 h-4 flex-shrink-0" />
+                      <span className="whitespace-nowrap">Create &amp; Forward</span>
+                    </>
+                  )}
+                </button>
+              )}
+
               <button
-                type="button"
-                onClick={handleCreateAndForward}
-                disabled={isCreatingAndForwarding}
-                className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Create this LPO and forward trucks to another station"
+                type="submit"
+                disabled={
+                  isSubmitting ||
+                  !formData.entries || formData.entries.length === 0 ||
+                  (formData.entries || []).some((_, idx) => {
+                    const af = entryAutoFillData[idx];
+                    return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
+                  })
+                }
+                style={{ background: 'linear-gradient(155deg,#4f46e5,#6366f1)', boxShadow: '0 8px 18px -6px rgba(79,70,229,.6)' }}
+                className="inline-flex items-center gap-2 h-[42px] px-[22px] rounded-[11px] border-0 text-white text-[13.5px] font-bold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                title={
+                  (formData.entries || []).some((_, idx) => {
+                    const af = entryAutoFillData[idx];
+                    return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
+                  }) ? 'Cannot submit: Some trucks have no Return DO. Switch them to Going or wait for Return DO entry.' : undefined
+                }
               >
-                {isCreatingAndForwarding ? (
-                  <>
-                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin flex-shrink-0" />
-                    <span className="whitespace-nowrap">Creating...</span>
-                  </>
-                ) : (
-                  <>
-                    <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                    <span className="whitespace-nowrap">Create & Forward</span>
-                  </>
-                )}
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck2 className="w-4 h-4" />}
+                {isSubmitting ? (initialData ? 'Updating…' : 'Creating…') : `${initialData ? 'Update' : 'Create'} LPO Document`}
               </button>
-            )}
-            
-            <button
-              type="submit"
-              disabled={
-                isSubmitting ||
-                !formData.entries || formData.entries.length === 0 ||
-                (formData.entries || []).some((_, idx) => {
-                  const af = entryAutoFillData[idx];
-                  return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
-                })
-              }
-              className="flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-4 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed whitespace-nowrap"
-              title={
-                (formData.entries || []).some((_, idx) => {
-                  const af = entryAutoFillData[idx];
-                  return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
-                }) ? 'Cannot submit: Some trucks have no Return DO. Switch them to Going or wait for Return DO entry.' : undefined
-              }
-            >
-              {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {isSubmitting ? (initialData ? 'Updating…' : 'Creating…') : `${initialData ? 'Update' : 'Create'} LPO Document`}
-            </button>
+            </div>
           </div>
         </form>
       </div>
