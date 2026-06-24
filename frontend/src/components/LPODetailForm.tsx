@@ -220,7 +220,7 @@ const LPO_RD_STYLES = `
 .lpo-rd .menu-item:hover{background:#f1f4f9;}
 .dark .lpo-rd .menu-item:hover{background:#1e293b;}
 /* Entries table */
-.lpo-rd .lpo-table{width:100%;border-collapse:collapse;min-width:1020px;}
+.lpo-rd .lpo-table{width:100%;border-collapse:collapse;min-width:1120px;}
 .lpo-rd .lpo-table thead tr{background:#f7f9fc;}
 .dark .lpo-rd .lpo-table thead tr{background:#0f172a;}
 .lpo-rd .lpo-th{padding:11px 12px;text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#94a3b8;white-space:nowrap;}
@@ -2048,6 +2048,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const TRUCK_FORMAT_COMPLETE = /^T\d+ [A-Z]{2,}$/;
 
     if (TRUCK_FORMAT_COMPLETE.test(formattedTruckNo)) {
+      // NIL/REF modes: never fetch — manual entry only, no lookup
+      const entryMode = entryAutoFillData[index]?.entryType;
+      if (entryMode === 'nil' || entryMode === 'ref') return;
+
       // Format is complete — clear any previous timer for this row
       if (fetchDebounceTimers.current[index]) {
         clearTimeout(fetchDebounceTimers.current[index]);
@@ -3268,7 +3272,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
            Theme-sensitive surfaces flip via `.dark` selectors so dark mode stays reactive. ===== */}
       <style>{LPO_RD_STYLES}</style>
 
-      <div className="lpo-rd bg-white dark:bg-[#0b1220] rounded-none sm:rounded-[18px] shadow-xl max-w-[1140px] w-full h-full sm:h-auto max-h-screen sm:max-h-[92vh] overflow-hidden border border-[#eef1f6] dark:border-[#1e293b] flex flex-col transition-colors" onClick={(e) => e.stopPropagation()}>
+      <div className="lpo-rd bg-white dark:bg-[#0b1220] rounded-none sm:rounded-[18px] shadow-xl max-w-[1300px] w-full h-full sm:h-auto max-h-screen sm:max-h-[92vh] overflow-hidden border border-[#eef1f6] dark:border-[#1e293b] flex flex-col transition-colors" onClick={(e) => e.stopPropagation()}>
         {/* Forwarding mode banner */}
         {isForwardingMode && forwardedFromInfo && (
           <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 px-6 py-3">
@@ -4402,6 +4406,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       />
                     </th>
                     <th className="lpo-th">Truck</th>
+                    <th className="lpo-th">Mode</th>
                     <th className="lpo-th">DO number</th>
                     <th className="lpo-th">Direction</th>
                     <th className="lpo-th" style={{ textAlign: 'right' }}>Liters</th>
@@ -4481,45 +4486,46 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             </div>
                           </td>
 
+                          {/* Mode cell — NORM/DA/REF/NIL */}
+                          <td>
+                            <select
+                              value={autoFill.entryType || 'regular'}
+                              onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
+                              title={ENTRY_MODE_OPTIONS.find(o => o.value === (autoFill.entryType || 'regular'))?.title}
+                              className="mode-chip"
+                              style={autoFill.entryType === 'da' ? { borderColor: '#93c5fd', color: '#1d4ed8' } : autoFill.entryType === 'ref' ? { borderColor: '#f8c89a', color: '#c2410c' } : autoFill.entryType === 'nil' ? { borderColor: '#d8b4fe', color: '#7c3aed' } : {}}
+                            >
+                              {ENTRY_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </td>
+
                           {/* DO Number Input Cell - for DO-first search */}
                           <td>
-                            <div className="flex items-center gap-1.5">
-                              {/* Mode chip — NORM/DA/REF/NIL */}
-                              <select
-                                value={autoFill.entryType || 'regular'}
-                                onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
-                                title={ENTRY_MODE_OPTIONS.find(o => o.value === (autoFill.entryType || 'regular'))?.title}
-                                className="mode-chip flex-shrink-0"
-                                style={autoFill.entryType === 'da' ? { borderColor: '#93c5fd', color: '#1d4ed8' } : autoFill.entryType === 'ref' ? { borderColor: '#f8c89a', color: '#c2410c' } : autoFill.entryType === 'nil' ? { borderColor: '#d8b4fe', color: '#7c3aed' } : {}}
-                              >
-                                {ENTRY_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                              </select>
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  value={entry?.doNo || ''}
-                                  onChange={(e) => handleDONoChange(index, e.target.value)}
-                                  onBlur={(e) => {
-                                    // Set to NIL only on blur if field is still empty
-                                    if (!e.target.value.trim()) {
-                                      handleEntryChange(index, 'doNo', 'NIL');
-                                    }
-                                  }}
-                                  onPaste={(e) => handleDOPaste(index, e)}
-                                  placeholder="0001/26"
-                                  title="Enter DO number — paste multiple (one per line) to fill down"
-                                  className="cell-input mono"
-                                  style={{ width: '88px', ...(autoFill.entryType === 'da' ? { borderColor: '#93c5fd' } : autoFill.entryType === 'ref' ? { borderColor: '#f8c89a' } : autoFill.entryType === 'nil' ? { borderColor: '#d8b4fe' } : {}) }}
-                                />
-                                {autoFill.loading && (
-                                  <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
-                                )}
-                                {autoFill.entryType === 'da' && autoFill.referenceDoNo && (
-                                  <span className="absolute -bottom-4 left-0 text-[9px] text-gray-500 dark:text-gray-400 truncate max-w-[90px] mono" title={`Ref DO: ${autoFill.referenceDoNo}`}>
-                                    →{autoFill.referenceDoNo}
-                                  </span>
-                                )}
-                              </div>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={entry?.doNo || ''}
+                                onChange={(e) => handleDONoChange(index, e.target.value)}
+                                onBlur={(e) => {
+                                  // Set to NIL only on blur if field is still empty
+                                  if (!e.target.value.trim()) {
+                                    handleEntryChange(index, 'doNo', 'NIL');
+                                  }
+                                }}
+                                onPaste={(e) => handleDOPaste(index, e)}
+                                placeholder="0001/26"
+                                title="Enter DO number — paste multiple (one per line) to fill down"
+                                className="cell-input mono"
+                                style={{ width: '88px', ...(autoFill.entryType === 'da' ? { borderColor: '#93c5fd' } : autoFill.entryType === 'ref' ? { borderColor: '#f8c89a' } : autoFill.entryType === 'nil' ? { borderColor: '#d8b4fe' } : {}) }}
+                              />
+                              {autoFill.loading && (
+                                <Loader2 className="absolute right-1 top-1.5 w-4 h-4 text-primary-500 animate-spin" />
+                              )}
+                              {autoFill.entryType === 'da' && autoFill.referenceDoNo && (
+                                <span className="absolute -bottom-4 left-0 text-[9px] text-gray-500 dark:text-gray-400 truncate max-w-[90px] mono" title={`Ref DO: ${autoFill.referenceDoNo}`}>
+                                  →{autoFill.referenceDoNo}
+                                </span>
+                              )}
                             </div>
                           </td>
 
@@ -4779,7 +4785,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       );
                     })}
                   <tr style={{ borderTop: '1px dashed #c9cdf6' }}>
-                    <td colSpan={hasAnyIssue ? 10 : 9} style={{ padding: 0 }}>
+                    <td colSpan={hasAnyIssue ? 11 : 10} style={{ padding: 0 }}>
                       <button type="button" onClick={handleAddEntry} className="addrow-btn">
                         <Plus className="w-4 h-4" />
                         Add new entry
