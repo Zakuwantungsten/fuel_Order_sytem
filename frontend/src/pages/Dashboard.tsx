@@ -9,7 +9,6 @@ import {
   TrendingUp,
   ChevronUp,
   ChevronDown,
-  Activity,
   Calendar,
   Package,
   Plus,
@@ -20,9 +19,14 @@ import {
   Truck,
   Clock,
   CheckCircle,
-  AlertCircle,
+  RefreshCw,
+  MapPin,
+  Route,
+  Weight,
+  BellRing,
+  DollarSign,
 } from 'lucide-react';
-import { BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, LabelList, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { FuelRecord } from '../types';
@@ -47,12 +51,84 @@ interface DashboardProps {
   onNavigate?: (tab: string, highlight?: string) => void;
 }
 
-const DEFAULT_CHART_DATA = { monthlyFuel: [], doTrends: [], stationDistribution: [], journeyStatus: [] };
+const DEFAULT_CHART_DATA = { monthlyFuel: [], doTrends: [], stationDistribution: [], journeyStatus: [], stationPrices: [], fuelPriceTrend: [] };
+
+// ── Design tokens (matched to Fuel Dashboard design) ──────────────────────
+const CARD =
+  'bg-white dark:bg-gray-800/70 border border-gray-100 dark:border-gray-700/60 rounded-2xl ' +
+  'shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_26px_-16px_rgba(15,23,42,0.18)]';
+
+type Tone = 'blue' | 'green' | 'cyan' | 'orange' | 'indigo';
+
+const TONE_CHIP: Record<Tone, string> = {
+  blue: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300',
+  green: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300',
+  cyan: 'bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-300',
+  orange: 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300',
+  indigo: 'bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300',
+};
+
+const TONE_STROKE: Record<Tone, string> = {
+  blue: '#2563eb', green: '#16a34a', cyan: '#0891b2', orange: '#ea580c', indigo: '#0284c7',
+};
+
+// Fuel-cost card: format a price-per-litre for display by currency.
+const fmtNum = (v: number, currency: string) =>
+  currency === 'USD' ? `$${v.toFixed(2)}` : Math.round(v).toLocaleString();
+
+// Tiny sparkline derived from a real numeric series (no fabricated data).
+const Sparkline = ({ series, color }: { series: number[]; color: string }) => {
+  if (!series || series.length < 2) return null;
+  const w = 200, h = 30;
+  const max = Math.max(...series), min = Math.min(...series);
+  const span = max - min || 1;
+  const pts = series.map((v, i) => {
+    const x = (i / (series.length - 1)) * w;
+    const y = h - 4 - ((v - min) / span) * (h - 8);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-[30px] mt-3 block">
+      <polygon points={`${pts.join(' ')} ${w},${h} 0,${h}`} fill={color} opacity={0.07} />
+      <polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth={2}
+        strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+};
+
+// Journey-status tile theming, matched by status name.
+const JOURNEY_CAT = (name: string) => {
+  const n = (name || '').toLowerCase();
+  if (n.includes('active')) return { tile: 'bg-blue-50/70 dark:bg-blue-900/15 border-blue-100 dark:border-blue-800/50', dot: 'bg-blue-500 shadow-[0_0_0_4px_rgba(37,99,235,0.14)]' };
+  if (n.includes('complet')) return { tile: 'bg-emerald-50/70 dark:bg-emerald-900/15 border-emerald-100 dark:border-emerald-800/50', dot: 'bg-emerald-500 shadow-[0_0_0_4px_rgba(22,163,74,0.14)]' };
+  if (n.includes('pend')) return { tile: 'bg-amber-50/70 dark:bg-amber-900/15 border-amber-100 dark:border-amber-800/50', dot: 'bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.16)]' };
+  if (n.includes('cancel')) return { tile: 'bg-red-50/70 dark:bg-red-900/15 border-red-100 dark:border-red-800/50', dot: 'bg-red-500 shadow-[0_0_0_4px_rgba(220,38,38,0.14)]' };
+  return { tile: 'bg-primary-50/70 dark:bg-primary-900/15 border-primary-100 dark:border-primary-800/50', dot: 'bg-primary-500 shadow-[0_0_0_4px_rgba(2,132,199,0.14)]' };
+};
+
+// Quick-action pill used in the dashboard toolbar.
+const QuickPill = ({ onClick, icon: Icon, label, tone }: { onClick: () => void; icon: any; label: string; tone: 'indigo' | 'cyan' | 'green' }) => {
+  const tones = {
+    indigo: 'bg-primary-50 text-primary-700 border-primary-100 dark:bg-primary-900/20 dark:text-primary-300 dark:border-primary-800/50',
+    cyan: 'bg-cyan-50 text-cyan-700 border-cyan-100 dark:bg-cyan-900/20 dark:text-cyan-300 dark:border-cyan-800/50',
+    green: 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/50',
+  };
+  return (
+    <button onClick={onClick} className={`inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full border text-[12.5px] font-bold transition hover:shadow-sm ${tones[tone]}`}>
+      <Icon className="w-3.5 h-3.5" />{label}
+    </button>
+  );
+};
 
 const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   const navigate = useNavigate();
   const { isDark } = useAuth();
   const queryClient = useQueryClient();
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-chart-data'] });
+  };
 
   const { data: stats = null, isLoading: loading, error: statsError } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -110,7 +186,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   // Debounced realtime refresh — a burst of N changes (e.g. bulk DO create)
   // triggers one invalidation instead of N parallel refetches.
   const statsRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_summaries', 'yard_fuel'], () => {
+  useRealtimeSync(['fuel_records', 'delivery_orders', 'lpo_summaries', 'yard_fuel', 'fuel_stations'], () => {
     if (statsRefreshTimer.current) clearTimeout(statsRefreshTimer.current);
     statsRefreshTimer.current = setTimeout(() => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
@@ -464,31 +540,20 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     );
   }
 
-  const TrendBadge = ({ pct, onCard }: { pct: number | null | undefined; onCard?: boolean }) => {
+  const TrendBadge = ({ pct }: { pct?: number | null }) => {
     if (pct === null || pct === undefined) {
       return (
-        <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-          style={onCard ? { background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.80)' } : undefined}
-          {...(!onCard && { className: 'inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-gray-400 bg-gray-100 dark:text-gray-500 dark:bg-gray-700/50' })}>
+        <span className="inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full text-gray-400 bg-gray-100 dark:text-gray-500 dark:bg-gray-700/50">
           —
         </span>
       );
     }
     const isUp = pct >= 0;
     const Icon = isUp ? ChevronUp : ChevronDown;
-    if (onCard) {
-      return (
-        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-          style={{ background: 'rgba(255,255,255,0.18)', color: '#ffffff' }}>
-          <Icon className="w-3 h-3" />
-          {isUp ? '+' : ''}{pct}%
-        </span>
-      );
-    }
     return (
-      <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+      <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full ${
         isUp
-          ? 'text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/20'
+          ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20'
           : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20'
       }`}>
         <Icon className="w-3 h-3" />
@@ -497,6 +562,9 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     );
   };
 
+  const sparkDO = (chartData.doTrends || []).map((d: any) => Number(d.count) || 0);
+  const sparkFuel = (chartData.monthlyFuel || []).map((d: any) => Number(d.value) || 0);
+
   const statsCards = [
     {
       name: 'Delivery Orders',
@@ -504,99 +572,94 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       sub: `${stats.activeTrips} active trip${stats.activeTrips !== 1 ? 's' : ''}`,
       trend: stats.trends?.dos,
       icon: FileText,
-      bg: '#2563EB',
+      tone: 'blue' as Tone,
+      series: sparkDO,
     },
     {
-      name: 'Fuel Records',
-      value: stats.totalFuelRecords.toLocaleString(),
-      sub: `${stats.totalLiters.toLocaleString()} L dispensed`,
+      name: 'Fuel Dispensed',
+      value: (stats.totalLiters || 0).toLocaleString(),
+      unit: 'L',
+      sub: `${stats.totalFuelRecords.toLocaleString()} records this month`,
       trend: stats.trends?.fuelRecords,
       icon: Fuel,
-      bg: '#16A34A',
+      tone: 'green' as Tone,
+      series: sparkFuel,
     },
     {
       name: 'LPO Entries',
       value: stats.totalLPOs.toLocaleString(),
-      sub: stats.pendingYardFuel ? `${stats.pendingYardFuel} yard pending` : 'none pending',
+      sub: stats.pendingYardFuel ? `${stats.pendingYardFuel} yard fuel pending` : 'none pending',
+      subClass: stats.pendingYardFuel ? 'text-amber-600 dark:text-amber-400' : undefined,
       trend: stats.trends?.lpos,
       icon: ClipboardList,
-      bg: '#0891B2',
+      tone: 'cyan' as Tone,
+      series: [] as number[],
     },
     {
       name: 'Tonnage (Month)',
       value: stats.totalTonnage.toLocaleString(),
+      unit: 't',
       sub: `Ksh ${stats.totalRevenue.toLocaleString()} revenue`,
       trend: stats.trends?.tonnage,
-      icon: TrendingUp,
-      bg: '#EA580C',
+      icon: Weight,
+      tone: 'orange' as Tone,
+      series: [] as number[],
     },
   ];
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between" style={{ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center' }}>
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Fuel Order Dashboard</h1>
-          <p className="mt-1 text-sm" style={{ color: '#64748B' }}>
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
+      {/* ── TOP BAR ── */}
+      <div className={`${CARD} px-4 py-3 flex items-center gap-4 flex-wrap`}>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white shadow-[0_6px_14px_-5px_rgba(2,132,199,0.55)]">
+            <Fuel className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Fuel Order Dashboard</h1>
+            <div className="flex items-center gap-2 mt-0.5 text-xs font-medium text-gray-400 dark:text-gray-500">
+              <Calendar className="w-3.5 h-3.5" />
+              <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
+              <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(34,197,94,0.18)]" />Live
+              </span>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => { queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }); queryClient.invalidateQueries({ queryKey: ['dashboard-chart-data'] }); }}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-white rounded-lg transition-colors"
-          style={{ background: '#2563EB', width: 'fit-content', alignSelf: 'center', flexShrink: 0 }}
-          onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
-          onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}
-        >
-          <Activity className="w-4 h-4" />
-          Refresh
-        </button>
-      </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center gap-2 max-w-lg">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <div className="relative flex-1 min-w-[180px] max-w-md mx-auto">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search DO, LPO, or Truck..."
+            placeholder="Search DO, LPO, or truck number…"
             value={searchQuery}
             onChange={(e) => handleSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && performUnifiedSearch(searchQuery)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:border-transparent dashboard-search-input" style={{ '--tw-ring-color': '#2563EB', paddingLeft: '2.5rem', height: '34px' } as React.CSSProperties}
+            className="w-full h-[42px] pl-10 pr-10 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition"
           />
-          {searching && (
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <Loader className="w-4 h-4 animate-spin" style={{ color: '#2563EB' }} />
-            </div>
-          )}
+          {searching ? (
+            <Loader className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-primary-500" />
+          ) : hasResults ? (
+            <button onClick={handleClearSearch} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+              <X className="w-4 h-4" />
+            </button>
+          ) : null}
         </div>
-        {hasResults ? (
+
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
-            onClick={handleClearSearch}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors whitespace-nowrap dashboard-search-btn"
-            style={{ height: '34px', width: 'fit-content', flexShrink: 0 }}
+            onClick={handleRefresh}
+            className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-[13px] font-bold transition shadow-[0_6px_14px_-6px_rgba(2,132,199,0.6)]"
           >
-            <X className="w-3.5 h-3.5" />
-            Clear
+            <RefreshCw className="w-4 h-4" />Refresh
           </button>
-        ) : (
-          <button
-            onClick={() => performUnifiedSearch()}
-            disabled={!searchQuery.trim() || searching}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap dashboard-search-btn"
-            style={{ height: '34px', width: 'fit-content', flexShrink: 0 }}
-          >
-            <Search className="w-3.5 h-3.5" />
-            Search
-          </button>
-        )}
+        </div>
       </div>
 
       {/* Search Results */}
       {(searchResults.dos.length > 0 || searchResults.lpos.length > 0 || searchResults.fuels.length > 0) && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+        <div className={`${CARD} p-4 space-y-3`}>
           {/* Delivery Orders Results */}
           {searchResults.dos.length > 0 && (
             <div>
@@ -739,7 +802,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
        searchResults.dos.length === 0 && 
        searchResults.lpos.length === 0 && 
        searchResults.fuels.length === 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-5 text-center">
+        <div className={`${CARD} p-5 text-center`}>
           <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
           <p className="text-gray-500 dark:text-gray-400 font-medium">No results found</p>
           <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
@@ -748,91 +811,44 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {statsCards.map((stat) => (
-          <div
-            key={stat.name}
-            className="rounded-xl transition-all"
-            style={{
-              background: `linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0.08) 100%), ${stat.bg}`,
-              border: '1px solid rgba(255,255,255,0.15)',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.16), 0 1px 3px rgba(0,0,0,0.08)',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.10)')}
-            onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.16), 0 1px 3px rgba(0,0,0,0.08)')}
-          >
-            <div className="p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide truncate" style={{ color: 'rgba(255,255,255,0.65)', letterSpacing: '0.07em' }}>
-                    {stat.name}
-                  </p>
-                  <div className="mt-1.5 flex items-baseline gap-2">
-                    <p className="text-2xl font-bold leading-none text-white">
-                      {stat.value}
-                    </p>
-                    <TrendBadge pct={stat.trend} onCard />
-                  </div>
-                  <p className="mt-1.5 text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{stat.sub}</p>
-                </div>
-                <div className="p-2 rounded-lg flex-shrink-0" style={{ background: 'rgba(255,255,255,0.18)' }}>
-                  <stat.icon className="w-4 h-4 text-white" />
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
+      {/* Quick Actions */}
+      <div className="flex items-center gap-2 flex-wrap px-0.5">
+        <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500 mr-1">Quick</span>
+        <QuickPill onClick={() => handleQuickAction('create-do')} icon={Plus} label="New DO" tone="indigo" />
+        <QuickPill onClick={() => handleQuickAction('bulk-create')} icon={Package} label="Bulk DO" tone="indigo" />
+        <QuickPill onClick={() => handleQuickAction('create-lpo')} icon={ClipboardList} label="New LPO" tone="cyan" />
+        <QuickPill onClick={() => handleQuickAction('create-fuel')} icon={Fuel} label="Fuel Record" tone="green" />
       </div>
 
-      {/* Quick Actions */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">Quick:</span>
-        <button
-          onClick={() => handleQuickAction('create-do')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors"
-          style={{ color: isDark ? '#93C5FD' : '#1D4ED8', background: isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF', border: `1px solid ${isDark ? 'rgba(37,99,235,0.3)' : '#BFDBFE'}` }}
-          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.25)' : '#DBEAFE')}
-          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF')}
-        >
-          <Plus className="w-3 h-3" /> New DO
-        </button>
-        <button
-          onClick={() => handleQuickAction('bulk-create')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors"
-          style={{ color: isDark ? '#93C5FD' : '#1D4ED8', background: isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF', border: `1px solid ${isDark ? 'rgba(37,99,235,0.3)' : '#BFDBFE'}` }}
-          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.25)' : '#DBEAFE')}
-          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF')}
-        >
-          <Package className="w-3 h-3" /> Bulk DO
-        </button>
-        <button
-          onClick={() => handleQuickAction('create-lpo')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors"
-          style={{ color: isDark ? '#67E8F9' : '#0369A1', background: isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE', border: `1px solid ${isDark ? 'rgba(8,145,178,0.3)' : '#BAE6FD'}` }}
-          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(8,145,178,0.25)' : '#BAE6FD')}
-          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(8,145,178,0.15)' : '#E0F2FE')}
-        >
-          <Plus className="w-3 h-3" /> New LPO
-        </button>
-        <button
-          onClick={() => handleQuickAction('create-fuel')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors"
-          style={{ color: isDark ? '#86EFAC' : '#15803D', background: isDark ? 'rgba(22,163,74,0.15)' : '#DCFCE7', border: `1px solid ${isDark ? 'rgba(22,163,74,0.3)' : '#BBF7D0'}` }}
-          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(22,163,74,0.25)' : '#BBF7D0')}
-          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(22,163,74,0.15)' : '#DCFCE7')}
-        >
-          <Plus className="w-3 h-3" /> Fuel Record
-        </button>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {statsCards.map((stat) => (
+          <div key={stat.name} className={`${CARD} p-4`}>
+            <div className="flex items-center justify-between">
+              <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${TONE_CHIP[stat.tone]}`}>
+                <stat.icon className="w-[18px] h-[18px]" />
+              </span>
+              <TrendBadge pct={stat.trend} />
+            </div>
+            <div className="mt-3.5 flex items-baseline gap-1">
+              <span className="text-[28px] leading-none font-extrabold font-mono tracking-tight text-gray-900 dark:text-gray-50">{stat.value}</span>
+              {('unit' in stat && stat.unit) ? <span className="text-sm font-bold text-gray-400">{stat.unit}</span> : null}
+            </div>
+            <div className="mt-2 text-[13.5px] font-bold text-gray-900 dark:text-gray-100">{stat.name}</div>
+            <div className={`mt-0.5 text-xs font-medium ${('subClass' in stat && stat.subClass) ? stat.subClass : 'text-gray-400 dark:text-gray-500'}`}>{stat.sub}</div>
+            <Sparkline series={stat.series} color={TONE_STROKE[stat.tone]} />
+          </div>
+        ))}
       </div>
 
       {/* Charts & Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Monthly Fuel Consumption */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Monthly Fuel Consumption</h3>
+        <div className={`${CARD} p-5`}>
+          <div className="flex items-center gap-2.5 mb-2">
+            <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300 flex items-center justify-center"><BarChart3 className="w-4 h-4" /></span>
+            <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Monthly Fuel Consumption</h3>
+            <span className="ml-auto text-[11.5px] font-semibold text-gray-400">litres · last 6 mo</span>
           </div>
           {chartData.monthlyFuel.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
@@ -843,16 +859,17 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
                 })}
                 margin={{ top: 18, right: 8, bottom: 0, left: -16 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#6b7280" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#6b7280" />
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#eef1f6'} />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke={isDark ? '#9ca3af' : '#94a3b8'} />
+                <YAxis tick={{ fontSize: 11 }} stroke={isDark ? '#9ca3af' : '#94a3b8'} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
+                  cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(79,70,229,0.06)' }}
+                  contentStyle={{ backgroundColor: isDark ? '#1f2937' : '#0f1729', border: 'none', borderRadius: '10px', color: '#fff' }}
                   labelStyle={{ color: '#9ca3af' }}
                   formatter={(v: any) => [`${Number(v).toLocaleString()} L`, 'Fuel']}
                 />
-                <Bar dataKey="value" fill="#2563EB" radius={[4, 4, 0, 0]}>
-                  <LabelList dataKey="value" position="top" style={{ fontSize: 10, fill: '#6b7280' }} formatter={(v: any) => v > 0 ? Number(v).toLocaleString() : ''} />
+                <Bar dataKey="value" fill="#0284c7" radius={[6, 6, 2, 2]}>
+                  <LabelList dataKey="value" position="top" style={{ fontSize: 10, fill: isDark ? '#9ca3af' : '#94a3b8' }} formatter={(v: any) => v > 0 ? Number(v).toLocaleString() : ''} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -862,22 +879,23 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
 
         {/* DO Creation Trends */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">DO Creation Trends</h3>
+        <div className={`${CARD} p-5`}>
+          <div className="flex items-center gap-2.5 mb-2">
+            <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300 flex items-center justify-center"><TrendingUp className="w-4 h-4" /></span>
+            <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">DO Creation Trends</h3>
+            <span className="ml-auto text-[11.5px] font-semibold text-gray-400">orders / month</span>
           </div>
           {chartData.doTrends.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData.doTrends}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#6b7280" />
-                <YAxis tick={{ fontSize: 12 }} stroke="#6b7280" />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#eef1f6'} />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={isDark ? '#9ca3af' : '#94a3b8'} />
+                <YAxis tick={{ fontSize: 12 }} stroke={isDark ? '#9ca3af' : '#94a3b8'} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: isDark ? '#1f2937' : '#0f1729', border: 'none', borderRadius: '10px', color: '#fff' }}
                   labelStyle={{ color: '#9ca3af' }}
                 />
-                <Line type="monotone" dataKey="count" stroke="#16A34A" strokeWidth={3} dot={{ fill: '#16A34A', r: 5 }} />
+                <Line type="monotone" dataKey="count" stroke="#16A34A" strokeWidth={3} dot={{ fill: '#16A34A', r: 4 }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -886,10 +904,10 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
 
         {/* Station-wise LPO Distribution */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="w-4 h-4" style={{ color: '#0891B2' }} />
-            <h3 className="text-base font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Station LPO Distribution</h3>
+        <div className={`${CARD} p-5`}>
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-7 h-7 rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-300 flex items-center justify-center"><MapPin className="w-4 h-4" /></span>
+            <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Station LPO Distribution</h3>
           </div>
           {chartData.stationDistribution.length > 0 ? (() => {
             const total = chartData.stationDistribution.reduce((s: number, d: any) => s + d.value, 0);
@@ -926,22 +944,25 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
 
         {/* Journey Status */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <Activity className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Journey Status</h3>
+        <div className={`${CARD} p-5`}>
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-7 h-7 rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300 flex items-center justify-center"><Route className="w-4 h-4" /></span>
+            <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Journey Status</h3>
           </div>
           {chartData.journeyStatus.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
-              {chartData.journeyStatus.map((status: any, i: number) => (
-                <div key={status.name} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate">{status.name}</p>
-                    <p className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{status.value}</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {chartData.journeyStatus.map((status: any) => {
+                const c = JOURNEY_CAT(status.name);
+                return (
+                  <div key={status.name} className={`flex items-center gap-3 p-3.5 rounded-xl border ${c.tile}`}>
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 truncate">{status.name}</div>
+                      <div className="text-[22px] font-extrabold font-mono text-gray-900 dark:text-gray-100 leading-tight">{status.value}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data available</div>
@@ -949,13 +970,92 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
       </div>
 
+      {/* Fuel Cost per Litre — 6-month price trend, one card per currency */}
+      {chartData.fuelPriceTrend && chartData.fuelPriceTrend.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {(chartData.fuelPriceTrend as any[]).map((t) => {
+            const down = (t.trendPct ?? 0) <= 0;
+            return (
+              <div key={t.currency} className={`${CARD} p-5`}>
+                <div className="flex items-center gap-2.5 mb-1">
+                  <span className="w-7 h-7 rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300 flex items-center justify-center"><DollarSign className="w-4 h-4" /></span>
+                  <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Fuel Cost per Litre</h3>
+                  <span className="ml-auto text-[11.5px] font-semibold text-gray-400">{t.currency} · last 6 mo</span>
+                </div>
+                <div className="flex items-end gap-2.5 mb-1 flex-wrap">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[28px] leading-none font-extrabold font-mono tracking-tight text-gray-900 dark:text-gray-50">{fmtNum(t.current, t.currency)}</span>
+                    <span className="text-sm font-bold text-gray-400">/L</span>
+                  </div>
+                  {t.trendPct !== null && (
+                    <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full mb-0.5 ${down ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20' : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20'}`}>
+                      {down ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}{t.trendPct > 0 ? '+' : ''}{t.trendPct}%
+                    </span>
+                  )}
+                  {t.previous > 0 && (
+                    <span className="text-[11.5px] font-medium text-gray-400 mb-0.5">vs {fmtNum(t.previous, t.currency)} in {t.prevLabel}</span>
+                  )}
+                </div>
+                {t.series && t.series.length > 1 ? (
+                  <ResponsiveContainer width="100%" height={150}>
+                    <AreaChart data={t.series} margin={{ top: 10, right: 10, bottom: 0, left: -34 }}>
+                      <defs>
+                        <linearGradient id={`fp-${t.currency}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#ea580c" stopOpacity={0.18} />
+                          <stop offset="100%" stopColor="#ea580c" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} stroke={isDark ? '#374151' : '#eef1f6'} />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke={isDark ? '#9ca3af' : '#94a3b8'} tickLine={false} axisLine={false} />
+                      <YAxis hide domain={[(min: number) => min * 0.98, (max: number) => max * 1.02]} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: isDark ? '#1f2937' : '#0f1729', border: 'none', borderRadius: '10px', color: '#fff' }}
+                        labelStyle={{ color: '#9ca3af' }}
+                        formatter={(v: any) => [fmtNum(Number(v), t.currency), 'Price/L']}
+                      />
+                      <Area type="monotone" dataKey="value" stroke="#ea580c" strokeWidth={2.5} fill={`url(#fp-${t.currency})`} dot={{ fill: '#fff', stroke: '#ea580c', strokeWidth: 2, r: 3.5 }} activeDot={{ r: 5, fill: '#ea580c' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[150px] flex items-center justify-center text-gray-400 text-sm">Not enough price history</div>
+                )}
+                <div className="flex gap-2 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700/60">
+                  <div className="flex-1 text-center">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Lowest</div>
+                    <div className="text-[14px] font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">{fmtNum(t.lowest, t.currency)}</div>
+                  </div>
+                  <div className="w-px bg-gray-100 dark:bg-gray-700/60" />
+                  <div className="flex-1 text-center">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Average</div>
+                    <div className="text-[14px] font-extrabold font-mono text-gray-700 dark:text-gray-200 mt-0.5">{fmtNum(t.average, t.currency)}</div>
+                  </div>
+                  <div className="w-px bg-gray-100 dark:bg-gray-700/60" />
+                  <div className="flex-1 text-center">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Highest</div>
+                    <div className="text-[14px] font-extrabold font-mono text-red-600 dark:text-red-400 mt-0.5">{fmtNum(t.highest, t.currency)}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className={`${CARD} p-5`}>
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-7 h-7 rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300 flex items-center justify-center"><DollarSign className="w-4 h-4" /></span>
+            <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Fuel Cost per Litre</h3>
+          </div>
+          <div className="h-32 flex items-center justify-center text-gray-400 text-sm">No station prices configured</div>
+        </div>
+      )}
+
       {/* Alerts & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Attention / Status */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertCircle className="w-4 h-4 text-orange-500" />
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Attention</h3>
+        <div className={`${CARD} p-5`}>
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="w-7 h-7 rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300 flex items-center justify-center"><BellRing className="w-4 h-4" /></span>
+            <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Needs Attention</h3>
           </div>
           <div className="space-y-2">
             <div className={`flex items-center justify-between p-2.5 rounded-lg ${
@@ -1011,13 +1111,13 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
 
         {/* Recent Delivery Orders */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className={`${CARD} p-5`}>
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-blue-500" />
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent DOs</h3>
+            <div className="flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 flex items-center justify-center"><FileText className="w-4 h-4" /></span>
+              <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Recent DOs</h3>
             </div>
-            <button onClick={() => onNavigate?.('do')} className="text-xs transition-colors" style={{ color: '#2563EB' }} onMouseEnter={e => (e.currentTarget.style.color = '#1D4ED8')} onMouseLeave={e => (e.currentTarget.style.color = '#2563EB')}>View all →</button>
+            <button onClick={() => onNavigate?.('do')} className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors">View all →</button>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {stats.recentActivities?.deliveryOrders && stats.recentActivities.deliveryOrders.length > 0 ? (
@@ -1064,13 +1164,13 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
 
         {/* Recent LPOs */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className={`${CARD} p-5`}>
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" style={{ color: '#0891B2' }} />
-              <h3 className="text-sm font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Recent LPOs</h3>
+            <div className="flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-300 flex items-center justify-center"><ClipboardList className="w-4 h-4" /></span>
+              <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Recent LPOs</h3>
             </div>
-            <button onClick={() => onNavigate?.('lpo')} className="text-xs transition-colors" style={{ color: '#2563EB' }} onMouseEnter={e => (e.currentTarget.style.color = '#1D4ED8')} onMouseLeave={e => (e.currentTarget.style.color = '#2563EB')}>View all →</button>
+            <button onClick={() => onNavigate?.('lpo')} className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors">View all →</button>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {stats.recentActivities?.lpoEntries && stats.recentActivities.lpoEntries.length > 0 ? (

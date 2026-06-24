@@ -1,5 +1,6 @@
 import { Response } from 'express';
-import { DeliveryOrder, LPOSummary, FuelRecord, YardFuelDispense } from '../models';
+import { DeliveryOrder, LPOSummary, FuelRecord, YardFuelDispense, FuelPriceHistory } from '../models';
+import { FuelStationConfig } from '../models/FuelStationConfig';
 import { AuthRequest } from '../middleware/auth';
 
 /**
@@ -706,7 +707,7 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const fuelStartDate = new Date();
     fuelStartDate.setMonth(now.getMonth() - 12);
 
-    const [fuelRecords, deliveryOrders, lpoEntries] = await Promise.all([
+    const [fuelRecords, deliveryOrders, lpoEntries, activeStations] = await Promise.all([
       FuelRecord.find({
         isDeleted: false,
         isCancelled: { $ne: true },
@@ -730,6 +731,11 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
         { $unwind: '$entries' },
         { $project: { _id: 0, date: 1, ltrs: '$entries.liters', dieselAt: '$station' } },
       ]),
+      // Current fuel price per litre for every active station (for the dashboard price chart)
+      FuelStationConfig.find({ isActive: true })
+        .select('stationName defaultRate currency')
+        .sort({ currency: 1, stationName: 1 })
+        .lean(),
     ]);
 
     // Monthly fuel consumption — use actual date field
@@ -785,11 +791,97 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
       }
     ].filter(item => item.value > 0);
 
+    // Fuel price per litre — one entry per active station, with its currency.
+    // Stations are priced in different currencies (USD for Zambia, TZS for
+    // Tanzania), so the frontend groups/normalises per currency rather than
+    // plotting raw values on a single shared axis.
+    const stationPrices = (activeStations as any[]).map((s) => ({
+      name: s.stationName,
+      price: s.defaultRate,
+      currency: (s.currency || 'TZS') as 'USD' | 'TZS',
+    }));
+
+    // ── Fuel price trend — 6-month price-per-litre history, one line per currency.
+    // Reconstructs each station's effective price at each month-end from
+    // FuelPriceHistory, then averages across stations sharing a currency.
+    const MONTHS_BACK = 6;
+    const priceHistory = await FuelPriceHistory.find({})
+      .select('stationId oldPrice newPrice changedAt')
+      .sort({ changedAt: 1 })
+      .lean();
+
+    const histByStation: Record<string, any[]> = {};
+    for (const h of priceHistory) {
+      const sid = String(h.stationId);
+      (histByStation[sid] = histByStation[sid] || []).push(h);
+    }
+
+    // Effective price for a station at a point in time.
+    const effectivePrice = (station: any, at: Date): number => {
+      const list = histByStation[String(station._id)];
+      if (list && list.length) {
+        let price: number | undefined;
+        for (const h of list) {
+          if (new Date(h.changedAt) <= at) price = h.newPrice;
+          else break;
+        }
+        if (price !== undefined) return price;
+        return list[0].oldPrice; // price as it stood before the first recorded change
+      }
+      return station.defaultRate;
+    };
+
+    // Month-end boundaries for the last MONTHS_BACK months (oldest → newest).
+    const boundaries: { label: string; at: Date }[] = [];
+    for (let i = MONTHS_BACK - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const at = i === 0 ? now : new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+      boundaries.push({ label: d.toLocaleDateString('en-US', { month: 'short' }), at });
+    }
+
+    const stationsByCurrency: Record<string, any[]> = {};
+    for (const s of activeStations as any[]) {
+      const cur = s.currency || 'TZS';
+      (stationsByCurrency[cur] = stationsByCurrency[cur] || []).push(s);
+    }
+
+    const roundFor = (cur: string, v: number) => (cur === 'USD' ? Math.round(v * 100) / 100 : Math.round(v));
+
+    const fuelPriceTrend = Object.entries(stationsByCurrency)
+      .map(([currency, sts]) => {
+        const series = boundaries.map((b) => {
+          const vals = sts.map((s) => effectivePrice(s, b.at)).filter((v) => typeof v === 'number' && v > 0);
+          const avg = vals.length ? vals.reduce((a, v) => a + v, 0) / vals.length : 0;
+          return { month: b.label, value: roundFor(currency, avg) };
+        });
+        const nonZero = series.map((p) => p.value).filter((v) => v > 0);
+        const current = series[series.length - 1]?.value || 0;
+        const previous = series[series.length - 2]?.value || 0;
+        const prevLabel = boundaries[boundaries.length - 2]?.label || '';
+        const trendPct = previous > 0 ? Math.round(((current - previous) / previous) * 1000) / 10 : null;
+        const average = nonZero.length ? roundFor(currency, nonZero.reduce((a, v) => a + v, 0) / nonZero.length) : 0;
+        return {
+          currency,
+          stations: sts.length,
+          series,
+          current,
+          previous,
+          prevLabel,
+          trendPct,
+          lowest: nonZero.length ? Math.min(...nonZero) : 0,
+          highest: nonZero.length ? Math.max(...nonZero) : 0,
+          average,
+        };
+      })
+      .sort((a, b) => (a.currency === 'USD' ? -1 : b.currency === 'USD' ? 1 : a.currency.localeCompare(b.currency)));
+
     const chartData = {
       monthlyFuel,
       doTrends,
       stationDistribution,
       journeyStatus,
+      stationPrices,
+      fuelPriceTrend,
     };
 
     res.status(200).json({
