@@ -723,7 +723,7 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
         isDeleted: false,
         date: { $gte: toDateStr(doStartDate), $lte: toDateStr(doEndDate) },
       })
-        .select('date doNumber')
+        .select('date doNumber tonnages')
         .lean(),
       LPOSummary.aggregate([
         {
@@ -765,18 +765,23 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const monthlyFuel = Object.entries(monthlyFuelData)
       .map(([month, value]) => ({ month, value: Math.round(value as number) }));
 
-    // DO trends — use actual date field
-    const doTrendsData: any = {};
+    // DO trends + tonnage trends — use actual date field
+    const doTrendsData: Record<string, number> = {};
+    const tonnageTrendsData: Record<string, number> = {};
     deliveryOrders.forEach((DO) => {
       const doDate = DO.date && !isNaN(new Date(DO.date).getTime())
         ? new Date(DO.date)
         : new Date((DO as any).createdAt);
       const month = doDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       doTrendsData[month] = (doTrendsData[month] || 0) + 1;
+      tonnageTrendsData[month] = (tonnageTrendsData[month] || 0) + ((DO as any).tonnages || 0);
     });
 
     const doTrends = Object.entries(doTrendsData)
       .map(([month, count]) => ({ month, count }));
+
+    const tonnageTrends = Object.entries(tonnageTrendsData)
+      .map(([month, tonnage]) => ({ month, tonnage: Math.round(tonnage) }));
 
     // LPO trends — month-by-month entry count for the sparkline
     const lpoTrendsData: Record<string, number> = {};
@@ -905,6 +910,7 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
       monthlyFuel,
       doTrends,
       lpoTrends,
+      tonnageTrends,
       stationDistribution,
       journeyStatus,
       stationPrices,
