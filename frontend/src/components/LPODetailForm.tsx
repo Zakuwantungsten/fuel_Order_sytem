@@ -401,6 +401,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadLPOPdf = journeyConfig?.autoDownloadLPOPdf ?? true;
 
+  const lpoAutomationOff = useMemo(() => {
+    const fa = journeyConfig?.fuelAutomation;
+    if (!fa) return [];
+    const labels: string[] = [];
+    if (fa.lpoCreateDeduct === false) labels.push('Deduct on create');
+    if (fa.lpoCancelRevert === false) labels.push('Revert on cancel');
+    if (fa.lpoEditAdjust === false) labels.push('Adjust on edit');
+    return labels;
+  }, [journeyConfig]);
+
   // Creation lock: only one user may use the new-LPO form at a time. Acquire a
   // global 'lpo_create' resource lock while the form is open (creating only),
   // and release it on close/unmount. The 5-minute TTL backs out abandoned locks.
@@ -3359,6 +3369,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 Forwarded from LPO #{forwardedFromInfo.lpoNo} at {forwardedFromInfo.station}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* Fuel automation off banner */}
+        {lpoAutomationOff.length > 0 && (
+          <div className="flex items-center gap-2 px-5 py-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800/60">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-[11.5px] text-amber-800 dark:text-amber-300 leading-none">
+              <span className="font-semibold">Fuel automation off:</span>{' '}
+              {lpoAutomationOff.join(' · ')} — fuel records won't update automatically.
+            </p>
           </div>
         )}
 
