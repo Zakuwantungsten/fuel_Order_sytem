@@ -1,27 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { X, Fuel, AlertCircle, Loader2, TruckIcon, Calendar } from 'lucide-react';
+import { X, Fuel, AlertCircle, Loader2, TruckIcon, Calendar, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { FuelRecord } from '../types';
 import api from '../services/api';
 
-// All checkpoint columns with their abbreviations and field names
 const CHECKPOINT_COLUMNS = [
   { abbr: 'MMS', field: 'mmsaYard', label: 'MMSA Yard' },
-  { abbr: 'TnY', field: 'tangaYard', label: 'Tanga Yard' },
-  { abbr: 'DrY', field: 'darYard', label: 'DAR Yard' },
-  { abbr: 'TnG', field: 'tangaGoing', label: 'Tanga Going' },
-  { abbr: 'DrG', field: 'darGoing', label: 'DAR Going' },
-  { abbr: 'MoG', field: 'moroGoing', label: 'Moro Going' },
-  { abbr: 'MbG', field: 'mbeyaGoing', label: 'Mbeya Going' },
-  { abbr: 'TdG', field: 'tdmGoing', label: 'Tunduma Going' },
-  { abbr: 'ZmG', field: 'zambiaGoing', label: 'Zambia Going' },
-  { abbr: 'Cng', field: 'congoFuel', label: 'Congo Fuel' },
-  { abbr: 'ZmR', field: 'zambiaReturn', label: 'Zambia Return' },
-  { abbr: 'TdR', field: 'tundumaReturn', label: 'Tunduma Return' },
-  { abbr: 'MbR', field: 'mbeyaReturn', label: 'Mbeya Return' },
-  { abbr: 'MoR', field: 'moroReturn', label: 'Moro Return' },
-  { abbr: 'DrR', field: 'darReturn', label: 'DAR Return' },
-  { abbr: 'TnR', field: 'tangaReturn', label: 'Tanga Return' },
-  { abbr: 'Bal', field: 'balance', label: 'Balance' },
+  { abbr: 'TNY', field: 'tangaYard', label: 'Tanga Yard' },
+  { abbr: 'DRY', field: 'darYard', label: 'DAR Yard' },
+  { abbr: 'TNG', field: 'tangaGoing', label: 'Tanga Going' },
+  { abbr: 'DRG', field: 'darGoing', label: 'DAR Going' },
+  { abbr: 'MOG', field: 'moroGoing', label: 'Moro Going' },
+  { abbr: 'MBG', field: 'mbeyaGoing', label: 'Mbeya Going' },
+  { abbr: 'TDG', field: 'tdmGoing', label: 'Tunduma Going' },
+  { abbr: 'ZMG', field: 'zambiaGoing', label: 'Zambia Going' },
+  { abbr: 'CNG', field: 'congoFuel', label: 'Congo Fuel' },
+  { abbr: 'ZMR', field: 'zambiaReturn', label: 'Zambia Return' },
+  { abbr: 'TDR', field: 'tundumaReturn', label: 'Tunduma Return' },
+  { abbr: 'MBR', field: 'mbeyaReturn', label: 'Mbeya Return' },
+  { abbr: 'MOR', field: 'moroReturn', label: 'Moro Return' },
+  { abbr: 'DRR', field: 'darReturn', label: 'DAR Return' },
+  { abbr: 'TNR', field: 'tangaReturn', label: 'Tanga Return' },
+  { abbr: 'BAL', field: 'balance', label: 'Balance' },
 ] as const;
 
 interface FuelRecordInspectModalProps {
@@ -31,9 +30,6 @@ interface FuelRecordInspectModalProps {
   truckNumber?: string;
 }
 
-/**
- * Calculate remaining balance for Mbeya return checkpoint
- */
 export function calculateMbeyaReturnBalance(fuelRecord: FuelRecord): {
   standardAllocation: number;
   tundumaFuel: number;
@@ -45,24 +41,19 @@ export function calculateMbeyaReturnBalance(fuelRecord: FuelRecord): {
   const standardAllocation = 400;
   const tundumaFuel = fuelRecord.tundumaReturn || 0;
   const availableBalance = Math.max(0, standardAllocation - tundumaFuel);
-  const suggestedLiters = availableBalance;
-  const reason = tundumaFuel > 0 
+  const reason = tundumaFuel > 0
     ? `Standard ${standardAllocation}L - ${tundumaFuel}L (Tunduma) = ${availableBalance}L available`
     : `Standard allocation: ${standardAllocation}L`;
-  
   return {
     standardAllocation,
     tundumaFuel,
     availableBalance,
     hasReceivedTundumaFuel: tundumaFuel > 0,
-    suggestedLiters,
+    suggestedLiters: availableBalance,
     reason,
   };
 }
 
-/**
- * Calculate total fuel consumed by a truck
- */
 function calculateTotalFuel(record: FuelRecord): number {
   return (
     (record.mmsaYard || 0) +
@@ -84,6 +75,28 @@ function calculateTotalFuel(record: FuelRecord): number {
   );
 }
 
+function getFrontierField(record: FuelRecord): string | null {
+  const stops = CHECKPOINT_COLUMNS.filter(c => c.field !== 'balance');
+  let lastIdx = -1;
+  stops.forEach((col, i) => {
+    if (((record as any)[col.field] || 0) > 0) lastIdx = i;
+  });
+  return lastIdx < stops.length - 1 ? stops[lastIdx + 1].field : null;
+}
+
+function getStatusBadge(record: FuelRecord): { label: string; cls: string } {
+  if ((record as any).isLocked) return { label: 'Locked', cls: 'bg-amber-500/90 text-white' };
+  if ((record.balance || 0) === 0) return { label: 'Completed', cls: 'bg-gray-500/80 text-white' };
+  if ((record.balance || 0) > 0) return { label: 'Active', cls: 'bg-green-500/90 text-white' };
+  return { label: 'Overspent', cls: 'bg-red-500/90 text-white' };
+}
+
+const SectionBadge = ({ n }: { n: string }) => (
+  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 shrink-0">
+    {n}
+  </span>
+);
+
 const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
   isOpen,
   onClose,
@@ -94,10 +107,8 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset state when modal closes or fuelRecordId changes
   useEffect(() => {
     if (!isOpen) {
-      // Clear state when modal closes to prevent showing stale data on next open
       setFuelRecord(null);
       setLoading(true);
       setError(null);
@@ -106,7 +117,6 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
 
   useEffect(() => {
     if (isOpen && fuelRecordId) {
-      // Clear previous data before fetching new record
       setFuelRecord(null);
       setLoading(true);
       setError(null);
@@ -114,18 +124,11 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
     }
   }, [isOpen, fuelRecordId]);
 
-  // Handle Escape key with propagation prevention
   useEffect(() => {
     if (!isOpen) return;
-    
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        e.preventDefault();
-        onClose();
-      }
+      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); onClose(); }
     };
-    
     window.addEventListener('keydown', handleEscape, true);
     return () => window.removeEventListener('keydown', handleEscape, true);
   }, [isOpen, onClose]);
@@ -135,387 +138,413 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
     setError(null);
     try {
       const response = await api.get(`/fuel-records/${fuelRecordId}`);
-      // API returns { success, message, data: fuelRecord }
-      const fuelRecordData = response.data?.data || response.data;
-      setFuelRecord(fuelRecordData);
+      setFuelRecord(response.data?.data || response.data);
     } catch (err: any) {
-      console.error('Error fetching fuel record:', err);
       setError(err.response?.data?.message || 'Failed to fetch fuel record');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleClose = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    e?.preventDefault();
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const totalFuel = fuelRecord ? calculateTotalFuel(fuelRecord) : 0;
   const mbeyaBalance = fuelRecord ? calculateMbeyaReturnBalance(fuelRecord) : null;
-
-  // Handle close with event propagation prevention
-  const handleClose = (e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    onClose();
-  };
+  const frontierField = fuelRecord ? getFrontierField(fuelRecord) : null;
+  const badge = fuelRecord ? getStatusBadge(fuelRecord) : null;
+  const balance = fuelRecord?.balance || 0;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center">
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={handleClose}
-      />
-      
-      {/* Modal */}
-      <div 
-        className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
+
+      <div
+        className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-500 to-purple-600">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/20 rounded-lg">
-              <Fuel className="h-5 w-5 text-white" />
+        {/* ── HEADER ── */}
+        <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 px-6 py-4 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <Fuel className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">Fuel Record Inspection</h2>
+                <div className="flex items-center gap-2 text-white/75 text-sm mt-0.5">
+                  <TruckIcon className="h-3.5 w-3.5" />
+                  <span>{fuelRecord?.truckNo || truckNumber || '—'}</span>
+                  <span className="opacity-50">•</span>
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{fuelRecord?.month || '—'}</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Fuel Record Inspection
-              </h2>
-              {truckNumber && (
-                <p className="text-sm text-white/80 flex items-center gap-1">
-                  <TruckIcon className="h-3 w-3" />
-                  {truckNumber}
-                </p>
+            <div className="flex items-center gap-2">
+              {badge && (
+                <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${badge.cls}`}>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {badge.label}
+                </span>
               )}
+              <button onClick={handleClose} className="p-2 hover:bg-white/20 rounded-xl transition-colors">
+                <X className="h-5 w-5 text-white" />
+              </button>
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-          >
-            <X className="h-5 w-5 text-white" />
-          </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
+        {/* ── SCROLLABLE BODY ── */}
+        <div className="flex-1 overflow-y-auto">
+          {loading && (
+            <div className="flex items-center justify-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-              <span className="ml-3 text-gray-600 dark:text-gray-400">Loading fuel record...</span>
+              <span className="ml-3 text-gray-500 dark:text-gray-400">Loading fuel record…</span>
             </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center py-12">
+          )}
+
+          {error && (
+            <div className="flex flex-col items-center justify-center py-16">
               <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-              <p className="text-red-600 dark:text-red-400 text-center">{error}</p>
+              <p className="text-red-600 dark:text-red-400 text-center mb-4">{error}</p>
               <button
                 onClick={fetchFuelRecord}
-                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
               >
                 Retry
               </button>
             </div>
-          ) : fuelRecord ? (
-            <div className="space-y-6">
-              {/* Basic Info */}
-              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Truck</p>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {fuelRecord.truckNo || truckNumber || 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Month</p>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {fuelRecord.month || 'N/A'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-500" />
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Date</p>
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        {fuelRecord.date ? new Date(fuelRecord.date).toLocaleDateString() : 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                      (fuelRecord as any).isLocked
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-                        : fuelRecord.balance === 0 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                          : fuelRecord.balance > 0 
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                    }`}>
-                      {(fuelRecord as any).isLocked 
-                        ? '🔒 Locked (Pending Config)' 
-                        : fuelRecord.balance === 0 
-                          ? 'Completed' 
-                          : fuelRecord.balance > 0 
-                            ? 'Active' 
-                            : 'Overspent'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+          )}
 
-              {/* Route Info - Going Journey */}
-              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-4">
-                <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2">
-                   Going Journey (IMPORT)
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-sm text-blue-600 dark:text-blue-400">DO Number</p>
-                    <p className="font-semibold text-blue-900 dark:text-blue-100">
-                      {fuelRecord.goingDo || 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-blue-600 dark:text-blue-400">From</p>
-                    <p className="font-semibold text-blue-900 dark:text-blue-100">
-                      {(fuelRecord as any).originalGoingFrom || fuelRecord.from || 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-blue-600 dark:text-blue-400">To</p>
-                    <p className="font-semibold text-blue-900 dark:text-blue-100">
-                      {(fuelRecord as any).originalGoingTo || fuelRecord.to || 'N/A'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Route Info - Return Journey (only if exists) */}
-              {fuelRecord.returnDo && (
-                <div className="bg-green-50 dark:bg-green-900/30 rounded-xl p-4">
-                  <h4 className="text-sm font-semibold text-green-700 dark:text-green-300 mb-3 flex items-center gap-2">
-                     Return Journey (EXPORT)
-                  </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-sm text-green-600 dark:text-green-400">DO Number</p>
-                      <p className="font-semibold text-green-900 dark:text-green-100">
-                        {fuelRecord.returnDo}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-green-600 dark:text-green-400">From</p>
-                      <p className="font-semibold text-green-900 dark:text-green-100">
-                        {fuelRecord.from || 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-green-600 dark:text-green-400">To</p>
-                      <p className="font-semibold text-green-900 dark:text-green-100">
-                        {fuelRecord.to || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Locked Record Warning - Show configuration missing */}
-              {(fuelRecord as any).isLocked && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 rounded-lg">
-                  <div className="flex items-start">
-                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mr-3 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
-                        🔒 Record Locked - Missing Configuration
-                      </h4>
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
-                        {(fuelRecord as any).pendingConfigReason === 'both' 
-                          ? 'Missing: Route total liters AND truck batch assignment'
-                          : (fuelRecord as any).pendingConfigReason === 'missing_total_liters'
-                          ? 'Missing: Route total liters configuration'
-                          : 'Missing: Truck batch assignment'}
-                      </p>
-                      <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
-                        ℹ️ Contact admin to configure missing settings. Manual LPO entry is still allowed.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Checkpoint Table — desktop only */}
-              <div className="hidden md:block">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                  <Fuel className="h-5 w-5" />
-                  Fuel at Each Checkpoint
-                </h3>
-                
-                <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-100 dark:bg-gray-700">
-                      <tr>
-                        {CHECKPOINT_COLUMNS.map((col) => (
-                          <th
-                            key={col.abbr}
-                            className="px-2 py-2 text-center text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap"
-                            title={col.label}
-                          >
-                            {col.abbr}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                      <tr>
-                        {CHECKPOINT_COLUMNS.map((col) => {
-                          const value = (fuelRecord as any)[col.field] || 0;
-                          const isBalance = col.field === 'balance';
-                          const hasValue = value > 0;
-                          
-                          return (
-                            <td
-                              key={col.abbr}
-                              className={`px-2 py-3 text-center text-sm font-medium whitespace-nowrap ${
-                                isBalance
-                                  ? value > 0
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                    : value < 0
-                                      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                      : 'text-gray-500 dark:text-gray-400'
-                                  : hasValue
-                                    ? 'text-gray-900 dark:text-white bg-yellow-50 dark:bg-yellow-900/20'
-                                    : 'text-gray-400 dark:text-gray-500'
-                              }`}
-                              title={col.label}
-                            >
-                              {value}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                
-                {/* Legend */}
-                <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
-                  <span className="flex items-center gap-1">
-                    <span className="w-3 h-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 rounded"></span>
-                    Has fuel
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-3 h-3 bg-green-100 dark:bg-green-900/30 border border-green-300 rounded"></span>
-                    Positive balance
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-3 h-3 bg-red-100 dark:bg-red-900/30 border border-red-300 rounded"></span>
-                    Negative balance
-                  </span>
-                </div>
-              </div>
-
-              {/* Checkpoint Details Cards — mobile: always visible, desktop: always visible too */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-                  Checkpoint Details
-                </h3>
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {CHECKPOINT_COLUMNS.map((col) => {
-                    const value = (fuelRecord as any)[col.field] || 0;
-                    const isBalance = col.field === 'balance';
-                    const hasValue = value !== 0;
-                    
-                    return (
-                      <div
-                        key={col.abbr}
-                        className={`p-2 rounded-lg border ${
-                          isBalance
-                            ? value > 0
-                              ? 'border-green-300 bg-green-50 dark:bg-green-900/30 dark:border-green-700'
-                              : value < 0
-                                ? 'border-red-300 bg-red-50 dark:bg-red-900/30 dark:border-red-700'
-                                : 'border-gray-200 bg-gray-50 dark:bg-gray-700/50 dark:border-gray-600'
-                            : hasValue
-                              ? 'border-yellow-300 bg-yellow-50 dark:bg-yellow-900/30 dark:border-yellow-700'
-                              : 'border-gray-200 bg-gray-50 dark:bg-gray-700/50 dark:border-gray-600'
-                        }`}
-                      >
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{col.label}</p>
-                        <p className={`text-lg font-bold ${
-                          isBalance
-                            ? value > 0
-                              ? 'text-green-700 dark:text-green-300'
-                              : value < 0
-                                ? 'text-red-700 dark:text-red-300'
-                                : 'text-gray-500 dark:text-gray-400'
-                            : hasValue
-                              ? 'text-gray-900 dark:text-white'
-                              : 'text-gray-400 dark:text-gray-500'
-                        }`}>
-                          {value}L
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Totals Summary */}
-              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Fuel Used</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {totalFuel}L
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Litres (Allocated)</p>
-                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {fuelRecord.totalLts || 0}L
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Balance</p>
-                    <p className={`text-2xl font-bold ${
-                      (fuelRecord.balance || 0) > 0
-                        ? 'text-green-600 dark:text-green-400'
-                        : (fuelRecord.balance || 0) < 0
-                          ? 'text-red-600 dark:text-red-400'
-                          : 'text-gray-600 dark:text-gray-400'
-                    }`}>
-                      {fuelRecord.balance || 0}L
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mbeya Return Balance Info */}
-              {mbeyaBalance && mbeyaBalance.hasReceivedTundumaFuel && (
-                <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-xl p-4">
-                  <h4 className="font-semibold text-amber-800 dark:text-amber-200 mb-2 flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5" />
-                    Mbeya Return Balance Note
-                  </h4>
-                  <p className="text-sm text-amber-700 dark:text-amber-300">
-                    Standard Mbeya Return: <strong>400L</strong> - Tunduma Return fuel (<strong>{mbeyaBalance.tundumaFuel}L</strong>) 
-                    = Available: <strong className="text-green-700 dark:text-green-300">{mbeyaBalance.availableBalance}L</strong>
+          {fuelRecord && (
+            <>
+              {/* ── STATS BAR ── */}
+              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-gray-100 dark:divide-gray-800 border-b border-gray-100 dark:border-gray-800">
+                <div className="p-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Truck</p>
+                  <p className="text-xl font-black text-gray-900 dark:text-white mt-1 tracking-wide">
+                    {fuelRecord.truckNo || truckNumber || '—'}
                   </p>
                 </div>
-              )}
-            </div>
-          ) : null}
+                <div className="p-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Route</p>
+                  <p className="text-base font-bold text-gray-900 dark:text-white mt-1">
+                    {fuelRecord.from || '—'} → {fuelRecord.to || '—'}
+                  </p>
+                  {fuelRecord.returnDo && (
+                    <p className="text-xs text-gray-400 mt-0.5">Going + Return</p>
+                  )}
+                </div>
+                <div className="p-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Allocated</p>
+                  <p className="mt-1">
+                    <span className="text-xl font-black text-purple-600 dark:text-purple-400">
+                      {(fuelRecord.totalLts || 0).toLocaleString()}
+                    </span>
+                    <span className="text-sm text-gray-400 ml-1">L</span>
+                  </p>
+                </div>
+                <div className="p-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Balance Remaining</p>
+                  <p className="mt-1">
+                    <span className={`text-xl font-black ${
+                      balance > 0 ? 'text-green-600 dark:text-green-400' :
+                      balance < 0 ? 'text-red-600 dark:text-red-400' :
+                      'text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {balance.toLocaleString()}
+                    </span>
+                    <span className="text-sm text-gray-400 ml-1">L</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* ── JOURNEY CARDS ── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-blue-50/70 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="p-1.5 bg-blue-600 rounded-lg shrink-0">
+                        <ArrowRight className="h-4 w-4 text-white" />
+                      </div>
+                      <h4 className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-widest">
+                        Going Journey (Import)
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <p className="text-[10px] text-blue-500 dark:text-blue-400">DO number</p>
+                        <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mt-0.5">
+                          {fuelRecord.goingDo || '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-blue-500 dark:text-blue-400">From</p>
+                        <p className="text-sm font-bold text-blue-900 dark:text-blue-100 mt-0.5 uppercase">
+                          {(fuelRecord as any).originalGoingFrom || fuelRecord.from || '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-blue-500 dark:text-blue-400">To</p>
+                        <p className="text-sm font-bold text-blue-900 dark:text-blue-100 mt-0.5 uppercase">
+                          {(fuelRecord as any).originalGoingTo || fuelRecord.to || '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {fuelRecord.returnDo ? (
+                    <div className="bg-green-50/70 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 bg-green-600 rounded-lg shrink-0">
+                          <ArrowLeft className="h-4 w-4 text-white" />
+                        </div>
+                        <h4 className="text-[10px] font-bold text-green-700 dark:text-green-300 uppercase tracking-widest">
+                          Return Journey (Export)
+                        </h4>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <p className="text-[10px] text-green-500 dark:text-green-400">DO number</p>
+                          <p className="text-sm font-semibold text-green-900 dark:text-green-100 mt-0.5">
+                            {fuelRecord.returnDo}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-green-500 dark:text-green-400">From</p>
+                          <p className="text-sm font-bold text-green-900 dark:text-green-100 mt-0.5 uppercase">
+                            {fuelRecord.from || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-green-500 dark:text-green-400">To</p>
+                          <p className="text-sm font-bold text-green-900 dark:text-green-100 mt-0.5 uppercase">
+                            {fuelRecord.to || '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="hidden md:flex bg-gray-50 dark:bg-gray-800/40 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl items-center justify-center">
+                      <p className="text-sm text-gray-400">No return journey</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Locked warning */}
+                {(fuelRecord as any).isLocked && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                          Record Locked — Missing Configuration
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                          {(fuelRecord as any).pendingConfigReason === 'both'
+                            ? 'Missing: Route total liters AND truck batch assignment'
+                            : (fuelRecord as any).pendingConfigReason === 'missing_total_liters'
+                            ? 'Missing: Route total liters configuration'
+                            : 'Missing: Truck batch assignment'}
+                        </p>
+                        <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+                          Contact admin to configure missing settings. Manual LPO entry is still allowed.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── 02 ALL CHECKPOINTS — desktop: table, mobile: cards ── */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <SectionBadge n="02" />
+                      <h3 className="font-semibold text-gray-900 dark:text-white">All checkpoints</h3>
+                    </div>
+                    <div className="hidden md:flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded border-2 border-green-400 bg-green-50 dark:bg-green-900/30 inline-block" />
+                        Has fuel
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded border-2 border-blue-400 bg-blue-50 dark:bg-blue-900/30 inline-block" />
+                        Balance
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full border-separate border-spacing-x-0.5">
+                      <thead>
+                        <tr>
+                          {CHECKPOINT_COLUMNS.map(col => (
+                            <th
+                              key={col.abbr}
+                              title={col.label}
+                              className={`pb-2 text-center text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
+                                col.field === 'balance'
+                                  ? 'text-blue-600 dark:text-blue-400'
+                                  : 'text-gray-400 dark:text-gray-500'
+                              }`}
+                            >
+                              {col.abbr}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          {CHECKPOINT_COLUMNS.map(col => {
+                            const val = (fuelRecord as any)[col.field] || 0;
+                            const isBalance = col.field === 'balance';
+                            const isFrontier = !isBalance && val === 0 && col.field === frontierField;
+
+                            let cellCls = '';
+                            let display: React.ReactNode = '—';
+
+                            if (isBalance) {
+                              display = val.toLocaleString();
+                              cellCls = val > 0
+                                ? 'text-blue-700 dark:text-blue-300 font-black text-base'
+                                : val < 0
+                                  ? 'text-red-600 dark:text-red-400 font-black text-base'
+                                  : 'text-gray-400';
+                            } else if (val > 0) {
+                              display = val;
+                              cellCls = 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700 rounded-lg font-semibold';
+                            } else if (isFrontier) {
+                              cellCls = 'bg-amber-50 dark:bg-amber-900/30 text-amber-500 dark:text-amber-400 border border-amber-300 dark:border-amber-600 rounded-lg';
+                            } else {
+                              cellCls = 'text-gray-300 dark:text-gray-600';
+                            }
+
+                            return (
+                              <td key={col.abbr} className="py-1 text-center" title={col.label}>
+                                <div className={`mx-auto w-11 py-1.5 text-sm text-center ${cellCls}`}>
+                                  {display}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile cards */}
+                  <div className="md:hidden grid grid-cols-3 gap-2">
+                    {CHECKPOINT_COLUMNS.map(col => {
+                      const val = (fuelRecord as any)[col.field] || 0;
+                      const isBalance = col.field === 'balance';
+                      const hasVal = val !== 0;
+
+                      return (
+                        <div
+                          key={col.abbr}
+                          className={`p-2 rounded-lg border text-center ${
+                            isBalance
+                              ? val > 0
+                                ? 'border-blue-300 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-700'
+                                : val < 0
+                                  ? 'border-red-300 bg-red-50 dark:bg-red-900/30 dark:border-red-700'
+                                  : 'border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700'
+                              : hasVal
+                                ? 'border-green-300 bg-green-50 dark:bg-green-900/30 dark:border-green-700'
+                                : 'border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700'
+                          }`}
+                        >
+                          <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">{col.abbr}</p>
+                          <p className={`text-base font-bold mt-0.5 ${
+                            isBalance
+                              ? val > 0 ? 'text-blue-700 dark:text-blue-300' : val < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'
+                              : hasVal ? 'text-green-700 dark:text-green-300' : 'text-gray-300 dark:text-gray-600'
+                          }`}>
+                            {hasVal ? val : '—'}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── 03 CONSUMPTION SUMMARY ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <SectionBadge n="03" />
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Consumption summary</h3>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-center">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Used</p>
+                      <p className="text-3xl font-black text-gray-900 dark:text-white mt-2">
+                        {totalFuel.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">litres</p>
+                    </div>
+                    <div className="bg-blue-50/70 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-center">
+                      <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Allocated</p>
+                      <p className="text-3xl font-black text-blue-600 dark:text-blue-400 mt-2">
+                        {(fuelRecord.totalLts || 0).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-blue-400 mt-1">litres</p>
+                    </div>
+                    <div className={`rounded-xl p-4 text-center border ${
+                      balance > 0
+                        ? 'bg-green-50/70 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : balance < 0
+                          ? 'bg-red-50/70 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                          : 'bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700'
+                    }`}>
+                      <p className={`text-[10px] font-bold uppercase tracking-widest ${
+                        balance > 0 ? 'text-green-400' : balance < 0 ? 'text-red-400' : 'text-gray-400'
+                      }`}>Balance</p>
+                      <p className={`text-3xl font-black mt-2 ${
+                        balance > 0 ? 'text-green-600 dark:text-green-400' :
+                        balance < 0 ? 'text-red-600 dark:text-red-400' :
+                        'text-gray-500 dark:text-gray-400'
+                      }`}>
+                        {balance.toLocaleString()}
+                      </p>
+                      <p className={`text-xs mt-1 ${
+                        balance > 0 ? 'text-green-400' : balance < 0 ? 'text-red-400' : 'text-gray-400'
+                      }`}>litres</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mbeya balance note */}
+                {mbeyaBalance?.hasReceivedTundumaFuel && (
+                  <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-xl p-4">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Mbeya Return Balance Note</p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                          Standard 400L − Tunduma {mbeyaBalance.tundumaFuel}L ={' '}
+                          <strong className="text-green-700 dark:text-green-300">{mbeyaBalance.availableBalance}L available</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end items-center">
+        {/* ── FOOTER ── */}
+        <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 flex justify-end shrink-0">
           <button
             onClick={handleClose}
-            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors"
           >
             Close
           </button>
