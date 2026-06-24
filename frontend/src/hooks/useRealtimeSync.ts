@@ -6,6 +6,7 @@ import { deliveryOrderKeys } from './useDeliveryOrders';
 import { fuelRecordKeys } from './useFuelRecords';
 import { tangaLPOKeys } from './useTangaLPOs';
 import { darLPOKeys } from './useDarLPOs';
+import { journeyConfigKey } from './useJourneyConfig';
 
 /** Shape of a real-time data-change event delivered over the WebSocket. */
 export interface DataChangeEvent {
@@ -31,6 +32,7 @@ const COLLECTION_QUERY_KEYS: Record<string, () => ReadonlyArray<ReadonlyArray<un
   truck_batches:        () => [fuelRecordKeys.lists(), deliveryOrderKeys.lists()],
   tanga_lpo_documents:  () => [tangaLPOKeys.lists(), [...tangaLPOKeys.all, 'workbook'] as const, tangaLPOKeys.years()],
   dar_lpo_documents:    () => [darLPOKeys.lists(), [...darLPOKeys.all, 'workbook'] as const, darLPOKeys.years()],
+  journey_config:       () => [[...journeyConfigKey]],
 };
 
 /** Map collection name → the detail-level React Query key for a specific record id. */
