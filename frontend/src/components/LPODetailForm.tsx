@@ -30,7 +30,11 @@ interface TruckFetchResult {
   balance: number;
   message: string;
   success: boolean;
-  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | null;
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | null;
+  // Set when the same DO is on more than one truck/journey (dirty imported data).
+  // The caller must let the user pick rather than silently committing the primary.
+  ambiguous?: boolean;
+  matches?: (TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' })[];
   queueInfo?: {
     hasQueue: boolean;
     queuedCount: number;
@@ -56,7 +60,7 @@ interface EntryAutoFillData {
   entryType?: 'regular' | 'da' | 'ref' | 'nil';
   referenceDoNo?: string;  // For DA: the real journey DO number
   // Warning states for trucks without valid fuel records
-  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | null;
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | null;
   warningMessage?: string;
   // Balance info for Mbeya returning and other checkpoints
   balanceInfo?: {
@@ -243,6 +247,29 @@ const LPO_RD_STYLES = `
 .dark .lpo-rd .addrow-btn{background:#0f172a;color:#818cf8;}
 `;
 
+// Map a single fuel record + detected direction into the shared TruckFetchResult
+// shape. Used both for the primary DO match and for each candidate in the
+// ambiguity picker, so a picked candidate auto-fills exactly like a clean lookup.
+const buildDoResult = (
+  fuelRecord: FuelRecord,
+  direction: 'going' | 'returning'
+): TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' } => {
+  const goingDestination = fuelRecord.originalGoingTo || fuelRecord.to || 'NIL';
+  const doShown = direction === 'returning' ? fuelRecord.returnDo : fuelRecord.goingDo;
+  return {
+    fuelRecord,
+    truckNo: fuelRecord.truckNo,
+    direction,
+    goingDo: fuelRecord.goingDo || 'NIL',
+    returnDo: fuelRecord.returnDo || 'NIL',
+    destination: fuelRecord.to || 'NIL',
+    goingDestination,
+    balance: fuelRecord.balance || 0,
+    message: `Found: DO ${doShown || 'NIL'}, Balance: ${fuelRecord.balance ?? 0}L`,
+    success: true,
+  };
+};
+
 const LPODetailForm: React.FC<LPODetailFormProps> = ({
   isOpen,
   onClose,
@@ -346,6 +373,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     stationName: string;
     blockedDirection: 'going' | 'returning';
   }>({ open: false, stationName: '', blockedDirection: 'going' });
+
+  // Ambiguous-DO picker modal. Opens when a typed DO matches more than one truck
+  // (dirty imported data). The user must pick the correct journey; we never
+  // silently auto-fill in that case.
+  const [doAmbiguityModal, setDoAmbiguityModal] = useState<{
+    open: boolean;
+    index: number;
+    doNo: string;
+    matches: (TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' })[];
+  }>({ open: false, index: -1, doNo: '', matches: [] });
 
   // Multi-select state for bulk editing
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
@@ -1422,9 +1459,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   /**
    * Fetch journey data by DO number — sourced from the fuel record table
    * (the SAME source as the truck-number lookup), not the delivery-orders
-   * collection. Each DO is unique and belongs to exactly one journey as either
-   * the going or the returning DO (never both), so we look the record up
-   * directly and let the backend detect the direction.
+   * collection. A DO *should* be unique to one journey (as either the going or
+   * the returning DO), but imported data can put the same DO on two trucks. The
+   * backend returns EVERY match plus an `ambiguous` flag; we pass those through
+   * so the caller can make the user pick instead of silently using the primary.
    * Returns the same TruckFetchResult structure for consistency.
    */
   const fetchByDONumber = useCallback(async (doNumber: string): Promise<TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' }> => {
@@ -1458,20 +1496,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         };
       }
 
-      const { fuelRecord, direction } = result;
-      const goingDestination = fuelRecord.originalGoingTo || fuelRecord.to || 'NIL';
-
+      const base = buildDoResult(result.fuelRecord, result.direction);
       return {
-        fuelRecord,
-        truckNo: fuelRecord.truckNo,
-        direction,
-        goingDo: fuelRecord.goingDo || 'NIL',
-        returnDo: fuelRecord.returnDo || 'NIL',
-        destination: fuelRecord.to || 'NIL',
-        goingDestination,
-        balance: fuelRecord.balance || 0,
-        message: `Found: DO ${doNumber}, Balance: ${fuelRecord.balance ?? 0}L`,
-        success: true,
+        ...base,
+        ambiguous: result.ambiguous,
+        matches: result.matches.map(m => buildDoResult(m.fuelRecord, m.direction)),
       };
     } catch (error) {
       console.error('Error fetching fuel record by DO:', error);
@@ -2224,6 +2253,121 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   };
 
   /**
+   * Commit a resolved DO lookup into the row: fill truck/destination/liters and
+   * record the auto-fill metadata. Shared by the normal single-match path and the
+   * ambiguity picker (a picked candidate fills exactly like a clean lookup).
+   */
+  const applyDoFetchResult = (
+    index: number,
+    doNoUpper: string,
+    result: TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' }
+  ) => {
+    // Direction is detected by the backend from which DO field matched
+    // (goingDo → going, returnDo → returning). Fall back to a local match
+    // against the record's returnDo if the backend didn't supply one.
+    const direction: 'going' | 'returning' = result.direction
+      ? result.direction
+      : (result.fuelRecord && result.fuelRecord.returnDo === doNoUpper ? 'returning' : 'going');
+
+    // Check if return DO is missing
+    const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
+
+    // Use correct destination based on direction
+    const destinationForAllocation = direction === 'going'
+      ? result.goingDestination
+      : result.destination;
+
+    const isCustom = formData.station === 'CUSTOM';
+    const isCash = formData.station === 'CASH';
+    const defaults = isCustom
+      ? { liters: customDefaultLitersRef.current, rate: customRateRef.current }
+      : isCash
+      ? { liters: cashDefaultLitersRef.current, rate: cashRateRef.current }
+      : (formData.station
+          ? getStationDefaults(
+              formData.station,
+              direction,
+              destinationForAllocation,
+              result.fuelRecord?.totalLts ?? undefined,
+              result.fuelRecord?.extra ?? undefined,
+              result.fuelRecord?.balance ?? undefined
+            )
+          : { liters: noStationDefaultLitersRef.current, rate: noStationRateRef.current });
+
+    // Calculate balance info for Mbeya returning
+    let balanceInfo = undefined;
+    if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
+      balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
+    }
+
+    // Auto-fill the entry with truck number and details
+    setFormData(prev => {
+      const newEntries = [...(prev.entries || [])];
+
+      if (!newEntries[index]) {
+        newEntries[index] = {
+          doNo: '',
+          truckNo: '',
+          liters: 0,
+          rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+          amount: 0,
+          dest: 'NIL',
+        };
+      }
+
+      newEntries[index] = {
+        ...newEntries[index],
+        truckNo: result.truckNo || '',
+        doNo: doNoUpper,
+        dest: destinationForAllocation,
+        liters: defaults.liters,
+        rate: defaults.rate,
+        amount: defaults.liters * defaults.rate
+      };
+
+      if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
+        newEntries[index].liters = balanceInfo.suggestedLiters;
+        newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
+      }
+
+      const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
+
+      return { ...prev, entries: newEntries, total };
+    });
+
+    setEntryAutoFillData(prev => ({
+      ...prev,
+      [index]: {
+        direction,
+        loading: false,
+        fetched: result.success,
+        fuelRecord: result.fuelRecord,
+        fuelRecordId: result.fuelRecord?.id || result.fuelRecord?._id,
+        goingDestination: result.goingDestination,
+        returnDoMissing,
+        // Preserve the explicitly-chosen mode (regular/da) across the fetch
+        entryType: prev[index]?.entryType || 'regular',
+        // DA tracks the typed/resolved DO as the reference journey DO
+        referenceDoNo: prev[index]?.entryType === 'da' ? doNoUpper : prev[index]?.referenceDoNo,
+        warningType: result.warningType || null,
+        warningMessage: result.message,
+        balanceInfo,
+        formulaStatus: defaults.formulaStatus || null,
+        formulaMessage: defaults.formulaMessage,
+      }
+    }));
+  };
+
+  // User picked the correct truck from the ambiguous-DO modal — commit it and close.
+  const handlePickAmbiguousMatch = (
+    match: TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' }
+  ) => {
+    const { index, doNo } = doAmbiguityModal;
+    if (index >= 0) applyDoFetchResult(index, doNo, match);
+    setDoAmbiguityModal({ open: false, index: -1, doNo: '', matches: [] });
+  };
+
+  /**
    * Handle DO number change (for DO-first search)
    * Fetches journey by DO and auto-fills truck number
    */
@@ -2295,100 +2439,29 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       fetchDebounceTimers.current[index] = setTimeout(async () => {
         const result = await fetchByDONumber(doNoUpper);
 
-        // Direction is detected by the backend from which DO field matched
-        // (goingDo → going, returnDo → returning). Fall back to a local match
-        // against the record's returnDo if the backend didn't supply one.
-        const direction: 'going' | 'returning' = result.direction
-          ? result.direction
-          : (result.fuelRecord && result.fuelRecord.returnDo === doNoUpper ? 'returning' : 'going');
-
-        // Check if return DO is missing
-        const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
-
-        // Use correct destination based on direction
-        const destinationForAllocation = direction === 'going'
-          ? result.goingDestination
-          : result.destination;
-
-        const isCustom = formData.station === 'CUSTOM';
-        const isCash = formData.station === 'CASH';
-        const defaults = isCustom
-          ? { liters: customDefaultLitersRef.current, rate: customRateRef.current }
-          : isCash
-          ? { liters: cashDefaultLitersRef.current, rate: cashRateRef.current }
-          : (formData.station
-              ? getStationDefaults(
-                  formData.station,
-                  direction,
-                  destinationForAllocation,
-                  result.fuelRecord?.totalLts ?? undefined,
-                  result.fuelRecord?.extra ?? undefined,
-                  result.fuelRecord?.balance ?? undefined
-                )
-              : { liters: noStationDefaultLitersRef.current, rate: noStationRateRef.current });
-
-        // Calculate balance info for Mbeya returning
-        let balanceInfo = undefined;
-        if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
-          balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
+        // Ambiguous DO: the same number is on more than one truck (dirty imported
+        // data). DON'T silently auto-fill — stop, flag the row, and make the user
+        // pick the correct journey from a modal. Auto-fill happens only on pick.
+        const ambiguousMatches = result.matches;
+        if (result.ambiguous && ambiguousMatches && ambiguousMatches.length > 1) {
+          setEntryAutoFillData(prev => ({
+            ...prev,
+            [index]: {
+              ...prev[index],
+              loading: false,
+              fetched: false,
+              fuelRecord: null,
+              entryType: prev[index]?.entryType || 'regular',
+              warningType: 'ambiguous_do',
+              warningMessage: `⚠️ DO ${doNoUpper} matches ${ambiguousMatches.length} trucks — pick the correct one.`,
+            }
+          }));
+          setDoAmbiguityModal({ open: true, index, doNo: doNoUpper, matches: ambiguousMatches });
+          delete fetchDebounceTimers.current[index];
+          return;
         }
 
-        // Auto-fill the entry with truck number and details
-        setFormData(prev => {
-          const newEntries = [...(prev.entries || [])];
-
-          if (!newEntries[index]) {
-            newEntries[index] = {
-              doNo: '',
-              truckNo: '',
-              liters: 0,
-              rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
-              amount: 0,
-              dest: 'NIL',
-            };
-          }
-
-          newEntries[index] = {
-            ...newEntries[index],
-            truckNo: result.truckNo || '',
-            doNo: doNoUpper,
-            dest: destinationForAllocation,
-            liters: defaults.liters,
-            rate: defaults.rate,
-            amount: defaults.liters * defaults.rate
-          };
-
-          if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
-            newEntries[index].liters = balanceInfo.suggestedLiters;
-            newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
-          }
-
-          const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
-
-          return { ...prev, entries: newEntries, total };
-        });
-
-        setEntryAutoFillData(prev => ({
-          ...prev,
-          [index]: {
-            direction,
-            loading: false,
-            fetched: result.success,
-            fuelRecord: result.fuelRecord,
-            fuelRecordId: result.fuelRecord?.id || result.fuelRecord?._id,
-            goingDestination: result.goingDestination,
-            returnDoMissing,
-            // Preserve the explicitly-chosen mode (regular/da) across the fetch
-            entryType: prev[index]?.entryType || 'regular',
-            // DA tracks the typed/resolved DO as the reference journey DO
-            referenceDoNo: prev[index]?.entryType === 'da' ? doNoUpper : prev[index]?.referenceDoNo,
-            warningType: result.warningType || null,
-            warningMessage: result.message,
-            balanceInfo,
-            formulaStatus: defaults.formulaStatus || null,
-            formulaMessage: defaults.formulaMessage,
-          }
-        }));
+        applyDoFetchResult(index, doNoUpper, result);
 
         delete fetchDebounceTimers.current[index];
       }, 300);
@@ -3247,6 +3320,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       (af as EntryAutoFillData).entryType === 'da' ||
       (af as EntryAutoFillData).entryType === 'ref' ||
       (af.warningType && !af.loading && (entry?.truckNo?.length || 0) >= 5) ||
+      (af.warningType === 'ambiguous_do' && !af.loading) ||
       hasDup ||
       (af.fetched && af.allJourneys) ||
       (af.direction === 'returning' && af.returnDoMissing && af.fetched) ||
@@ -4207,7 +4281,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
                 const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
                 const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
-                const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && autoFill.entryType !== 'ref';
+                const hasNoRecordWarning = (autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && autoFill.entryType !== 'ref')
+                  || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading);
                 const mobileReturnDoMissing = autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched;
                 return (
                   <div key={index} className={`border rounded-lg p-2 transition-colors ${
@@ -4304,6 +4379,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               {autoFill.warningType === 'not_found' && '⚠️ No record — manual entry allowed'}
                               {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
                               {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
+                              {autoFill.warningType === 'ambiguous_do' && '⚠️ DO on multiple trucks — pick one'}
                             </span>
                         )}
                         {isExactDuplicate && duplicateInfo && <span className="text-red-600 dark:text-red-400">⛔ Dup LPO #{duplicateInfo.lpoNo} ({duplicateInfo.liters}L)</span>}
@@ -4426,7 +4502,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
                       const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
                       const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
-                      const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && (autoFill as EntryAutoFillData).entryType !== 'ref';
+                      const hasNoRecordWarning = (autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && (autoFill as EntryAutoFillData).entryType !== 'ref')
+                        || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading);
                       return (
                         <tr key={index} className={`lpo-row ${
                           (autoFill as EntryAutoFillData).entryType === 'ref' ? 'row-orange'
@@ -4640,6 +4717,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                         {autoFill.warningType === 'not_found' && '⚠️ No record found'}
                                         {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
                                         {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
+                                        {autoFill.warningType === 'ambiguous_do' && '⚠️ DO on multiple trucks — pick one'}
                                       </>
                                     )}
                                     <span className="block text-[10px] text-gray-500 dark:text-gray-400">
@@ -4908,6 +4986,79 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           onCancel={() => setDirectionWarningModal(prev => ({ ...prev, open: false }))}
         />
       </div>
+
+      {/* Ambiguous-DO picker — the typed DO matches more than one truck (dirty
+          imported data). The user MUST pick; closing without picking leaves the
+          row flagged and un-filled rather than guessing a truck. */}
+      {doAmbiguityModal.open && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDoAmbiguityModal({ open: false, index: -1, doNo: '', matches: [] });
+          }}
+        >
+          <div
+            className="lpo-rd w-full max-w-lg rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 p-5 border-b border-gray-100 dark:border-gray-800">
+              <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  DO {doAmbiguityModal.doNo} is on {doAmbiguityModal.matches.length} trucks
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  This DO number appears on more than one journey (likely a data-import
+                  mistake). Pick the truck you mean — nothing is filled in until you do.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 max-h-[55vh] overflow-y-auto lpo-scroll space-y-2">
+              {doAmbiguityModal.matches.map((m, i) => (
+                <button
+                  key={`${m.fuelRecord?.id || m.fuelRecord?._id || i}`}
+                  type="button"
+                  onClick={() => handlePickAmbiguousMatch(m)}
+                  className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/60 dark:hover:bg-indigo-900/20 transition-colors p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-bold text-gray-900 dark:text-gray-100 mono">
+                      {formatTruckNumber(m.truckNo || m.fuelRecord?.truckNo || '—')}
+                    </span>
+                    <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-md ${
+                      m.direction === 'returning'
+                        ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                        : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                    }`}>
+                      {m.direction === 'returning' ? 'Returning' : 'Going'}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Date: <span className="text-gray-700 dark:text-gray-300">{m.fuelRecord?.date || '—'}</span></span>
+                    <span>Dest: <span className="text-gray-700 dark:text-gray-300">{(m.direction === 'going' ? m.goingDestination : m.destination) || '—'}</span></span>
+                    <span>Balance: <span className="text-gray-700 dark:text-gray-300 mono">{m.balance ?? 0}L</span></span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                    Going DO {m.goingDo} · Return DO {m.returnDo}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setDoAmbiguityModal({ open: false, index: -1, doNo: '', matches: [] })}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fuel Record Inspect Modal */}
       <FuelRecordInspectModal

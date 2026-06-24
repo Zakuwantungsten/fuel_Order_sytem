@@ -368,25 +368,40 @@ export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): P
     
     // Debug: Log what we're searching for
     logger.info(`[Fuel Record Lookup] Searching for DO: ${doNumber}`);
-    
-    // First try to find by goingDo, exclude cancelled records
-    let fuelRecord = await FuelRecord.findOne({
+
+    // A DO *should* be unique to one truck/journey, but imported data can contain
+    // the same DO on two trucks by mistake. Use find() (not findOne) so we can SEE
+    // every match and report ambiguity to the caller instead of silently picking one.
+    // Going is queried first so it remains the preferred direction (back-compat).
+    const goingMatches = await FuelRecord.find({
       goingDo: doNumber,
       isDeleted: false,
       isCancelled: { $ne: true },
-    }).sort({ createdAt: -1 }); // Get most recent if multiple exist
+    }).sort({ createdAt: -1 }); // Most recent first
 
-    let direction: 'going' | 'returning' = 'going';
+    const returnMatches = await FuelRecord.find({
+      returnDo: doNumber,
+      isDeleted: false,
+      isCancelled: { $ne: true },
+    }).sort({ createdAt: -1 }); // Most recent first
 
-    // If not found as goingDo, try returnDo, exclude cancelled records
-    if (!fuelRecord) {
-      fuelRecord = await FuelRecord.findOne({
-        returnDo: doNumber,
-        isDeleted: false,
-        isCancelled: { $ne: true },
-      }).sort({ createdAt: -1 }); // Get most recent if multiple exist
-      direction = 'returning';
+    // Build a de-duplicated, direction-tagged match list (a record could in theory
+    // carry the same value in both DO fields — count it once, prefer 'going').
+    const seenIds = new Set<string>();
+    const matches: { record: any; direction: 'going' | 'returning' }[] = [];
+    for (const r of goingMatches) {
+      const id = (r._id as any).toString();
+      if (!seenIds.has(id)) { seenIds.add(id); matches.push({ record: r, direction: 'going' }); }
     }
+    for (const r of returnMatches) {
+      const id = (r._id as any).toString();
+      if (!seenIds.has(id)) { seenIds.add(id); matches.push({ record: r, direction: 'returning' }); }
+    }
+
+    // Primary = first match (most-recent going, else most-recent returning).
+    // Preserves the previous single-record behaviour for every existing caller.
+    const fuelRecord = matches.length > 0 ? matches[0].record : null;
+    const direction: 'going' | 'returning' = matches.length > 0 ? matches[0].direction : 'going';
 
     if (!fuelRecord) {
       // Debug: Check if record exists but is cancelled or deleted
@@ -410,20 +425,110 @@ export const getFuelRecordByGoingDO = async (req: AuthRequest, res: Response): P
     // Debug: Log what we found
     logger.info(`[Fuel Record Lookup] Found record for DO ${doNumber} - Date: ${fuelRecord.date}, Truck: ${fuelRecord.truckNo}, Direction: ${direction}`);
 
+    const isAmbiguous = matches.length > 1;
+    if (isAmbiguous) {
+      // Dirty data: the same DO is on more than one truck/journey. Surface it loudly
+      // in the logs so it can be cleaned (see GET /fuel-records/duplicate-dos).
+      logger.warn(
+        `[Fuel Record Lookup] AMBIGUOUS DO ${doNumber} matches ${matches.length} records: ` +
+        matches.map(m => `${m.record.truckNo}(${m.direction})`).join(', ')
+      );
+    }
+
     // Include direction in the response
     const responseData = {
       ...fuelRecord.toObject(),
       detectedDirection: direction
     };
 
+    // When ambiguous, return EVERY match so the caller can let the user pick the
+    // correct truck instead of blindly trusting the primary. Single-match lookups
+    // still get a one-element array, so callers can treat `matches` uniformly.
+    const matchesData = matches.map(m => ({
+      ...m.record.toObject(),
+      detectedDirection: m.direction,
+    }));
+
     res.status(200).json({
       success: true,
       message: 'Fuel record retrieved successfully',
       data: responseData,
+      ambiguous: isAmbiguous,
+      matches: matchesData,
     });
   } catch (error: any) {
     throw error;
   }
+};
+
+/**
+ * Data-integrity report: find every DO number that appears on more than one
+ * (non-cancelled, non-deleted) fuel record — i.e. the same DO shared across two
+ * trucks/journeys. These are import defects that make DO→truck lookups ambiguous.
+ * Returns each offending DO with the records that carry it so they can be cleaned.
+ */
+export const getDuplicateDONumbers = async (_req: AuthRequest, res: Response): Promise<void> => {
+  const duplicates = await FuelRecord.aggregate([
+    { $match: { isDeleted: false, isCancelled: { $ne: true } } },
+    // Flatten each record into its valid DO values (going + return), dropping NIL/blank.
+    {
+      $project: {
+        truckNo: 1,
+        date: 1,
+        dos: {
+          $filter: {
+            input: [
+              { do: '$goingDo', direction: 'going' },
+              { do: '$returnDo', direction: 'returning' },
+            ],
+            as: 'd',
+            cond: {
+              $and: [
+                { $ne: ['$$d.do', null] },
+                { $ne: [{ $ifNull: ['$$d.do', ''] }, ''] },
+                { $ne: [{ $toUpper: { $ifNull: ['$$d.do', ''] } }, 'NIL'] },
+                { $ne: [{ $toUpper: { $ifNull: ['$$d.do', ''] } }, 'N/A'] },
+              ],
+            },
+          },
+        },
+      },
+    },
+    { $unwind: '$dos' },
+    {
+      $group: {
+        _id: { $toUpper: '$dos.do' },
+        records: {
+          $push: {
+            recordId: '$_id',
+            truckNo: '$truckNo',
+            direction: '$dos.direction',
+            date: '$date',
+            do: '$dos.do',
+          },
+        },
+        recordIds: { $addToSet: '$_id' },
+      },
+    },
+    // Keep only DOs spread across more than one distinct record (the real conflict).
+    { $match: { $expr: { $gt: [{ $size: '$recordIds' }, 1] } } },
+    {
+      $project: {
+        _id: 0,
+        doNo: '$_id',
+        count: { $size: '$recordIds' },
+        records: 1,
+      },
+    },
+    { $sort: { count: -1, doNo: 1 } },
+  ]);
+
+  res.status(200).json({
+    success: true,
+    message: `Found ${duplicates.length} DO number(s) shared across multiple trucks`,
+    count: duplicates.length,
+    data: duplicates,
+  });
 };
 
 /**

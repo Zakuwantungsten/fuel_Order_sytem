@@ -960,7 +960,14 @@ export const fuelRecordsAPI = {
   },
 
   // Get fuel record by DO number and determine direction
-  getByDoNumber: async (doNumber: string): Promise<{ fuelRecord: FuelRecord; direction: 'going' | 'returning' } | null> => {
+  getByDoNumber: async (doNumber: string): Promise<{
+    fuelRecord: FuelRecord;
+    direction: 'going' | 'returning';
+    // True when the same DO is on more than one truck/journey (dirty imported data).
+    ambiguous: boolean;
+    // Every matching record (1 element for a clean DO). Lets the caller offer a pick.
+    matches: { fuelRecord: FuelRecord; direction: 'going' | 'returning' }[];
+  } | null> => {
     try {
       // URL-encode the DO number to handle slashes (e.g., "0003/26" -> "0003%2F26")
       const encodedDoNumber = encodeURIComponent(doNumber);
@@ -969,7 +976,16 @@ export const fuelRecordsAPI = {
         const fuelRecord = response.data.data;
         // Use the detected direction from the backend
         const direction = fuelRecord.detectedDirection || (fuelRecord.goingDo === doNumber ? 'going' : 'returning');
-        return { fuelRecord, direction };
+        // Normalise matches: backend sends a (possibly multi-element) `matches` array;
+        // fall back to the single primary record for older backends.
+        const rawMatches: any[] = Array.isArray(response.data.matches) && response.data.matches.length > 0
+          ? response.data.matches
+          : [fuelRecord];
+        const matches = rawMatches.map((m: any) => ({
+          fuelRecord: m as FuelRecord,
+          direction: (m.detectedDirection || (m.goingDo === doNumber ? 'going' : 'returning')) as 'going' | 'returning',
+        }));
+        return { fuelRecord, direction, ambiguous: !!response.data.ambiguous, matches };
       }
       return null;
     } catch (error: any) {
