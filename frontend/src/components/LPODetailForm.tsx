@@ -505,6 +505,23 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // Map of entry index → debounce timer ID (300ms safety timer for truck fetch)
   const fetchDebounceTimers = React.useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
+  // "Always-current" refs for config values used inside async timeout callbacks.
+  // Assigning these in the render body (not in useEffect) keeps them in sync before
+  // any pending setTimeout fires — avoids the stale-closure bug where the user changes
+  // defaults after typing a truck number but within the 300ms debounce window.
+  const cashDefaultLitersRef = React.useRef(cashDefaultLiters);
+  const cashRateRef = React.useRef(cashRate);
+  const customDefaultLitersRef = React.useRef(customDefaultLiters);
+  const customRateRef = React.useRef(customRate);
+  const noStationDefaultLitersRef = React.useRef(noStationDefaultLiters);
+  const noStationRateRef = React.useRef(noStationRate);
+  cashDefaultLitersRef.current = cashDefaultLiters;
+  cashRateRef.current = cashRate;
+  customDefaultLitersRef.current = customDefaultLiters;
+  customRateRef.current = customRate;
+  noStationDefaultLitersRef.current = noStationDefaultLiters;
+  noStationRateRef.current = noStationRate;
+
   // Close dropdowns when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -2061,9 +2078,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         const isCustomStation = formData.station === 'CUSTOM';
         const isCashStation = formData.station === 'CASH';
         const defaults = isCustomStation
-          ? { liters: customDefaultLiters, rate: customRate }
+          ? { liters: customDefaultLitersRef.current, rate: customRateRef.current }
           : isCashStation
-          ? { liters: cashDefaultLiters, rate: cashRate }
+          ? { liters: cashDefaultLitersRef.current, rate: cashRateRef.current }
           : (formData.station
               ? getStationDefaults(
                   formData.station,
@@ -2073,7 +2090,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   result.fuelRecord?.extra ?? undefined,
                   result.fuelRecord?.balance ?? undefined
                 )
-              : { liters: noStationDefaultLiters, rate: noStationRate });
+              : { liters: noStationDefaultLitersRef.current, rate: noStationRateRef.current });
 
         // Calculate balance info for Mbeya returning (INFINITY station)
         let balanceInfo = undefined;
@@ -2289,16 +2306,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           ? result.goingDestination
           : result.destination;
 
-        const defaults = formData.station
-          ? getStationDefaults(
-              formData.station,
-              direction,
-              destinationForAllocation,
-              result.fuelRecord?.totalLts ?? undefined,
-              result.fuelRecord?.extra ?? undefined,
-              result.fuelRecord?.balance ?? undefined
-            )
-          : { liters: noStationDefaultLiters, rate: noStationRate };
+        const isCustom = formData.station === 'CUSTOM';
+        const isCash = formData.station === 'CASH';
+        const defaults = isCustom
+          ? { liters: customDefaultLitersRef.current, rate: customRateRef.current }
+          : isCash
+          ? { liters: cashDefaultLitersRef.current, rate: cashRateRef.current }
+          : (formData.station
+              ? getStationDefaults(
+                  formData.station,
+                  direction,
+                  destinationForAllocation,
+                  result.fuelRecord?.totalLts ?? undefined,
+                  result.fuelRecord?.extra ?? undefined,
+                  result.fuelRecord?.balance ?? undefined
+                )
+              : { liters: noStationDefaultLitersRef.current, rate: noStationRateRef.current });
 
         // Calculate balance info for Mbeya returning
         let balanceInfo = undefined;
@@ -2404,28 +2427,36 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
     // Update the DO number and liters based on new direction
     if (fuelRecord) {
-      const doNumber = newDirection === 'going' ? fuelRecord.goingDo : (fuelRecord.returnDo || fuelRecord.goingDo);
-      
+      // Check the raw DB field directly — covers system records (null/undefined) and
+      // imported records where the CSV importer stores '' for a blank Return Do column.
+      const returnDoMissing = !fuelRecord.returnDo || (fuelRecord.returnDo as string).trim() === '' || fuelRecord.returnDo === 'NIL';
+
+      // When toggling to returning with no return DO, leave the field blank so the
+      // user immediately sees something is wrong rather than seeing the going DO.
+      const doNumber = newDirection === 'going'
+        ? fuelRecord.goingDo
+        : (returnDoMissing ? '' : fuelRecord.returnDo as string);
+
       // IMPORTANT: Use correct destination based on direction
       // For going: use originalGoingTo (stored goingDestination) to get original going destination
       // For returning: use the current 'to' field
       const destinationForAllocation = newDirection === 'going'
         ? (storedGoingDestination || fuelRecord.originalGoingTo || fuelRecord.to)
         : fuelRecord.to;
-      
-      const defaults = formData.station 
+
+      const defaults = formData.station
         ? getStationDefaults(
-            formData.station, 
-            newDirection, 
+            formData.station,
+            newDirection,
             destinationForAllocation,
             fuelRecord.totalLts ?? undefined,
             fuelRecord.extra ?? undefined,
             fuelRecord.balance ?? undefined
-          ) 
+          )
         : { liters: noStationDefaultLiters, rate: noStationRate };
 
       let litersToSet = defaults.liters;
-      
+
       // Calculate balance info for Mbeya returning (INFINITY station)
       let balanceInfo = undefined;
       if (formData.station?.toUpperCase() === 'INFINITY' && newDirection === 'returning') {
@@ -2439,7 +2470,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // USE CALLBACK FORM to avoid race conditions
       setFormData(prev => {
         const newEntries = [...(prev.entries || [])];
-        
+
         // Ensure entry exists
         if (!newEntries[index]) {
           newEntries[index] = {
@@ -2451,7 +2482,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             dest: 'NIL',
           };
         }
-        
+
         newEntries[index] = {
           ...newEntries[index],
           doNo: doNumber,
@@ -2463,13 +2494,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
         return { ...prev, entries: newEntries, total };
       });
-      
-      // Update autofill data with new direction and balance info
+
+      // Update autofill data with new direction, balance info, and explicit returnDoMissing
       setEntryAutoFillData(prev => ({
         ...prev,
-        [index]: { 
-          ...prev[index], 
+        [index]: {
+          ...prev[index],
           direction: newDirection,
+          returnDoMissing: newDirection === 'returning' ? returnDoMissing : prev[index]?.returnDoMissing,
           balanceInfo: newDirection === 'returning' ? balanceInfo : undefined,
           formulaStatus: defaults.formulaStatus || null,
           formulaMessage: defaults.formulaMessage,
@@ -3218,9 +3250,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         (af.allJourneys.active && af.allJourneys.queued.length > 0) ||
         (!af.allJourneys.active && af.allJourneys.queued.length > 1)
       )) ||
-      (af.balanceInfo && af.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY') ||
+      // Only open the Status column for a REDUCED Mbeya balance — standard 400L needs no annotation
+      (af.balanceInfo && af.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && af.balanceInfo.suggestedLiters < af.balanceInfo.standardAllocation) ||
       (af.formulaStatus === 'missing_data' || af.formulaStatus === 'error')
     );
+  });
+
+  // Separate flag used to gate the submit button style — avoids re-computing inside JSX twice
+  const hasReturnDoMissingBlock = (formData.entries || []).some((_, idx) => {
+    const af = entryAutoFillData[idx];
+    return !!(af && af.direction === 'returning' && af.returnDoMissing && af.fetched);
   });
 
   return (
@@ -4165,10 +4204,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
                 const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
                 const hasNoRecordWarning = autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && autoFill.entryType !== 'ref';
+                const mobileReturnDoMissing = autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched;
                 return (
                   <div key={index} className={`border rounded-lg p-2 transition-colors ${
                     autoFill.entryType === 'ref' ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/10'
                     : autoFill.entryType === 'da' ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10'
+                    : mobileReturnDoMissing ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
                     : autoFill.fetched && !hasNoRecordWarning && !isExactDuplicate && !isDifferentAmount ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10'
                     : hasNoRecordWarning ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10'
                     : isExactDuplicate ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
@@ -4246,8 +4287,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </div>
 
                     {/* Warnings (only show when needed) */}
-                    {(hasNoRecordWarning || isExactDuplicate || isDifferentAmount) && (
-                      <div className="mb-1.5 text-[10px] leading-tight">
+                    {(hasNoRecordWarning || isExactDuplicate || isDifferentAmount || mobileReturnDoMissing) && (
+                      <div className="mb-1.5 text-[10px] leading-tight flex flex-col gap-0.5">
+                        {mobileReturnDoMissing && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 w-fit" title="No Return DO found in the fuel record — cannot submit">
+                            ⛔ No Return DO
+                          </span>
+                        )}
                         {hasNoRecordWarning && (autoFill.warningMessage?.includes('DUPLICATE')
                           ? <span className="text-red-600 dark:text-red-400 font-semibold">⚠️ Duplicate — use different truck</span>
                           : <span className="text-amber-600 dark:text-amber-400">
@@ -4313,16 +4359,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
                       </div>
                     </div>
-                    {/* Balance hint (rare — only for Infinity return) */}
-                    {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && (
-                      <div className={`mt-1 text-[10px] ${autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                    {/* Balance hint — only shown when Mbeya return is reduced below standard */}
+                    {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation && (
+                      <div className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
                         <Fuel className="w-3 h-3 inline mr-0.5" />
-                        {autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation ? `${autoFill.balanceInfo.suggestedLiters}L (reduced)` : `${autoFill.balanceInfo.suggestedLiters}L`}
+                        {`${autoFill.balanceInfo.suggestedLiters}L (reduced — balance too low for full ${autoFill.balanceInfo.standardAllocation}L)`}
                       </div>
-                    )}
-                    {/* Return DO missing hint */}
-                    {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched && (
-                      <div className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">⚠️ No Return DO</div>
                     )}
                   </div>
                 );
@@ -4625,10 +4667,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                     )}
                                   </div>
                                 )}
-                                {/* No Return DO warning */}
+                                {/* No Return DO warning — blocks submission */}
                                 {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched && (
-                                  <span className="text-amber-600 dark:text-amber-400" title="Return DO not yet inputted in fuel record">
-                                    ⚠️ No Return DO
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 w-fit" title="No Return DO found in the fuel record — cannot submit. Switch back to Going or wait until the Return DO is entered.">
+                                    ⛔ No Return DO
                                   </span>
                                 )}
                                 {/* Journey navigation: active + queued */}
@@ -4699,18 +4741,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                     ✓ {autoFill.formulaMessage}
                                   </div>
                                 )}
-                                {/* Balance info hint (Infinity return) */}
-                                {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && (
-                                  <div className={`${
-                                    autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation
-                                      ? 'text-amber-600 dark:text-amber-400'
-                                      : 'text-green-600 dark:text-green-400'
-                                  }`} title={autoFill.balanceInfo.reason}>
+                                {/* Balance info hint (Infinity return) — only shown when allocation is reduced below standard */}
+                                {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation && (
+                                  <div className="text-amber-600 dark:text-amber-400" title={autoFill.balanceInfo.reason}>
                                     <Fuel className="w-3 h-3 inline mr-1" />
-                                    {autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation
-                                      ? `${autoFill.balanceInfo.suggestedLiters}L (reduced)`
-                                      : `${autoFill.balanceInfo.suggestedLiters}L`
-                                    }
+                                    {`${autoFill.balanceInfo.suggestedLiters}L (reduced — balance too low for full ${autoFill.balanceInfo.standardAllocation}L)`}
                                   </div>
                                 )}
                               </div>
@@ -4767,7 +4802,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   {(() => {
                     const stationUpper = (formData.station || '').toUpperCase();
                     const stationConfig = availableStations.find(s => s.stationName.toUpperCase() === stationUpper);
-                    const currency = formData.station === 'CUSTOM' ? customCurrency : (stationConfig?.currency ?? 'TZS');
+                    const currency = formData.station === 'CASH' ? cashCurrency
+                      : formData.station === 'CUSTOM' ? customCurrency
+                      : (stationConfig?.currency ?? 'TZS');
                     const total = formData.total || 0;
                     return currency === 'USD'
                       ? `$ ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -4834,19 +4871,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 disabled={
                   isSubmitting ||
                   !formData.entries || formData.entries.length === 0 ||
-                  (formData.entries || []).some((_, idx) => {
-                    const af = entryAutoFillData[idx];
-                    return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
-                  })
+                  hasReturnDoMissingBlock
                 }
-                style={{ background: 'linear-gradient(155deg,#4f46e5,#6366f1)', boxShadow: '0 8px 18px -6px rgba(79,70,229,.6)' }}
-                className="inline-flex items-center gap-2 h-[42px] px-[22px] rounded-[11px] border-0 text-white text-[13.5px] font-bold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                title={
-                  (formData.entries || []).some((_, idx) => {
-                    const af = entryAutoFillData[idx];
-                    return af && af.direction === 'returning' && af.returnDoMissing && af.fetched;
-                  }) ? 'Cannot submit: Some trucks have no Return DO. Switch them to Going or wait for Return DO entry.' : undefined
+                style={
+                  hasReturnDoMissingBlock
+                    ? { background: '#94a3b8', cursor: 'not-allowed' }
+                    : { background: 'linear-gradient(155deg,#4f46e5,#6366f1)', boxShadow: '0 8px 18px -6px rgba(79,70,229,.6)' }
                 }
+                className="inline-flex items-center gap-2 h-[42px] px-[22px] rounded-[11px] border-0 text-white text-[13.5px] font-bold disabled:cursor-not-allowed whitespace-nowrap"
+                title={hasReturnDoMissingBlock ? 'Cannot submit: one or more trucks set to Return have no Return DO in the fuel records. Switch them back to Going or wait until the Return DO is entered.' : undefined}
               >
                 {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck2 className="w-4 h-4" />}
                 {isSubmitting ? (initialData ? 'Updating…' : 'Creating…') : `${initialData ? 'Update' : 'Create'} LPO Document`}
