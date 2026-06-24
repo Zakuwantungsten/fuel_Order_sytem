@@ -1038,7 +1038,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }
 
       setIsCheckingDuplicates(true);
-      const warnings = new Map<string, { lpoNo: string; date: string; liters: number; isDifferentAmount: boolean; newLiters: number }>();
+      const warnings = new Map<string, { lpoNo: string; date: string; liters: number; isDifferentAmount: boolean; newLiters: number; isNilDo: boolean }>();
 
       try {
         for (const entry of formData.entries) {
@@ -4442,8 +4442,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       const autoFill = entryAutoFillData[index] || { direction: 'going', loading: false, fetched: false };
                       const duplicateInfo = duplicateWarnings.get(entry?.truckNo || '');
                       const hasDuplicate = !!duplicateInfo && formData.station?.toUpperCase() !== 'CASH';
-                      const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount;
-                      const isDifferentAmount = hasDuplicate && duplicateInfo?.isDifferentAmount;
+                      const isExactDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount && !duplicateInfo?.isNilDo;
+                      const isDifferentAmount = hasDuplicate && !!duplicateInfo?.isDifferentAmount;
+                      const isNilDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount && !!duplicateInfo?.isNilDo;
                       const hasNoRecordWarning = (autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && (autoFill as EntryAutoFillData).entryType !== 'ref')
                         || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading);
                       return (
