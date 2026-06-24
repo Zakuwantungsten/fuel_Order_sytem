@@ -698,7 +698,11 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     // For LPO charts: Last 1 month
     const lpoStartDate = new Date();
     lpoStartDate.setMonth(now.getMonth() - 1);
-    
+
+    // For LPO sparkline: Last 6 months
+    const lpoTrendsStartDate = new Date();
+    lpoTrendsStartDate.setMonth(now.getMonth() - 6);
+
     // For DO charts: Current year (Jan 1 - Dec 31, 2026)
     const doStartDate = new Date(now.getFullYear(), 0, 1); // Jan 1
     const doEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59); // Dec 31
@@ -707,7 +711,7 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const fuelStartDate = new Date();
     fuelStartDate.setMonth(now.getMonth() - 12);
 
-    const [fuelRecords, deliveryOrders, lpoEntries, activeStations] = await Promise.all([
+    const [fuelRecords, deliveryOrders, lpoEntries, activeStations, lpoTrendDocs] = await Promise.all([
       FuelRecord.find({
         isDeleted: false,
         isCancelled: { $ne: true },
@@ -736,6 +740,17 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
         .select('stationName defaultRate currency')
         .sort({ currency: 1, stationName: 1 })
         .lean(),
+      // LPO entry counts per month for the sparkline (last 6 months)
+      LPOSummary.aggregate([
+        {
+          $match: {
+            isDeleted: false,
+            date: { $gte: toDateStr(lpoTrendsStartDate), $lte: toDateStr(now) },
+          },
+        },
+        { $unwind: '$entries' },
+        { $project: { _id: 0, date: 1 } },
+      ]),
     ]);
 
     // Monthly fuel consumption — use actual date field
@@ -761,6 +776,17 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     });
 
     const doTrends = Object.entries(doTrendsData)
+      .map(([month, count]) => ({ month, count }));
+
+    // LPO trends — month-by-month entry count for the sparkline
+    const lpoTrendsData: Record<string, number> = {};
+    lpoTrendDocs.forEach((doc: any) => {
+      const d = doc.date && !isNaN(new Date(doc.date).getTime()) ? new Date(doc.date) : null;
+      if (!d) return;
+      const month = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      lpoTrendsData[month] = (lpoTrendsData[month] || 0) + 1;
+    });
+    const lpoTrends = Object.entries(lpoTrendsData)
       .map(([month, count]) => ({ month, count }));
 
     // Station distribution
@@ -878,6 +904,7 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const chartData = {
       monthlyFuel,
       doTrends,
+      lpoTrends,
       stationDistribution,
       journeyStatus,
       stationPrices,

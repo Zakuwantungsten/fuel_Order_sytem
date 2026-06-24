@@ -51,7 +51,7 @@ interface DashboardProps {
   onNavigate?: (tab: string, highlight?: string) => void;
 }
 
-const DEFAULT_CHART_DATA = { monthlyFuel: [], doTrends: [], stationDistribution: [], journeyStatus: [], stationPrices: [], fuelPriceTrend: [] };
+const DEFAULT_CHART_DATA = { monthlyFuel: [], doTrends: [], lpoTrends: [], stationDistribution: [], journeyStatus: [], stationPrices: [], fuelPriceTrend: [] };
 
 // ── Design tokens (matched to Fuel Dashboard design) ──────────────────────
 const CARD =
@@ -564,6 +564,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
   const sparkDO = (chartData.doTrends || []).map((d: any) => Number(d.count) || 0);
   const sparkFuel = (chartData.monthlyFuel || []).map((d: any) => Number(d.value) || 0);
+  const sparkLPO = (chartData.lpoTrends || []).map((d: any) => Number(d.count) || 0);
 
   const statsCards = [
     {
@@ -593,7 +594,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       trend: stats.trends?.lpos,
       icon: ClipboardList,
       tone: 'cyan' as Tone,
-      series: [] as number[],
+      series: sparkLPO,
     },
     {
       name: 'Tonnage (Month)',
