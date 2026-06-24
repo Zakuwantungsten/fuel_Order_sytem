@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check, Save, CalendarDays, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -3425,7 +3425,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               <span className="text-[14px] font-bold text-[#0f1729] dark:text-gray-100">Order details</span>
               <div className="flex-1 h-px bg-[#eef1f6] dark:bg-[#1e293b]" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* LPO No */}
               <div>
                 <label className="lbl">LPO No.</label>
@@ -3450,20 +3450,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               {/* Date */}
               <div>
                 <label className="lbl">Date</label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    name="date"
-                    value={formData.date}
-                    onChange={handleHeaderChange}
-                    required
-                    className="fld"
-                    style={{ paddingLeft: '38px' }}
-                  />
-                  <span className="absolute left-[13px] top-[11px] text-[#94a3b8] pointer-events-none">
-                    <CalendarDays className="w-[15px] h-[15px]" />
-                  </span>
-                </div>
+                <input
+                  type="date"
+                  name="date"
+                  value={formData.date}
+                  onChange={handleHeaderChange}
+                  required
+                  className="fld"
+                />
               </div>
 
               {/* Station */}
@@ -3477,9 +3471,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     className="fld flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ color: formData.station ? undefined : '#94a3b8' }}
                   >
-                    <span className="inline-flex items-center gap-2 truncate">
+                    <span className="inline-flex items-center gap-2 min-w-0 overflow-hidden">
                       <MapPin className="w-[15px] h-[15px] text-[#4f46e5] shrink-0" />
-                      {loadingStations ? 'Loading stations...' : (formData.station || 'Select station')}
+                      <span className="truncate">{loadingStations ? 'Loading stations...' : (formData.station || 'Select station')}</span>
                     </span>
                     <ChevronDown className={`w-4 h-4 shrink-0 text-[#94a3b8] transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
                   </button>
@@ -4249,7 +4243,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     : isDifferentAmount ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10'
                     : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
                   }`}>
-                    {/* Header row: checkbox + # + Truck + DO + Direction + Actions all on one line */}
+                    {/* Checkbox + row number */}
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <input
                         type="checkbox"
@@ -4259,64 +4253,62 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           if (e.target.checked) next.add(index); else next.delete(index);
                           setSelectedEntries(next);
                         }}
-                        className="rounded border-gray-300 dark:border-gray-600 text-primary-600 flex-shrink-0"
+                        className="rounded border-gray-300 dark:border-gray-600 text-primary-600"
                       />
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 w-4 flex-shrink-0">#{index + 1}</span>
-                      {/* Truck */}
-                      <div className="relative flex-1 min-w-0">
-                        <input type="text" value={entry?.truckNo || ''} onChange={(e) => handleTruckNoChange(index, e.target.value)} onPaste={(e) => handleTruckPaste(index, e)}
-                          placeholder="Truck" title="Paste multiple trucks (one per line) to auto-fill multiple rows"
-                          className={`w-full pr-4 px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
-                            isExactDuplicate ? 'border-red-500 dark:border-red-400' : isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : isNilDuplicate ? 'border-amber-400 dark:border-amber-500' : hasNoRecordWarning ? 'border-amber-500 dark:border-amber-400' : 'border-gray-300 dark:border-gray-600'
-                          }`} />
-                        {autoFill.loading && <Loader2 className="absolute right-1 top-1 w-3 h-3 text-primary-500 animate-spin" />}
-                        {autoFill.fetched && !autoFill.loading && !hasDuplicate && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-green-500" />}
-                        {hasNoRecordWarning && !autoFill.loading && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-amber-500" />}
-                        {isExactDuplicate && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-red-500" />}
-                        {isDifferentAmount && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-blue-500" />}
+                      <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">#{index + 1}</span>
+                    </div>
+
+                    {/* Truck | Mode | DO | Dir — same 4-col grid as liters row */}
+                    <div className="grid grid-cols-4 gap-1 mb-1.5">
+                      <div>
+                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Truck</label>
+                        <div className="relative">
+                          <input type="text" value={entry?.truckNo || ''} onChange={(e) => handleTruckNoChange(index, e.target.value)} onPaste={(e) => handleTruckPaste(index, e)}
+                            placeholder="Truck" title="Paste multiple trucks (one per line) to auto-fill multiple rows"
+                            className={`w-full pr-4 px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                              isExactDuplicate ? 'border-red-500 dark:border-red-400' : isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : isNilDuplicate ? 'border-amber-400 dark:border-amber-500' : hasNoRecordWarning ? 'border-amber-500 dark:border-amber-400' : 'border-gray-300 dark:border-gray-600'
+                            }`} />
+                          {autoFill.loading && <Loader2 className="absolute right-1 top-1 w-3 h-3 text-primary-500 animate-spin" />}
+                          {autoFill.fetched && !autoFill.loading && !hasDuplicate && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-green-500" />}
+                          {hasNoRecordWarning && !autoFill.loading && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-amber-500" />}
+                          {isExactDuplicate && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-red-500" />}
+                          {isDifferentAmount && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-blue-500" />}
+                        </div>
                       </div>
-                      {/* Mode chip — NORM/DA/REF/NIL */}
-                      <select
-                        value={autoFill.entryType || 'regular'}
-                        onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
-                        title="Entry mode"
-                        className={`flex-shrink-0 px-1 py-0.5 border rounded text-[10px] font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
-                      >
-                        {ENTRY_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                      {/* DO — free to type in every mode */}
-                      <div className="relative flex-1 min-w-0">
+                      <div>
+                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Mode</label>
+                        <select
+                          value={autoFill.entryType || 'regular'}
+                          onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
+                          title="Entry mode"
+                          className={`w-full px-1 py-0.5 border rounded text-[10px] font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
+                        >
+                          {ENTRY_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">DO#</label>
                         <input type="text" value={entry?.doNo || ''} onChange={(e) => handleDONoChange(index, e.target.value)}
                           onBlur={(e) => { if (!e.target.value.trim()) handleEntryChange(index, 'doNo', 'NIL'); }}
                           onPaste={(e) => handleDOPaste(index, e)}
                           placeholder="DO#" title="Enter DO number — paste multiple (one per line) to fill down"
                           className={`w-full px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`} />
                       </div>
-                      {/* Direction toggle — hidden for REF entries */}
-                      {autoFill.entryType !== 'ref' && (
-                        <button type="button" onClick={() => toggleDirection(index)}
-                          className={`flex-shrink-0 inline-flex items-center px-1.5 py-1 rounded text-[10px] font-medium ${
-                            autoFill.direction === 'going'
-                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                              : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
-                          }`}>
-                          {autoFill.direction === 'going' ? <><ArrowRight className="w-3 h-3" /></> : <><ArrowLeft className="w-3 h-3" /></>}
-                        </button>
-                      )}
-                      {autoFill.entryType === 'ref' && (
-                        <span className="flex-shrink-0 inline-flex items-center px-1.5 py-1 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">REF</span>
-                      )}
-                      {/* Actions */}
-                      {autoFill.fuelRecord && (
-                        <button type="button" onClick={() => handleInspectRecord(index)}
-                          className="flex-shrink-0 p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Inspect fuel record">
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      <button type="button" onClick={() => handleRemoveEntry(index)}
-                        className="flex-shrink-0 p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Remove entry">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div>
+                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Dir</label>
+                        {autoFill.entryType !== 'ref' ? (
+                          <button type="button" onClick={() => toggleDirection(index)}
+                            className={`w-full inline-flex items-center justify-center py-0.5 rounded text-[10px] font-medium ${
+                              autoFill.direction === 'going'
+                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                                : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
+                            }`}>
+                            {autoFill.direction === 'going' ? <ArrowRight className="w-3 h-3" /> : <ArrowLeft className="w-3 h-3" />}
+                          </button>
+                        ) : (
+                          <span className="w-full inline-flex items-center justify-center py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">REF</span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Warnings (only show when needed) */}
@@ -4400,6 +4392,33 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                         {`${autoFill.balanceInfo.suggestedLiters}L (reduced — balance too low for full ${autoFill.balanceInfo.standardAllocation}L)`}
                       </div>
                     )}
+
+                    {/* Card actions */}
+                    <div className="flex items-center gap-2 pt-1.5 mt-1.5 border-t border-gray-200 dark:border-gray-600">
+                      <button
+                        type="button"
+                        onClick={() => autoFill.fuelRecord && handleInspectRecord(index)}
+                        disabled={!autoFill.fuelRecord}
+                        title={autoFill.fuelRecord ? 'Inspect fuel record' : 'No fuel record linked'}
+                        className={`flex-1 px-3 py-1.5 text-[11px] font-medium rounded-lg inline-flex items-center justify-center gap-1 transition-colors ${
+                          autoFill.fuelRecord
+                            ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                            : 'text-blue-400 dark:text-blue-700 bg-blue-50/50 dark:bg-blue-900/10 opacity-40 cursor-not-allowed'
+                        }`}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Inspect
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEntry(index)}
+                        title="Remove entry"
+                        className="flex-1 px-3 py-1.5 text-[11px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg inline-flex items-center justify-center gap-1 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 );
               })}
