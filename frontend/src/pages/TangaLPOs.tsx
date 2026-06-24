@@ -51,6 +51,15 @@ function StatCard({ label, value, sub, icon: Icon, accent, onClick, isLoading }:
 
 const monthOf = (date: string) => parseInt(date.slice(5, 7), 10) || 0;
 
+// Whitespace/separator-tolerant prefix match — mirrors the backend buildFuzzyRegex
+// so the displayed rows match what the server returned ("t598 dtb" finds "T598DTB").
+const compactStr = (s: string) => s.replace(/[\s\-_/.]+/g, '').toLowerCase();
+const fuzzyMatch = (value: string | undefined, term: string): boolean => {
+  const q = compactStr(term);
+  if (!q) return true;
+  return compactStr(value || '').startsWith(q);
+};
+
 export default function TangaLPOs() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -132,7 +141,16 @@ export default function TangaLPOs() {
   // multi-entry LPO still carries its other entries — trim the displayed rows to the
   // ones that match the active entry-level filters.
   const filteredRows = useMemo(() => {
+    const term = search.trim();
     return allRows.filter(({ lpo, entry }) => {
+      // Mirror the server-side search at the entry level so multi-entry LPOs only
+      // surface the entries that actually match (LPO# / truck / DO / destination).
+      if (term && !(
+        fuzzyMatch(lpo.lpoNo, term) ||
+        fuzzyMatch(entry.truckNo, term) ||
+        fuzzyMatch(entry.doNo, term) ||
+        fuzzyMatch(entry.dest, term)
+      )) return false;
       if (filterMonth !== 'all' && monthOf(lpo.date) !== filterMonth) return false;
       if (entityFilter && entry.truckNo !== entityFilter) return false;
       if (linkedFilter === 'linked' && (entry.isCancelled || !entry.linkedFuelRecordId)) return false;
@@ -141,7 +159,7 @@ export default function TangaLPOs() {
       if (statusFilter === 'cancelled' && !entry.isCancelled) return false;
       return true;
     });
-  }, [allRows, filterMonth, entityFilter, linkedFilter, statusFilter]);
+  }, [allRows, search, filterMonth, entityFilter, linkedFilter, statusFilter]);
 
   // Reset to page 1 whenever any filter changes
   useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, filterMonth, entityFilter, linkedFilter, statusFilter]);
@@ -528,7 +546,7 @@ export default function TangaLPOs() {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search LPO, truck/entity, DO…"
+                placeholder="Search LPO, truck/entity, DO, destination…"
                 className={`${fieldCls} pl-9`}
               />
             </div>

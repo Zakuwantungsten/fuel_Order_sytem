@@ -5,7 +5,7 @@ import { SystemConfig } from '../models/SystemConfig';
 import { YardConfig } from '../models/YardConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
@@ -126,12 +126,16 @@ function buildTangaLPOFilter(q: YardFilterInput): any {
   else if (dateConds.length > 1) filter.$and = dateConds;
 
   if (search) {
-    const safe = sanitizeRegexInput(search as string);
-    if (safe) {
+    // Whitespace/separator-tolerant prefix match (same as LPO management) so
+    // "t598 dtb" also finds "T598DTB", "T598-DTB", etc. Searches across the LPO
+    // number, truck/entity, DO number and destination.
+    const fuzzy = buildFuzzyRegex(search as string);
+    if (fuzzy) {
       filter.$or = [
-        { lpoNo: { $regex: safe, $options: 'i' } },
-        { 'entries.truckNo': { $regex: safe, $options: 'i' } },
-        { 'entries.doNo': { $regex: safe, $options: 'i' } },
+        { lpoNo: { $regex: fuzzy, $options: 'i' } },
+        { 'entries.truckNo': { $regex: fuzzy, $options: 'i' } },
+        { 'entries.doNo': { $regex: fuzzy, $options: 'i' } },
+        { 'entries.dest': { $regex: fuzzy, $options: 'i' } },
       ];
     }
   } else if (lpoNo) {
