@@ -3471,7 +3471,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     className="fld flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ color: formData.station ? undefined : '#94a3b8' }}
                   >
-                    <span className="inline-flex items-center gap-2 min-w-0 overflow-hidden">
+                    <span className="flex-1 inline-flex items-center gap-2 min-w-0 overflow-hidden mr-1">
                       <MapPin className="w-[15px] h-[15px] text-[#4f46e5] shrink-0" />
                       <span className="truncate">{loadingStations ? 'Loading stations...' : (formData.station || 'Select station')}</span>
                     </span>
@@ -4261,52 +4261,52 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     {/* Truck | Mode | DO | Dir — same 4-col grid as liters row */}
                     <div className="grid grid-cols-4 gap-1 mb-1.5">
                       <div>
-                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Truck</label>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">Truck</label>
                         <div className="relative">
                           <input type="text" value={entry?.truckNo || ''} onChange={(e) => handleTruckNoChange(index, e.target.value)} onPaste={(e) => handleTruckPaste(index, e)}
                             placeholder="Truck" title="Paste multiple trucks (one per line) to auto-fill multiple rows"
-                            className={`w-full pr-4 px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                            className={`w-full pr-3 px-1 py-px border rounded text-[9px] focus:ring-1 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
                               isExactDuplicate ? 'border-red-500 dark:border-red-400' : isDifferentAmount ? 'border-blue-500 dark:border-blue-400' : isNilDuplicate ? 'border-amber-400 dark:border-amber-500' : hasNoRecordWarning ? 'border-amber-500 dark:border-amber-400' : 'border-gray-300 dark:border-gray-600'
                             }`} />
-                          {autoFill.loading && <Loader2 className="absolute right-1 top-1 w-3 h-3 text-primary-500 animate-spin" />}
-                          {autoFill.fetched && !autoFill.loading && !hasDuplicate && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-green-500" />}
-                          {hasNoRecordWarning && !autoFill.loading && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-amber-500" />}
-                          {isExactDuplicate && <AlertTriangle className="absolute right-1 top-1 w-3 h-3 text-red-500" />}
-                          {isDifferentAmount && <CheckCircle className="absolute right-1 top-1 w-3 h-3 text-blue-500" />}
+                          {autoFill.loading && <Loader2 className="absolute right-0.5 top-0.5 w-2.5 h-2.5 text-primary-500 animate-spin" />}
+                          {autoFill.fetched && !autoFill.loading && !hasDuplicate && <CheckCircle className="absolute right-0.5 top-0.5 w-2.5 h-2.5 text-green-500" />}
+                          {hasNoRecordWarning && !autoFill.loading && <AlertTriangle className="absolute right-0.5 top-0.5 w-2.5 h-2.5 text-amber-500" />}
+                          {isExactDuplicate && <AlertTriangle className="absolute right-0.5 top-0.5 w-2.5 h-2.5 text-red-500" />}
+                          {isDifferentAmount && <CheckCircle className="absolute right-0.5 top-0.5 w-2.5 h-2.5 text-blue-500" />}
                         </div>
                       </div>
                       <div>
-                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Mode</label>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">Mode</label>
                         <select
                           value={autoFill.entryType || 'regular'}
                           onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
                           title="Entry mode"
-                          className={`w-full px-1 py-0.5 border rounded text-[10px] font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
+                          className={`w-full px-0.5 py-px border rounded text-[9px] font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`}
                         >
                           {ENTRY_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">DO#</label>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">DO#</label>
                         <input type="text" value={entry?.doNo || ''} onChange={(e) => handleDONoChange(index, e.target.value)}
                           onBlur={(e) => { if (!e.target.value.trim()) handleEntryChange(index, 'doNo', 'NIL'); }}
                           onPaste={(e) => handleDOPaste(index, e)}
                           placeholder="DO#" title="Enter DO number — paste multiple (one per line) to fill down"
-                          className={`w-full px-1.5 py-0.5 border rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`} />
+                          className={`w-full px-1 py-px border rounded text-[9px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${modeBorderClass(autoFill.entryType)}`} />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Dir</label>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">Dir</label>
                         {autoFill.entryType !== 'ref' ? (
                           <button type="button" onClick={() => toggleDirection(index)}
-                            className={`w-full inline-flex items-center justify-center py-0.5 rounded text-[10px] font-medium ${
+                            className={`w-full inline-flex items-center justify-center py-px rounded text-[9px] font-medium ${
                               autoFill.direction === 'going'
                                 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
                                 : 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
                             }`}>
-                            {autoFill.direction === 'going' ? <ArrowRight className="w-3 h-3" /> : <ArrowLeft className="w-3 h-3" />}
+                            {autoFill.direction === 'going' ? <ArrowRight className="w-2.5 h-2.5" /> : <ArrowLeft className="w-2.5 h-2.5" />}
                           </button>
                         ) : (
-                          <span className="w-full inline-flex items-center justify-center py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">REF</span>
+                          <span className="w-full inline-flex items-center justify-center py-px rounded text-[9px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">REF</span>
                         )}
                       </div>
                     </div>
@@ -4359,30 +4359,30 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     {/* Liters + Rate + Amount + Dest in one compact row */}
                     <div className="grid grid-cols-4 gap-1">
                       <div>
-                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Ltrs</label>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">Ltrs</label>
                         <input type="number" value={entry?.liters || 0}
                           onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
                           onPaste={(e) => handleNumberFieldPaste(index, 'liters', e)}
                           title="Paste a column of numbers to fill down"
-                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                          className="w-full px-1 py-px border border-gray-300 dark:border-gray-600 rounded text-[9px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Rate</label>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">Rate</label>
                         <input type="number" value={entry?.rate || 0} step="0.01"
                           onChange={(e) => handleEntryChange(index, 'rate', parseFloat(e.target.value) || 0)}
                           onPaste={(e) => handleNumberFieldPaste(index, 'rate', e)}
                           title="Paste a column of numbers to fill down"
-                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                          className="w-full px-1 py-px border border-gray-300 dark:border-gray-600 rounded text-[9px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Amt</label>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">Amt</label>
                         <input type="number" value={(entry?.amount || 0).toFixed(2)} readOnly
-                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-gray-100" />
+                          className="w-full px-1 py-px border border-gray-300 dark:border-gray-600 rounded text-[9px] bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-gray-100" />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Dest</label>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">Dest</label>
                         <input type="text" value={entry?.dest || 'NIL'} onChange={(e) => handleEntryChange(index, 'dest', e.target.value)} placeholder="NIL"
-                          className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-[10px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                          className="w-full px-1 py-px border border-gray-300 dark:border-gray-600 rounded text-[9px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
                       </div>
                     </div>
                     {/* Balance hint — only shown when Mbeya return is reduced below standard */}
