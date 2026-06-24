@@ -1988,7 +1988,8 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
         existingLpos: matchingLpos,
         existingLiters,
         isDifferentAmount,
-        allowOverride: isDifferentAmount // Allow if amount is different (top-up scenario)
+        allowOverride: isDifferentAmount, // Allow if amount is different (top-up scenario)
+        isNilDo: !checkDoNo || checkDoNo === 'NIL', // True when match was based on truck+station only (no DO)
       },
     });
   } catch (error: any) {

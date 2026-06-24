@@ -758,6 +758,7 @@ export const lpoDocumentsAPI = {
     existingLiters?: number[];
     isDifferentAmount: boolean;
     allowOverride: boolean;
+    isNilDo: boolean;
   }> => {
     const params: any = { truckNo, station };
     if (excludeLpoId) params.excludeLpoId = excludeLpoId;
