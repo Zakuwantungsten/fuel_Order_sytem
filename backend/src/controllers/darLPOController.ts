@@ -5,7 +5,7 @@ import { SystemConfig } from '../models/SystemConfig';
 import { YardConfig } from '../models/YardConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex, normalizeTruckNo } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
@@ -41,6 +41,29 @@ async function findLinkedFuelRecord(doNo: string, truckNo: string, afterDate?: D
   if (afterDate) query.date = { $gte: afterDate.toISOString().split('T')[0] };
   const records = await FuelRecord.find(query).sort({ date: -1 });
   return records.length ? records[0] : null;
+}
+
+// Auto-link matches by TRUCK only (not DO): given a truck, return every eligible
+// FuelRecord within the time window for the user to choose from in the preview.
+// Truck matching is whitespace/hyphen-tolerant (mirrors normalizeTruckNo) so
+// imported records like "T790EEU" / "T790-EEU" still match an LPO entry's
+// "T790 EEU". Most-recent first.
+async function findFuelRecordsByTruck(truckNo: string, afterDate?: Date): Promise<any[]> {
+  const normalized = normalizeTruckNo(truckNo); // e.g. "T790 EEU" -> "T790EEU"
+  if (!normalized) return [];
+  // Allow optional separators between the numeric block and the letters. The
+  // normalized form is purely [A-Z0-9], so it's safe to embed directly in a regex.
+  const m = normalized.match(/^(T?\d+)([A-Z]+)$/);
+  const pattern = m ? `^${m[1]}[\\s-]*${m[2]}$` : `^${normalized}$`;
+  const query: any = {
+    truckNo: { $regex: new RegExp(pattern, 'i') },
+    isDeleted: false,
+    isCancelled: { $ne: true },
+  };
+  if (afterDate) query.date = { $gte: afterDate.toISOString().split('T')[0] };
+  // Cap candidates so a truck with a long history (e.g. when no time window is
+  // configured) can't load thousands of records into the picker.
+  return FuelRecord.find(query).sort({ date: -1 }).limit(50);
 }
 
 async function applyDarYardDelta(
@@ -588,41 +611,77 @@ type BulkLinkResult = {
   liters: number;
   dispenseLiters: number;
   existingValue?: number;
+  fuelRecordId?: string;
+};
+
+// One selection from the auto-link preview: the entry plus the specific fuel
+// record the user picked for it (auto-link matches many records per truck, so the
+// chosen record id is required — the server no longer re-resolves it).
+type BulkLinkSelection = {
+  entryId: string;
+  fuelRecordId: string;
+  dispenseLiters?: number;
+  topUp?: boolean;
 };
 
 export const bulkAutoLinkDarEntries = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { entryIds, topUpEntryIds = [], dispenseOverrides = {} } = req.body;
-
-  if (!Array.isArray(entryIds) || entryIds.length === 0) {
-    throw new ApiError(400, 'entryIds must be a non-empty array');
-  }
+  const body = req.body as {
+    selections?: BulkLinkSelection[];
+    entryIds?: string[];
+    topUpEntryIds?: string[];
+    dispenseOverrides?: Record<string, number>;
+  };
 
   const lpo = await DarLPODocument.findOne({ _id: id, isDeleted: false });
   if (!lpo) throw new ApiError(404, 'Dar LPO not found');
 
-  // Gate FuelRecord search to the configured dar yard time window
-  const timeLimitCfg = await SystemConfig.findOne({ configType: 'yard_fuel_time_limit', isDeleted: false }).lean();
-  let afterDate: Date | undefined;
-  const tlCfg = (timeLimitCfg as any)?.yardFuelTimeLimit;
-  if (tlCfg?.enabled && tlCfg.perYard?.darYard?.enabled && tlCfg.perYard.darYard.timeLimitDays != null) {
-    const days: number = tlCfg.perYard.darYard.timeLimitDays;
-    afterDate = new Date();
-    afterDate.setDate(afterDate.getDate() - days);
+  // Two accepted input shapes, normalized to a single `selections` list:
+  //  • selections — the auto-link preview already resolved a specific fuel record
+  //    per entry (truck-based discovery, the user's explicit choice).
+  //  • entryIds — legacy/creation path: resolve each entry by its OWN truck + DO
+  //    (manual-link semantics) within the configured yard time window.
+  let selections: BulkLinkSelection[];
+  if (Array.isArray(body.selections) && body.selections.length > 0) {
+    selections = body.selections;
+  } else if (Array.isArray(body.entryIds) && body.entryIds.length > 0) {
+    const timeLimitCfg = await SystemConfig.findOne({ configType: 'yard_fuel_time_limit', isDeleted: false }).lean();
+    let afterDate: Date | undefined;
+    const tlCfg = (timeLimitCfg as any)?.yardFuelTimeLimit;
+    if (tlCfg?.enabled && tlCfg.perYard?.darYard?.enabled && tlCfg.perYard.darYard.timeLimitDays != null) {
+      const days: number = tlCfg.perYard.darYard.timeLimitDays;
+      afterDate = new Date();
+      afterDate.setDate(afterDate.getDate() - days);
+    }
+    const topUpSet = new Set<string>((body.topUpEntryIds as string[]) || []);
+    const overrides = (body.dispenseOverrides || {}) as Record<string, number>;
+    selections = [];
+    for (const entryId of body.entryIds) {
+      const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
+      if (!entry || entry.isCancelled || entry.linkedFuelRecordId) continue;
+      const fr = await findLinkedFuelRecord(entry.doNo, entry.truckNo, afterDate);
+      selections.push({
+        entryId,
+        fuelRecordId: fr ? fr._id.toString() : '',
+        dispenseLiters: overrides[entryId],
+        topUp: topUpSet.has(entryId),
+      });
+    }
+  } else {
+    throw new ApiError(400, 'selections or entryIds must be a non-empty array');
   }
 
   const results: BulkLinkResult[] = [];
-  const topUpSet = new Set<string>(topUpEntryIds as string[]);
-  const overrides = (dispenseOverrides || {}) as Record<string, number>;
   let didApply = false;
 
-  for (const entryId of entryIds as string[]) {
+  for (const sel of selections) {
+    const entryId = sel?.entryId;
     const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
     if (!entry || entry.isCancelled) continue;
 
     // Apply any per-truck dispense override before resolving the amount.
-    if (overrides[entryId] != null && Number(overrides[entryId]) >= 0) {
-      entry.dispenseLiters = Number(overrides[entryId]);
+    if (sel.dispenseLiters != null && Number(sel.dispenseLiters) >= 0) {
+      entry.dispenseLiters = Number(sel.dispenseLiters);
     }
     const disp = dispenseAmount(entry);
 
@@ -631,7 +690,10 @@ export const bulkAutoLinkDarEntries = async (req: AuthRequest, res: Response): P
       continue;
     }
 
-    const fr = await findLinkedFuelRecord(entry.doNo, entry.truckNo, afterDate);
+    // Link to the exact fuel record the user chose in the preview.
+    const fr = sel.fuelRecordId
+      ? await FuelRecord.findOne({ _id: sel.fuelRecordId, isDeleted: false, isCancelled: { $ne: true } })
+      : null;
     if (!fr) {
       results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp });
       continue;
@@ -639,12 +701,14 @@ export const bulkAutoLinkDarEntries = async (req: AuthRequest, res: Response): P
 
     const existingValue: number = fr.darYard ?? 0;
 
-    if (existingValue > 0 && !topUpSet.has(entryId)) {
-      results.push({ entryId, status: 'conflict', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp, existingValue });
+    if (existingValue > 0 && !sel.topUp) {
+      results.push({ entryId, status: 'conflict', truckNo: entry.truckNo, doNo: fr.goingDo || entry.doNo, liters: entry.liters, dispenseLiters: disp, existingValue, fuelRecordId: fr._id.toString() });
       continue;
     }
 
     entry.linkedFuelRecordId = fr._id.toString();
+    // Backfill the entry's DO from the matched fuel record (manual link does the same).
+    if (fr.goingDo) entry.doNo = fr.goingDo;
     await applyDarYardDelta(fr, disp);
     didApply = true;
     results.push({
@@ -655,6 +719,7 @@ export const bulkAutoLinkDarEntries = async (req: AuthRequest, res: Response): P
       liters: entry.liters,
       dispenseLiters: disp,
       existingValue: existingValue > 0 ? existingValue : undefined,
+      fuelRecordId: fr._id.toString(),
     });
   }
 
@@ -743,22 +808,29 @@ export const previewBulkAutoLinkDarEntries = async (req: AuthRequest, res: Respo
     if (!entry || entry.isCancelled || entry.linkedFuelRecordId) continue;
 
     const disp = dispenseAmount(entry);
-    const fr = await findLinkedFuelRecord(entry.doNo, entry.truckNo, afterDate);
-    if (!fr) {
-      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp, fuelRecord: null, existingValue: 0 });
+    // Auto-link by truck: surface every eligible fuel record in the window so the
+    // user can choose which one this entry links to (no DO requirement).
+    const candidates = await findFuelRecordsByTruck(entry.truckNo, afterDate);
+    if (candidates.length === 0) {
+      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp, candidates: [] });
       continue;
     }
 
-    const existingValue: number = fr.darYard ?? 0;
     results.push({
       entryId,
-      status: existingValue > 0 ? 'conflict' : 'found',
+      status: 'found',
       truckNo: entry.truckNo,
       doNo: entry.doNo,
       liters: entry.liters,
       dispenseLiters: disp,
-      existingValue,
-      fuelRecord: fr.toObject(),
+      candidates: candidates.map((fr: any) => ({
+        fuelRecordId: fr._id.toString(),
+        date: fr.date,
+        goingDo: fr.goingDo,
+        returnDo: fr.returnDo,
+        existingValue: fr.darYard ?? 0,
+        fuelRecord: fr.toObject(),
+      })),
     });
   }
 

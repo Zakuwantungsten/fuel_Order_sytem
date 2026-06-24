@@ -32,16 +32,29 @@ type BulkLinkResult = {
   existingValue?: number;
 };
 
+// One candidate fuel record the user can pick for an entry. Auto-link matches by
+// truck, so an entry can have several candidates within the time window.
+type PreviewCandidate = {
+  fuelRecordId: string;
+  date: string;
+  goingDo: string;
+  returnDo?: string;
+  existingValue: number;
+  fuelRecord: any;
+};
+
 type BulkPreviewResult = {
   entryId: string;
-  status: 'found' | 'conflict' | 'not_found';
+  status: 'found' | 'not_found';
   truckNo: string;
   doNo: string;
   liters: number;
   dispenseLiters: number;
-  existingValue: number;
-  fuelRecord: any | null;
+  candidates: PreviewCandidate[];
 };
+
+// One confirmed selection sent to the bulk-link endpoint.
+type BulkSelection = { entryId: string; fuelRecordId: string; dispenseLiters: number; topUp: boolean };
 
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
@@ -507,12 +520,16 @@ function BulkLinkPreviewModal({
   onClose,
 }: {
   results: BulkPreviewResult[];
-  onConfirm: (selectedIds: string[], topUpIds: string[], dispenseOverrides: Record<string, number>) => void;
+  onConfirm: (selections: BulkSelection[]) => void;
   onClose: () => void;
 }) {
-  const actionable = results.filter(r => r.status === 'found' || r.status === 'conflict');
+  const actionable = results.filter(r => r.status === 'found' && r.candidates.length > 0);
   const notFound = results.filter(r => r.status === 'not_found');
   const [selected, setSelected] = useState<Set<string>>(new Set(actionable.map(r => r.entryId)));
+  // Default chosen candidate per entry: the most recent (candidates[0]).
+  const [chosen, setChosen] = useState<Record<string, string>>(
+    () => Object.fromEntries(actionable.map(r => [r.entryId, r.candidates[0].fuelRecordId]))
+  );
   const [dispense, setDispense] = useState<Record<string, string>>(
     () => Object.fromEntries(actionable.map(r => [r.entryId, String(r.dispenseLiters ?? r.liters)]))
   );
@@ -524,6 +541,8 @@ function BulkLinkPreviewModal({
     const raw = dispense[r.entryId];
     return raw === '' || raw == null ? (r.dispenseLiters ?? r.liters) : (parseFloat(raw) || 0);
   };
+  const chosenCand = (r: BulkPreviewResult): PreviewCandidate =>
+    r.candidates.find(c => c.fuelRecordId === chosen[r.entryId]) ?? r.candidates[0];
 
   const toggle = (id: string) => setSelected(prev => {
     const next = new Set(prev);
@@ -535,13 +554,20 @@ function BulkLinkPreviewModal({
   const toggleAll = () => setSelected(allChecked ? new Set() : new Set(actionable.map(r => r.entryId)));
 
   const handleConfirm = () => {
-    const selectedArr = Array.from(selected);
-    const topUpIds = results.filter(r => r.status === 'conflict' && selected.has(r.entryId)).map(r => r.entryId);
-    const dispenseOverrides: Record<string, number> = {};
-    for (const r of actionable) {
-      if (selected.has(r.entryId)) dispenseOverrides[r.entryId] = dispVal(r);
-    }
-    onConfirm(selectedArr, topUpIds, dispenseOverrides);
+    const selections: BulkSelection[] = actionable
+      .filter(r => selected.has(r.entryId))
+      .map(r => {
+        const cand = chosenCand(r);
+        return {
+          entryId: r.entryId,
+          fuelRecordId: cand.fuelRecordId,
+          dispenseLiters: dispVal(r),
+          // Selecting an entry whose chosen record already has a yard value
+          // approves the top-up (keeps the conflict/top-up flow).
+          topUp: (cand.existingValue ?? 0) > 0,
+        };
+      });
+    onConfirm(selections);
   };
 
   return (
@@ -552,7 +578,7 @@ function BulkLinkPreviewModal({
             <div>
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">Auto-Link Preview</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {actionable.length} matched · {notFound.length} not found — confirm which to link
+                {actionable.length} matched · {notFound.length} not found — pick a fuel record per truck
               </p>
             </div>
             <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
@@ -572,62 +598,92 @@ function BulkLinkPreviewModal({
                     Matched ({actionable.length})
                   </span>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {actionable.map(r => {
                     const checked = selected.has(r.entryId);
-                    const isConflict = r.status === 'conflict';
+                    const cand = chosenCand(r);
+                    const isConflict = (cand.existingValue ?? 0) > 0;
                     return (
                       <div key={r.entryId}
-                        className={`flex items-center gap-2.5 p-2.5 rounded-lg border ${
+                        className={`p-2.5 rounded-lg border ${
                           checked
                             ? isConflict
                               ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20'
                               : 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20'
                             : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20'
                         }`}>
-                        <button type="button" onClick={() => toggle(r.entryId)}
-                          className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
-                            checked
-                              ? isConflict ? 'border-orange-600 bg-orange-600' : 'border-green-600 bg-green-600'
-                              : 'border-gray-400 dark:border-gray-500'
-                          }`}>
-                          {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{r.truckNo}</span>
-                            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{r.doNo}</span>
-                            {isConflict && (
-                              <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 rounded font-medium">top-up</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            <span className="text-[11px] text-gray-500 dark:text-gray-400">Dispense</span>
-                            <input
-                              type="number"
-                              value={dispense[r.entryId] ?? ''}
-                              onChange={e => setDisp(r.entryId, e.target.value)}
-                              onClick={e => e.stopPropagation()}
-                              min={0}
-                              step="0.01"
-                              placeholder={String(r.liters)}
-                              title={`Liters added to darYard (billed ${r.liters}L)`}
-                              className="w-16 px-1.5 py-0.5 text-xs text-right border border-amber-300 dark:border-amber-700 rounded bg-amber-50/50 dark:bg-amber-900/10 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-amber-500"
-                            />
-                            <span className="text-[11px] text-gray-400">L → darYard</span>
-                            {isConflict && (
-                              <span className="text-[11px] text-orange-600 dark:text-orange-400">({r.existingValue}L + {dispVal(r)}L = {r.existingValue + dispVal(r)}L)</span>
-                            )}
+                        <div className="flex items-center gap-2.5">
+                          <button type="button" onClick={() => toggle(r.entryId)}
+                            className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                              checked
+                                ? isConflict ? 'border-orange-600 bg-orange-600' : 'border-green-600 bg-green-600'
+                                : 'border-gray-400 dark:border-gray-500'
+                            }`}>
+                            {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{r.truckNo}</span>
+                              <span className="text-[11px] text-gray-400">{r.candidates.length} record{r.candidates.length === 1 ? '' : 's'}</span>
+                              {isConflict && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 rounded font-medium">top-up</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400">Dispense</span>
+                              <input
+                                type="number"
+                                value={dispense[r.entryId] ?? ''}
+                                onChange={e => setDisp(r.entryId, e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                                min={0}
+                                step="0.01"
+                                placeholder={String(r.liters)}
+                                title={`Liters added to darYard (billed ${r.liters}L)`}
+                                className="w-16 px-1.5 py-0.5 text-xs text-right border border-amber-300 dark:border-amber-700 rounded bg-amber-50/50 dark:bg-amber-900/10 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-amber-500"
+                              />
+                              <span className="text-[11px] text-gray-400">L → darYard</span>
+                              {isConflict && (
+                                <span className="text-[11px] text-orange-600 dark:text-orange-400">({cand.existingValue}L + {dispVal(r)}L = {cand.existingValue + dispVal(r)}L)</span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        {r.fuelRecord && (
-                          <button type="button"
-                            onClick={() => { setInspectFrId(String(r.fuelRecord._id || r.fuelRecord.id)); setInspectTruckNo(r.truckNo); }}
-                            className="p-1 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:text-green-400 dark:hover:bg-green-900/30 flex-shrink-0"
-                            title="View fuel record breakdown">
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+
+                        {/* Candidate picker — one fuel record to link this entry to */}
+                        <div className="mt-2 pl-6 space-y-1">
+                          {r.candidates.map(c => {
+                            const picked = cand.fuelRecordId === c.fuelRecordId;
+                            return (
+                              <div key={c.fuelRecordId}
+                                className={`flex items-center gap-2 p-1.5 rounded-md border text-xs cursor-pointer ${
+                                  picked
+                                    ? 'border-green-400 dark:border-green-600 bg-white dark:bg-gray-800'
+                                    : 'border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/40'
+                                }`}
+                                onClick={() => setChosen(prev => ({ ...prev, [r.entryId]: c.fuelRecordId }))}>
+                                <span className={`flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full border ${
+                                  picked ? 'border-green-600' : 'border-gray-400 dark:border-gray-500'
+                                }`}>
+                                  {picked && <span className="h-1.5 w-1.5 rounded-full bg-green-600" />}
+                                </span>
+                                <span className="text-gray-700 dark:text-gray-300 whitespace-nowrap">{c.date}</span>
+                                <span className="font-mono text-gray-500 dark:text-gray-400 truncate">
+                                  {c.goingDo}{c.returnDo && c.returnDo !== c.goingDo ? ` → ${c.returnDo}` : ''}
+                                </span>
+                                {(c.existingValue ?? 0) > 0 && (
+                                  <span className="text-[10px] px-1 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 rounded">{c.existingValue}L</span>
+                                )}
+                                <button type="button"
+                                  onClick={e => { e.stopPropagation(); setInspectFrId(c.fuelRecordId); setInspectTruckNo(r.truckNo); }}
+                                  className="ml-auto p-0.5 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:text-green-400 dark:hover:bg-green-900/30 flex-shrink-0"
+                                  title="View fuel record breakdown">
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     );
                   })}
@@ -645,7 +701,7 @@ function BulkLinkPreviewModal({
                     <div key={r.entryId} className="flex items-center gap-2 p-2 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/10">
                       <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{r.truckNo}</span>
-                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{r.doNo}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">no fuel record in window</span>
                     </div>
                   ))}
                 </div>
@@ -711,7 +767,9 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
   const [showBulkConflict, setShowBulkConflict] = useState(false);
   const [showBulkPreview, setShowBulkPreview] = useState(false);
   const [bulkPreviewResults, setBulkPreviewResults] = useState<BulkPreviewResult[]>([]);
-  const [lastDispenseOverrides, setLastDispenseOverrides] = useState<Record<string, number>>({});
+  // Selections from the last bulk-link attempt, so the conflict modal can resend
+  // the same chosen fuel records with top-up approved.
+  const [lastSelections, setLastSelections] = useState<BulkSelection[]>([]);
   const [editingDate, setEditingDate] = useState(false);
   const [dateValue, setDateValue] = useState(lpo.date);
   const [savingDate, setSavingDate] = useState(false);
@@ -832,12 +890,12 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
     }
   };
 
-  const handleBulkLink = async (entryIds: string[], topUpEntryIds: string[] = [], dispenseOverrides: Record<string, number> = {}) => {
-    if (entryIds.length === 0) return;
+  const handleBulkLink = async (selections: BulkSelection[]) => {
+    if (selections.length === 0) return;
     setBulkLinking(true);
-    setLastDispenseOverrides(dispenseOverrides);
+    setLastSelections(selections);
     try {
-      const res = await darLPOAPI.bulkLink(lpoId, { entryIds, topUpEntryIds, dispenseOverrides });
+      const res = await darLPOAPI.bulkLink(lpoId, { selections });
       handleMutationResult(res.data as DarLPO);
 
       const results: BulkLinkResult[] = res.results || [];
@@ -1489,10 +1547,10 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
       {showBulkPreview && (
         <BulkLinkPreviewModal
           results={bulkPreviewResults}
-          onConfirm={(selectedIds, topUpIds, dispenseOverrides) => {
+          onConfirm={(selections) => {
             setShowBulkPreview(false);
             setBulkPreviewResults([]);
-            if (selectedIds.length > 0) handleBulkLink(selectedIds, topUpIds, dispenseOverrides);
+            if (selections.length > 0) handleBulkLink(selections);
           }}
           onClose={() => { setShowBulkPreview(false); setBulkPreviewResults([]); }}
         />
@@ -1503,7 +1561,12 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
           onConfirm={topUpIds => {
             setShowBulkConflict(false);
             setBulkConflicts([]);
-            if (topUpIds.length > 0) handleBulkLink(topUpIds, topUpIds, lastDispenseOverrides);
+            // Resend the same chosen fuel records for the approved entries, now
+            // with top-up confirmed.
+            const resend = lastSelections
+              .filter(s => topUpIds.includes(s.entryId))
+              .map(s => ({ ...s, topUp: true }));
+            if (resend.length > 0) handleBulkLink(resend);
           }}
           onClose={() => { setShowBulkConflict(false); setBulkConflicts([]); }}
         />

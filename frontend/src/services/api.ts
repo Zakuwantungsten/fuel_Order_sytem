@@ -2509,7 +2509,12 @@ export const tangaLPOAPI = {
     const response = await apiClient.post('/tanga-lpo/preview-manual-link', data);
     return response.data.data;
   },
-  bulkLink: async (lpoId: string, data: { entryIds: string[]; topUpEntryIds?: string[]; dispenseOverrides?: Record<string, number> }) => {
+  bulkLink: async (
+    lpoId: string,
+    data:
+      | { selections: { entryId: string; fuelRecordId: string; dispenseLiters?: number; topUp?: boolean }[] }
+      | { entryIds: string[]; topUpEntryIds?: string[]; dispenseOverrides?: Record<string, number> }
+  ) => {
     const response = await apiClient.post(`/tanga-lpo/${lpoId}/bulk-link`, data);
     return response.data;
   },
@@ -2614,7 +2619,12 @@ export const darLPOAPI = {
     const response = await apiClient.post('/dar-lpo/preview-manual-link', data);
     return response.data.data;
   },
-  bulkLink: async (lpoId: string, data: { entryIds: string[]; topUpEntryIds?: string[]; dispenseOverrides?: Record<string, number> }) => {
+  bulkLink: async (
+    lpoId: string,
+    data:
+      | { selections: { entryId: string; fuelRecordId: string; dispenseLiters?: number; topUp?: boolean }[] }
+      | { entryIds: string[]; topUpEntryIds?: string[]; dispenseOverrides?: Record<string, number> }
+  ) => {
     const response = await apiClient.post(`/dar-lpo/${lpoId}/bulk-link`, data);
     return response.data;
   },
