@@ -652,12 +652,20 @@ const FUEL_AUTOMATION_GROUPS: {
   rows: { key: keyof FuelAutomationConfig; label: string; sub: string }[];
 }[] = [
   {
-    title: 'DO → Fuel record',
+    title: ‘LPO → Fuel record’,
     rows: [
-      { key: 'doImportCreate', label: 'Create on import DO', sub: 'An IMPORT delivery order creates a new going-journey fuel record.' },
-      { key: 'doExportUpdate', label: 'Update on export DO', sub: 'An EXPORT delivery order fills the matched going record’s return leg.' },
-      { key: 'doAmendCascade', label: 'Cascade DO amendments', sub: 'Truck / destination / loading-point edits recalculate the linked fuel record.' },
-      { key: 'doCancelCascade', label: 'Cascade DO cancellation', sub: 'Cancelling a DO cancels or reverts its linked fuel record.' },
+      { key: ‘lpoCreateDeduct’, label: ‘Deduct on LPO creation’, sub: ‘Creating an LPO entry deducts fuel from the truck’s balance.’ },
+      { key: ‘lpoCancelRevert’, label: ‘Revert on LPO cancellation’, sub: ‘Cancelling an LPO entry restores the deducted fuel to the truck’s balance.’ },
+      { key: ‘lpoEditAdjust’, label: ‘Adjust on LPO edit’, sub: ‘Editing an LPO entry’s liters or truck recalculates the fuel deduction.’ },
+    ],
+  },
+  {
+    title: ‘DO → Fuel record’,
+    rows: [
+      { key: ‘doImportCreate’, label: ‘Create on import DO’, sub: ‘An IMPORT delivery order creates a new going-journey fuel record.’ },
+      { key: ‘doExportUpdate’, label: ‘Update on export DO’, sub: ‘An EXPORT delivery order fills the matched going record’s return leg.’ },
+      { key: ‘doAmendCascade’, label: ‘Cascade DO amendments’, sub: ‘Truck / destination / loading-point edits recalculate the linked fuel record.’ },
+      { key: ‘doCancelCascade’, label: ‘Cascade DO cancellation’, sub: ‘Cancelling a DO cancels or reverts its linked fuel record.’ },
     ],
   },
 ];
