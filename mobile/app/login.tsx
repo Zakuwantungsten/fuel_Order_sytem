@@ -74,9 +74,9 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <View style={[styles.logoRing, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
-            <Image source={require('../assets/horse-icon.png')} style={styles.logo} />
+            <Image source={require('../assets/splash-icon.png')} style={styles.logo} />
           </View>
-          <Text style={[styles.title, { color: colors.onHeader }]}>FuelOrder</Text>
+          <Text style={[styles.title, { color: colors.onHeader }]}>limka</Text>
           <Text style={[styles.subtitle, { color: colors.onHeaderMuted }]}>Sign in to continue</Text>
         </View>
 

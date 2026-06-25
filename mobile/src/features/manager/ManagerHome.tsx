@@ -89,7 +89,7 @@ export default function ManagerHome() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <AppHeader title="FuelOrder" subtitle={stationLabel} badge={superMgr ? 'Super Manager' : 'Manager'} />
+      <AppHeader title="limka" subtitle={stationLabel} badge={superMgr ? 'Super Manager' : 'Manager'} />
 
       {/* Search */}
       <View

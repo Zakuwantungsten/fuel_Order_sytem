@@ -54,7 +54,7 @@ export default function DriverHome() {
   if (!truck) {
     return (
       <Screen>
-        <AppHeader title="FuelOrder" subtitle="Driver" />
+        <AppHeader title="limka" subtitle="Driver" />
         <View style={{ padding: spacing.md }}>
           <Card>
             <EmptyState
@@ -71,7 +71,7 @@ export default function DriverHome() {
   if (query.isLoading) {
     return (
       <Screen>
-        <AppHeader title="FuelOrder" subtitle={truck} />
+        <AppHeader title="limka" subtitle={truck} />
         <Loading label="Loading your trip…" />
       </Screen>
     );
@@ -85,7 +85,7 @@ export default function DriverHome() {
 
   return (
     <Screen>
-      <AppHeader title="FuelOrder" subtitle={truck} badge="Driver" />
+      <AppHeader title="limka" subtitle={truck} badge="Driver" />
       <ScrollView
         contentContainerStyle={{ padding: spacing.md }}
         refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={onRefresh} tintColor={colors.primary} />}

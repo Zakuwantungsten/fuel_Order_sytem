@@ -38,7 +38,7 @@ export default function HomeScreen() {
   const info = PLACEHOLDER[home];
   return (
     <Screen>
-      <AppHeader title="FuelOrder" subtitle={user?.station || user?.yard || 'Dashboard'} />
+      <AppHeader title="limka" subtitle={user?.station || user?.yard || 'Dashboard'} />
       <ScrollView contentContainerStyle={{ padding: spacing.md }}>
         <Card>
           <EmptyState icon={info.icon} title={info.title} subtitle={info.subtitle} />
