@@ -4,6 +4,15 @@
     "slug": "fuelorder",
     "version": "1.0.0",
     "orientation": "portrait",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/5ed18b6c-4d7c-44c3-85f0-4ba928534ac1",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "icon": "./assets/icon.png",
     "scheme": "fuelorder",
     "userInterfaceStyle": "light",
@@ -25,6 +34,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-updates",
       "expo-secure-store",
       [
         "expo-splash-screen",
