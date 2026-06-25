@@ -9,6 +9,7 @@ import {
   NotificationsResult,
   dismissAllNotifications,
   getNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
 } from '../../src/api/notifications';
 import { Card, EmptyState, Loading } from '../../src/components/ui';
@@ -38,6 +39,22 @@ export default function NotificationsScreen() {
     queryKey: ['notifications'],
     queryFn: getNotifications,
   });
+
+  // Opening the panel clears the unread badge: mark everything read once on mount
+  // (the items stay visible — they just lose the "unread" dot). The count query is
+  // then refreshed so the header badge drops to zero.
+  React.useEffect(() => {
+    let cancelled = false;
+    markAllNotificationsRead()
+      .then(() => {
+        if (cancelled) return;
+        queryClient.invalidateQueries({ queryKey: ['notif-count'] });
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      })
+      .catch(() => { /* non-fatal — badge will reset on next fetch */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const markRead = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),

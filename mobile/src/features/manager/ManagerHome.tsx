@@ -116,7 +116,12 @@ export default function ManagerHome() {
 
       {/* Station picker (super manager) */}
       {superMgr && stations.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm, paddingHorizontal: spacing.md, flexGrow: 0 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginTop: spacing.sm, flexGrow: 0 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.md, paddingRight: spacing.lg, alignItems: 'center' }}
+        >
           <Chip label="All" active={station === 'all'} onPress={() => setStation('all')} />
           {stations.map((s) => (
             <Chip key={s} label={s.replace('LAKE ', '')} active={station === s} onPress={() => setStation(s)} />
@@ -227,22 +232,32 @@ export default function ManagerHome() {
   function LpoRow({ entry }: { entry: LpoEntry }) {
     const cancelled = entry.isCancelled;
     const amended = !cancelled && !!entry.amendedAt;
-    const accent = cancelled
-      ? colors.danger
-      : entry.isDriverAccount
-      ? colors.warning
-      : entry.isRefer
-      ? colors.info
-      : colors.primary;
     const dim = cancelled ? 0.55 : 1;
     const sym = symbolFor(entry.station);
+    const stationColor = cancelled ? colors.textMuted : colors.primary;
+    const dateLabel = entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : entry.date;
 
     return (
       <Pressable onPress={() => setSelected(entry)} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-        <Card accent={accent} style={styles.row}>
-          {/* Top: truck + tags | total */}
-          <View style={styles.rowTop}>
-            <View style={{ flex: 1, opacity: dim }}>
+        <Card style={styles.row}>
+          {/* Identity: station name + LPO number both stand out */}
+          <View style={styles.idRow}>
+            <View style={styles.idLeft}>
+              <Ionicons name="business" size={15} color={stationColor} />
+              <Text style={{ fontSize: font.body, fontWeight: weight.heavy, color: stationColor, marginLeft: 5, flexShrink: 1 }} numberOfLines={1}>
+                {entry.station}
+              </Text>
+            </View>
+            <View style={[styles.lpoPill, { backgroundColor: colors.primaryMuted }]}>
+              <Text style={{ fontSize: font.small, fontWeight: weight.bold, color: cancelled ? colors.textMuted : colors.primary }} numberOfLines={1}>
+                LPO {entry.lpoNo}
+              </Text>
+            </View>
+          </View>
+
+          {/* Truck + tags | total */}
+          <View style={[styles.rowTop, { opacity: dim }]}>
+            <View style={{ flex: 1 }}>
               <View style={styles.truckLine}>
                 <Text style={{ fontSize: font.body, fontWeight: weight.bold, color: cancelled ? colors.textMuted : colors.text }} numberOfLines={1}>
                   {entry.truckNo}
@@ -257,7 +272,7 @@ export default function ManagerHome() {
               </Text>
             </View>
 
-            <View style={{ alignItems: 'flex-end', opacity: dim }}>
+            <View style={{ alignItems: 'flex-end' }}>
               <Text style={{ fontSize: font.tiny, color: colors.textMuted, fontWeight: weight.semibold }}>TOTAL</Text>
               <Text
                 style={{
@@ -276,7 +291,7 @@ export default function ManagerHome() {
           <View style={[styles.rowBottom, { borderTopColor: colors.border, opacity: dim }]}>
             <View>
               <Text style={styles.metaLabel}>QUANTITY</Text>
-              <Text style={{ fontSize: font.body, fontWeight: weight.semibold, color: cancelled ? colors.textMuted : colors.text }}>
+              <Text style={{ fontSize: font.body, fontWeight: weight.bold, color: cancelled ? colors.textMuted : colors.text }}>
                 {entry.liters.toLocaleString()} L
               </Text>
             </View>
@@ -288,12 +303,10 @@ export default function ManagerHome() {
             </View>
           </View>
 
-          {/* LPO + station + created (small footer) */}
+          {/* Created date (small footer) */}
           <View style={[styles.footer, { opacity: dim }]}>
-            <Text style={styles.footerText} numberOfLines={1}>
-              LPO {entry.lpoNo}{superMgr ? ` • ${entry.station}` : ''}
-            </Text>
-            <Text style={styles.footerText}>{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : entry.date}</Text>
+            <Ionicons name="time-outline" size={12} color={colors.textMuted} />
+            <Text style={[styles.footerText, { marginLeft: 4 }]}>{dateLabel}</Text>
           </View>
         </Card>
       </Pressable>
@@ -307,11 +320,14 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sortBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   row: { marginBottom: 8, paddingVertical: 10, paddingHorizontal: 12 },
+  idRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 },
+  idLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  lpoPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexShrink: 0 },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   truckLine: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   rowBottom: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 8, paddingTop: 8 },
   metaLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, color: '#94a3b8' },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
+  footer: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   footerText: { fontSize: 11, color: '#94a3b8' },
   sortScrim: { flex: 1 },
   sortMenu: {

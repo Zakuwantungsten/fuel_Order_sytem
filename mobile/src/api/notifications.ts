@@ -36,6 +36,11 @@ export async function markNotificationRead(id: string): Promise<void> {
   await apiClient.patch(`/notifications/${id}/read`, {});
 }
 
+/** Mark every notification read (resets the badge) without hiding them. */
+export async function markAllNotificationsRead(): Promise<void> {
+  await apiClient.patch('/notifications/read-all', {});
+}
+
 export async function dismissAllNotifications(): Promise<void> {
   await apiClient.delete('/notifications');
 }

@@ -61,6 +61,9 @@ export async function registerForPush(): Promise<void> {
         name: 'Default',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
+        // Custom notification tone bundled via the expo-notifications `sounds`
+        // plugin (see app.json). Falls back to the system sound if unavailable.
+        sound: 'notification.wav',
       });
     }
 

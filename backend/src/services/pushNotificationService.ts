@@ -46,7 +46,9 @@ export async function sendPushToRecipients(
   recipients: string[],
   payload: { title: string; body: string; url?: string; tag?: string }
 ): Promise<void> {
-  if (!ensureVapidConfigured()) return;
+  // NOTE: do NOT gate on VAPID here. VAPID is only needed for *browser* web-push;
+  // Expo (mobile) push uses FCM/APNs and must still fire when VAPID is unset
+  // (e.g. the self-hosted backend has no browser-push keys configured).
 
   // Try async queue first (returns false if queue is unavailable)
   const enqueued = await enqueuePush(recipients, payload);
@@ -68,7 +70,9 @@ export async function sendPushDirect(
   recipients: string[],
   payload: { title: string; body: string; url?: string; tag?: string }
 ): Promise<void> {
-  if (!ensureVapidConfigured()) return;
+  // Web-push needs VAPID; Expo push does not. Resolve VAPID availability once and
+  // skip only the browser sends if it's missing — Expo sends always proceed.
+  const vapidOk = ensureVapidConfigured();
 
   try {
     // Build the query: match by userId OR role
@@ -93,8 +97,8 @@ export async function sendPushDirect(
       tag:   payload.tag || 'fuel-order-notification',
     });
 
-    // --- Web Push (VAPID) ---
-    const webSends = webSubs.map(async (sub) => {
+    // --- Web Push (VAPID) — only when keys are configured ---
+    const webSends = (vapidOk ? webSubs : []).map(async (sub) => {
       try {
         await webPush.sendNotification(
           { endpoint: sub.endpoint, keys: sub.keys as { p256dh: string; auth: string } },
@@ -118,7 +122,9 @@ export async function sendPushDirect(
         title: payload.title,
         body:  payload.body,
         data:  { url: payload.url || '/' },
-        sound: 'default' as const,
+        // Custom tone bundled in the app (iOS uses this filename; Android uses the
+        // 'default' channel's sound). Invalid/missing falls back to the system sound.
+        sound: 'notification.wav',
         channelId: 'default',
       }));
 

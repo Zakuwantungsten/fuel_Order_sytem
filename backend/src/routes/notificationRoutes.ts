@@ -65,6 +65,13 @@ router.delete('/mobile-subscribe', asyncHandler(notificationController.unsubscri
 router.delete('/', asyncHandler(notificationController.dismissAllNotifications));
 
 /**
+ * @route   PATCH /api/notifications/read-all
+ * @desc    Mark all of the current user's notifications as read (reset badge)
+ * @access  Private
+ */
+router.patch('/read-all', asyncHandler(notificationController.markAllAsRead));
+
+/**
  * @route   PATCH /api/notifications/:id/read
  * @desc    Mark notification as read
  * @access  Private

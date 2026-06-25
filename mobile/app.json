@@ -48,7 +48,8 @@
         "expo-notifications",
         {
           "icon": "./assets/horse-icon.png",
-          "color": "#1d4ed8"
+          "color": "#1d4ed8",
+          "sounds": ["./assets/notification.wav"]
         }
       ],
       "expo-font"

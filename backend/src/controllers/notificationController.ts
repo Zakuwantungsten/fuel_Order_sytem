@@ -254,6 +254,38 @@ export const dismissAllNotifications = async (req: AuthRequest, res: Response): 
 };
 
 /**
+ * Mark ALL of the current user's pending notifications as read.
+ *
+ * Unlike dismissAllNotifications (which hides them), this only clears the
+ * "unread" state — the notifications stay visible in the list. Used to reset the
+ * badge counter when the user opens the notifications panel.
+ */
+export const markAllAsRead = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role || 'user';
+
+    const result = await Notification.updateMany(
+      {
+        recipients: { $in: [userRole, userId] },
+        isDeleted: false,
+        status: 'pending',
+        readBy: { $ne: userId },
+      },
+      { $addToSet: { readBy: userId }, $set: { isRead: true } }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Marked ${result.modifiedCount} notification(s) as read`,
+      count: result.modifiedCount,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Resolve notification (automatically when admin fixes the issue)
  */
 export const resolveNotification = async (req: AuthRequest, res: Response): Promise<void> => {
