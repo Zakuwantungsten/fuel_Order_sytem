@@ -157,6 +157,7 @@ export const deliveryOrderValidation = {
   ],
 
   update: [
+    body('date').optional().trim().notEmpty().withMessage('Date cannot be empty'),
     body('importOrExport')
       .optional()
       .isIn(['IMPORT', 'EXPORT'])

@@ -60,17 +60,20 @@ const LPO_ENTRY_FIELDS: Record<string, string[]> = {
 // ── Delivery Order ───────────────────────────────────────────
 const DELIVERY_ORDER_FIELDS: Record<string, string[]> = {
   admin: [
-    'truckNo', 'trailerNo', 'loadingPoint', 'destination',
+    'date', 'truckNo', 'trailerNo', 'loadingPoint', 'destination',
     'tonnages', 'ratePerTon', 'driverName', 'clientName', 'containerNo',
-    'editReason', 'status',
+    'editReason', 'status', 'haulier', 'invoiceNos', 'borderEntryDRC',
+    'doNumber', 'cargoType', 'rateType', 'totalAmount',
   ],
   fuel_order_maker: [
-    'truckNo', 'trailerNo', 'loadingPoint', 'destination',
+    'date', 'truckNo', 'trailerNo', 'loadingPoint', 'destination',
     'tonnages', 'driverName', 'clientName', 'containerNo', 'editReason',
+    'haulier', 'invoiceNos', 'borderEntryDRC', 'cargoType',
   ],
   clerk: [
-    'truckNo', 'trailerNo', 'loadingPoint', 'destination',
+    'date', 'truckNo', 'trailerNo', 'loadingPoint', 'destination',
     'tonnages', 'driverName', 'clientName', 'containerNo', 'editReason',
+    'haulier', 'invoiceNos', 'borderEntryDRC', 'cargoType',
   ],
 };
 

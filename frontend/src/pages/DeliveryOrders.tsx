@@ -791,6 +791,13 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         }
       }
       
+      // Show success toast
+      if (orderId) {
+        toast.success(`Delivery order ${savedOrder.doType}-${savedOrder.doNumber} updated successfully`);
+      } else {
+        toast.success(`Delivery order ${savedOrder.doType}-${savedOrder.doNumber} created successfully`);
+      }
+
       // Invalidate React Query cache to refetch
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
