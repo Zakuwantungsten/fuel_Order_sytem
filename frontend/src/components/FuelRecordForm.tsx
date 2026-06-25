@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Zap, Lock, Unlock } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Zap, Lock, Unlock, AlertTriangle } from 'lucide-react';
 import { FuelRecord } from '../types';
+import { fuelRecordsAPI } from '../services/api';
 
 interface FuelRecordFormProps {
   isOpen: boolean;
@@ -58,6 +59,14 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditing = Boolean(initialData);
+
+  const [doAmbiguityModal, setDoAmbiguityModal] = useState<{
+    open: boolean;
+    doNo: string;
+    matches: { fuelRecord: FuelRecord; direction: 'going' | 'returning' }[];
+  }>({ open: false, doNo: '', matches: [] });
+
+  const pendingSubmit = useRef<Partial<FuelRecord> | null>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -213,14 +222,7 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
     );
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    const trimmedReason = reason.trim();
-    const submitData = trimmedReason ? { ...formData, reason: trimmedReason } : formData;
-    // Track in-flight state so the submit button can show "Updating…/Creating…"
-    // and stay disabled (prevents double-submit). The parent closes the form on
-    // success; on error it stays open, so we reset the flag in finally.
+  const doSubmit = async (submitData: Partial<FuelRecord>) => {
     setIsSubmitting(true);
     try {
       await onSubmit(submitData);
@@ -230,6 +232,52 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
     // Do NOT call onClose() here — the parent closes the form after the async
     // save completes. Calling onClose() here races the PUT with a DELETE /lock,
     // which causes the backend to reject the save with 409 (no lock found).
+  };
+
+  const checkDoConflict = async (
+    doNo: string
+  ): Promise<{ fuelRecord: FuelRecord; direction: 'going' | 'returning' }[] | null> => {
+    if (!doNo || doNo === 'NIL' || doNo.length < 3) return null;
+    try {
+      const result = await fuelRecordsAPI.getByDoNumber(doNo);
+      if (!result) return null;
+      // Filter out the record currently being edited — only flag OTHER records
+      const currentId = initialData?.id ?? initialData?._id;
+      const conflicts = result.matches.filter(m => {
+        const matchId = m.fuelRecord?.id ?? m.fuelRecord?._id;
+        return String(matchId) !== String(currentId);
+      });
+      return conflicts.length > 0 ? conflicts : null;
+    } catch {
+      return null; // never block save on a lookup error
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    const trimmedReason = reason.trim();
+    const submitData = trimmedReason ? { ...formData, reason: trimmedReason } : formData;
+
+    // Check both DOs — warn if either already belongs to a different truck's record
+    const goingDoNo = (formData.goingDo || '').trim().toUpperCase();
+    const returnDoNo = (formData.returnDo || '').trim().toUpperCase();
+
+    const goingConflicts = await checkDoConflict(goingDoNo);
+    if (goingConflicts) {
+      pendingSubmit.current = submitData;
+      setDoAmbiguityModal({ open: true, doNo: goingDoNo, matches: goingConflicts });
+      return;
+    }
+
+    const returnConflicts = await checkDoConflict(returnDoNo);
+    if (returnConflicts) {
+      pendingSubmit.current = submitData;
+      setDoAmbiguityModal({ open: true, doNo: returnDoNo, matches: returnConflicts });
+      return;
+    }
+
+    await doSubmit(submitData);
   };
 
   if (!isOpen) return null;
@@ -502,6 +550,89 @@ const FuelRecordForm: React.FC<FuelRecordFormProps> = ({
           </div>
         </form>
       </div>
+
+      {doAmbiguityModal.open && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDoAmbiguityModal(prev => ({ ...prev, open: false }))}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 p-5 border-b border-gray-100 dark:border-gray-800">
+              <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  DO {doAmbiguityModal.doNo} is already on{' '}
+                  {doAmbiguityModal.matches.length === 1
+                    ? 'another truck'
+                    : `${doAmbiguityModal.matches.length} other trucks`}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  This DO number is already assigned to a different fuel record.
+                  Are you sure you want to use it here?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 max-h-[55vh] overflow-y-auto space-y-2">
+              {doAmbiguityModal.matches.map((m, i) => (
+                <div
+                  key={`${m.fuelRecord?.id || m.fuelRecord?._id || i}`}
+                  className="rounded-xl border border-gray-200 dark:border-gray-700 p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-bold text-gray-900 dark:text-gray-100 font-mono">
+                      {m.fuelRecord?.truckNo || '—'}
+                    </span>
+                    <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-md ${
+                      m.direction === 'returning'
+                        ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                        : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                    }`}>
+                      {m.direction === 'returning' ? 'Returning' : 'Going'}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Date: <span className="text-gray-700 dark:text-gray-300">{m.fuelRecord?.date || '—'}</span></span>
+                    <span>Dest: <span className="text-gray-700 dark:text-gray-300">{m.fuelRecord?.to || '—'}</span></span>
+                    <span>Balance: <span className="text-gray-700 dark:text-gray-300 font-mono">{m.fuelRecord?.balance ?? 0}L</span></span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                    Going DO {m.fuelRecord?.goingDo} · Return DO {m.fuelRecord?.returnDo || 'NIL'}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => {
+                  pendingSubmit.current = null;
+                  setDoAmbiguityModal(prev => ({ ...prev, open: false }));
+                }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const data = pendingSubmit.current;
+                  pendingSubmit.current = null;
+                  setDoAmbiguityModal(prev => ({ ...prev, open: false }));
+                  if (data) await doSubmit(data);
+                }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                Submit Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
