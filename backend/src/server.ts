@@ -270,6 +270,16 @@ const applyCsrfProtection = (basePath: string) => {
     if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/refresh' || req.path === '/auth/first-login-password' || req.path === '/auth/verify-mfa' || req.path === '/auth/setup-mfa/generate' || req.path === '/auth/setup-mfa/verify' || req.path === '/auth/setup-mfa/email/send' || req.path === '/auth/setup-mfa/email/verify' || req.path === '/auth/passkey/login/options' || req.path === '/auth/passkey/login/verify' || req.path === '/mfa/send-otp') {
       return next();
     }
+    // Skip CSRF for Bearer-token (mobile / non-browser API) requests. CSRF only
+    // applies to ambient cookie-authenticated requests: this API authenticates
+    // solely via the `Authorization: Bearer <jwt>` header (no auth cookie), and a
+    // cross-site attacker can neither read nor set that header, so such requests
+    // cannot be forged. Requiring an X-XSRF-TOKEN here only breaks legitimate
+    // mobile clients (they were getting 403 "CSRF token missing").
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      return next();
+    }
     // Apply CSRF protection
     csrfProtection(req, res, next);
   });
