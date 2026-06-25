@@ -12,14 +12,15 @@ import Constants from 'expo-constants';
  * not your dev PC. Use your machine's LAN IP (e.g. http://192.168.4.11:5000).
  * On an Android emulator use http://10.0.2.2:5000.
  */
-const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL;
-const fromExtra = (Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined)?.apiBaseUrl;
+type AppExtra = { apiBaseUrl?: string; socketUrl?: string };
+
+const extra = Constants.expoConfig?.extra as AppExtra | undefined;
 
 export const API_BASE_URL =
-  fromEnv || fromExtra || 'http://192.168.4.11:5000/api/v1';
+  process.env.EXPO_PUBLIC_API_BASE_URL || extra?.apiBaseUrl || 'http://192.168.4.11:5000/api/v1';
 
-/** Socket.io connects to the server origin (without the /api/v1 path). */
-export const SOCKET_URL = API_BASE_URL.replace(/\/api(\/v\d+)?\/?$/, '');
+export const SOCKET_URL =
+  process.env.EXPO_PUBLIC_SOCKET_URL || extra?.socketUrl || API_BASE_URL.replace(/\/api(\/v\d+)?\/?$/, '');
 
 export const config = {
   apiBaseUrl: API_BASE_URL,

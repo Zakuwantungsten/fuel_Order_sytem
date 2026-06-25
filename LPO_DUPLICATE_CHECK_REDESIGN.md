@@ -278,3 +278,4 @@ No backend change needed — the same `cashLpoLookbackDays` field in `SystemConf
 
 3. **Status column space:** the Status column currently holds several pieces of info. Is there a
    maximum density you want to stay under, or is a small compact badge sufficient?
+io

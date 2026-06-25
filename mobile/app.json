@@ -44,7 +44,12 @@
       "expo-font"
     ],
     "extra": {
-      "apiBaseUrl": "http://192.168.4.11:5000/api/v1"
+      "apiBaseUrl": "https://tahfuelorder.dev/api/v1",
+      "socketUrl": "https://tahfuelorder.dev",
+      "router": {},
+      "eas": {
+        "projectId": "5ed18b6c-4d7c-44c3-85f0-4ba928534ac1"
+      }
     }
   }
 }
