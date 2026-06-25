@@ -354,6 +354,12 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
             });
           }
           
+          const _parsedDate = lpo.actualDate
+            ? new Date(lpo.actualDate)
+            : lpo.createdAt
+              ? new Date(lpo.createdAt)
+              : null;
+
           return {
             id: `lpo-${lpo._id || lpo.id || index}`,
             type: 'lpo' as const,
@@ -361,7 +367,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
             primaryText: `${lpo.lpoNo} - ${lpo.dieselAt}`,
             secondaryText: `${lpo.truckNo} | ${lpo.ltrs}L | ${lpo.doSdo}`,
             isCancelled: lpo.isCancelled === true,
-            metadata: lpo
+            metadata: { ...lpo, _parsedDate }
           };
         });
 
@@ -447,12 +453,13 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       } else if (result.type === 'lpo') {
         // For LPOs, use the parsed timestamp from metadata
         const lpoDate = result.metadata._parsedDate;
+        const truckNo = result.metadata.truckNo || '';
         if (lpoDate) {
           const year = lpoDate.getFullYear();
           const month = lpoDate.getMonth() + 1; // 1-indexed
-          onNavigate('lpo', `highlight=${result.metadata.lpoNo}&year=${year}&month=${month}`);
+          onNavigate('lpo', `highlight=${result.metadata.lpoNo}&truck=${truckNo}&year=${year}&month=${month}`);
         } else {
-          onNavigate('lpo', `highlight=${result.metadata.lpoNo}`);
+          onNavigate('lpo', `highlight=${result.metadata.lpoNo}&truck=${truckNo}`);
         }
       } else if (result.type === 'fuel') {
         // For fuel records, highlight by the unique record id — a truck can have
@@ -474,12 +481,13 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       } else if (result.type === 'lpo') {
         // Use the parsed timestamp from metadata
         const lpoDate = result.metadata._parsedDate;
+        const truckNo = result.metadata.truckNo || '';
         if (lpoDate) {
           const year = lpoDate.getFullYear();
           const month = lpoDate.getMonth() + 1;
-          navigate(`/lpo?highlight=${result.metadata.lpoNo}&year=${year}&month=${month}`);
+          navigate(`/lpo?highlight=${result.metadata.lpoNo}&truck=${truckNo}&year=${year}&month=${month}`);
         } else {
-          navigate(`/lpo?highlight=${result.metadata.lpoNo}`);
+          navigate(`/lpo?highlight=${result.metadata.lpoNo}&truck=${truckNo}`);
         }
       } else if (result.type === 'fuel') {
         const fuelDate = new Date(result.metadata.date);

@@ -135,6 +135,7 @@ const LPOs = () => {
   // Ref to track if we've processed a highlight
   const highlightProcessedRef = useRef<string | null>(null);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
+  const [pendingHighlightTruck, setPendingHighlightTruck] = useState<string | null>(null);
   const [filtersInitialized, setFiltersInitialized] = useState(false);
 
   // --- React Query hooks (server-side pagination + caching) ---
@@ -332,6 +333,7 @@ const LPOs = () => {
       const url = new URL(window.location.href);
       const actionParam = url.searchParams.get('action');
       const highlightId = url.searchParams.get('highlight');
+      const truckParam = url.searchParams.get('truck');
       const yearParam = url.searchParams.get('year');
       const monthParam = url.searchParams.get('month');
       
@@ -389,6 +391,7 @@ const LPOs = () => {
         console.log('Will trigger highlight in 200ms');
         setTimeout(() => {
           console.log('Triggering highlight now');
+          setPendingHighlightTruck(truckParam);
           setPendingHighlight(highlightId);
         }, 200);
       } else {
@@ -419,7 +422,7 @@ const LPOs = () => {
       // false "not found" that would clear the highlight.
       const isDriverEntry = driverEntries.some((e: any) => e.lpoNo === pendingHighlight);
       if (isDriverEntry) {
-        scrollToAndHighlightLPO(pendingHighlight);
+        scrollToAndHighlightLPO(pendingHighlight, 0, pendingHighlightTruck ?? undefined);
         return;
       }
 
@@ -434,9 +437,12 @@ const LPOs = () => {
         if (cancelled) return;
 
         const allLpos = response.data || [];
-        const recordIndex = allLpos.findIndex((l: any) => l.lpoNo === pendingHighlight);
+        const recordIndex = allLpos.findIndex((l: any) =>
+          l.lpoNo === pendingHighlight &&
+          (!pendingHighlightTruck || l.truckNo === pendingHighlightTruck)
+        );
         if (recordIndex < 0) {
-          console.log('LPO not found for highlight:', pendingHighlight);
+          console.log('LPO not found for highlight:', pendingHighlight, pendingHighlightTruck);
           clearLPOHighlight();
           return;
         }
@@ -447,7 +453,7 @@ const LPOs = () => {
         }
         // scrollToAndHighlightLPO polls for the row, so it tolerates the
         // page-change refetch finishing whenever it does — no fixed guess needed.
-        scrollToAndHighlightLPO(pendingHighlight);
+        scrollToAndHighlightLPO(pendingHighlight, 0, pendingHighlightTruck ?? undefined);
       } catch (error) {
         console.error('❌ Error finding LPO position:', error);
         if (!cancelled) clearLPOHighlight();
@@ -466,12 +472,17 @@ const LPOs = () => {
   // a fresh server fetch (common for older records that need an extra refetch).
   // Instead of guessing a single delay, poll for the element to appear and only
   // give up after a max number of attempts.
-  const scrollToAndHighlightLPO = (lpoNo: string, attempt = 0) => {
+  const scrollToAndHighlightLPO = (lpoNo: string, attempt = 0, truckNo?: string) => {
     const MAX_ATTEMPTS = 20; // ~3s total at 150ms intervals
     const RETRY_DELAY = 150;
 
     // Find all elements with this LPO number
-    const allElements = document.querySelectorAll(`[data-lpo-number="${lpoNo}"]`);
+    const allByLpo = Array.from(document.querySelectorAll(`[data-lpo-number="${lpoNo}"]`));
+
+    // Narrow to the specific truck row when truckNo is known (multiple trucks share one lpoNo)
+    const allElements = truckNo
+      ? allByLpo.filter(el => el.getAttribute('data-truck-no') === truckNo)
+      : allByLpo;
 
     // Find visible element (mobile or desktop depending on screen size)
     const visibleElements = Array.from(allElements).filter(el => {
@@ -487,7 +498,7 @@ const LPOs = () => {
     // Row not rendered yet (still fetching/paginating) — retry until it appears
     if (!element) {
       if (attempt < MAX_ATTEMPTS) {
-        setTimeout(() => scrollToAndHighlightLPO(lpoNo, attempt + 1), RETRY_DELAY);
+        setTimeout(() => scrollToAndHighlightLPO(lpoNo, attempt + 1, truckNo), RETRY_DELAY);
         return;
       }
       console.error('❌ LPO Element not found after retries:', lpoNo);
@@ -534,8 +545,10 @@ const LPOs = () => {
   const clearLPOHighlight = () => {
     highlightProcessedRef.current = null;
     setPendingHighlight(null);
+    setPendingHighlightTruck(null);
     const url = new URL(window.location.href);
     url.searchParams.delete('highlight');
+    url.searchParams.delete('truck');
     url.searchParams.delete('year');
     url.searchParams.delete('month');
     window.history.replaceState({}, '', url.toString());
@@ -1686,6 +1699,7 @@ const LPOs = () => {
                   <div
                     key={rowKey}
                     data-lpo-number={lpo.lpoNo}
+                    data-truck-no={lpo.truckNo}
                     onClick={() => handleRowClick(lpo)}
                     className={`border rounded-xl p-4 transition-all cursor-pointer ${
                       lpo.isCancelled
@@ -1870,9 +1884,10 @@ const LPOs = () => {
                   {paginatedLpos.map((lpo, index) => {
                     const rowKey = lpo.id ?? `lpo-${index}`;
                     return (
-                      <tr 
+                      <tr
                         key={rowKey}
                         data-lpo-number={lpo.lpoNo}
+                        data-truck-no={lpo.truckNo}
                         className={`cursor-pointer transition-colors ${
                           lpo.isCancelled
                             ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
