@@ -51,7 +51,10 @@ const INITIAL_FORM: FormData = {
   yard: '',
 };
 
-const STATION_ROLES: UserRole[] = ['fuel_attendant', 'station_manager'];
+// Roles that are scoped to a single station and therefore require one at creation.
+// `manager` (LPO-view station manager) is included so the superadmin can assign
+// the station the manager will be locked to.
+const STATION_ROLES: UserRole[] = ['manager', 'fuel_attendant', 'station_manager'];
 const YARD_ROLES: UserRole[] = ['yard_personnel'];
 const USER_CREATE_ROLE_OPTIONS = USER_ROLES.filter(r => r.value !== 'driver');
 

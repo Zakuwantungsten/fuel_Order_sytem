@@ -21,7 +21,7 @@ import {
   Key,
   User
 } from 'lucide-react';
-import { lposAPI } from '../services/api';
+import { lposAPI, configAPI } from '../services/api';
 import { LPOEntry } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from './Pagination';
@@ -91,6 +91,9 @@ export function ManagerView({ user }: ManagerViewProps) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('all');
+  // Admin-configured allowed stations for super managers (Journey Config). Empty
+  // => fall back to the default all-minus-excluded set below.
+  const [configuredStations, setConfiguredStations] = useState<string[]>([]);
   const [sortField, setSortField] = useState<'date' | 'lpoNo' | 'ltrs' | 'station'>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
@@ -128,13 +131,19 @@ export function ManagerView({ user }: ManagerViewProps) {
     return STATION_MAPPING[usernameKey] || null;
   }, [user, isSuperManager]);
 
-  // Get available stations for filtering
+  // Get available stations for filtering. For super managers, the admin-configured
+  // list (Journey Config) is authoritative when set; otherwise fall back to the
+  // default (all stations minus the hard-excluded set). This mirrors the
+  // server-side enforcement so the dropdown can't offer stations the API hides.
   const availableStations = useMemo(() => {
     if (isSuperManager) {
+      if (configuredStations.length > 0) {
+        return configuredStations.map(s => s.toUpperCase().trim());
+      }
       return ALL_STATIONS.filter(s => !EXCLUDED_STATIONS_SUPER.includes(s));
     }
     return userStation ? [userStation] : [];
-  }, [isSuperManager, userStation]);
+  }, [isSuperManager, userStation, configuredStations]);
 
   // Parse a stored LPO date. The canonical stored format is ISO "YYYY-MM-DD";
   // we also tolerate the legacy "dd-mmm" display format.
@@ -187,7 +196,14 @@ export function ManagerView({ user }: ManagerViewProps) {
         .filter((entry: LPODisplayEntry) => {
           const station = entry.dieselAt?.toUpperCase()?.trim();
           if (station === 'CASH') return false;
-          if (isSuperManager && EXCLUDED_STATIONS_SUPER.includes(station)) return false;
+          if (isSuperManager) {
+            // The server already scopes the data; this just keeps the UI honest if
+            // the config and the response ever drift. Configured list wins.
+            if (configuredStations.length > 0) {
+              return configuredStations.map(s => s.toUpperCase().trim()).includes(station);
+            }
+            if (EXCLUDED_STATIONS_SUPER.includes(station)) return false;
+          }
           if (!isSuperManager && userStation && station !== userStation) return false;
           return true;
         });
@@ -207,7 +223,18 @@ export function ManagerView({ user }: ManagerViewProps) {
         setIsRefreshing(false);
       }
     }
-  }, [userStation, isSuperManager]);
+  }, [userStation, isSuperManager, configuredStations]);
+
+  // Load the admin-configured super-manager station list (Journey Config). Only
+  // relevant for super managers; station managers are scoped to one station.
+  useEffect(() => {
+    if (!isSuperManager) return;
+    let cancelled = false;
+    configAPI.getJourneyConfig()
+      .then(cfg => { if (!cancelled) setConfiguredStations(cfg.superManagerStations || []); })
+      .catch(() => { /* non-fatal — falls back to the default exclusion set */ });
+    return () => { cancelled = true; };
+  }, [isSuperManager]);
 
   // Click-outside detection for dropdowns
   useEffect(() => {

@@ -48,12 +48,59 @@ const CACHE_TTL_MS = 30000;
 let _fuelAutomationCache: IFuelAutomationConfig | null = null;
 let _fuelAutomationCacheUpdatedAt = 0;
 
+// Cache for the manager-access config (super-manager stations + LPO lookback).
+// Read on every manager/super_manager LPO list request, so it must not hit the DB
+// each time. Invalidated together with the rest of journey_config on save.
+export interface ManagerAccessConfig {
+  /** Stations a super_manager may view. Empty => all (minus client-side excludes). */
+  superManagerStations: string[];
+  /** Days back manager-tier roles may see LPOs. 0 => unlimited. */
+  managerLpoLookbackDays: number;
+}
+let _managerAccessCache: ManagerAccessConfig | null = null;
+let _managerAccessCacheUpdatedAt = 0;
+
 /** Drop the cache so the next read reflects a freshly-saved config. */
 export function invalidateJourneyConfigCache(): void {
   _startColumnsCache = null;
   _cacheUpdatedAt = 0;
   _fuelAutomationCache = null;
   _fuelAutomationCacheUpdatedAt = 0;
+  _managerAccessCache = null;
+  _managerAccessCacheUpdatedAt = 0;
+}
+
+/**
+ * Read the manager-access config (cached, 30s TTL). Used to scope the manager /
+ * super_manager LPO views server-side. Never throws — on error returns the
+ * permissive default (all stations, unlimited lookback) so a config read failure
+ * can't lock managers out of their own data.
+ */
+export async function getManagerAccessConfig(): Promise<ManagerAccessConfig> {
+  const now = Date.now();
+  if (_managerAccessCache && now - _managerAccessCacheUpdatedAt < CACHE_TTL_MS) {
+    return _managerAccessCache;
+  }
+
+  try {
+    const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false })
+      .select('journeyConfig.superManagerStations journeyConfig.managerLpoLookbackDays')
+      .lean();
+    const stations = (cfg?.journeyConfig?.superManagerStations || [])
+      .map((s) => (s || '').toUpperCase().trim())
+      .filter(Boolean);
+    const lookbackRaw = Number(cfg?.journeyConfig?.managerLpoLookbackDays);
+    const result: ManagerAccessConfig = {
+      superManagerStations: stations,
+      managerLpoLookbackDays: Number.isFinite(lookbackRaw) && lookbackRaw > 0 ? Math.floor(lookbackRaw) : 0,
+    };
+    _managerAccessCache = result;
+    _managerAccessCacheUpdatedAt = now;
+    return result;
+  } catch (error: any) {
+    logger.error(`Failed to load manager-access config, using permissive defaults: ${error.message}`);
+    return { superManagerStations: [], managerLpoLookbackDays: 0 };
+  }
 }
 
 /**

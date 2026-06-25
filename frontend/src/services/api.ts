@@ -1603,6 +1603,8 @@ export interface JourneyConfig {
   selectableColumns?: string[];
   // Stations a super_manager may view (empty => default all-allowed)
   superManagerStations?: string[];
+  // Days back manager-tier roles may see LPOs in the manager views (0 => unlimited)
+  managerLpoLookbackDays?: number;
   // Whether to auto-download PDF immediately after DO creation (single or bulk)
   autoDownloadDOPdf?: boolean;
   // Whether to auto-download PDF after LPO "Create and Forward"
@@ -2268,6 +2270,12 @@ export const configAPI = {
   // Update only the super-manager allowed-stations list (partial journey-config update)
   updateSuperManagerStations: async (superManagerStations: string[]): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', { superManagerStations });
+    return response.data.data;
+  },
+
+  // Update the manager LPO lookback window (0 => unlimited) (partial journey-config update)
+  updateManagerLpoLookbackDays: async (managerLpoLookbackDays: number): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { managerLpoLookbackDays });
     return response.data.data;
   },
 

@@ -1385,6 +1385,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
         startColumns: config.journeyConfig?.startColumns || DEFAULT_START_COLUMNS,
         selectableColumns: SELECTABLE_START_COLUMNS,
         superManagerStations: config.journeyConfig?.superManagerStations || [],
+        managerLpoLookbackDays: config.journeyConfig?.managerLpoLookbackDays ?? 0,
         autoDownloadDOPdf: config.journeyConfig?.autoDownloadDOPdf ?? true,
         autoDownloadLPOPdf: config.journeyConfig?.autoDownloadLPOPdf ?? true,
         fuelAutomation: { ...DEFAULT_FUEL_AUTOMATION, ...(config.journeyConfig?.fuelAutomation || {}) },
@@ -1410,17 +1411,18 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
  */
 export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { startColumns, superManagerStations, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays, searchConfig } = req.body;
+    const { startColumns, superManagerStations, managerLpoLookbackDays, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays, searchConfig } = req.body;
 
     const hasStartColumns = startColumns !== undefined;
     const hasSmStations = superManagerStations !== undefined;
+    const hasManagerLookback = managerLpoLookbackDays !== undefined;
     const hasAutoDownloadDO = autoDownloadDOPdf !== undefined;
     const hasAutoDownloadLPO = autoDownloadLPOPdf !== undefined;
     const hasFuelAutomation = fuelAutomation !== undefined;
     const hasCashLpoLookbackDays = cashLpoLookbackDays !== undefined;
     const hasSearchConfig = searchConfig !== undefined;
 
-    if (!hasStartColumns && !hasSmStations && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays && !hasSearchConfig) {
+    if (!hasStartColumns && !hasSmStations && !hasManagerLookback && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays && !hasSearchConfig) {
       throw new ApiError(400, 'Provide at least one field to update');
     }
 
@@ -1453,6 +1455,13 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     if (hasSmStations) {
       if (!Array.isArray(superManagerStations) || superManagerStations.some((s: any) => typeof s !== 'string')) {
         throw new ApiError(400, 'superManagerStations must be an array of station names');
+      }
+    }
+
+    if (hasManagerLookback) {
+      const parsed = Number(managerLpoLookbackDays);
+      if (!Number.isInteger(parsed) || parsed < 0 || parsed > 3650) {
+        throw new ApiError(400, 'managerLpoLookbackDays must be an integer between 0 (unlimited) and 3650');
       }
     }
 
@@ -1506,6 +1515,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       superManagerStations: hasSmStations
         ? superManagerStations.map((s: string) => s.trim()).filter(Boolean)
         : (existing.superManagerStations || []),
+      managerLpoLookbackDays: hasManagerLookback ? Number(managerLpoLookbackDays) : (existing.managerLpoLookbackDays ?? 0),
       autoDownloadDOPdf: hasAutoDownloadDO ? autoDownloadDOPdf : (existing.autoDownloadDOPdf ?? true),
       autoDownloadLPOPdf: hasAutoDownloadLPO ? autoDownloadLPOPdf : (existing.autoDownloadLPOPdf ?? true),
       // Merge: defaults < stored < incoming partial. Only known keys survive validation above.
@@ -1542,6 +1552,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     const detailParts: string[] = [];
     if (hasStartColumns) detailParts.push(`start columns [${nextJourneyConfig.startColumns.join(', ')}]`);
     if (hasSmStations) detailParts.push(`super-manager stations [${nextJourneyConfig.superManagerStations.join(', ')}]`);
+    if (hasManagerLookback) detailParts.push(`managerLpoLookbackDays=${nextJourneyConfig.managerLpoLookbackDays}`);
     if (hasAutoDownloadDO) detailParts.push(`autoDownloadDOPdf=${nextJourneyConfig.autoDownloadDOPdf}`);
     if (hasAutoDownloadLPO) detailParts.push(`autoDownloadLPOPdf=${nextJourneyConfig.autoDownloadLPOPdf}`);
     if (hasFuelAutomation) {
@@ -1578,6 +1589,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         startColumns: nextJourneyConfig.startColumns,
         selectableColumns: SELECTABLE_START_COLUMNS,
         superManagerStations: nextJourneyConfig.superManagerStations,
+        managerLpoLookbackDays: nextJourneyConfig.managerLpoLookbackDays,
         autoDownloadDOPdf: nextJourneyConfig.autoDownloadDOPdf,
         autoDownloadLPOPdf: nextJourneyConfig.autoDownloadLPOPdf,
         fuelAutomation: nextJourneyConfig.fuelAutomation,

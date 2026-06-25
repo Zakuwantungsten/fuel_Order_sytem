@@ -873,6 +873,9 @@ function SuperManagerStationsCard() {
   const [stations, setStations] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [saved, setSaved] = useState<string[]>([]);
+  // LPO lookback window (days) for ALL manager-tier roles. '0' / '' => unlimited.
+  const [lookback, setLookback] = useState('0');
+  const [savedLookback, setSavedLookback] = useState('0');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -889,6 +892,9 @@ function SuperManagerStationsCard() {
       const sm = cfg.superManagerStations || [];
       setSelected(sm);
       setSaved(sm);
+      const lb = String(cfg.managerLpoLookbackDays ?? 0);
+      setLookback(lb);
+      setSavedLookback(lb);
     } catch {
       toast.error('Failed to load super-manager station access');
     } finally {
@@ -902,23 +908,38 @@ function SuperManagerStationsCard() {
   const toggle = (s: string) =>
     setSelected((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
 
-  const isDirty = useMemo(() => {
+  // Normalize the lookback input to a clamped integer (0..3650). '' => 0.
+  const normalizedLookback = useMemo(() => {
+    const n = parseInt(lookback, 10);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(n, 3650);
+  }, [lookback]);
+
+  const stationsDirty = useMemo(() => {
     if (selected.length !== saved.length) return true;
     const a = [...selected].sort();
     const b = [...saved].sort();
     return a.some((v, i) => v !== b[i]);
   }, [selected, saved]);
 
+  const isDirty = stationsDirty || normalizedLookback !== parseInt(savedLookback, 10);
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      const cfg = await configAPI.updateSuperManagerStations(selected);
+      let cfg = await configAPI.updateSuperManagerStations(selected);
+      if (normalizedLookback !== parseInt(savedLookback, 10)) {
+        cfg = await configAPI.updateManagerLpoLookbackDays(normalizedLookback);
+      }
       const sm = cfg.superManagerStations || [];
       setSelected(sm);
       setSaved(sm);
-      toast.success('Super-manager station access saved');
+      const lb = String(cfg.managerLpoLookbackDays ?? normalizedLookback);
+      setLookback(lb);
+      setSavedLookback(lb);
+      toast.success('Manager access settings saved');
     } catch {
-      toast.error('Failed to save super-manager station access');
+      toast.error('Failed to save manager access settings');
     } finally {
       setSaving(false);
     }
@@ -975,10 +996,34 @@ function SuperManagerStationsCard() {
           </div>
         )}
 
+        {/* LPO date-range (lookback) window for manager-tier roles */}
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
+          <label htmlFor="manager-lpo-lookback" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+            LPO history window for managers
+          </label>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 mb-1.5">
+            How many days back <strong>managers &amp; super managers</strong> can see LPOs (web &amp; mobile). Use <strong>0</strong> for unlimited. Enforced on the server.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              id="manager-lpo-lookback"
+              type="number"
+              min={0}
+              max={3650}
+              value={lookback}
+              onChange={(e) => setLookback(e.target.value)}
+              className="w-24 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-xs text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {normalizedLookback === 0 ? 'days (unlimited)' : `days (~${(normalizedLookback / 30).toFixed(normalizedLookback % 30 === 0 ? 0 : 1)} months)`}
+            </span>
+          </div>
+        </div>
+
         <div className="flex items-center justify-end gap-1.5 pt-1">
           <button
             type="button"
-            onClick={() => setSelected(saved)}
+            onClick={() => { setSelected(saved); setLookback(savedLookback); }}
             disabled={!isDirty || saving}
             className="inline-flex items-center gap-1 rounded-lg border border-gray-300 dark:border-gray-600 px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 disabled:opacity-50"
           >

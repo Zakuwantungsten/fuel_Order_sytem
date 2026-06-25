@@ -37,8 +37,8 @@ export const USER_ROLES: RoleDefinition[] = [
     label: 'Super Manager',
     color: 'text-purple-600 dark:text-purple-400',
     bgColor: 'bg-purple-50 dark:bg-purple-900/30',
-    description: 'Cross-yard management with elevated operational access',
-    permissionSummary: ['All yards', 'Delivery orders', 'LPO management', 'Reports'],
+    description: 'Read-only LPO viewing across the stations configured under Journey Config → Super Manager stations',
+    permissionSummary: ['View LPOs', 'Configured stations only', 'Read-only', 'Search & filter'],
   },
   {
     value: 'boss',
@@ -50,11 +50,11 @@ export const USER_ROLES: RoleDefinition[] = [
   },
   {
     value: 'manager',
-    label: 'Manager',
+    label: 'Manager (Station LPO View)',
     color: 'text-violet-600 dark:text-violet-400',
     bgColor: 'bg-violet-50 dark:bg-violet-900/30',
-    description: 'Operational management within assigned scope',
-    permissionSummary: ['Delivery orders', 'LPO management', 'Team oversight', 'Reports'],
+    description: 'Views LPOs for their single assigned station only (set the station below)',
+    permissionSummary: ['Assigned station only', 'View LPOs', 'Reports'],
   },
   {
     value: 'supervisor',

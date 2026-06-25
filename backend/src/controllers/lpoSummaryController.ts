@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry, SystemConfig } from '../models';
+import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry, SystemConfig, User } from '../models';
 import { ArchivedLPOSummary } from '../models/ArchivedData';
 import { FuelStationConfig } from '../models/FuelStationConfig';
 import { ApiError } from '../middleware/errorHandler';
@@ -10,7 +10,7 @@ import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
-import { checkAndPromoteStartedJourney, getFuelAutomationFlags } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getFuelAutomationFlags, getManagerAccessConfig } from '../services/journeyService';
 import { formatDONumber, parseDONumber } from '../utils/doNumberFormatter';
 import {
   createLPOCreatedNotification,
@@ -2735,6 +2735,85 @@ const ENTRY_PROJECTION = {
  * Aggregates LPOSummary.entries into a flat, paginated list.
  * Replaces the removed /lpo-entries endpoint.
  */
+// Manager-tier roles whose LPO view is scoped (by station and/or date) server-side.
+const STATION_SCOPED_ROLES = ['manager', 'station_manager'];
+const ALL_MANAGER_TIER_ROLES = [...STATION_SCOPED_ROLES, 'super_manager'];
+
+// Stations a super_manager does NOT see by default (when no allow-list is
+// configured). Mirrors the client EXCLUDED_STATIONS_SUPER so the default view is
+// identical whether or not an admin has set an explicit list.
+const DEFAULT_SUPER_MANAGER_EXCLUDED = [
+  'LAKE TUNDUMA',
+  'GBP MOROGORO',
+  'GBP KANGE',
+  'GPB KANGE',
+  'INFINITY',
+];
+
+// Fallback station mapping for legacy station-manager accounts that have no
+// `station` field set — derived from their username (manager_kitwe → LAKE KITWE).
+// Mirrors the client-side STATION_MAPPING so server and app agree.
+const USERNAME_STATION_MAPPING: Record<string, string> = {
+  infinity: 'INFINITY',
+  chilabombwe: 'LAKE CHILABOMBWE',
+  ndola: 'LAKE NDOLA',
+  kapiri: 'LAKE KAPIRI',
+  kitwe: 'LAKE KITWE',
+  kabangwa: 'LAKE KABANGWA',
+  chingola: 'LAKE CHINGOLA',
+  tunduma: 'LAKE TUNDUMA',
+  morogoro: 'GBP MOROGORO',
+  kange: 'GBP KANGE',
+};
+
+/**
+ * Resolve the LPO-access constraints for a manager-tier user, enforced
+ * SERVER-SIDE so the restriction can't be widened by editing the client.
+ *
+ * Returns null for non-manager roles (no extra scoping applied here).
+ *  - manager / station_manager → `forcedStation` (their own station; '' if it
+ *    can't be resolved, which deliberately matches nothing).
+ *  - super_manager → `allowedStations` (the admin-configured list; empty => all).
+ *  - all three → `dateFloor` ('YYYY-MM-DD') from managerLpoLookbackDays (0 => none).
+ */
+async function resolveManagerScope(
+  user: { userId: string; username: string; role: string } | undefined
+): Promise<{ forcedStation?: string; allowedStations?: string[]; excludedStations?: string[]; dateFloor?: string } | null> {
+  if (!user || !ALL_MANAGER_TIER_ROLES.includes(user.role)) return null;
+
+  const access = await getManagerAccessConfig();
+
+  // Date floor (applies to every manager-tier role).
+  let dateFloor: string | undefined;
+  if (access.managerLpoLookbackDays > 0) {
+    const floor = new Date();
+    floor.setDate(floor.getDate() - access.managerLpoLookbackDays);
+    dateFloor = floor.toISOString().substring(0, 10);
+  }
+
+  if (user.role === 'super_manager') {
+    // Configured allow-list wins; otherwise fall back to the default exclusions.
+    if (access.superManagerStations.length > 0) {
+      return { allowedStations: access.superManagerStations, dateFloor };
+    }
+    return { excludedStations: DEFAULT_SUPER_MANAGER_EXCLUDED, dateFloor };
+  }
+
+  // Station-scoped roles: force their own station.
+  let station = '';
+  const dbUser = await User.findById(user.userId).select('station').lean();
+  if (dbUser?.station) {
+    station = dbUser.station.toUpperCase().trim();
+  } else {
+    const key = (user.username || '')
+      .toLowerCase()
+      .replace('manager_', '')
+      .replace('mgr_', '');
+    station = USERNAME_STATION_MAPPING[key] || '';
+  }
+  return { forcedStation: station, dateFloor };
+}
+
 export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit } = getPaginationParams(req.query);
@@ -2766,6 +2845,62 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
       docMatch.date = {};
       if (dateFrom) docMatch.date.$gte = (dateFrom as string).substring(0, 10);
       if (dateTo) docMatch.date.$lte = (dateTo as string).substring(0, 10);
+    }
+
+    // ── Server-side access enforcement for manager-tier roles ──────────────
+    // Station + date scoping is applied here (NOT trusting the client) so a
+    // manager can never widen their view by editing query params. Runs even
+    // when `search` is present, so search stays within the allowed scope.
+    const scope = await resolveManagerScope(req.user);
+    if (scope) {
+      if (scope.forcedStation !== undefined) {
+        // manager / station_manager → locked to their own station.
+        delete docMatch.$or;
+        const s = sanitizeRegexInput(scope.forcedStation);
+        // Empty/unresolvable station deliberately matches nothing.
+        docMatch.station = s
+          ? { $regex: `^${s}$`, $options: 'i' }
+          : ' __no_station__';
+      } else if (scope.allowedStations && scope.allowedStations.length > 0) {
+        // super_manager with a configured allow-list. Honor a client-picked
+        // single station only if it is within the list; otherwise restrict to
+        // the whole list.
+        delete docMatch.$or;
+        const allowed = scope.allowedStations;
+        const picked = station ? (station as string).toUpperCase().trim() : '';
+        if (picked && allowed.includes(picked)) {
+          const s = sanitizeRegexInput(picked);
+          docMatch.station = { $regex: `^${s}$`, $options: 'i' };
+        } else {
+          delete docMatch.station;
+          docMatch.$or = allowed
+            .map((st) => sanitizeRegexInput(st))
+            .filter(Boolean)
+            .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+        }
+      } else if (scope.excludedStations && scope.excludedStations.length > 0) {
+        // super_manager with no configured list → default-exclude the hidden set.
+        // Honor a client-picked single station unless it is in the excluded set.
+        delete docMatch.$or;
+        const excluded = scope.excludedStations;
+        const picked = station ? (station as string).toUpperCase().trim() : '';
+        if (picked && !excluded.includes(picked)) {
+          const s = sanitizeRegexInput(picked);
+          docMatch.station = { $regex: `^${s}$`, $options: 'i' };
+        } else {
+          delete docMatch.station;
+          docMatch.$nor = excluded
+            .map((st) => sanitizeRegexInput(st))
+            .filter(Boolean)
+            .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+        }
+      }
+      // Date floor: tighten $gte, never loosen it.
+      if (scope.dateFloor) {
+        docMatch.date = docMatch.date || {};
+        const existingFrom = docMatch.date.$gte as string | undefined;
+        docMatch.date.$gte = existingFrom && existingFrom > scope.dateFloor ? existingFrom : scope.dateFloor;
+      }
     }
 
     const entryMatch: any = {};
@@ -2853,12 +2988,42 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
 
     const { dateFrom, dateTo } = req.query;
 
+    // Scope the filter dropdowns to what a manager-tier user is actually allowed
+    // to see, so the station list and period list don't leak other stations.
+    const scope = await resolveManagerScope(req.user);
+    let scopedDateFloor: string | undefined;
+    if (scope) {
+      if (scope.forcedStation !== undefined) {
+        const s = sanitizeRegexInput(scope.forcedStation);
+        baseMatch.station = s ? { $regex: `^${s}$`, $options: 'i' } : ' __no_station__';
+      } else if (scope.allowedStations && scope.allowedStations.length > 0) {
+        baseMatch.$or = scope.allowedStations
+          .map((st) => sanitizeRegexInput(st))
+          .filter(Boolean)
+          .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+      } else if (scope.excludedStations && scope.excludedStations.length > 0) {
+        baseMatch.$nor = scope.excludedStations
+          .map((st) => sanitizeRegexInput(st))
+          .filter(Boolean)
+          .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+      }
+      scopedDateFloor = scope.dateFloor;
+    }
+
+    const applyDateFloor = (m: any) => {
+      if (!scopedDateFloor) return;
+      m.date = m.date || {};
+      const existingFrom = m.date.$gte as string | undefined;
+      m.date.$gte = existingFrom && existingFrom > scopedDateFloor ? existingFrom : scopedDateFloor;
+    };
+
     const periodsMatch: any = { ...baseMatch };
     if (dateFrom || dateTo) {
       periodsMatch.date = {};
       if (dateFrom) periodsMatch.date.$gte = (dateFrom as string).substring(0, 10);
       if (dateTo) periodsMatch.date.$lte = (dateTo as string).substring(0, 10);
     }
+    applyDateFloor(periodsMatch);
 
     const periodResults = await LPOSummary.aggregate([
       { $match: periodsMatch },
@@ -2885,12 +3050,15 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     const periods = Array.from(seen.values()).sort((a, b) =>
       b.year !== a.year ? b.year - a.year : b.month - a.month
     );
-    const stationsMatch: any = { ...baseMatch, station: { $nin: [null, ''] } };
+    const stationsMatch: any = { ...baseMatch };
+    // Preserve the "non-empty station" guard without clobbering a scoped station filter.
+    if (!stationsMatch.station) stationsMatch.station = { $nin: [null, ''] };
     if (dateFrom || dateTo) {
       stationsMatch.date = {};
       if (dateFrom) stationsMatch.date.$gte = (dateFrom as string).substring(0, 10);
       if (dateTo) stationsMatch.date.$lte = (dateTo as string).substring(0, 10);
     }
+    applyDateFloor(stationsMatch);
     const rawStations = await LPOSummary.distinct('station', stationsMatch) as string[];
     const stations = rawStations
       .filter(s => s && s.trim())
