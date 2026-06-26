@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { apiClient } from '../api/client';
@@ -39,13 +39,20 @@ export async function initNotificationHandler(): Promise<void> {
     if (isExpoGo) return;
     const Notifications = await import('expo-notifications');
 
+    // Suppress the system banner/sound when the app is already in the foreground —
+    // the in-app toast in RealtimeProvider handles that case. When the app is in
+    // background or closed, this handler is not called at all (the OS shows the
+    // notification directly), so background push is unaffected.
     Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
+      handleNotification: async () => {
+        const inForeground = AppState.currentState === 'active';
+        return {
+          shouldShowBanner: !inForeground,
+          shouldShowList: true,
+          shouldPlaySound: !inForeground,
+          shouldSetBadge: true,
+        };
+      },
     });
 
     if (Platform.OS === 'android') {
@@ -118,8 +125,9 @@ export async function registerForPush(): Promise<void> {
 
     await apiClient.post('/notifications/mobile-subscribe', { expoPushToken: token });
     registeredToken = token;
-  } catch {
-    // Never let push setup break the app.
+  } catch (err) {
+    // Non-fatal, but log so background-push failures are diagnosable.
+    console.warn('[registerForPush] failed:', err);
   }
 }
 
