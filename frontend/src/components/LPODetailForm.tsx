@@ -1674,9 +1674,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // Regular station change - update rates for existing entries.
       // In forwarding mode the entries were zeroed out, so always apply defaults.liters.
       // On a normal form, preserve any liters the user has already typed.
+      // Pass preserved fuelRecord data so formula-based stations (e.g. INFINITY) can
+      // evaluate the correct liters using totalLts / extra / balance from the record.
       const updatedEntries = formData.entries?.map((entry, idx) => {
-        const direction = entryAutoFillData[idx]?.direction || 'going';
-        const defaults = getStationDefaults(value, direction, entry.dest);
+        const afill = entryAutoFillData[idx];
+        const direction = afill?.direction || 'going';
+        const fr = afill?.fuelRecord;
+        const defaults = getStationDefaults(
+          value,
+          direction,
+          entry.dest,
+          fr?.totalLts   ?? undefined,
+          fr?.extra      ?? undefined,
+          fr?.balance    ?? undefined,
+        );
         const resolvedLiters = isForwardingMode ? defaults.liters : (entry.liters || defaults.liters);
         return {
           ...entry,
@@ -3217,14 +3228,38 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         total: undefined,
       });
 
-      // Reset autofill data to an unfetched state so stale formula/balance badges
-      // from the previous station don't bleed into the forwarded form.
+      // Carry over per-entry state that must survive the station change:
+      // direction, fuel record (for Eye icon + toggleDirection), entry type (DA/REF/NIL),
+      // journey navigation, and going-destination. Clear only the station-specific
+      // formula/balance badges so they re-evaluate against the new station's config.
       setEntryAutoFillData(
         Object.fromEntries(
-          forwardedEntries.map((_, idx) => [
-            idx,
-            { direction: 'going' as const, loading: false, fetched: false, fuelRecord: null },
-          ])
+          forwardedEntries.map((_, idx) => {
+            const prev = entryAutoFillData[idx];
+            return [
+              idx,
+              {
+                direction:            prev?.direction            ?? 'going',
+                loading:              false,
+                fetched:              prev?.fuelRecord != null,
+                fuelRecord:           prev?.fuelRecord           ?? null,
+                fuelRecordId:         prev?.fuelRecordId,
+                goingDestination:     prev?.goingDestination,
+                entryType:            prev?.entryType,
+                referenceDoNo:        prev?.referenceDoNo,
+                allJourneys:          prev?.allJourneys,
+                selectedJourneyIndex: prev?.selectedJourneyIndex,
+                selectedJourneyType:  prev?.selectedJourneyType,
+                // Reset station-specific computed fields — they re-derive on station select
+                balanceInfo:          undefined,
+                formulaStatus:        null,
+                formulaMessage:       undefined,
+                returnDoMissing:      prev?.returnDoMissing,
+                warningType:          null,
+                warningMessage:       undefined,
+              },
+            ];
+          })
         )
       );
 
