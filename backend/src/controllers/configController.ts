@@ -934,6 +934,7 @@ export const getBranding = async (req: AuthRequest, res: Response): Promise<void
       success: true,
       message: 'Company branding retrieved successfully',
       data: {
+        systemName: g?.systemName || '',
         companyName: g?.companyName || '',
         companyWebsite: g?.companyWebsite || '',
         companyEmail: g?.companyEmail || '',

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import { AuthState, AuthUser, AuthResponse, LoginCredentials } from '../types';
 import { getRolePermissions } from '../utils/permissions';
-import { authAPI } from '../services/api';
+import apiClient, { authAPI } from '../services/api';
 import { activityTracker } from '../utils/activityTracker';
 import { setSystemTimezone, setSystemDateFormat, setSystemName } from '../utils/timezone';
 import systemConfigAPI from '../services/systemConfigService';
@@ -283,15 +283,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (cachedName) setSystemName(cachedName);
 
         const parsed = JSON.parse(authData);
-        if (parsed.role !== 'super_admin') return;
 
-        const settings = await systemConfigAPI.getSystemSettings();
-        if (settings?.general) {
-          if (settings.general.timezone)   setSystemTimezone(settings.general.timezone);
-          if (settings.general.dateFormat) setSystemDateFormat(settings.general.dateFormat);
-          if (settings.general.systemName) {
-            localStorage.setItem('fuel_order_system_name', settings.general.systemName);
-            setSystemName(settings.general.systemName);
+        if (parsed.role === 'super_admin') {
+          const settings = await systemConfigAPI.getSystemSettings();
+          if (settings?.general) {
+            if (settings.general.timezone)   setSystemTimezone(settings.general.timezone);
+            if (settings.general.dateFormat) setSystemDateFormat(settings.general.dateFormat);
+            if (settings.general.systemName) {
+              localStorage.setItem('fuel_order_system_name', settings.general.systemName);
+              setSystemName(settings.general.systemName);
+            }
+          }
+        } else {
+          const res = await apiClient.get('/config/branding');
+          const name = res.data?.data?.systemName;
+          if (name) {
+            localStorage.setItem('fuel_order_system_name', name);
+            setSystemName(name);
           }
         }
       } catch {
@@ -439,7 +447,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const cachedName = localStorage.getItem('fuel_order_system_name');
       if (cachedName) setSystemName(cachedName);
 
-      // Load system settings (super_admin only - endpoint is restricted)
       if (user.role === 'super_admin') {
         try {
           const settings = await systemConfigAPI.getSystemSettings();
@@ -451,8 +458,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
               setSystemName(settings.general.systemName);
             }
           }
-        } catch (error) {
-          // Silently fail - timezone already set to default
+        } catch {
+          // Silently fail
+        }
+      } else {
+        try {
+          const res = await apiClient.get('/config/branding');
+          const name = res.data?.data?.systemName;
+          if (name) {
+            localStorage.setItem('fuel_order_system_name', name);
+            setSystemName(name);
+          }
+        } catch {
+          // Silently fail
         }
       }
       
