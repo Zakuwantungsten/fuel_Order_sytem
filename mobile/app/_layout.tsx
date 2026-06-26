@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -17,13 +17,39 @@ const queryClient = new QueryClient({
 
 function ThemedNavigator() {
   const { colors } = useTheme();
+  const router = useRouter();
 
-  // Set up the notification handler early so that local notifications (triggered
-  // by socket events) show banners and play sound even before a push token is
-  // registered. Idempotent — safe to also call inside registerForPush().
+  // Set up the notification handler early so banners and sound fire when a
+  // remote push arrives. Idempotent — safe to call multiple times.
   useEffect(() => {
     initNotificationHandler();
   }, []);
+
+  // Handle notification taps in all three app states:
+  //   1. App in foreground  — listener fires immediately
+  //   2. App in background  — listener fires when user taps the banner
+  //   3. App was closed     — getLastNotificationResponseAsync returns the tap
+  //                           that cold-launched the app
+  useEffect(() => {
+    let subscription: { remove: () => void } | undefined;
+
+    (async () => {
+      const Notifications = await import('expo-notifications');
+
+      // Live listener (foreground + background taps)
+      subscription = Notifications.addNotificationResponseReceivedListener(() => {
+        router.push('/(app)/notifications');
+      });
+
+      // Cold-launch: app was killed, user tapped the notification
+      const last = await Notifications.getLastNotificationResponseAsync();
+      if (last) {
+        router.push('/(app)/notifications');
+      }
+    })();
+
+    return () => subscription?.remove();
+  }, [router]);
 
   return (
     <>

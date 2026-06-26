@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -50,6 +50,10 @@ export default function ManagerHome() {
   const [sort, setSort] = useState<LpoSortKey>('newest');
   const [sortOpen, setSortOpen] = useState(false);
   const [selected, setSelected] = useState<LpoEntry | null>(null);
+  const [newEntriesAvailable, setNewEntriesAvailable] = useState(false);
+
+  const flatListRef = useRef<FlatList>(null);
+  const lastKnownFirstId = useRef<string | undefined>(undefined);
 
   const { data: currencyMap } = useQuery({
     queryKey: ['station-currencies'],
@@ -104,10 +108,34 @@ export default function ManagerHome() {
         allowedStations: superMgr ? stations : undefined,
       }),
     getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
+    refetchInterval: 60_000, // Fallback polling — socket invalidation handles real-time
   });
 
   const entries = useMemo(() => query.data?.pages.flatMap((p) => p.entries) ?? [], [query.data]);
   const total = query.data?.pages[0]?.total ?? 0;
+
+  // Reset the "new entries" signal whenever the sort changes so we don't show a
+  // stale chip after switching from a different sort back to newest.
+  useEffect(() => {
+    setNewEntriesAvailable(false);
+    lastKnownFirstId.current = undefined;
+  }, [sort]);
+
+  // Detect when a new entry appears at position 0 while sorted by newest.
+  // The sort effect above runs first (same render), so lastKnownFirstId is
+  // already cleared on sort changes and won't produce a false positive.
+  useEffect(() => {
+    const currentFirstId = entries[0]?.id;
+    if (!currentFirstId) return;
+    if (
+      sort === 'newest' &&
+      lastKnownFirstId.current !== undefined &&
+      lastKnownFirstId.current !== currentFirstId
+    ) {
+      setNewEntriesAvailable(true);
+    }
+    lastKnownFirstId.current = currentFirstId;
+  }, [entries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Toggle a station in/out of the selection
   function toggleStation(s: string) {
@@ -232,17 +260,23 @@ export default function ManagerHome() {
           </Card>
         </View>
       ) : (
-        <FlatList
-          data={entries}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <LpoRow entry={item} />}
-          contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: spacing.xl }}
-          onRefresh={query.refetch}
-          refreshing={query.isRefetching}
-          onEndReachedThreshold={0.4}
-          onEndReached={() => {
-            if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
-          }}
+        <View style={{ flex: 1 }}>
+          <FlatList
+            ref={flatListRef}
+            data={entries}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => <LpoRow entry={item} />}
+            contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: spacing.xl }}
+            onRefresh={() => {
+              setNewEntriesAvailable(false);
+              lastKnownFirstId.current = undefined;
+              query.refetch();
+            }}
+            refreshing={query.isRefetching}
+            onEndReachedThreshold={0.4}
+            onEndReached={() => {
+              if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
+            }}
           ListEmptyComponent={
             <Card>
               <EmptyState icon="receipt-outline" title="No LPO entries found" />
@@ -254,6 +288,21 @@ export default function ManagerHome() {
             ) : null
           }
         />
+        {newEntriesAvailable ? (
+          <Pressable
+            onPress={() => {
+              flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+              setNewEntriesAvailable(false);
+            }}
+            style={[styles.newEntriesChip, { backgroundColor: colors.primary }]}
+          >
+            <Ionicons name="arrow-up" size={14} color={colors.onPrimary} />
+            <Text style={{ color: colors.onPrimary, fontSize: font.small, fontWeight: weight.bold, marginLeft: 5 }}>
+              New entries
+            </Text>
+          </Pressable>
+        ) : null}
+        </View>
       )}
 
       {/* ── Station picker bottom sheet ─────────────────────────────────── */}
@@ -668,6 +717,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  newEntriesChip: {
+    position: 'absolute',
+    top: 12,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
   },
   // Sort dropdown
   sortScrim: { flex: 1 },
