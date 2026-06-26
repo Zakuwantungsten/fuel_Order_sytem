@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../src/auth/AuthContext';
 import { RealtimeProvider } from '../src/realtime/RealtimeProvider';
 import { ThemeProvider, useTheme } from '../src/theme';
+import { NotificationToastProvider } from '../src/components/NotificationToast';
+import { initNotificationHandler } from '../src/push/registerPush';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,9 +17,16 @@ const queryClient = new QueryClient({
 
 function ThemedNavigator() {
   const { colors } = useTheme();
+
+  // Set up the notification handler early so that local notifications (triggered
+  // by socket events) show banners and play sound even before a push token is
+  // registered. Idempotent — safe to also call inside registerForPush().
+  useEffect(() => {
+    initNotificationHandler();
+  }, []);
+
   return (
     <>
-      {/* The very top is always a dark surface (navy header / login), so light icons. */}
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -39,9 +48,15 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
-            <RealtimeProvider>
-              <ThemedNavigator />
-            </RealtimeProvider>
+            {/*
+              NotificationToastProvider must wrap RealtimeProvider so the socket
+              listener can call showToast() via useToast().
+            */}
+            <NotificationToastProvider>
+              <RealtimeProvider>
+                <ThemedNavigator />
+              </RealtimeProvider>
+            </NotificationToastProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>

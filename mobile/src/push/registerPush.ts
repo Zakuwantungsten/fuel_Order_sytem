@@ -17,7 +17,6 @@ import { apiClient } from '../api/client';
  * would crash the app at startup before any of our guards run.
  */
 
-// True when running inside the Expo Go client (where remote push is unavailable).
 const isExpoGo = Constants.appOwnership === 'expo';
 
 function getProjectId(): string | undefined {
@@ -30,23 +29,16 @@ function getProjectId(): string | undefined {
 
 let registeredToken: string | null = null;
 
-/** Best-effort: obtain an Expo push token and register it with the backend. */
-export async function registerForPush(): Promise<void> {
+/**
+ * Configure the notification handler + Android channel so that banners and
+ * sounds fire when a notification arrives (push OR local). Call this once at
+ * app startup — it's safe to call multiple times (idempotent).
+ */
+export async function initNotificationHandler(): Promise<void> {
   try {
-    if (isExpoGo) return;          // remote push isn't supported in Expo Go
-    if (!Device.isDevice) return;  // simulators can't get push tokens
-
-    const projectId = getProjectId();
-    if (!projectId) {
-      // Not yet `eas init`-ed — skip silently. Device push activates
-      // once a development build with a projectId is installed.
-      return;
-    }
-
-    // Lazy import: only loaded in a real build, never in Expo Go.
+    if (isExpoGo) return;
     const Notifications = await import('expo-notifications');
 
-    // Show banners/sounds when a push arrives while the app is foregrounded.
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowBanner: true,
@@ -61,11 +53,57 @@ export async function registerForPush(): Promise<void> {
         name: 'Default',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
-        // Custom notification tone bundled via the expo-notifications `sounds`
-        // plugin (see app.json). Falls back to the system sound if unavailable.
         sound: 'notification.wav',
+        lightColor: '#1d4ed8',
       });
     }
+  } catch {
+    // Non-fatal.
+  }
+}
+
+/**
+ * Fire an immediate local notification. Shows as a system banner + appears in
+ * the notification panel + plays the bundled sound. No-ops in Expo Go or on
+ * simulators, and requires notification permission to be granted.
+ */
+export async function scheduleLocalNotification(title: string, body: string): Promise<void> {
+  try {
+    if (isExpoGo || !Device.isDevice) return;
+    const Notifications = await import('expo-notifications');
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: 'notification.wav',
+        channelId: 'default',
+      },
+      trigger: null,
+    });
+  } catch {
+    // Non-fatal.
+  }
+}
+
+/** Best-effort: obtain an Expo push token and register it with the backend. */
+export async function registerForPush(): Promise<void> {
+  try {
+    if (isExpoGo) return;
+    if (!Device.isDevice) return;
+
+    const projectId = getProjectId();
+    if (!projectId) {
+      // Not yet `eas init`-ed — skip silently.
+      return;
+    }
+
+    // Ensure handler + channel are configured (initNotificationHandler may
+    // have already run at startup, but calling again is safe/idempotent).
+    await initNotificationHandler();
+
+    const Notifications = await import('expo-notifications');
 
     const existing = await Notifications.getPermissionsAsync();
     let status = existing.status;

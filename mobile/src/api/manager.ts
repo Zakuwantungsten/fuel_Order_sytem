@@ -181,9 +181,9 @@ export interface LpoQueryOpts {
   limit?: number;
   search?: string;
   sort?: LpoSortKey;
-  /** Specific station to filter by (super_manager station picker). */
-  station?: string;
-  /** Super_manager's allowed station list (used when no specific station is picked). */
+  /** For super_manager: multi-select station filter (empty = all allowed). */
+  selectedStations?: string[];
+  /** Super_manager's allowed station list (used when no specific station is selected). */
   allowedStations?: string[];
 }
 
@@ -201,8 +201,12 @@ export async function getManagerLpoPage(
 ): Promise<LpoPage> {
   const { page = 1, limit = 30, search } = opts;
   const superMgr = isSuperManager(user);
-  const specificStation = opts.station && opts.station !== 'all' ? opts.station : null;
-  const usingAllowedList = superMgr && !specificStation && !!opts.allowedStations?.length;
+
+  // Multi-station filter: empty array means "all allowed".
+  const sel = opts.selectedStations ?? [];
+  const specificStation = sel.length === 1 ? sel[0] : null;
+  const multipleStations = sel.length > 1 ? sel : null;
+  const usingAllowedList = superMgr && !specificStation && !multipleStations && !!opts.allowedStations?.length;
 
   const params: Record<string, any> = { page, limit };
   if (search && search.trim()) params.search = search.trim();
@@ -212,12 +216,13 @@ export async function getManagerLpoPage(
   if (superMgr) {
     if (specificStation) {
       params.station = specificStation;
+    } else if (multipleStations) {
+      params.stations = multipleStations.join(',');
     } else if (usingAllowedList) {
-      // Restrict to the configured allowed stations (server-side $in).
       params.stations = opts.allowedStations!.join(',');
     }
   } else {
-    const forcedStation = resolveUserStation(user); // non-null only for station managers
+    const forcedStation = resolveUserStation(user);
     if (forcedStation) params.station = forcedStation;
   }
 
@@ -229,9 +234,8 @@ export async function getManagerLpoPage(
   const entries = rawList.map(normalizeEntry).filter((e) => {
     const station = e.station.toUpperCase().trim();
     if (station === 'CASH') return false;
-    // Fallback: super_manager with no specific station AND no configured list →
-    // drop the default-excluded stations client-side.
-    if (superMgr && !specificStation && !usingAllowedList && EXCLUDED_STATIONS_SUPER.includes(station)) {
+    // Fallback client-side filter when no station selection and no configured list.
+    if (superMgr && !specificStation && !multipleStations && !usingAllowedList && EXCLUDED_STATIONS_SUPER.includes(station)) {
       return false;
     }
     return true;
