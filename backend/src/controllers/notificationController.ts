@@ -3,12 +3,14 @@ import { AuthRequest } from '../middleware/auth';
 import { Notification } from '../models/Notification';
 import { FuelRecord } from '../models/FuelRecord';
 import { PushSubscription } from '../models/PushSubscription';
+import { User } from '../models/User';
 import { ApiError } from '../middleware/errorHandler';
 import { config } from '../config';
 import logger from '../utils/logger';
 import { emitNotification, emitDataChange } from '../services/websocket';
 import { sendPushToRecipients } from '../services/pushNotificationService';
 import { createDriverUserId } from '../utils/truckNumber';
+import { getManagerAccessConfig } from '../services/journeyService';
 
 // Station name → station-manager username (for notification targeting).
 const STATION_MANAGER_MAP: Record<string, string> = {
@@ -26,16 +28,31 @@ const STATION_MANAGER_MAP: Record<string, string> = {
 };
 
 /**
- * Build LPO notification recipients: the station manager, the super_manager role
- * (for LAKE/custom stations), and the specific driver(s) of the involved trucks.
+ * Build LPO notification recipients: the station manager (by their actual DB _id),
+ * the super_manager role only for stations in the configured list, and specific drivers.
  */
-function buildLpoRecipients(station: string, truckNos: string[]): string[] {
+async function buildLpoRecipients(station: string, truckNos: string[]): Promise<string[]> {
   const recipients = new Set<string>();
-  const mgr = STATION_MANAGER_MAP[station];
-  if (mgr) recipients.add(mgr);
-  if (station.startsWith('LAKE') || !STATION_MANAGER_MAP[station]) recipients.add('super_manager');
+
+  // Station manager — look up by username to get the actual MongoDB _id so it
+  // matches what PushSubscription stores at subscribe time.
+  const mgrUsername = STATION_MANAGER_MAP[station];
+  if (mgrUsername) {
+    const mgrUser = await User.findOne({ username: mgrUsername }).select('_id').lean();
+    if (mgrUser) recipients.add((mgrUser._id as any).toString());
+  }
+
+  // Super manager — only send to stations they are configured to manage.
+  // superManagerStations empty means "all stations" (no restriction configured).
+  const { superManagerStations } = await getManagerAccessConfig();
+  const stationUp = station.toUpperCase().trim();
+  const smReceives =
+    superManagerStations.length === 0 ||
+    superManagerStations.some((s) => s.toUpperCase().trim() === stationUp);
+  if (smReceives) recipients.add('super_manager');
+
   for (const t of truckNos) {
-    if (t && t.trim()) recipients.add(createDriverUserId(t)); // e.g. driver_T991_EFN
+    if (t && t.trim()) recipients.add(createDriverUserId(t));
   }
   return Array.from(recipients);
 }
@@ -915,7 +932,7 @@ export const createLPOCreatedNotification = async (
     if (activeEntries.length === 0) return;
 
     const truckNos: string[] = activeEntries.map((e: any) => e.truckNo).filter(Boolean);
-    const recipients = buildLpoRecipients(station, truckNos);
+    const recipients = await buildLpoRecipients(station, truckNos);
     if (recipients.length === 0) return;
 
     const totalLtrs = activeEntries.reduce((s: number, e: any) => s + (e.liters || 0), 0);
@@ -955,7 +972,7 @@ export const createLPOCancelledNotification = async (
     const station = lpoDoc.station?.toUpperCase()?.trim();
     if (!station || station === 'CASH') return;
 
-    const recipients = buildLpoRecipients(station, [entry.truckNo]);
+    const recipients = await buildLpoRecipients(station, [entry.truckNo]);
     if (recipients.length === 0) return;
 
     const title = `LPO Cancelled — ${station}`;
@@ -993,7 +1010,7 @@ export const createLPOAmendedNotification = async (
     const station = lpoDoc.station?.toUpperCase()?.trim();
     if (!station || station === 'CASH') return;
 
-    const recipients = buildLpoRecipients(station, [entry.truckNo]);
+    const recipients = await buildLpoRecipients(station, [entry.truckNo]);
     if (recipients.length === 0) return;
 
     const change =

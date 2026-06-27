@@ -495,9 +495,11 @@ export default function ManagerHome() {
     const dim = cancelled ? 0.55 : 1;
     const sym = symbolFor(entry.station);
     const stationColor = cancelled ? colors.textMuted : colors.primary;
-    const dateLabel = entry.createdAt
+    const dateLabel = entry.date
+      ? new Date(entry.date).toLocaleDateString()
+      : entry.createdAt
       ? new Date(entry.createdAt).toLocaleDateString()
-      : entry.date;
+      : '';
 
     return (
       <Pressable onPress={() => setSelected(entry)} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>

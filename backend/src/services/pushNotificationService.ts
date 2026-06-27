@@ -126,6 +126,9 @@ export async function sendPushDirect(
         // 'default' channel's sound). Invalid/missing falls back to the system sound.
         sound: 'notification.wav',
         channelId: 'default',
+        // 'high' priority bypasses Android Doze mode so the device wakes immediately
+        // instead of deferring until the next maintenance window.
+        priority: 'high' as const,
       }));
 
     const expoSend = (async () => {
