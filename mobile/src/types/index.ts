@@ -36,6 +36,7 @@ export interface AuthUser {
   department?: string;
   truckNo?: string;
   isActive?: boolean;
+  mustChangePassword?: boolean;
 }
 
 /** The four role-home groups the v1 mobile app routes to. */

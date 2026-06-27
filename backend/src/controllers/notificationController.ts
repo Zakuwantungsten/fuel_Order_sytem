@@ -12,34 +12,35 @@ import { sendPushToRecipients } from '../services/pushNotificationService';
 import { createDriverUserId } from '../utils/truckNumber';
 import { getManagerAccessConfig } from '../services/journeyService';
 
-// Station name → station-manager username (for notification targeting).
-const STATION_MANAGER_MAP: Record<string, string> = {
-  'LAKE CHILABOMBWE': 'mgr_chilabombwe',
-  'LAKE NDOLA': 'mgr_ndola',
-  'LAKE KAPIRI': 'mgr_kapiri',
-  'LAKE KITWE': 'mgr_kitwe',
-  'LAKE KABANGWA': 'mgr_kabangwa',
-  'LAKE CHINGOLA': 'mgr_chingola',
-  'LAKE TUNDUMA': 'mgr_tunduma',
-  'GBP MOROGORO': 'mgr_morogoro',
-  'GBP KANGE': 'mgr_kange',
-  'GPB KANGE': 'mgr_kange',
-  'INFINITY': 'mgr_infinity',
-};
-
 /**
- * Build LPO notification recipients: the station manager (by their actual DB _id),
- * the super_manager role only for stations in the configured list, and specific drivers.
+ * Build LPO notification recipients: station managers assigned to this station
+ * (looked up live from the DB by role + station field), the super_manager role
+ * for stations in their configured list, and specific drivers.
+ *
+ * The old approach used a hardcoded username map which silently missed managers
+ * whenever their username didn't match the expected pattern. The DB lookup is
+ * reliable as long as the manager user's `station` field is set correctly.
  */
 async function buildLpoRecipients(station: string, truckNos: string[]): Promise<string[]> {
   const recipients = new Set<string>();
 
-  // Station manager — look up by username to get the actual MongoDB _id so it
-  // matches what PushSubscription stores at subscribe time.
-  const mgrUsername = STATION_MANAGER_MAP[station];
-  if (mgrUsername) {
-    const mgrUser = await User.findOne({ username: mgrUsername }).select('_id').lean();
-    if (mgrUser) recipients.add((mgrUser._id as any).toString());
+  // Escape the station name so it is safe inside a RegExp literal.
+  const escapedStation = station.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Find all users with a manager role whose station matches this LPO's station.
+  // Both 'manager' and 'station_manager' role variants are checked so the query
+  // covers however the admin named the role at account creation time.
+  const stationManagers = await User.find({
+    role: { $in: ['manager', 'station_manager'] },
+    station: { $regex: new RegExp(`^${escapedStation}$`, 'i') },
+    isActive: true,
+    isDeleted: false,
+  })
+    .select('_id')
+    .lean();
+
+  for (const mgr of stationManagers) {
+    recipients.add((mgr._id as any).toString());
   }
 
   // Super manager — only send to stations they are configured to manage.

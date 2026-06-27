@@ -31,6 +31,8 @@ interface AuthState {
   initializing: boolean;
   signIn: (username: string, password: string) => Promise<authApi.LoginResult>;
   signOut: () => Promise<void>;
+  /** Update the in-memory user and cached profile after a first-login password change. */
+  updateUser: (user: AuthUser) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -96,7 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback(
     async (username: string, password: string): Promise<authApi.LoginResult> => {
       const result = await authApi.login(username, password);
-      if (result.status === 'success' && result.accessToken) {
+      if (
+        (result.status === 'success' || result.status === 'password_change_required') &&
+        result.accessToken
+      ) {
         await saveTokens({
           accessToken: result.accessToken,
           refreshToken: result.refreshToken ?? null,
@@ -105,16 +110,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const me = result.user ?? (await authApi.getMe());
         setUser(me);
         await saveCachedUser(me);
-        registerForPush();
+        // Only register for push once the account is fully activated.
+        if (result.status === 'success') {
+          registerForPush();
+        }
       }
       return result;
     },
     []
   );
 
+  const updateUser = useCallback(async (updatedUser: AuthUser) => {
+    setUser(updatedUser);
+    await saveCachedUser(updatedUser);
+  }, []);
+
   const value = useMemo<AuthState>(
-    () => ({ user, initializing, signIn, signOut }),
-    [user, initializing, signIn, signOut]
+    () => ({ user, initializing, signIn, signOut, updateUser }),
+    [user, initializing, signIn, signOut, updateUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -12,6 +12,8 @@ export default function AppLayout() {
 
   if (initializing) return <Loading label="Loading…" />;
   if (!user) return <Redirect href="/login" />;
+  // Block access to the main app until the user has set a permanent password.
+  if (user.mustChangePassword) return <Redirect href="/change-password" />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

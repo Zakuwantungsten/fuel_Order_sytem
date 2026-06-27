@@ -1094,6 +1094,8 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
 
     // Track entries that need fuel record updates and amendment tracking
     const entriesToUpdate: EntryType[] = [];
+    // Track entries whose isCancelled flipped true→false so notifications can be sent after save.
+    const newlyCancelledEntries: EntryType[] = [];
 
     // Per-operation automation toggles. lpoCancelRevert governs cancel/restore fuel
     // sync; lpoEditAdjust governs liters changes, entry removal, driver-account
@@ -1187,6 +1189,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
 
         // Mark cancellation time
         newEntry.cancelledAt = new Date();
+        newlyCancelledEntries.push(newEntry);
       } else if (newEntry.isDriverAccount && !oldEntry.isDriverAccount) {
         // Entry was converted to driver account - revert fuel and create driver account entry
         logger.info(`Entry converted to driver account: ${key}, reverting ${oldEntry.liters}L`);
@@ -1407,6 +1410,11 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     for (const amended of entriesToUpdate) {
       if (amended.isCancelled || amended.isDriverAccount) continue;
       createLPOAmendedNotification(lpoSummary, amended, req.user?.username || 'system').catch(() => {});
+    }
+
+    // Notify on cancellations that happened in this save (best-effort).
+    for (const cancelled of newlyCancelledEntries) {
+      createLPOCancelledNotification(lpoSummary, cancelled, req.user?.username || 'system').catch(() => {});
     }
   } catch (error: any) {
     throw error;
@@ -2375,6 +2383,11 @@ export const cancelAllEntriesInLPO = async (req: AuthRequest, res: Response): Pr
     });
     emitDataChange('lpo_summaries', 'update');
     emitDataChange('fuel_records', 'update');
+
+    // Notify station manager / super_manager / drivers for every cancelled entry (best-effort).
+    for (const entry of activeEntries) {
+      createLPOCancelledNotification(lpo, entry, req.user?.username || 'system').catch(() => {});
+    }
   } catch (error: any) {
     throw error;
   }

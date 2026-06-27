@@ -9,6 +9,12 @@ export interface LoginResult {
   message?: string;
 }
 
+export interface FirstLoginResult {
+  accessToken: string;
+  refreshToken?: string;
+  user: AuthUser;
+}
+
 /**
  * Log in either a staff user (username/email + password) or a driver
  * (truck number + PIN). The backend's /auth/login detects driver logins,
@@ -30,11 +36,39 @@ export async function login(username: string, password: string): Promise<LoginRe
   }
 
   const data = body.data ?? body;
+
+  // mustChangePassword may come back as true or as the truthy string "[REDACTED]"
+  // if the response sanitizer is active on this endpoint. Either way it signals
+  // that the user must set a new password before accessing the app.
+  if (data.user?.mustChangePassword) {
+    return {
+      status: 'password_change_required',
+      user: data.user as AuthUser,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+    };
+  }
+
   return {
     status: 'success',
     user: data.user as AuthUser,
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
+  };
+}
+
+/**
+ * Set a permanent password for a first-login / temporary-password account.
+ * Does not require the current password — the mustChangePassword flag acts as
+ * the gate. Returns fresh tokens so the caller can update SecureStore.
+ */
+export async function firstLoginPassword(newPassword: string): Promise<FirstLoginResult> {
+  const res = await apiClient.post('/auth/first-login-password', { newPassword });
+  const data = res.data?.data ?? res.data;
+  return {
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    user: data.user as AuthUser,
   };
 }
 

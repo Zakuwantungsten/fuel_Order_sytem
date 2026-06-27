@@ -62,6 +62,7 @@ function ThemedNavigator() {
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="change-password" />
         <Stack.Screen name="(app)" />
       </Stack>
     </>

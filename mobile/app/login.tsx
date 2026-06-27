@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useAuth } from '../src/auth/AuthContext';
 import { getApiErrorMessage } from '../src/api/client';
 import { useTheme } from '../src/theme';
@@ -28,7 +28,10 @@ export default function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (user) return <Redirect href="/(app)/home" />;
+  if (user) {
+    if (user.mustChangePassword) return <Redirect href="/change-password" />;
+    return <Redirect href="/(app)/home" />;
+  }
 
   const isDriver = mode === 'driver';
 
@@ -43,6 +46,8 @@ export default function LoginScreen() {
       const result = await signIn(username.trim(), password);
       if (result.status === 'mfa_required') {
         setError(result.message ?? 'MFA required — finish setup on the web portal.');
+      } else if (result.status === 'password_change_required') {
+        router.replace('/change-password');
       }
     } catch (e) {
       setError(getApiErrorMessage(e, 'Login failed. Check your credentials.'));
