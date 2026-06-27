@@ -499,7 +499,7 @@ export const uncancelItem = async (req: AuthRequest, res: Response): Promise<voi
 
       logger.info(`LPO ${id} entry ${truckNo} uncancelled by ${username}`);
       res.status(200).json({ success: true, message: 'LPO entry uncancelled successfully' });
-      emitDataChange('lpo_summaries', 'update');
+      emitDataChange('lpo_summaries', 'update', undefined, (lpo as any).station);
       return;
     }
 

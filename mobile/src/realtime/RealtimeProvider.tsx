@@ -6,6 +6,8 @@ import { useAuth } from '../auth/AuthContext';
 import { getAccessToken } from '../auth/secureStore';
 import { getNotifications } from '../api/notifications';
 import { useToast } from '../components/NotificationToast';
+import { isSuperManager, resolveUserStation } from '../api/manager';
+import type { AuthUser } from '../types';
 
 /**
  * Maintains a single Socket.io connection while authenticated and refreshes
@@ -16,6 +18,27 @@ import { useToast } from '../components/NotificationToast';
  *
  * Works in Expo Go (no native module needed for the socket itself).
  */
+/** Returns true if an lpo_summaries event for this station should affect this user. */
+function isStationRelevant(
+  eventStation: string,
+  user: AuthUser | null,
+  smStations: string[] | undefined
+): boolean {
+  if (!user) return false;
+  const st = eventStation.toUpperCase().trim();
+  if (isSuperManager(user)) {
+    // Empty list means "all stations" — no admin restriction configured yet.
+    if (!smStations || smStations.length === 0) return true;
+    return smStations.some((s) => s.toUpperCase().trim() === st);
+  }
+  if (user.role === 'manager') {
+    const myStation = resolveUserStation(user)?.toUpperCase().trim() ?? '';
+    return myStation === st;
+  }
+  // All other roles (admin, super_admin, etc.) receive everything.
+  return true;
+}
+
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -44,12 +67,24 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ['notif-count'] });
       };
 
-      socket.on('data_changed', (payload: { collection?: string }) => {
+      socket.on('data_changed', (payload: { collection?: string; station?: string | null }) => {
         switch (payload?.collection) {
-          case 'lpo_summaries':
-            queryClient.invalidateQueries({ queryKey: ['manager-lpos'] });
-            queryClient.invalidateQueries({ queryKey: ['driver-dashboard'] });
+          case 'lpo_summaries': {
+            const eventStation = payload.station;
+            // If station is unknown (legacy emit site, e.g. DO cascade) fall through
+            // but still use silent invalidation to avoid a reload spinner.
+            if (eventStation) {
+              const smStations = queryClient.getQueryData<string[]>(['sm-stations', user?.role]);
+              if (!isStationRelevant(eventStation, user, smStations)) break;
+            }
+            // Mark stale without an immediate background re-fetch — no spinner, no
+            // forced reload. The 60 s poll or a user-initiated tap will do the fetch.
+            queryClient.invalidateQueries({ queryKey: ['manager-lpos'], refetchType: 'none' });
+            queryClient.invalidateQueries({ queryKey: ['driver-dashboard'], refetchType: 'none' });
+            // Increment the signal so ManagerHome shows the "New entries" chip.
+            queryClient.setQueryData<number>(['lpo-update-signal'], (prev) => (prev ?? 0) + 1);
             break;
+          }
           case 'fuel_records':
           case 'delivery_orders':
             queryClient.invalidateQueries({ queryKey: ['driver-dashboard'] });

@@ -54,11 +54,21 @@ export default function ManagerHome() {
 
   const flatListRef = useRef<FlatList>(null);
   const lastKnownFirstId = useRef<string | undefined>(undefined);
+  const prevUpdateSignalRef = useRef<number | undefined>(undefined);
 
   const { data: currencyMap } = useQuery({
     queryKey: ['station-currencies'],
     queryFn: getStationCurrencyMap,
     staleTime: 10 * 60_000,
+  });
+
+  // Watches for real-time LPO change signals from RealtimeProvider without
+  // triggering an automatic re-fetch. Chip is shown; user taps to refresh.
+  const { data: lpoUpdateSignal } = useQuery<number>({
+    queryKey: ['lpo-update-signal'],
+    queryFn: () => 0,
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
   const symbolFor = (st: string) => currencySymbol(currencyForStation(st, currencyMap));
 
@@ -120,6 +130,20 @@ export default function ManagerHome() {
     setNewEntriesAvailable(false);
     lastKnownFirstId.current = undefined;
   }, [sort]);
+
+  // Show chip when RealtimeProvider increments the lpo-update-signal — without
+  // triggering a background re-fetch. User taps chip to fetch on their own terms.
+  useEffect(() => {
+    if (lpoUpdateSignal === undefined || lpoUpdateSignal === 0) return;
+    if (prevUpdateSignalRef.current === undefined) {
+      prevUpdateSignalRef.current = lpoUpdateSignal;
+      return;
+    }
+    if (lpoUpdateSignal !== prevUpdateSignalRef.current) {
+      prevUpdateSignalRef.current = lpoUpdateSignal;
+      setNewEntriesAvailable(true);
+    }
+  }, [lpoUpdateSignal]);
 
   // Detect when a new entry appears at position 0 while sorted by newest.
   // The sort effect above runs first (same render), so lastKnownFirstId is
@@ -293,6 +317,7 @@ export default function ManagerHome() {
             onPress={() => {
               flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
               setNewEntriesAvailable(false);
+              query.refetch();
             }}
             style={[styles.newEntriesChip, { backgroundColor: colors.primary }]}
           >

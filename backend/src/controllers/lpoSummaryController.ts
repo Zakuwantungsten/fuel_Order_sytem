@@ -1023,7 +1023,7 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       message: 'LPO document created successfully',
       data: { ...responseData, id: responseData._id },
     });
-    emitDataChange('lpo_summaries', 'create');
+    emitDataChange('lpo_summaries', 'create', undefined, lpoSummary.station);
     emitDataChange('fuel_records', 'update');
 
     // Notify station manager / super_manager / drivers (best-effort).
@@ -1398,7 +1398,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       message: 'LPO document updated successfully',
       data: { ...responseData, id: responseData._id },
     });
-    emitDataChange('lpo_summaries', 'update');
+    emitDataChange('lpo_summaries', 'update', undefined, lpoSummary.station);
     emitDataChange('fuel_records', 'update');
     emitDataChange('driver_accounts', 'update');
 

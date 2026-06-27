@@ -331,10 +331,17 @@ export const emitSecuritySettingsEvent = (settings: {
 export const emitDataChange = (
   collection: string,
   action: 'create' | 'update' | 'delete' = 'update',
-  changedDocument?: Record<string, any>
+  changedDocument?: Record<string, any>,
+  station?: string
 ): void => {
   if (!io) return;
-  io.emit('data_changed', { collection, action, timestamp: Date.now(), record: changedDocument ?? null });
+  io.emit('data_changed', {
+    collection,
+    action,
+    timestamp: Date.now(),
+    record: changedDocument ?? null,
+    station: station ?? null,
+  });
 };
 
 /**
