@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "622805845989",
+    "project_id": "limka-291bc",
+    "storage_bucket": "limka-291bc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:622805845989:android:f4c2b85e25fababf5b910c",
+        "android_client_info": {
+          "package_name": "com.fuelorder.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgFdGrOULQFlYiadW4vxaUJKUqkwBAbP8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

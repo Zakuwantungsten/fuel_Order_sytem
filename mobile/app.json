@@ -22,6 +22,7 @@
     },
     "android": {
       "package": "com.fuelorder.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0f172a",
         "foregroundImage": "./assets/android-icon-foreground.png"

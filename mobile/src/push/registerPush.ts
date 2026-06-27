@@ -128,6 +128,9 @@ export async function registerForPush(): Promise<void> {
   } catch (err) {
     // Non-fatal, but log so background-push failures are diagnosable.
     console.warn('[registerForPush] failed:', err);
+    // TEMPORARY DEBUG — remove after diagnosing push registration failure
+    const { Alert } = require('react-native');
+    Alert.alert('Push Debug', `Registration failed:\n${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
