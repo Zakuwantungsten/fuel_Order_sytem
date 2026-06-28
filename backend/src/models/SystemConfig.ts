@@ -58,6 +58,7 @@ export interface IFuelAutomationConfig {
   lpoCreateDeduct: boolean;   // LPO creation deducts fuel from the matched record
   lpoCancelRevert: boolean;   // LPO entry cancellation/removal reverts the deduction
   lpoEditAdjust: boolean;     // LPO entry liters edit re-adjusts the fuel record
+  lpoPickupAuto: boolean;     // Pick-up-at auto-detects the deduct/add checkpoints; when OFF the user picks them per truck
   doImportCreate: boolean;    // Import DO creates a new going-journey fuel record
   doExportUpdate: boolean;    // Export DO updates the matched going record's return leg
   doAmendCascade: boolean;    // DO amendment (truck/destination/loadingPoint) recalcs the fuel record
@@ -100,6 +101,7 @@ export const DEFAULT_FUEL_AUTOMATION: IFuelAutomationConfig = {
   lpoCreateDeduct: true,
   lpoCancelRevert: true,
   lpoEditAdjust: true,
+  lpoPickupAuto: true,
   doImportCreate: true,
   doExportUpdate: true,
   doAmendCascade: true,
@@ -371,6 +373,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         lpoCreateDeduct: { type: Boolean, default: true },
         lpoCancelRevert: { type: Boolean, default: true },
         lpoEditAdjust: { type: Boolean, default: true },
+        lpoPickupAuto: { type: Boolean, default: true },
         doImportCreate: { type: Boolean, default: true },
         doExportUpdate: { type: Boolean, default: true },
         doAmendCascade: { type: Boolean, default: true },

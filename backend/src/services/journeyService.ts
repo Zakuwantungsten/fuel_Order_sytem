@@ -125,6 +125,7 @@ export async function getFuelAutomationFlags(): Promise<IFuelAutomationConfig> {
       lpoCreateDeduct: stored.lpoCreateDeduct !== false,
       lpoCancelRevert: stored.lpoCancelRevert !== false,
       lpoEditAdjust: stored.lpoEditAdjust !== false,
+      lpoPickupAuto: stored.lpoPickupAuto !== false,
       doImportCreate: stored.doImportCreate !== false,
       doExportUpdate: stored.doExportUpdate !== false,
       doAmendCascade: stored.doAmendCascade !== false,

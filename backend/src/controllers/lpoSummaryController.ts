@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import mongoose, { ClientSession } from 'mongoose';
 import { LPOSummary, LPOWorkbook, FuelRecord, DriverAccountEntry, SystemConfig, User } from '../models';
 import { ArchivedLPOSummary } from '../models/ArchivedData';
 import { FuelStationConfig } from '../models/FuelStationConfig';
@@ -36,10 +37,16 @@ async function loadStationMappings() {
   const mapping: Record<string, { going?: string; returning?: string }> = {};
 
   for (const station of stations) {
-    mapping[station.stationName] = {
-      going: station.fuelRecordFieldGoing,
-      returning: station.fuelRecordFieldReturning,
-    };
+    // Only include stations that have at least one checkpoint field configured.
+    // A station stored with both fields null/undefined would produce a truthy object
+    // { going: undefined, returning: undefined } that blocks the fallback lookup and
+    // causes the field to resolve to undefined → silent fuel-record skip.
+    if (station.fuelRecordFieldGoing || station.fuelRecordFieldReturning) {
+      mapping[station.stationName] = {
+        going: station.fuelRecordFieldGoing,
+        returning: station.fuelRecordFieldReturning,
+      };
+    }
   }
 
   // Add CASH as a fallback (context determines the field)
@@ -71,25 +78,6 @@ async function getCashLpoLookbackDays(): Promise<number> {
   }
 }
 
-// Mapping from station to fuel record field for updating
-// Kept as fallback for backward compatibility
-const STATION_TO_FUEL_FIELD_FALLBACK: Record<string, { going?: string; returning?: string }> = {
-  // Zambia stations - going direction uses zambiaGoing, return uses zambiaReturn
-  'LAKE CHILABOMBWE': { going: 'zambiaGoing', returning: 'zambiaReturn' },
-  'LAKE NDOLA': { going: 'zambiaGoing', returning: 'zambiaReturn' },  // Return: 50L split
-  'LAKE KAPIRI': { going: 'zambiaGoing', returning: 'zambiaReturn' }, // Return: 350L split
-  'LAKE KITWE': { going: 'zambiaGoing', returning: 'zambiaReturn' },
-  'LAKE KABANGWA': { going: 'zambiaGoing', returning: 'zambiaReturn' },
-  'LAKE CHINGOLA': { going: 'zambiaGoing', returning: 'zambiaReturn' },
-  // Tanzania stations
-  'LAKE TUNDUMA': { going: 'tdmGoing', returning: 'tundumaReturn' }, // Tunduma checkpoint
-  'INFINITY': { going: 'mbeyaGoing', returning: 'mbeyaReturn' },      // Mbeya checkpoint (both directions)
-  'GBP MOROGORO': { going: 'moroGoing', returning: 'moroReturn' },    // Morogoro checkpoint
-  'GBP KANGE': { going: 'moroGoing', returning: 'tangaReturn' },      // Tanga Return (70L for Mombasa/MSA)
-  'GPB KANGE': { going: 'moroGoing', returning: 'tangaReturn' },      // Typo version - Tanga Return
-  // Cash can be used at any checkpoint - context determines the field
-  'CASH': { going: 'darGoing', returning: 'darReturn' },              // Default to Dar fields for cash
-};
 
 /**
  * Map cancellation points to fuel record fields
@@ -191,7 +179,8 @@ async function flushFuelUpdateBatch(batch: FuelUpdateBatch, username: string): P
 async function findFuelRecordWithDirection(
   doNumber: string,
   truckNo: string,
-  batch?: FuelUpdateBatch
+  batch?: FuelUpdateBatch,
+  session?: ClientSession
 ): Promise<{ fuelRecord: any; direction: 'going' | 'returning' } | null> {
   const cacheKey = `${doNumber}||${truckNo}`;
   if (batch && batch.resolution.has(cacheKey)) {
@@ -203,7 +192,7 @@ async function findFuelRecordWithDirection(
     goingDo: doNumber,
     isDeleted: false,
     isCancelled: { $ne: true },
-  });
+  }).session(session ?? null);
 
   let direction: 'going' | 'returning' = 'going';
 
@@ -212,7 +201,7 @@ async function findFuelRecordWithDirection(
       returnDo: doNumber,
       isDeleted: false,
       isCancelled: { $ne: true },
-    });
+    }).session(session ?? null);
     if (fuelRecord) direction = 'returning';
   }
 
@@ -222,7 +211,7 @@ async function findFuelRecordWithDirection(
       truckNo: { $regex: truckNo, $options: 'i' },
       isDeleted: false,
       isCancelled: { $ne: true },
-    }).sort({ date: -1 });
+    }).sort({ date: -1 }).session(session ?? null);
 
     if (truckRecords.length === 0) {
       if (batch) batch.resolution.set(cacheKey, null);
@@ -256,6 +245,82 @@ async function findFuelRecordWithDirection(
 }
 
 /**
+ * The real numeric checkpoint columns on a FuelRecord. Any manually-chosen
+ * checkpoint (e.g. the pick-up-at picker) MUST be one of these — we never write
+ * an arbitrary field name onto the document.
+ */
+const FUEL_CHECKPOINT_FIELDS = new Set<string>([
+  'mmsaYard', 'tangaYard', 'darYard',
+  'tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel',
+  'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
+]);
+
+/**
+ * Resolve which FuelRecord checkpoint column an LPO entry maps to, given the
+ * station, the detected journey direction and any CASH/CUSTOM overrides.
+ * Returns undefined when no mapping can be determined.
+ */
+async function resolveFuelFieldForEntry(
+  station: string,
+  direction: 'going' | 'returning',
+  cancellationPoint?: string,
+  customCheckpointInfo?: {
+    isCustomStation?: boolean;
+    customGoingCheckpoint?: string;
+    customReturnCheckpoint?: string;
+  }
+): Promise<string | undefined> {
+  const stationUpper = station.toUpperCase().trim();
+  let fieldToUpdate: string | undefined;
+
+  // For CUSTOM station, use the custom checkpoint based on direction.
+  // If only one direction is configured, use that checkpoint regardless of detected direction.
+  if (customCheckpointInfo?.isCustomStation) {
+    const hasGoing = !!customCheckpointInfo.customGoingCheckpoint;
+    const hasReturn = !!customCheckpointInfo.customReturnCheckpoint;
+
+    if (hasGoing && hasReturn) {
+      fieldToUpdate = direction === 'going'
+        ? customCheckpointInfo.customGoingCheckpoint
+        : customCheckpointInfo.customReturnCheckpoint;
+    } else if (hasGoing) {
+      fieldToUpdate = customCheckpointInfo.customGoingCheckpoint;
+    } else if (hasReturn) {
+      fieldToUpdate = customCheckpointInfo.customReturnCheckpoint;
+    } else {
+      logger.warn(`Custom station but no checkpoint configured for any direction`);
+    }
+    if (fieldToUpdate) logger.info(`Custom station (${direction}) -> field: ${fieldToUpdate}`);
+  }
+  // For CASH station with cancellation point, use the cancellation point to determine the field
+  else if (stationUpper === 'CASH' && cancellationPoint) {
+    fieldToUpdate = CANCELLATION_POINT_TO_FUEL_FIELD[cancellationPoint];
+    logger.debug(`CASH mode with cancellation point ${cancellationPoint} -> field: ${fieldToUpdate}`);
+  }
+
+  // Resolve via FuelStationConfig (the single source of truth for station→checkpoint mapping).
+  // Only stations that have fuelRecordFieldGoing or fuelRecordFieldReturning configured are
+  // present in stationMappings — stations without those fields are absent so we don't
+  // accidentally return undefined and silently skip a revert.
+  if (!fieldToUpdate) {
+    const stationMappings = await getStationToFuelFieldMapping();
+    const fieldMapping = stationMappings[stationUpper];
+
+    if (!fieldMapping) {
+      logger.warn(`No checkpoint field configured in FuelStationConfig for station "${stationUpper}". Set fuelRecordFieldGoing / fuelRecordFieldReturning in the station admin to enable automated fuel-record sync.`);
+      return undefined;
+    }
+
+    fieldToUpdate = direction === 'going' ? fieldMapping.going : fieldMapping.returning;
+    if (!fieldToUpdate) {
+      fieldToUpdate = direction === 'going' ? fieldMapping.returning : fieldMapping.going;
+    }
+  }
+
+  return fieldToUpdate;
+}
+
+/**
  * Update fuel record when LPO entry is created/updated
  * @param doNumber - DO number for identifying the fuel record
  * @param litersChange - positive for deduction, negative for reverting
@@ -275,7 +340,17 @@ async function updateFuelRecordForLPOEntry(
     customGoingCheckpoint?: string;
     customReturnCheckpoint?: string;
   },
-  batch?: FuelUpdateBatch
+  batch?: FuelUpdateBatch,
+  opts?: {
+    session?: ClientSession;
+    // When provided, this exact FuelRecord column is written (manual checkpoint
+    // pick). Must be one of FUEL_CHECKPOINT_FIELDS — station/direction derivation
+    // is skipped entirely.
+    explicitField?: string;
+    // In session/transaction mode emit + journey-promotion are deferred to the
+    // caller (post-commit); touched record ids are collected here.
+    touchedIds?: Set<string>;
+  }
 ): Promise<void> {
   try {
     // Check for NIL DO, Driver Account, or REF entries
@@ -283,7 +358,7 @@ async function updateFuelRecordForLPOEntry(
     const isNilDO = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A';
     const isRefEntry = doNoUpper === 'REF';
 
-    logger.debug(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}, cancellationPoint=${cancellationPoint || 'N/A'}, customInfo=${JSON.stringify(customCheckpointInfo || {})}`);
+    logger.debug(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}, cancellationPoint=${cancellationPoint || 'N/A'}, explicitField=${opts?.explicitField || 'N/A'}, customInfo=${JSON.stringify(customCheckpointInfo || {})}`);
 
     // Skip fuel record update for NIL DOs (expected for Driver Account and CASH entries)
     if (isNilDO) {
@@ -297,8 +372,8 @@ async function updateFuelRecordForLPOEntry(
       return;
     }
 
-    const result = await findFuelRecordWithDirection(doNumber, truckNo, batch);
-    
+    const result = await findFuelRecordWithDirection(doNumber, truckNo, batch, opts?.session);
+
     if (!result) {
       logger.warn(`No fuel record found for DO ${doNumber} or truck ${truckNo} to update - possible data inconsistency`);
       return;
@@ -306,59 +381,18 @@ async function updateFuelRecordForLPOEntry(
 
     const { fuelRecord, direction } = result;
 
-    const stationUpper = station.toUpperCase().trim();
     let fieldToUpdate: string | undefined;
 
-    // For CUSTOM station, use the custom checkpoint based on direction
-    // If only one direction is configured, use that checkpoint regardless of detected direction
-    if (customCheckpointInfo?.isCustomStation) {
-      const hasGoing = !!customCheckpointInfo.customGoingCheckpoint;
-      const hasReturn = !!customCheckpointInfo.customReturnCheckpoint;
-      
-      if (hasGoing && hasReturn) {
-        // Both directions configured - use based on detected direction
-        if (direction === 'going') {
-          fieldToUpdate = customCheckpointInfo.customGoingCheckpoint;
-          logger.info(`Custom station (Going) -> field: ${fieldToUpdate}`);
-        } else {
-          fieldToUpdate = customCheckpointInfo.customReturnCheckpoint;
-          logger.info(`Custom station (Return) -> field: ${fieldToUpdate}`);
-        }
-      } else if (hasGoing) {
-        // Only going configured - use it for any direction
-        fieldToUpdate = customCheckpointInfo.customGoingCheckpoint;
-        logger.info(`Custom station (only Going configured) -> field: ${fieldToUpdate}`);
-      } else if (hasReturn) {
-        // Only return configured - use it for any direction  
-        fieldToUpdate = customCheckpointInfo.customReturnCheckpoint;
-        logger.info(`Custom station (only Return configured) -> field: ${fieldToUpdate}`);
-      } else {
-        logger.warn(`Custom station but no checkpoint configured for any direction`);
-      }
-    }
-    // For CASH station with cancellation point, use the cancellation point to determine the field
-    else if (stationUpper === 'CASH' && cancellationPoint) {
-      fieldToUpdate = CANCELLATION_POINT_TO_FUEL_FIELD[cancellationPoint];
-      logger.debug(`CASH mode with cancellation point ${cancellationPoint} -> field: ${fieldToUpdate}`);
-    }
-
-    // Fallback to station-based mapping if no cancellation point or no mapping found
-    if (!fieldToUpdate) {
-      const stationMappings = await getStationToFuelFieldMapping();
-      const fieldMapping = stationMappings[stationUpper] || STATION_TO_FUEL_FIELD_FALLBACK[stationUpper];
-
-      logger.debug(`Found fuel record ${fuelRecord._id} for truck ${truckNo}, direction=${direction}, station=${stationUpper}`);
-
-      if (!fieldMapping) {
-        logger.warn(`No field mapping for station "${stationUpper}" - available: ${Object.keys(stationMappings).join(', ')}`);
+    // Manual checkpoint pick: write the exact column the caller chose (validated).
+    if (opts?.explicitField) {
+      if (!FUEL_CHECKPOINT_FIELDS.has(opts.explicitField)) {
+        logger.warn(`Rejected invalid explicit checkpoint field "${opts.explicitField}" for truck ${truckNo}`);
         return;
       }
-
-      fieldToUpdate = direction === 'going' ? fieldMapping.going : fieldMapping.returning;
-
-      if (!fieldToUpdate) {
-        fieldToUpdate = direction === 'going' ? fieldMapping.returning : fieldMapping.going;
-      }
+      fieldToUpdate = opts.explicitField;
+      logger.debug(`Manual checkpoint -> field: ${fieldToUpdate}`);
+    } else {
+      fieldToUpdate = await resolveFuelFieldForEntry(station, direction, cancellationPoint, customCheckpointInfo);
     }
 
     if (!fieldToUpdate) {
@@ -371,10 +405,10 @@ async function updateFuelRecordForLPOEntry(
     const currentValue = Math.abs((fuelRecord as any)[fieldToUpdate] || 0);
     const oldBalance = fuelRecord.balance;
     const newValue = currentValue + litersChange; // For cancellation, litersChange is negative, so this subtracts
-    
+
     // Update balance: positive litersChange reduces balance, negative litersChange increases balance
     const newBalance = fuelRecord.balance - litersChange; // For cancellation, litersChange is negative, so this adds
-    
+
     const updateData: any = {};
     updateData[fieldToUpdate] = Math.max(0, newValue); // Ensure non-negative
     updateData.balance = newBalance;
@@ -397,20 +431,28 @@ async function updateFuelRecordForLPOEntry(
     const updatedRecord = await FuelRecord.findByIdAndUpdate(
       fuelRecord._id,
       { $set: updateData },
-      { new: true }
+      { new: true, session: opts?.session ?? null }
     );
 
     logger.debug(`✓ Updated fuel record ${fuelRecord._id} field ${fieldToUpdate}: ${litersChange > 0 ? 'deducted' : 'restored'} ${Math.abs(litersChange)}L`);
 
     if (updatedRecord) {
-      // Live-update the fuel records table for every connected client (no refresh).
-      emitDataChange('fuel_records', 'update', updatedRecord.toObject());
-      // If this LPO fill just started a queued journey (a start column went non-zero),
-      // auto-complete the truck's prior active journey and promote this one — live.
-      await checkAndPromoteStartedJourney(updatedRecord, 'lpo-system');
+      // In a transaction, defer the live-emit and journey promotion to the caller
+      // (post-commit) so we never run a nested transaction or emit uncommitted data.
+      if (opts?.session) {
+        opts.touchedIds?.add(updatedRecord._id.toString());
+      } else {
+        // Live-update the fuel records table for every connected client (no refresh).
+        emitDataChange('fuel_records', 'update', updatedRecord.toObject());
+        // If this LPO fill just started a queued journey (a start column went non-zero),
+        // auto-complete the truck's prior active journey and promote this one — live.
+        await checkAndPromoteStartedJourney(updatedRecord, 'lpo-system');
+      }
     }
   } catch (error: any) {
     logger.error(`Error updating fuel record for LPO: ${error.message}`);
+    // Inside a transaction the failure must abort the whole operation.
+    if (opts?.session) throw error;
   }
 }
 
@@ -780,6 +822,45 @@ export const getNextLPONumber = async (req: AuthRequest, res: Response): Promise
   }
 };
 
+/**
+ * Allocate the next canonical LPO number (XXXX/YY) for a year — the same scheme
+ * getNextLPONumber returns for the manual create form. Server-side LPO creators
+ * (forward, pick-up-at) use this so generated LPOs match the rest of the system
+ * instead of the legacy plain-integer format. Session-aware for transactions.
+ */
+async function allocateNextLpoNo(year: number, session?: ClientSession): Promise<string> {
+  const yearSuffix = year.toString().slice(-2);
+
+  const maxNewFmt = await LPOSummary.aggregate([
+    { $match: { isDeleted: false, year, lpoNo: { $regex: `/${yearSuffix}$` } } },
+    { $project: { seq: { $toInt: { $arrayElemAt: [{ $split: ['$lpoNo', '/'] }, 0] } } } },
+    { $group: { _id: null, maxSeq: { $max: '$seq' } } },
+  ]).session(session ?? null);
+
+  let nextSeq: number;
+  if (maxNewFmt.length > 0 && maxNewFmt[0].maxSeq != null) {
+    nextSeq = maxNewFmt[0].maxSeq + 1;
+  } else {
+    // No new-format LPOs this year yet — fall back to the legacy plain-int max so we
+    // don't restart from 1 mid-year during the format transition.
+    const legacy = await LPOSummary.aggregate([
+      { $match: { isDeleted: false, year } },
+      { $project: { lpoNoInt: { $toInt: '$lpoNo' } } },
+      { $group: { _id: null, maxLpoNo: { $max: '$lpoNoInt' } } },
+    ]).session(session ?? null);
+    nextSeq = (legacy[0]?.maxLpoNo ?? 0) + 1;
+  }
+
+  let nextLpoNo = formatDONumber(nextSeq, year);
+  let exists = await LPOSummary.exists({ lpoNo: nextLpoNo, isDeleted: false }).session(session ?? null);
+  while (exists) {
+    nextSeq++;
+    nextLpoNo = formatDONumber(nextSeq, year);
+    exists = await LPOSummary.exists({ lpoNo: nextLpoNo, isDeleted: false }).session(session ?? null);
+  }
+  return nextLpoNo;
+}
+
 
 /**
  * Sync DriverAccountEntry records when an LPO summary with driver account entries is updated.
@@ -1104,6 +1185,18 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     const fuelFlags = await getFuelAutomationFlags();
     const skippedAutomation = new Set<string>();
 
+    // Manual checkpoint overrides for edit/cancel from LPOSheetView. When the relevant
+    // automation flag is OFF, the operator can still drive the fuel deduct/add by naming
+    // the exact FuelRecord column per entry (keyed by `${doNo}-${truckNo}`). Validated
+    // against the real columns; anything else is ignored (falls back to skip).
+    const rawManualCheckpoints = (newData.manualCheckpoints || {}) as Record<string, string>;
+    const manualFieldFor = (e: EntryType): string | undefined => {
+      const f = rawManualCheckpoints[`${e.doNo}-${e.truckNo}`];
+      return f && FUEL_CHECKPOINT_FIELDS.has(f) ? f : undefined;
+    };
+    // Strip the override map so it is never persisted onto the LPO document.
+    if ('manualCheckpoints' in newData) delete newData.manualCheckpoints;
+
     // Get date info for driver account entries
     const dateObj = new Date(newData.date || existingLpo.date);
     const month = dateObj.toLocaleString('default', { month: 'long' });
@@ -1130,6 +1223,13 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
               customReturnCheckpoint: newEntry.customReturnCheckpoint || oldEntry.customReturnCheckpoint,
             } : undefined
           );
+        } else if (manualFieldFor(newEntry)) {
+          // Automation off, but operator chose the checkpoint manually.
+          await updateFuelRecordForLPOEntry(
+            newEntry.doNo, newEntry.liters, newData.station || existingLpo.station, newEntry.truckNo,
+            undefined, undefined, undefined, { explicitField: manualFieldFor(newEntry) }
+          );
+          logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} re-deducted for ${newEntry.truckNo}`);
         } else {
           skippedAutomation.add('lpoCancelRevert');
           logger.info(`[fuelAutomation] lpoCancelRevert OFF — skipping restore re-deduction for ${newEntry.truckNo}`);
@@ -1182,6 +1282,13 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
               customReturnCheckpoint: oldEntry.customReturnCheckpoint,
             } : undefined
           );
+        } else if (manualFieldFor(newEntry)) {
+          // Automation off, but operator chose the checkpoint manually.
+          await updateFuelRecordForLPOEntry(
+            oldEntry.doNo, -oldEntry.liters, existingLpo.station, oldEntry.truckNo,
+            undefined, undefined, undefined, { explicitField: manualFieldFor(newEntry) }
+          );
+          logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} reverted for ${oldEntry.truckNo}`);
         } else {
           skippedAutomation.add('lpoCancelRevert');
           logger.info(`[fuelAutomation] lpoCancelRevert OFF — skipping cancellation revert for ${oldEntry.truckNo}`);
@@ -1250,6 +1357,13 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
               customReturnCheckpoint: newEntry.customReturnCheckpoint || oldEntry.customReturnCheckpoint,
             } : undefined
           );
+        } else if (manualFieldFor(newEntry)) {
+          // Automation off, but operator chose the checkpoint manually.
+          await updateFuelRecordForLPOEntry(
+            oldEntry.doNo, difference, newData.station || existingLpo.station, oldEntry.truckNo,
+            undefined, undefined, undefined, { explicitField: manualFieldFor(newEntry) }
+          );
+          logger.info(`[fuelAutomation] lpoEditAdjust OFF — manual checkpoint ${manualFieldFor(newEntry)} adjusted (${difference}L) for ${oldEntry.truckNo}`);
         } else {
           skippedAutomation.add('lpoEditAdjust');
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — skipping liters adjustment (${difference}L) for ${oldEntry.truckNo}`);
@@ -2466,47 +2580,18 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
     const dateObj = new Date(lpoDate);
     const year = dateObj.getFullYear();
 
-    // Get next LPO number for this year
-    let nextNumber = 1;
-    const lastLpo = await LPOSummary.findOne({ 
-      isDeleted: false,
-      year: year 
-    })
-      .sort({ lpoNo: -1 })
-      .select('lpoNo')
-      .lean();
-
-    if (lastLpo && (lastLpo as any).lpoNo) {
-      const lastNumber = parseInt((lastLpo as any).lpoNo, 10);
-      if (!isNaN(lastNumber)) {
-        nextNumber = lastNumber + 1;
-      }
-    }
-
-    // Make sure the number doesn't already exist for this year
-    let exists = await LPOSummary.exists({ 
-      lpoNo: nextNumber.toString(), 
-      year: year,
-      isDeleted: false 
-    });
-    while (exists) {
-      nextNumber++;
-      exists = await LPOSummary.exists({ 
-        lpoNo: nextNumber.toString(), 
-        year: year,
-        isDeleted: false 
-      });
-    }
-
     // Calculate total
     const total = forwardedEntries.reduce((sum: number, entry: any) => sum + entry.amount, 0);
 
     // Ensure workbook exists for this year
     await getOrCreateWorkbook(year);
 
+    // Get next canonical LPO number (XXXX/YY) for this year
+    const nextLpoNo = await allocateNextLpoNo(year);
+
     // Create the forwarded LPO
     const forwardedLpo = await LPOSummary.create({
-      lpoNo: nextNumber.toString(),
+      lpoNo: nextLpoNo,
       date: lpoDate,
       year,
       station: targetStation.toUpperCase(),
@@ -2573,6 +2658,294 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
   } catch (error: any) {
     throw error;
   }
+};
+
+/**
+ * Pick-up-at: a set of trucks ordered fuel at one station but actually filled at
+ * another. In a single all-or-nothing transaction this:
+ *   1. Cancels the selected trucks on the source LPO and reverts their fuel.
+ *   2. Creates a new LPO at the chosen station for those trucks (same liters by
+ *      default, or a uniform override) and deducts their fuel there.
+ *
+ * Fuel netting is always "deduct old + add new": same liters nets the balance to
+ * zero (the fuel just moves columns); different liters nets the difference.
+ *
+ * Checkpoint selection:
+ *   - When `lpoPickupAuto` is ON, the deduct/add columns are auto-derived from the
+ *     station + the DO-derived direction (existing logic).
+ *   - When OFF (e.g. raw imported records with no checkpoints), the caller supplies
+ *     a per-truck `revertField` (column to revert at the source) and `addField`
+ *     (column to deduct at the target). Direction is determined per truck by its DO
+ *     number on the client, so going trucks pick going columns and returning trucks
+ *     pick returning columns. Both must be real FuelRecord columns.
+ */
+// REF / NIL / Driver-Account entries never have a fuel record. Pick-up moves them
+// to the new LPO but skips fuel netting and (in manual mode) the checkpoint columns.
+const isNoFuelRecordEntry = (entry: any): boolean => {
+  const doUp = (entry?.doNo || '').toString().trim().toUpperCase();
+  return (
+    entry?.isDriverAccount === true ||
+    entry?.isRefer === true ||
+    doUp === '' || doUp === 'NIL' || doUp === 'N/A' || doUp === 'REF' || doUp === 'DA'
+  );
+};
+
+export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<void> => {
+  const {
+    sourceLpoId,
+    targetStation,
+    customStationName,
+    customGoingCheckpoint,
+    customReturnCheckpoint,
+    rate,
+    date,
+    orderOf,
+    lpoNo,                         // optional preferred number (previewed client-side); used if still free
+    litersMode = 'same',           // 'same' (keep each truck's liters) | 'uniform'
+    uniformLiters,                 // required when litersMode === 'uniform'
+    trucks,                        // [{ doNo, truckNo, liters?, revertField?, addField? }]
+  } = req.body;
+
+  if (!sourceLpoId || !targetStation || !rate) {
+    throw new ApiError(400, 'Source LPO ID, target station, and rate are required');
+  }
+  if (!Array.isArray(trucks) || trucks.length === 0) {
+    throw new ApiError(400, 'At least one truck must be selected for pick-up-at');
+  }
+  if (litersMode === 'uniform' && (!uniformLiters || uniformLiters <= 0)) {
+    throw new ApiError(400, 'Uniform liters must be greater than 0 when litersMode is "uniform"');
+  }
+
+  const isCustomTarget = String(targetStation).toUpperCase() === 'CUSTOM';
+  if (isCustomTarget && !customStationName) {
+    throw new ApiError(400, 'Custom station name is required when target is CUSTOM');
+  }
+
+  const fuelFlags = await getFuelAutomationFlags();
+  // Manual columns are required when auto is off, OR when the target is a CUSTOM
+  // (unlisted) station — there is no station→column mapping to auto-derive from.
+  const autoCheckpoints = fuelFlags.lpoPickupAuto && !isCustomTarget;
+
+  // The manual-checkpoint requirement is enforced per truck inside the transaction
+  // (below), once each source entry is resolved — REF / NIL / Driver-Account entries
+  // have no fuel record and are exempt.
+
+  // Resolve the target station's currency the same way createLPOSummary does.
+  let resolvedCurrency: 'USD' | 'TZS' = 'TZS';
+  if (targetStation && String(targetStation).toUpperCase() !== 'CASH' && !isCustomTarget) {
+    const stationConfig = await FuelStationConfig.findOne({ stationName: targetStation, isActive: true }).lean();
+    if (stationConfig?.currency) {
+      resolvedCurrency = stationConfig.currency as 'USD' | 'TZS';
+    } else {
+      const upper = String(targetStation).toUpperCase();
+      if (upper.startsWith('LAKE') && !upper.includes('TUNDUMA')) resolvedCurrency = 'USD';
+    }
+  }
+
+  const touchedIds = new Set<string>();
+  let createdLpo: any = null;
+  let sourceLpoNo = '';
+  let pickedUpCount = 0;
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const sourceLpo = await LPOSummary.findOne({ _id: sourceLpoId, isDeleted: false }).session(session);
+      if (!sourceLpo) {
+        throw new ApiError(404, 'Source LPO not found');
+      }
+      sourceLpoNo = sourceLpo.lpoNo;
+
+      if (String(sourceLpo.station).toUpperCase() === String(targetStation).toUpperCase()) {
+        throw new ApiError(400, 'Target station cannot be the same as the source station');
+      }
+
+      // Resolve each requested truck to its live (active, non-cancelled) source entry.
+      const selected: { entry: any; liters: number; revertField?: string; addField?: string; special: boolean }[] = [];
+      for (const t of trucks) {
+        const entry: any = sourceLpo.entries.find(
+          (e: any) => e.doNo === t.doNo && e.truckNo === t.truckNo && !e.isCancelled
+        );
+        if (!entry) {
+          throw new ApiError(400, `Truck ${t.truckNo} (DO ${t.doNo}) is not an active entry on LPO ${sourceLpo.lpoNo}`);
+        }
+        const special = isNoFuelRecordEntry(entry);
+        // Manual mode: a real fuel-record entry must carry valid revert/add columns.
+        // Special entries (REF/NIL/DA) have no fuel record, so checkpoints don't apply.
+        if (!autoCheckpoints && !special) {
+          if (!t.revertField || !FUEL_CHECKPOINT_FIELDS.has(t.revertField)) {
+            throw new ApiError(400, `Truck ${t.truckNo}: a valid revert checkpoint is required (manual mode)`);
+          }
+          if (!t.addField || !FUEL_CHECKPOINT_FIELDS.has(t.addField)) {
+            throw new ApiError(400, `Truck ${t.truckNo}: a valid destination checkpoint is required (manual mode)`);
+          }
+        }
+        // Per-truck liters take precedence (edited in the table); fall back to the
+        // legacy uniform/same modes, then the source entry's own liters.
+        const newLiters = t.liters != null && Number(t.liters) > 0
+          ? Number(t.liters)
+          : (litersMode === 'uniform' ? Number(uniformLiters) : entry.liters);
+        if (!(newLiters > 0)) {
+          throw new ApiError(400, `Truck ${t.truckNo}: liters must be greater than 0`);
+        }
+        selected.push({ entry, liters: newLiters, revertField: t.revertField, addField: t.addField, special });
+      }
+
+      const now = new Date();
+
+      // 1. Cancel selected trucks on the source LPO and revert their fuel.
+      for (const sel of selected) {
+        const { entry } = sel;
+        // Special entries (REF/NIL/DA) have no fuel record — just cancel them.
+        if (!sel.special) {
+          await updateFuelRecordForLPOEntry(
+            entry.doNo,
+            -entry.liters, // revert exactly what was deducted at the source
+            sourceLpo.station,
+            entry.truckNo,
+            entry.cancellationPoint,
+            entry.isCustomStation ? {
+              isCustomStation: entry.isCustomStation,
+              customGoingCheckpoint: entry.customGoingCheckpoint,
+              customReturnCheckpoint: entry.customReturnCheckpoint,
+            } : undefined,
+            undefined,
+            { session, touchedIds, explicitField: autoCheckpoints ? undefined : sel.revertField }
+          );
+        }
+        entry.isCancelled = true;
+        entry.cancelledAt = now;
+        entry.cancellationReason = `Picked up at ${isCustomTarget ? customStationName : targetStation}`;
+      }
+      sourceLpo.total = sourceLpo.entries
+        .filter((e: any) => !e.isCancelled)
+        .reduce((sum: number, e: any) => sum + e.amount, 0);
+      sourceLpo.markModified('entries');
+      await sourceLpo.save({ session });
+
+      // 2. Build the new LPO entries (preserve DO/dest/direction; same or uniform liters).
+      const newEntries = selected.map((sel) => ({
+        doNo: sel.entry.doNo,
+        truckNo: sel.entry.truckNo,
+        liters: sel.liters,
+        rate,
+        amount: sel.liters * rate,
+        dest: sel.entry.dest,
+        isCancelled: false,
+        // Preserve the source entry's nature so picked-up REF / Driver-Account
+        // entries stay correctly categorised at the target.
+        isDriverAccount: sel.entry.isDriverAccount || false,
+        isRefer: sel.entry.isRefer || false,
+        referenceDo: sel.entry.referenceDo,
+        referenceDoNo: sel.entry.referenceDoNo,
+        originalLiters: null,
+        amendedAt: null,
+        cancellationPoint: sel.entry.cancellationPoint,
+        isCustomStation: isCustomTarget,
+        customStationName: isCustomTarget ? customStationName : sel.entry.customStationName,
+        customGoingCheckpoint: isCustomTarget ? customGoingCheckpoint : sel.entry.customGoingCheckpoint,
+        customReturnCheckpoint: isCustomTarget ? customReturnCheckpoint : sel.entry.customReturnCheckpoint,
+      }));
+
+      const lpoDate = date || new Date().toISOString().split('T')[0];
+      const year = new Date(lpoDate).getFullYear();
+      await getOrCreateWorkbook(year);
+
+      // Use the client-previewed number if it's still free; otherwise allocate the
+      // next canonical XXXX/YY (session-consistent) so concurrent creates can't collide.
+      const requestedLpoNo = (lpoNo || '').toString().trim();
+      let newLpoNo: string;
+      if (requestedLpoNo) {
+        const taken = await LPOSummary.exists({ lpoNo: requestedLpoNo, isDeleted: false }).session(session);
+        newLpoNo = taken ? await allocateNextLpoNo(year, session) : requestedLpoNo;
+      } else {
+        newLpoNo = await allocateNextLpoNo(year, session);
+      }
+
+      const total = newEntries.reduce((sum, e) => sum + e.amount, 0);
+      const created = await LPOSummary.create([{
+        lpoNo: newLpoNo,
+        date: lpoDate,
+        year,
+        station: String(targetStation).toUpperCase(),
+        orderOf: orderOf || sourceLpo.orderOf,
+        currency: resolvedCurrency,
+        entries: newEntries,
+        total,
+        forwardedFrom: {
+          lpoId: sourceLpo._id,
+          lpoNo: sourceLpo.lpoNo,
+          station: sourceLpo.station,
+        },
+        isCustomStation: isCustomTarget,
+        customStationName: isCustomTarget ? customStationName : undefined,
+        customGoingCheckpoint: isCustomTarget ? customGoingCheckpoint : undefined,
+        customReturnCheckpoint: isCustomTarget ? customReturnCheckpoint : undefined,
+      }], { session });
+      createdLpo = created[0];
+
+      // 3. Deduct fuel for each new entry at the target (skip special entries —
+      //    REF/NIL/DA carry no fuel record).
+      for (let i = 0; i < newEntries.length; i++) {
+        if (selected[i].special) continue;
+        const e = newEntries[i];
+        await updateFuelRecordForLPOEntry(
+          e.doNo,
+          e.liters,
+          String(targetStation),
+          e.truckNo,
+          e.cancellationPoint,
+          isCustomTarget ? {
+            isCustomStation: true,
+            customGoingCheckpoint,
+            customReturnCheckpoint,
+          } : undefined,
+          undefined,
+          { session, touchedIds, explicitField: autoCheckpoints ? undefined : selected[i].addField }
+        );
+      }
+
+      pickedUpCount = newEntries.length;
+    });
+  } catch (error: any) {
+    await session.endSession();
+    if (error instanceof ApiError) throw error;
+    logger.error(`Pick-up-at failed for LPO ${sourceLpoId}: ${error.message}`);
+    throw new ApiError(500, `Pick-up-at failed: ${error.message}`);
+  }
+  await session.endSession();
+
+  // Post-commit: live-update affected fuel records and run journey promotion.
+  if (touchedIds.size > 0) {
+    const records = await FuelRecord.find({ _id: { $in: Array.from(touchedIds) } });
+    for (const rec of records) {
+      emitDataChange('fuel_records', 'update', rec.toObject());
+      await checkAndPromoteStartedJourney(rec, req.user?.username || 'lpo-system');
+    }
+  }
+  emitDataChange('lpo_summaries', 'update');
+  emitDataChange('lpo_summaries', 'create');
+
+  await AuditService.log({
+    userId: req.user?.userId,
+    username: req.user?.username || 'system',
+    action: 'UPDATE',
+    resourceType: 'LPOSummary',
+    resourceId: createdLpo?.lpoNo,
+    details: `Picked up ${pickedUpCount} truck(s) from LPO ${sourceLpoNo} to ${targetStation} as LPO ${createdLpo?.lpoNo} (checkpoints: ${autoCheckpoints ? 'auto' : 'manual'}) by ${req.user?.username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
+  res.status(201).json({
+    success: true,
+    message: `Picked up ${pickedUpCount} truck(s) from LPO ${sourceLpoNo} to ${targetStation} as LPO ${createdLpo?.lpoNo}`,
+    data: {
+      sourceLpo: { id: sourceLpoId, lpoNo: sourceLpoNo },
+      pickedUpLpo: createdLpo,
+      entriesPickedUp: pickedUpCount,
+    },
+  });
 };
 
 /**

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from 'react-toastify';
-import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search } from 'lucide-react';
+import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search, ArrowRight } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, FuelAutomationConfig } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -8,13 +8,16 @@ import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGene
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { formatTruckNumber } from '../utils/dataCleanup';
-import { 
-  generateCancellationReport, 
+import {
+  generateCancellationReport,
   formatEntryForDisplay,
   saveCancellationToHistory,
   getAutoCancellationPoint,
-  getCancellationPointDisplayName
+  getCancellationPointDisplayName,
+  FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
+import PickupAtModal from './PickupAtModal';
+import FuelRecordInspectModal from './FuelRecordInspectModal';
 
 interface LPOSheetViewProps {
   sheet: LPOSheet;
@@ -46,6 +49,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [entryTypeMessage, setEntryTypeMessage] = useState<string | null>(null);
   const [entryType, setEntryType] = useState<'driver-account' | 'nil-do' | 'regular' | null>(null);
+  // Manual checkpoint selection for cancel when lpoCancelRevert automation is OFF
+  const [detectedFuelRecordId, setDetectedFuelRecordId] = useState<string | number | null>(null);
+  const [cancelManualField, setCancelManualField] = useState<string>('');
+  const [showCancelInspect, setShowCancelInspect] = useState(false);
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
   const [showCancelAllModal, setShowCancelAllModal] = useState(false);
   const [isCancellingAll, setIsCancellingAll] = useState(false);
@@ -54,6 +61,92 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [highlightedTruckNo, setHighlightedTruckNo] = useState<string | null>(null);
   const entryRowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const highlightedForRef = useRef<string | null>(null);
+
+  // Pick-up-at multi-select (operates on the full-array originalIndex)
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [showPickupModal, setShowPickupModal] = useState(false);
+
+  // A regular entry backed by a fuel record (real DO, not DA/REF/NIL). Used to gate
+  // the manual fuel-checkpoint prompt on edit — those special entries have no record.
+  const hasFuelRecord = (entry: LPODetail): boolean => {
+    const doUp = (entry.doNo || '').toUpperCase().trim();
+    return (
+      !entry.isCancelled &&
+      !entry.isDriverAccount &&
+      !(entry as any).isRefer &&
+      doUp !== '' && doUp !== 'NIL' && doUp !== 'N/A' && doUp !== 'REF' && doUp !== 'DA'
+    );
+  };
+
+  // Any active entry is pickable — including REF / NIL / Driver-Account entries.
+  // Those carry no fuel record, so pick-up just moves them (no fuel netting); the
+  // modal and backend detect and skip the fuel/checkpoint steps for them.
+  const isPickable = (entry: LPODetail): boolean =>
+    !entry.isCancelled && (entry.truckNo || '').trim() !== '';
+
+  const toggleSelect = (index: number) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      next.has(index) ? next.delete(index) : next.add(index);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIndices(new Set());
+  const selectAllPickable = () => {
+    setSelectedIndices(new Set(
+      editedSheet.entries.map((e, i) => (isPickable(e) ? i : -1)).filter((i) => i >= 0)
+    ));
+  };
+
+  // Memoized so the pickup modal doesn't see a fresh array reference on every render.
+  const selectedEntries = useMemo(
+    () => editedSheet.entries.filter((_, i) => selectedIndices.has(i)),
+    [editedSheet.entries, selectedIndices]
+  );
+
+  // Stable source-LPO object for the pickup modal (same reason).
+  const pickupSourceLpo = useMemo(
+    () => ({
+      id: editedSheet.id ? String(editedSheet.id) : undefined,
+      lpoNo: editedSheet.lpoNo,
+      station: editedSheet.station,
+      orderOf: editedSheet.orderOf,
+      date: editedSheet.date,
+    }),
+    [editedSheet.id, editedSheet.lpoNo, editedSheet.station, editedSheet.orderOf, editedSheet.date]
+  );
+
+  // Acquire the LPO edit lock before opening pickup (same lock the detail form / row
+  // edit use) so another user can't edit or pick up this LPO until we close the modal.
+  const handleOpenPickup = async () => {
+    if (sheet.id) {
+      try {
+        await lpoDocumentsAPI.acquireLock(sheet.id);
+      } catch (err: any) {
+        if (err.response?.status === 423) {
+          const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+          toast.error(`This LPO is being edited by ${lockHolder}. Try again once they're done.`);
+          return;
+        }
+      }
+    }
+    setShowPickupModal(true);
+  };
+
+  const handleClosePickup = async () => {
+    setShowPickupModal(false);
+    await releaseLockIfNeeded();
+  };
+
+  const handlePickupComplete = async () => {
+    setShowPickupModal(false);
+    clearSelection();
+    await releaseLockIfNeeded();
+    await refreshSheet();
+  };
+
+  // Reset selection whenever we switch to a different LPO.
+  useEffect(() => { setSelectedIndices(new Set()); }, [lpoNo]);
 
   useEffect(() => {
     setEditedSheet(sheet);
@@ -230,14 +323,21 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }
   };
 
-  // Save a single row edit to the backend
-  const handleRowSave = async (_index: number) => {
+  // Save a single row edit to the backend. When a manual checkpoint is supplied
+  // (lpoEditAdjust automation OFF), it's attached so the backend adjusts that column.
+  const handleRowSave = async (index: number, manualField?: string) => {
     if (isSaving) return; // Prevent double submission
     setIsSaving(true);
     try {
-      const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, editedSheet);
+      let payload: any = editedSheet;
+      if (manualField) {
+        const e = editedSheet.entries[index];
+        payload = { ...editedSheet, manualCheckpoints: { [`${e.doNo}-${e.truckNo}`]: manualField } };
+      }
+      const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, payload);
       onUpdate(updatedSheet);
       setEditingRow(null);
+      setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false });
       await releaseLockIfNeeded();
       toast.success('Entry updated! Fuel records have been adjusted.');
     } catch (error) {
@@ -246,6 +346,41 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Edit-side manual checkpoint state (when lpoEditAdjust automation is OFF).
+  const [editCheckpoint, setEditCheckpoint] = useState<{
+    open: boolean;
+    index: number | null;
+    direction: 'going' | 'returning' | null;
+    fuelRecordId: string | number | null;
+    field: string;
+    loading: boolean;
+  }>({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false });
+  const [showEditInspect, setShowEditInspect] = useState(false);
+
+  // Decide whether a row save needs a manual checkpoint pick first.
+  const requestRowSave = async (index: number) => {
+    const orig = sheet.entries[index];
+    const cur = editedSheet.entries[index];
+    const litersChanged = !!orig && cur.liters !== orig.liters;
+    if (fuelAutomation?.lpoEditAdjust === false && litersChanged && hasFuelRecord(cur)) {
+      setEditCheckpoint({ open: true, index, direction: null, fuelRecordId: null, field: '', loading: true });
+      try {
+        const res = await fuelRecordsAPI.getByDoNumber(cur.doNo);
+        const fr: any = res?.fuelRecord;
+        setEditCheckpoint((p) => ({
+          ...p,
+          loading: false,
+          direction: res?.direction ?? 'going',
+          fuelRecordId: fr?.id ?? fr?._id ?? null,
+        }));
+      } catch {
+        setEditCheckpoint((p) => ({ ...p, loading: false, direction: 'going' }));
+      }
+      return;
+    }
+    await handleRowSave(index);
   };
 
   // Cancel row edit - revert to original values
@@ -289,6 +424,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setDetectionError(null);
     setEntryTypeMessage(null);
     setEntryType(null);
+    setDetectedFuelRecordId(null);
+    setCancelManualField('');
     setIsDetecting(true);
     setShowCancelModal(true);
 
@@ -328,6 +465,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         setEntryType('regular');
         setEntryTypeMessage('✓ Fuel record found. Cancelling this entry will revert the fuel allocation in the fuel record.');
         setDetectedDirection(result.direction);
+        const fr: any = result.fuelRecord;
+        setDetectedFuelRecordId(fr?.id ?? fr?._id ?? null);
         const cancellationPoint = getAutoCancellationPoint(editedSheet.station, result.direction);
         setDetectedCancellationPoint(cancellationPoint);
       } else {
@@ -361,6 +500,13 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       return;
     }
 
+    // When revert automation is OFF, a manual checkpoint must be chosen for regular entries.
+    const needsManualCheckpoint = entryType === 'regular' && fuelAutomation?.lpoCancelRevert === false;
+    if (needsManualCheckpoint && !cancelManualField) {
+      toast.error('Please select the checkpoint to revert the fuel from.');
+      return;
+    }
+
     if (isSaving) return;
     setIsSaving(true);
 
@@ -390,17 +536,24 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         .filter(e => !e.isCancelled)
         .reduce((sum, e) => sum + e.amount, 0);
 
-      const updatedSheet = {
+      const targetEntry = updatedEntries[cancellingEntryIndex];
+      const updatedSheet: any = {
         ...editedSheet,
         entries: updatedEntries,
         total: newTotal
       };
+      // Manual checkpoint override (automation OFF) — backend reverts the chosen column.
+      if (needsManualCheckpoint && cancelManualField) {
+        updatedSheet.manualCheckpoints = {
+          [`${targetEntry.doNo}-${targetEntry.truckNo}`]: cancelManualField,
+        };
+      }
 
       // Save to backend
       const savedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, updatedSheet);
       onUpdate(savedSheet);
       setEditedSheet(savedSheet);
-      
+
       // Generate success message based on entry type
       let successMessage = '✓ Entry cancelled successfully!';
       if (entryType === 'driver-account') {
@@ -999,6 +1152,35 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         </div>
       )}
 
+      {/* Pick-up-at selection toolbar */}
+      {selectedIndices.size > 0 && (
+        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800">
+          <span className="text-sm font-medium text-indigo-800 dark:text-indigo-200">
+            {selectedIndices.size} truck{selectedIndices.size !== 1 ? 's' : ''} selected
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={selectAllPickable}
+              className="px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-white dark:bg-gray-800 border border-indigo-200 dark:border-indigo-700 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/40"
+            >
+              Select all active
+            </button>
+            <button
+              onClick={clearSelection}
+              className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              Clear
+            </button>
+            <button
+              onClick={handleOpenPickup}
+              className="flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded"
+            >
+              <ArrowRight className="w-3.5 h-3.5" /> Pick up at…
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sheet Content */}
       <div className="flex-1 overflow-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
 
@@ -1054,7 +1236,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px'}}>
                         <span className="text-[10px] font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Editing Entry</span>
                         <div style={{display: 'flex', gap: '8px', flexShrink: 0}}>
-                          <button onClick={() => handleRowSave(originalIndex)} disabled={isSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold disabled:opacity-50">
+                          <button onClick={() => requestRowSave(originalIndex)} disabled={isSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold disabled:opacity-50">
                             <Save className="w-3.5 h-3.5" />{isSaving ? 'Saving…' : 'Save'}
                           </button>
                           <button onClick={() => handleRowCancel(originalIndex)} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-bold bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
@@ -1091,6 +1273,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
+                            {isPickable(entry) && (
+                              <input
+                                type="checkbox"
+                                checked={selectedIndices.has(originalIndex)}
+                                onChange={() => toggleSelect(originalIndex)}
+                                className="w-4 h-4 accent-indigo-600 flex-shrink-0"
+                                title="Select for pick-up-at"
+                              />
+                            )}
                             <span className={`text-[17px] font-extrabold tracking-tight ${isCancelled ? 'line-through text-red-500 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
                               {entry.truckNo}
                             </span>
@@ -1190,7 +1381,22 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
             {/* Table Header */}
             <div className="bg-blue-50 dark:bg-blue-900/30 border-b border-gray-300 dark:border-gray-700">
-              <div className="grid grid-cols-7 gap-0">
+              <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-0">
+                <div className="px-2 py-2 flex items-center justify-center border-r border-gray-300 dark:border-gray-700">
+                  {(() => {
+                    const pickableCount = editedSheet.entries.filter(isPickable).length;
+                    return (
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-indigo-600"
+                        disabled={pickableCount === 0}
+                        checked={pickableCount > 0 && selectedIndices.size === pickableCount}
+                        onChange={(e) => (e.target.checked ? selectAllPickable() : clearSelection())}
+                        title="Select all active trucks"
+                      />
+                    );
+                  })()}
+                </div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700">DO No.</div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700">Truck No.</div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-right">Liters</div>
@@ -1226,7 +1432,18 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 }}
                 className={rowClass}
               >
-                <div className="grid grid-cols-7 gap-0">
+                <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-0">
+                  <div className="px-2 py-2 flex items-center justify-center border-r border-gray-300 dark:border-gray-700">
+                    {isPickable(entry) && editingRow !== originalIndex && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIndices.has(originalIndex)}
+                        onChange={() => toggleSelect(originalIndex)}
+                        className="w-4 h-4 accent-indigo-600"
+                        title="Select for pick-up-at"
+                      />
+                    )}
+                  </div>
                   <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700">
                     {editingRow === originalIndex ? (
                       <input
@@ -1324,7 +1541,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                       ) : editingRow === originalIndex ? (
                         <>
                           <button
-                            onClick={() => handleRowSave(originalIndex)}
+                            onClick={() => requestRowSave(originalIndex)}
                             className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
                             title="Save & Update Fuel Record"
                           >
@@ -1375,7 +1592,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
             {/* Total Row */}
             <div className="bg-blue-100 dark:bg-blue-900/40 font-semibold">
-              <div className="grid grid-cols-7 gap-0">
+              <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-0">
+                <div className="px-2 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700 text-right text-gray-900 dark:text-gray-100">TOTAL</div>
@@ -1558,14 +1776,37 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   </div>
 
                   {entryType === 'regular' && fuelAutomation?.lpoCancelRevert === false ? (
-                    <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg space-y-2">
                       <p className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
                         <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                         <span>
-                          <strong>Automation OFF — Revert on LPO cancellation:</strong>{' '}
-                          The fuel deduction of {editedSheet.entries[cancellingEntryIndex].liters}L will <strong>not</strong> be automatically reverted from the {detectedDirection} checkpoint ({detectedCancellationPoint ? getCancellationPointDisplayName(detectedCancellationPoint) : 'Unknown'}). Reconcile this fuel record manually after cancelling.
+                          <strong>Automation OFF — choose the checkpoint to revert.</strong>{' '}
+                          Direction is <strong>{detectedDirection === 'returning' ? 'returning' : 'going'}</strong>. The {editedSheet.entries[cancellingEntryIndex].liters}L will be reverted from the column you pick.
                         </span>
                       </p>
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase mb-1">Revert checkpoint</label>
+                          <select
+                            value={cancelManualField}
+                            onChange={(e) => setCancelManualField(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-amber-300 dark:border-amber-700 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="">Select column…</option>
+                            {(detectedDirection === 'returning' ? FUEL_RECORD_COLUMNS.return : FUEL_RECORD_COLUMNS.going).map((c) => (
+                              <option key={c.field} value={c.field}>{c.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {detectedFuelRecordId != null && (
+                          <button
+                            onClick={() => setShowCancelInspect(true)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          >
+                            <Search className="w-3.5 h-3.5" /> Inspect
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
@@ -1601,7 +1842,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
               </button>
               <button
                 onClick={handleCancelEntry}
-                disabled={isDetecting || !detectedCancellationPoint || isSaving}
+                disabled={
+                  isDetecting || !detectedCancellationPoint || isSaving ||
+                  (entryType === 'regular' && fuelAutomation?.lpoCancelRevert === false && !cancelManualField)
+                }
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? 'Processing...' : 'Confirm Cancellation'}
@@ -1697,6 +1941,103 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pick-up-at Modal */}
+      {showPickupModal && (
+        <PickupAtModal
+          isOpen={showPickupModal}
+          onClose={handleClosePickup}
+          sourceLpo={pickupSourceLpo}
+          selectedEntries={selectedEntries}
+          fuelAutomation={fuelAutomation}
+          onComplete={handlePickupComplete}
+        />
+      )}
+
+      {/* Inspect fuel record from the cancel modal */}
+      {showCancelInspect && detectedFuelRecordId != null && (
+        <FuelRecordInspectModal
+          isOpen={showCancelInspect}
+          onClose={() => setShowCancelInspect(false)}
+          fuelRecordId={detectedFuelRecordId}
+          truckNumber={cancellingEntryIndex !== null ? editedSheet.entries[cancellingEntryIndex]?.truckNo : undefined}
+        />
+      )}
+
+      {/* Edit-side manual checkpoint modal (lpoEditAdjust OFF + liters changed) */}
+      {editCheckpoint.open && editCheckpoint.index !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Choose Adjustment Checkpoint</h3>
+              <button
+                onClick={() => setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false })}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Fuel automation for edits is OFF. The liters change for{' '}
+                <strong>{editedSheet.entries[editCheckpoint.index].truckNo}</strong> will be adjusted on the column you choose
+                ({editCheckpoint.direction === 'returning' ? 'returning' : 'going'} direction).
+              </p>
+              {editCheckpoint.loading ? (
+                <div className="flex items-center gap-2 text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Detecting direction…</div>
+              ) : (
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Checkpoint</label>
+                    <select
+                      value={editCheckpoint.field}
+                      onChange={(e) => setEditCheckpoint((p) => ({ ...p, field: e.target.value }))}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    >
+                      <option value="">Select column…</option>
+                      {(editCheckpoint.direction === 'returning' ? FUEL_RECORD_COLUMNS.return : FUEL_RECORD_COLUMNS.going).map((c) => (
+                        <option key={c.field} value={c.field}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {editCheckpoint.fuelRecordId != null && (
+                    <button
+                      onClick={() => setShowEditInspect(true)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    >
+                      <Search className="w-3.5 h-3.5" /> Inspect
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t dark:border-gray-700">
+              <button
+                onClick={() => setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false })}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => editCheckpoint.index !== null && handleRowSave(editCheckpoint.index, editCheckpoint.field)}
+                disabled={!editCheckpoint.field || isSaving}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? 'Saving…' : 'Save Entry'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditInspect && editCheckpoint.fuelRecordId != null && (
+        <FuelRecordInspectModal
+          isOpen={showEditInspect}
+          onClose={() => setShowEditInspect(false)}
+          fuelRecordId={editCheckpoint.fuelRecordId}
+          truckNumber={editCheckpoint.index !== null ? editedSheet.entries[editCheckpoint.index]?.truckNo : undefined}
+        />
       )}
     </div>
   );

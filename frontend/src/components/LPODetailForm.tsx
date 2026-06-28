@@ -1121,6 +1121,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
   };
 
+  // When an LPO is created elsewhere (e.g. pick-up-at consumes a number), refresh
+  // the previewed next number while composing a NEW LPO so it never shows a stale
+  // / duplicate value. Skipped when editing an existing LPO (initialData present).
+  useRealtimeSync('lpo_summaries', (event) => {
+    if (event?.action === 'create' && isOpen && !initialData) {
+      fetchNextLpoNumber();
+    }
+  }, 'lpo-detail-next-number');
+
   // Fetch truck data when truck number changes
   // Search logic: current month → previous month → month before that
   // If found with balance=0, journey is complete (no fuel allocation needed)

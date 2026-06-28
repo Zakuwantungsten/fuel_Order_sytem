@@ -826,6 +826,36 @@ export const lpoDocumentsAPI = {
     return response.data.data;
   },
 
+  // Pick-up-at: cancel selected trucks on the source LPO and re-create them at the
+  // station where they actually filled, netting the fuel records in one transaction.
+  pickupAt: async (data: {
+    sourceLpoId: string | number;
+    targetStation: string;
+    customStationName?: string;
+    customGoingCheckpoint?: string;
+    customReturnCheckpoint?: string;
+    rate: number;
+    date?: string;
+    orderOf?: string;
+    lpoNo?: string;
+    litersMode?: 'same' | 'uniform';
+    uniformLiters?: number;
+    trucks: {
+      doNo: string;
+      truckNo: string;
+      liters?: number;      // per-truck liters (edited in the table)
+      revertField?: string; // manual mode: column to revert at the source
+      addField?: string;    // manual mode: column to deduct at the target
+    }[];
+  }): Promise<{
+    sourceLpo: { id: string; lpoNo: string };
+    pickedUpLpo: LPOSummary;
+    entriesPickedUp: number;
+  }> => {
+    const response = await apiClient.post('/lpo-documents/pickup-at', data);
+    return response.data.data;
+  },
+
   // Edit lock management
   acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
     const response = await apiClient.post(`/lpo-documents/${id}/lock`);
@@ -1590,6 +1620,7 @@ export interface FuelAutomationConfig {
   lpoCreateDeduct: boolean;
   lpoCancelRevert: boolean;
   lpoEditAdjust: boolean;
+  lpoPickupAuto: boolean;
   doImportCreate: boolean;
   doExportUpdate: boolean;
   doAmendCascade: boolean;

@@ -72,6 +72,14 @@ router.post(
   asyncHandler(lpoSummaryController.forwardLPO)
 );
 
+// Pick-up-at: cancel selected trucks on the source LPO and re-create them at the
+// station where they actually filled, netting the fuel records. Same UPDATE roles.
+router.post(
+  '/pickup-at',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'),
+  asyncHandler(lpoSummaryController.pickupAtStation)
+);
+
 // Update route - per frontend LPOS UPDATE permissions
 router.put(
   '/:id',

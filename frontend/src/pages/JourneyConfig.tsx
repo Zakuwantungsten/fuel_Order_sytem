@@ -641,6 +641,7 @@ const FUEL_AUTOMATION_DEFAULTS: FuelAutomationConfig = {
   lpoCreateDeduct: true,
   lpoCancelRevert: true,
   lpoEditAdjust: true,
+  lpoPickupAuto: true,
   doImportCreate: true,
   doExportUpdate: true,
   doAmendCascade: true,
@@ -657,6 +658,7 @@ const FUEL_AUTOMATION_GROUPS: {
       { key: 'lpoCreateDeduct', label: 'Deduct on LPO creation', sub: "Creating an LPO entry deducts fuel from the truck's balance." },
       { key: 'lpoCancelRevert', label: 'Revert on LPO cancellation', sub: "Cancelling an LPO entry restores the deducted fuel to the truck's balance." },
       { key: 'lpoEditAdjust', label: 'Adjust on LPO edit', sub: "Editing an LPO entry's liters or truck recalculates the fuel deduction." },
+      { key: 'lpoPickupAuto', label: 'Auto checkpoints on pick-up-at', sub: 'Pick-up-at auto-detects the revert/add checkpoints. Turn OFF to pick them per truck (e.g. raw imported records).' },
     ],
   },
   {
