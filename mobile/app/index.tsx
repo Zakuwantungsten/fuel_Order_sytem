@@ -13,5 +13,9 @@ export default function Index() {
     return <Loading label="Loading…" />;
   }
 
-  return <Redirect href={user ? '/(app)/home' : '/login'} />;
+  if (user) {
+    if (user.mustChangePassword) return <Redirect href="/change-password" />;
+    return <Redirect href="/(app)/home" />;
+  }
+  return <Redirect href="/login" />;
 }

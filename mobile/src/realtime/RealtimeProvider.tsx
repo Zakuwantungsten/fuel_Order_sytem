@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
 import { SOCKET_URL } from '../config';
 import { useAuth } from '../auth/AuthContext';
 import { getAccessToken } from '../auth/secureStore';
@@ -40,7 +41,7 @@ function isStationRelevant(
 }
 
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -130,6 +131,15 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
           // since the socket only fires while the app is in foreground.
         }
       });
+
+      // Admin reset this user's password or forced a logout while the app was open.
+      // Sign out immediately so the user is directed to login with their new credentials.
+      socket.on('session_event', async (payload?: { type?: string }) => {
+        if (payload?.type === 'password_reset' || payload?.type === 'force_logout') {
+          await signOut();
+          router.replace('/login');
+        }
+      });
     })();
 
     return () => {
@@ -139,7 +149,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         socket.disconnect();
       }
     };
-  }, [user, queryClient, showToast]);
+  }, [user, queryClient, showToast, signOut]);
 
   return <>{children}</>;
 }
