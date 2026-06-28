@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
   X, Plus, Trash2, Loader2, Search, Eye,
@@ -10,6 +10,7 @@ import { darLPOAPI, fuelRecordsAPI, configAPI } from '../services/api';
 import { darLPOKeys } from '../hooks/useDarLPOs';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
 import type { DarLPO, DarLPOEntry, FuelRecord } from '../types';
+import { useGridNav } from '../hooks/useGridNav';
 
 interface Props {
   mode: 'new' | 'add-entries';
@@ -81,6 +82,12 @@ export default function DarYardLPOForm({
     isOpen: boolean; fuelRecordId: string | number; truckNumber?: string;
   }>({ isOpen: false, fuelRecordId: '' });
 
+  // Grid keyboard navigation — col layout (desktop table only):
+  // 0=Truck  1=DO#  2=Liters  3=Dispense(conditional)  4=Rate  5=Dest
+  const _darAddRowRef = useRef<() => void>(null!);
+  const darNav = useGridNav(6, 5, () => _darAddRowRef.current());
+  useEffect(() => { darNav.flushPendingFocus(); }, [entries.length]);
+
   // Pre-fill rate from Dar yard config
   useEffect(() => {
     configAPI.getYardConfigs().then(configs => {
@@ -112,6 +119,7 @@ export default function DarYardLPOForm({
     setEntries(prev => [...prev, makeEmptyEntry(lastRate)]);
     setRows(prev => [...prev, makeEmptyRow()]);
   };
+  _darAddRowRef.current = addRow;
 
   const removeRow = (idx: number) => {
     if (entries.length === 1) return;
@@ -582,8 +590,9 @@ export default function DarYardLPOForm({
                           type="text"
                           value={entry.truckNo}
                           onChange={e => updateEntry(idx, 'truckNo', e.target.value.toUpperCase())}
-                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (autoSearch) fetchTruck(idx, entry.truckNo); } }}
+                          onKeyDown={e => { darNav.handleKeyDown(idx, 0, entries.length)(e); if (e.key === 'Enter') { e.preventDefault(); if (autoSearch) fetchTruck(idx, entry.truckNo); } }}
                           onPaste={e => handleTruckPaste(idx, e)}
+                          ref={darNav.cellRef(idx, 0)}
                           placeholder="T 000 XXX / Entity"
                           style={{ flex: 1, minWidth: 0, padding: '7px 9px', fontSize: '13px', fontFamily: "'Geist Mono', ui-monospace, monospace", fontWeight: 500, border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                         />
@@ -632,6 +641,8 @@ export default function DarYardLPOForm({
                         value={entry.doNo}
                         onChange={e => updateEntry(idx, 'doNo', e.target.value.toUpperCase())}
                         onPaste={e => handleDoPaste(idx, e)}
+                        onKeyDown={darNav.handleKeyDown(idx, 1, entries.length)}
+                        ref={darNav.cellRef(idx, 1)}
                         placeholder="DO #"
                         style={{ width: '100%', padding: '7px 9px', fontSize: '13px', fontFamily: "'Geist Mono', ui-monospace, monospace", border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
@@ -644,6 +655,8 @@ export default function DarYardLPOForm({
                         value={entry.liters || ''}
                         onChange={e => updateEntry(idx, 'liters', parseFloat(e.target.value) || 0)}
                         onPaste={e => handleLitersPaste(idx, e)}
+                        onKeyDown={darNav.handleKeyDown(idx, 2, entries.length)}
+                        ref={darNav.cellRef(idx, 2)}
                         placeholder="0" min={0.01} step="0.01"
                         style={{ width: '100%', padding: '7px 9px', fontSize: '13px', textAlign: 'right', border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
@@ -657,6 +670,8 @@ export default function DarYardLPOForm({
                           type="number"
                           value={(entry.dispenseLiters ?? entry.liters) || ''}
                           onChange={e => updateEntry(idx, 'dispenseLiters', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))}
+                          onKeyDown={darNav.handleKeyDown(idx, 3, entries.length)}
+                          ref={darNav.cellRef(idx, 3)}
                           placeholder={String(entry.liters || 0)}
                           min={0} step="0.01"
                           title="Liters dispensed to the fuel record (defaults to the full liters)"
@@ -673,6 +688,8 @@ export default function DarYardLPOForm({
                         type="number"
                         value={entry.rate || ''}
                         onChange={e => updateEntry(idx, 'rate', parseFloat(e.target.value) || 0)}
+                        onKeyDown={darNav.handleKeyDown(idx, 4, entries.length)}
+                        ref={darNav.cellRef(idx, 4)}
                         placeholder="0" min={0.01} step="0.01"
                         style={{ width: '100%', padding: '7px 9px', fontSize: '13px', textAlign: 'right', border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
@@ -689,6 +706,8 @@ export default function DarYardLPOForm({
                         type="text"
                         value={entry.dest}
                         onChange={e => updateEntry(idx, 'dest', e.target.value)}
+                        onKeyDown={darNav.handleKeyDown(idx, 5, entries.length)}
+                        ref={darNav.cellRef(idx, 5)}
                         placeholder="Destination"
                         style={{ width: '100%', padding: '7px 9px', fontSize: '13px', border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, MapPin, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
@@ -14,6 +14,7 @@ import {
   FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
 import FuelRecordInspectModal, { calculateMbeyaReturnBalance } from './FuelRecordInspectModal';
+import { useGridNav } from '../hooks/useGridNav';
 import ForwardLPOModal from './ForwardLPOModal';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 import { toast } from 'react-toastify';
@@ -357,6 +358,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     isNilDo: boolean; // true when matched via truck+station only (NIL DO) — warn only, never block
   }>>(new Map());
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+
+  // Grid keyboard navigation — col layout (desktop table only, mobile left as default):
+  // 0=Truck  1=Mode  2=DO#  3=Direction  4=Liters  5=Rate  6=Dest
+  const _lpoAddRowRef = useRef<() => void>(null!);
+  const lpoNav = useGridNav(7, 6, () => _lpoAddRowRef.current());
+  useEffect(() => { lpoNav.flushPendingFocus(); }, [(formData.entries || []).length]);
 
   // Inspect modal state - for viewing fuel record details without leaving the form
   const [inspectModal, setInspectModal] = useState<InspectModalState>({
@@ -1737,6 +1744,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       entries: [...(prev.entries || []), newEntry],
     }));
   };
+  _lpoAddRowRef.current = handleAddEntry;
 
   // Handle multi-line paste (Excel-style) - paste multiple trucks at once
   const handleTruckPaste = async (index: number, event: React.ClipboardEvent<HTMLInputElement>) => {
@@ -4558,6 +4566,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 value={entry?.truckNo || ''}
                                 onChange={(e) => handleTruckNoChange(index, e.target.value)}
                                 onPaste={(e) => handleTruckPaste(index, e)}
+                                onKeyDown={lpoNav.handleKeyDown(index, 0, (formData.entries || []).length)}
+                                ref={lpoNav.cellRef(index, 0)}
                                 placeholder="T762 DWK"
                                 title="Paste multiple trucks (one per line) to auto-fill multiple rows"
                                 className="cell-input mono"
@@ -4589,6 +4599,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             <select
                               value={autoFill.entryType || 'regular'}
                               onChange={(e) => handleModeChange(index, e.target.value as EntryMode)}
+                              onKeyDown={lpoNav.handleKeyDown(index, 1, (formData.entries || []).length)}
+                              ref={lpoNav.cellRef(index, 1)}
                               title={ENTRY_MODE_OPTIONS.find(o => o.value === (autoFill.entryType || 'regular'))?.title}
                               className="mode-chip"
                               style={autoFill.entryType === 'da' ? { borderColor: '#93c5fd', color: '#1d4ed8' } : autoFill.entryType === 'ref' ? { borderColor: '#f8c89a', color: '#c2410c' } : autoFill.entryType === 'nil' ? { borderColor: '#d8b4fe', color: '#7c3aed' } : {}}
@@ -4611,6 +4623,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                   }
                                 }}
                                 onPaste={(e) => handleDOPaste(index, e)}
+                                onKeyDown={lpoNav.handleKeyDown(index, 2, (formData.entries || []).length)}
+                                ref={lpoNav.cellRef(index, 2)}
                                 placeholder="0001/26"
                                 title="Enter DO number — paste multiple (one per line) to fill down"
                                 className="cell-input mono"
@@ -4637,12 +4651,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => toggleDirection(index)}
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-bold ${
+                                  onKeyDown={lpoNav.handleKeyDown(index, 3, (formData.entries || []).length)}
+                                  ref={lpoNav.cellRef(index, 3)}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-400 ${
                                     autoFill.direction === 'going'
                                       ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/50'
                                       : 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/50'
                                   }`}
-                                  title="Click to toggle direction"
+                                  title="Click or Space to toggle direction"
                                 >
                                   {autoFill.direction === 'going' ? (
                                     <>Going <ArrowRight className="w-3.5 h-3.5" /></>
@@ -4656,12 +4672,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               <button
                                 type="button"
                                 onClick={() => toggleDirection(index)}
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-bold ${
+                                onKeyDown={lpoNav.handleKeyDown(index, 3, (formData.entries || []).length)}
+                                ref={lpoNav.cellRef(index, 3)}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-400 ${
                                   autoFill.direction === 'going'
                                     ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/50'
                                     : 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/50'
                                 }`}
-                                title="Click to toggle direction"
+                                title="Click or Space to toggle direction"
                               >
                                 {autoFill.direction === 'going' ? (
                                   <>Going <ArrowRight className="w-3.5 h-3.5" /></>
@@ -4677,6 +4695,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               value={entry?.liters || 0}
                               onChange={(e) => handleEntryChange(index, 'liters', parseFloat(e.target.value) || 0)}
                               onPaste={(e) => handleNumberFieldPaste(index, 'liters', e)}
+                              onKeyDown={lpoNav.handleKeyDown(index, 4, (formData.entries || []).length)}
+                              ref={lpoNav.cellRef(index, 4)}
                               title="Paste a column of numbers to fill down"
                               className="cell-input mono"
                               style={{ width: '62px', textAlign: 'right' }}
@@ -4688,6 +4708,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               value={entry?.rate || 0}
                               onChange={(e) => handleEntryChange(index, 'rate', parseFloat(e.target.value) || 0)}
                               onPaste={(e) => handleNumberFieldPaste(index, 'rate', e)}
+                              onKeyDown={lpoNav.handleKeyDown(index, 5, (formData.entries || []).length)}
+                              ref={lpoNav.cellRef(index, 5)}
                               title="Paste a column of numbers to fill down"
                               step="0.01"
                               className="cell-input mono"
@@ -4702,6 +4724,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               type="text"
                               value={entry?.dest || 'NIL'}
                               onChange={(e) => handleEntryChange(index, 'dest', e.target.value)}
+                              onKeyDown={lpoNav.handleKeyDown(index, 6, (formData.entries || []).length)}
+                              ref={lpoNav.cellRef(index, 6)}
                               placeholder="NIL"
                               className="cell-input"
                               style={{ width: '72px' }}
