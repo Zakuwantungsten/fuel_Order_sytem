@@ -313,7 +313,13 @@ async function resolveFuelFieldForEntry(
 
     fieldToUpdate = direction === 'going' ? fieldMapping.going : fieldMapping.returning;
     if (!fieldToUpdate) {
-      fieldToUpdate = direction === 'going' ? fieldMapping.returning : fieldMapping.going;
+      const missingField = direction === 'going' ? 'fuelRecordFieldGoing' : 'fuelRecordFieldReturning';
+      const hasField     = direction === 'going' ? 'fuelRecordFieldReturning' : 'fuelRecordFieldGoing';
+      logger.warn(
+        `Station "${stationUpper}" has no ${missingField} configured for ${direction} trucks. ` +
+        `It only has ${hasField} set. Go to the station admin and add ${missingField} to fix this.`
+      );
+      return undefined;
     }
   }
 
