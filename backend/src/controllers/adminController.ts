@@ -169,7 +169,7 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
       data: config.fuelStations?.[stationIndex],
     });
 
-    emitDataChange('fuel_stations', 'update');
+    emitDataChange('fuel_stations', 'update', config.fuelStations?.[stationIndex] as Record<string, any>);
   } catch (error: any) {
     throw error;
   }

@@ -86,7 +86,7 @@ export const updatePrice = async (req: AuthRequest, res: Response): Promise<void
   station.defaultRate = newPrice;
   station.updatedBy = req.user?.username || 'system';
   await station.save();
-  emitDataChange('fuel_stations', 'update');
+  emitDataChange('fuel_stations', 'update', station.toObject());
 
   await AuditService.log({
     action: 'CONFIG_CHANGE',

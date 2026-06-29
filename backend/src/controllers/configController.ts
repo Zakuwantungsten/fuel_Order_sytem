@@ -479,7 +479,7 @@ export const updateFuelStation = async (req: AuthRequest, res: Response): Promis
     // Add cache-busting headers to force client refresh
     setCacheBustingHeaders(res);
 
-    emitDataChange('fuel_stations', 'update');
+    emitDataChange('fuel_stations', 'update', station.toObject());
 
     res.json({
       success: true,

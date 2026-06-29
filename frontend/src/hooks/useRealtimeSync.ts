@@ -7,6 +7,7 @@ import { fuelRecordKeys } from './useFuelRecords';
 import { tangaLPOKeys } from './useTangaLPOs';
 import { darLPOKeys } from './useDarLPOs';
 import { journeyConfigKey } from './useJourneyConfig';
+import { fuelStationKeys } from './useFuelStations';
 
 /** Shape of a real-time data-change event delivered over the WebSocket. */
 export interface DataChangeEvent {
@@ -33,6 +34,7 @@ const COLLECTION_QUERY_KEYS: Record<string, () => ReadonlyArray<ReadonlyArray<un
   tanga_lpo_documents:  () => [tangaLPOKeys.lists(), [...tangaLPOKeys.all, 'workbook'] as const, tangaLPOKeys.years()],
   dar_lpo_documents:    () => [darLPOKeys.lists(), [...darLPOKeys.all, 'workbook'] as const, darLPOKeys.years()],
   journey_config:       () => [[...journeyConfigKey]],
+  fuel_stations:        () => [fuelStationKeys.all, fuelStationKeys.active],
 };
 
 /** Map collection name → the detail-level React Query key for a specific record id. */
@@ -41,6 +43,7 @@ function getDetailKey(collection: string, id: string): readonly unknown[] | null
     case 'lpo_summaries':   return lpoKeys.detail(id);
     case 'delivery_orders': return deliveryOrderKeys.detail(id);
     case 'fuel_records':    return fuelRecordKeys.detail(id);
+    case 'fuel_stations':   return fuelStationKeys.byId(id);
     default:                return null;
   }
 }
