@@ -291,8 +291,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
           toast.error(`This LPO is being edited by ${lockHolder}.`);
-          return;
+        } else {
+          toast.error('Could not acquire edit lock. Please try again.');
         }
+        return;
       }
     }
     setIsEditing(true);
@@ -315,9 +317,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       setIsEditing(false);
       await releaseLockIfNeeded();
       toast.success('Changes saved successfully! Fuel records have been updated.');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving sheet:', error);
-      toast.error('Error saving changes. Please try again.');
+      if (error?.response?.status === 409) {
+        toast.error('Edit session expired — click the edit button to start a new edit.');
+        setIsEditing(false);
+        await releaseLockIfNeeded();
+      } else {
+        toast.error('Error saving changes. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -340,9 +348,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false });
       await releaseLockIfNeeded();
       toast.success('Entry updated! Fuel records have been adjusted.');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving entry:', error);
-      toast.error('Error saving entry. Please try again.');
+      if (error?.response?.status === 409) {
+        toast.error('Edit session expired — click the edit button to start a new edit.');
+        setEditingRow(null);
+        setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false });
+        await releaseLockIfNeeded();
+      } else {
+        toast.error('Error saving entry. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -364,21 +379,27 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     const orig = sheet.entries[index];
     const cur = editedSheet.entries[index];
     const litersChanged = !!orig && cur.liters !== orig.liters;
-    if (fuelAutomation?.lpoEditAdjust === false && litersChanged && hasFuelRecord(cur)) {
-      setEditCheckpoint({ open: true, index, direction: null, fuelRecordId: null, field: '', loading: true });
-      try {
-        const res = await fuelRecordsAPI.getByDoNumber(cur.doNo);
-        const fr: any = res?.fuelRecord;
-        setEditCheckpoint((p) => ({
-          ...p,
-          loading: false,
-          direction: res?.direction ?? 'going',
-          fuelRecordId: fr?.id ?? fr?._id ?? null,
-        }));
-      } catch {
-        setEditCheckpoint((p) => ({ ...p, loading: false, direction: 'going' }));
+    if (litersChanged && hasFuelRecord(cur)) {
+      if (fuelAutomation === null) {
+        toast.error('Journey config still loading — please wait a moment and try again.');
+        return;
       }
-      return;
+      if (fuelAutomation.lpoEditAdjust === false) {
+        setEditCheckpoint({ open: true, index, direction: null, fuelRecordId: null, field: '', loading: true });
+        try {
+          const res = await fuelRecordsAPI.getByDoNumber(cur.doNo);
+          const fr: any = res?.fuelRecord;
+          setEditCheckpoint((p) => ({
+            ...p,
+            loading: false,
+            direction: res?.direction ?? 'going',
+            fuelRecordId: fr?.id ?? fr?._id ?? null,
+          }));
+        } catch {
+          setEditCheckpoint((p) => ({ ...p, loading: false, direction: 'going' }));
+        }
+        return;
+      }
     }
     await handleRowSave(index);
   };
@@ -409,8 +430,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
           toast.error(`This LPO is being edited by ${lockHolder}.`);
-          return;
+        } else {
+          toast.error('Could not acquire edit lock. Please try again.');
         }
+        return;
       }
     }
     setEditingRow(index);
