@@ -20,6 +20,7 @@ interface Props {
   lpo: DarLPO;
   onUpdated: () => void;
   onBack?: () => void;
+  initialTruckNo?: string;
 }
 
 type BulkLinkResult = {
@@ -741,7 +742,7 @@ function BulkLinkPreviewModal({
 }
 
 // ── Main Sheet View ────────────────────────────────────────────────────────────
-export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: Props) {
+export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, initialTruckNo }: Props) {
   const { user } = useAuth();
   const canWrite = WRITE_ROLES.includes(user?.role ?? '');
 
@@ -752,6 +753,11 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  // Row highlight state (driven by initialTruckNo from list-view navigation)
+  const [highlightedTruckNo, setHighlightedTruckNo] = useState<string | null>(null);
+  const entryRowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const highlightedForRef = useRef<string | null>(null);
 
   const [showYardAddForm, setShowYardAddForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<{ index: number; entry: DarLPOEntry } | null>(null);
@@ -796,6 +802,23 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLpo.lpoNo]);
+
+  useEffect(() => {
+    if (!initialTruckNo || lpo.entries.length === 0) return;
+    if (highlightedForRef.current === initialTruckNo) return;
+    const idx = lpo.entries.findIndex(
+      e => (e.truckNo || '').toLowerCase() === initialTruckNo.toLowerCase()
+    );
+    if (idx === -1) return;
+    highlightedForRef.current = initialTruckNo;
+    setHighlightedTruckNo(initialTruckNo);
+    setTimeout(() => {
+      const el = entryRowRefs.current.get(idx);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    const clearTimer = setTimeout(() => setHighlightedTruckNo(null), 3500);
+    return () => clearTimeout(clearTimer);
+  }, [initialTruckNo, lpo.entries]);
 
   const handleMutationResult = useCallback((updated: DarLPO) => {
     setLpo(updated);
@@ -1235,8 +1258,11 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
               const isCancelled = entry.isCancelled;
               const isSelectable = canWrite && !isCancelled && !entry.linkedFuelRecordId && !!entry._id;
               const isSelected = isSelectable && selectedIds.has(entry._id!);
+              const isHighlighted = highlightedTruckNo !== null && (entry.truckNo || '').toLowerCase() === highlightedTruckNo.toLowerCase();
               return (
-                <div key={entry._id ?? idx} className="bg-white border border-[#eaeef4] rounded-[16px]"
+                <div key={entry._id ?? idx}
+                  ref={(el) => { if (el) entryRowRefs.current.set(realIdx, el); else entryRowRefs.current.delete(realIdx); }}
+                  className={`border rounded-[16px] transition-all ${isHighlighted ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-400' : 'border-[#eaeef4] bg-white'}`}
                   style={{ opacity: isCancelled ? 0.65 : 1, boxShadow: '0 4px 16px -10px rgba(28,40,64,0.25)' }}>
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -1378,13 +1404,16 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack }: 
               const isCancelled = entry.isCancelled;
               const isSelectable = canWrite && !isCancelled && !entry.linkedFuelRecordId && !!entry._id;
               const isSelected = isSelectable && selectedIds.has(entry._id!);
+              const isHighlighted = highlightedTruckNo !== null && (entry.truckNo || '').toLowerCase() === highlightedTruckNo.toLowerCase();
               const rowCls = isCancelled
                 ? 'bg-red-50 dark:bg-red-900/15 border-b border-red-100 dark:border-red-900/30'
-                : isSelected
-                  ? 'bg-green-50/60 dark:bg-green-900/10 border-b border-green-100 dark:border-green-900/20'
-                  : 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50';
+                : isHighlighted
+                  ? 'bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 ring-2 ring-inset ring-blue-400 dark:ring-blue-500'
+                  : isSelected
+                    ? 'bg-green-50/60 dark:bg-green-900/10 border-b border-green-100 dark:border-green-900/20'
+                    : 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50';
               return (
-                <div key={entry._id ?? idx} className={`grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] ${rowCls}`}>
+                <div key={entry._id ?? idx} ref={(el) => { if (el) entryRowRefs.current.set(realIdx, el); else entryRowRefs.current.delete(realIdx); }} className={`grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] ${rowCls}`}>
                   {/* Checkbox cell */}
                   <div className="px-1 py-2 flex items-center justify-center border-r border-gray-200 dark:border-gray-700">
                     {isSelectable && (

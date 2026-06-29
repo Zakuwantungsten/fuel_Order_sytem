@@ -10,11 +10,12 @@ import type { DarLPO } from '../types';
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const TABS_PER_PAGE = 8;
 
-export default function DarLPOWorkbook({ onBack, initialLpoId, initialYear, initialMonth }: {
+export default function DarLPOWorkbook({ onBack, initialLpoId, initialYear, initialMonth, initialTruckNo }: {
   onBack?: () => void;
   initialLpoId?: string | null;
   initialYear?: number;
   initialMonth?: number;
+  initialTruckNo?: string;
 } = {}) {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
@@ -197,6 +198,7 @@ export default function DarLPOWorkbook({ onBack, initialLpoId, initialYear, init
             lpo={activeLpo}
             onUpdated={handleLpoUpdated}
             onBack={onBack}
+            initialTruckNo={activeLpoId === initialLpoId ? initialTruckNo : undefined}
           />
         ) : (
           <div className="flex items-center justify-center h-48">

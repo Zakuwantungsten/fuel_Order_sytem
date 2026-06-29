@@ -83,7 +83,7 @@ export default function TangaLPOs() {
   const [showAddEntries, setShowAddEntries] = useState(false);
 
   // Row → workbook navigation target (set on row click, cleared on plain tab switch)
-  const [workbookInitial, setWorkbookInitial] = useState<{ lpoId: string; year: number; month: number } | null>(null);
+  const [workbookInitial, setWorkbookInitial] = useState<{ lpoId: string; year: number; month: number; initialTruckNo?: string } | null>(null);
 
   // Copy/Download dropdown state
   const [openDropdowns, setOpenDropdowns] = useState<{ [key: string]: boolean }>({});
@@ -341,10 +341,10 @@ export default function TangaLPOs() {
   };
 
   // Row click → open the parent LPO's sheet in the Workbook view
-  const handleRowClick = (lpo: TangaLPO) => {
+  const handleRowClick = (lpo: TangaLPO, truckNo?: string) => {
     const lpoId = (lpo._id ?? lpo.id) as string;
     const month = monthOf(lpo.date) || currentMonth;
-    setWorkbookInitial({ lpoId, year: lpo.year ?? currentYear, month });
+    setWorkbookInitial({ lpoId, year: lpo.year ?? currentYear, month, initialTruckNo: truckNo });
     setViewMode('workbook');
   };
 
@@ -525,6 +525,7 @@ export default function TangaLPOs() {
             initialLpoId={workbookInitial?.lpoId ?? null}
             initialYear={workbookInitial?.year}
             initialMonth={workbookInitial?.month}
+            initialTruckNo={workbookInitial?.initialTruckNo}
           />
         </div>
       )}
@@ -627,7 +628,7 @@ export default function TangaLPOs() {
                 return (
                   <div
                     key={rowKey}
-                    onClick={() => handleRowClick(lpo)}
+                    onClick={() => handleRowClick(lpo, entry.truckNo)}
                     className={`border rounded-xl p-4 transition-all cursor-pointer ${
                       entry.isCancelled
                         ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
@@ -716,7 +717,7 @@ export default function TangaLPOs() {
                             ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
                             : 'hover:bg-blue-50/40 dark:hover:bg-blue-900/10'
                         }`}
-                        onClick={() => handleRowClick(lpo)}
+                        onClick={() => handleRowClick(lpo, entry.truckNo)}
                       >
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900 dark:text-gray-100">{index + 1}</td>
                         <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">{lpo.date}</td>
