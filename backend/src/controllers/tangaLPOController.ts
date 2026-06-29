@@ -575,6 +575,7 @@ export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Pro
     entry.dispenseLiters = Number(dispenseLiters);
   }
   entry.doNo = doNo;
+  if (fr.to) entry.dest = fr.to;
   entry.linkedFuelRecordId = fr._id.toString();
   await applyTangaYardDelta(fr, dispenseAmount(entry));
   await lpo.save();
@@ -707,8 +708,9 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
     }
 
     entry.linkedFuelRecordId = fr._id.toString();
-    // Backfill the entry's DO from the matched fuel record (manual link does the same).
+    // Backfill the entry's DO and destination from the matched fuel record (manual link does the same).
     if (fr.goingDo) entry.doNo = fr.goingDo;
+    if (fr.to) entry.dest = fr.to;
     await applyTangaYardDelta(fr, disp);
     didApply = true;
     results.push({
