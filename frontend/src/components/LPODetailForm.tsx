@@ -1841,10 +1841,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return { ...prev, entries: newEntriesArray };
     });
     
+    // Capture the source row's mode before updating state so the setTimeout can use it.
+    const sourceMode = entryAutoFillData[index]?.entryType;
+
     // Update auto-fill data for all entries - use callback to ensure we have latest state
     setEntryAutoFillData(prev => {
       const newAutoFillData: Record<number, EntryAutoFillData> = {};
-      
+
       // Keep auto-fill data for entries before paste index
       Object.keys(prev).forEach(key => {
         const idx = parseInt(key);
@@ -1852,17 +1855,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           newAutoFillData[idx] = prev[idx];
         }
       });
-      
-      // Initialize auto-fill data for all pasted entries
+
+      // Initialize auto-fill data for all pasted entries, inheriting the source row's mode
+      const inheritedEntryType = prev[index]?.entryType;
       for (let i = 0; i < formattedTrucks.length; i++) {
         newAutoFillData[index + i] = {
           direction: 'going',
           loading: false,
           fetched: false,
-          fuelRecord: null
+          fuelRecord: null,
+          entryType: inheritedEntryType,
         };
       }
-      
+
       // Shift auto-fill data for entries after the paste position
       Object.keys(prev).forEach(key => {
         const idx = parseInt(key);
@@ -1871,26 +1876,28 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           newAutoFillData[idx + formattedTrucks.length - 1] = prev[idx];
         }
       });
-      
+
       console.log('Auto-fill data indices:', Object.keys(newAutoFillData)); // Debug log
-      
+
       return newAutoFillData;
     });
-    
+
     // Trigger auto-fetch for all pasted trucks after state has settled
     setTimeout(() => {
       console.log('Starting auto-fetch for', formattedTrucks.length, 'trucks'); // Debug log
-      
+
       formattedTrucks.forEach((formattedTruckNo, i) => {
         const targetIndex = index + i;
-        
+
         console.log(`Scheduling fetch for truck ${formattedTruckNo} at index ${targetIndex}`); // Debug log
-        
+
         // Stagger each fetch to avoid overwhelming the server
         setTimeout(() => {
           console.log(`Fetching truck ${formattedTruckNo} at index ${targetIndex}`); // Debug log
-          handleTruckNoChange(targetIndex, formattedTruckNo);
-          
+          // Pass sourceMode so handleTruckNoChange respects nil/ref even when its
+          // closure still sees the pre-paste snapshot of entryAutoFillData.
+          handleTruckNoChange(targetIndex, formattedTruckNo, sourceMode);
+
           // Reset flag after last fetch is scheduled
           if (i === formattedTrucks.length - 1) {
             setTimeout(() => {
@@ -2058,7 +2065,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   };
 
   // Handle truck number change with auto-fetch
-  const handleTruckNoChange = async (index: number, truckNo: string) => {
+  const handleTruckNoChange = async (index: number, truckNo: string, modeOverride?: EntryMode) => {
     // Format the truck number to standard format: T(number)(space)(letters) and uppercase
     const formattedTruckNo = formatTruckNumber(truckNo).toUpperCase();
     
@@ -2110,7 +2117,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
     if (TRUCK_FORMAT_COMPLETE.test(formattedTruckNo)) {
       // NIL/REF modes: never fetch — manual entry only, no lookup
-      const entryMode = entryAutoFillData[index]?.entryType;
+      const entryMode = modeOverride || entryAutoFillData[index]?.entryType;
       if (entryMode === 'nil' || entryMode === 'ref') return;
 
       // Format is complete — clear any previous timer for this row
