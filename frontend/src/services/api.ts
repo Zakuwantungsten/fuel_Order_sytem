@@ -155,7 +155,14 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
+
+    // No response at all = transport failure (network gone, hotspot dropped, DNS failed).
+    // Signal the network-status hook immediately so the offline banner appears without
+    // waiting for the next poll cycle — the same technique used by Offline.js.
+    if (!error.response) {
+      window.dispatchEvent(new Event('app:network-error'));
+    }
+
     // Handle CSRF token errors
     if (error.response?.status === 403 && 
         (error.response?.data?.code === 'CSRF_VALIDATION_FAILED' || 

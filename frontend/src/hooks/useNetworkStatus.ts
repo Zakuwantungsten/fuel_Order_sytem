@@ -57,20 +57,26 @@ export function useNetworkStatus() {
 
     const schedulePoll = () => { clearTimeout(nextPoll); nextPoll = setTimeout(poll, POLL_MS); };
 
-    // Browser events — immediate when the OS fires them
+    // Layer 1 — Browser events: instant when the OS fires them (unreliable for hotspots)
     const handleOffline = () => { applyResult(false); schedulePoll(); };
     const handleOnline  = () => { clearTimeout(nextPoll); poll(); };
     window.addEventListener('online',  handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Socket.io — fires within ~1s of network drop (TCP fails fast)
-    // Use poll to confirm rather than trusting disconnect reason blindly,
-    // since the server can also disconnect us intentionally (auth, maintenance).
+    // Layer 2 — Socket.io: fires within ~1s of network drop (TCP fails fast).
+    // Kick a poll rather than trusting the disconnect reason blindly — server
+    // restarts and auth expiry also disconnect the socket.
     const sock = getSocket();
     const handleSocketDisconnect = () => { clearTimeout(nextPoll); poll(); };
     const handleSocketConnect    = () => { clearTimeout(nextPoll); poll(); };
     sock?.on('disconnect', handleSocketDisconnect);
     sock?.on('connect',    handleSocketConnect);
+
+    // Layer 3 — Axios network errors: any API call that fails with no response
+    // (transport failure) dispatches 'app:network-error' from api.ts — the same
+    // technique Offline.js (HubSpot) uses to get instant detection from real requests.
+    const handleNetworkError = () => { clearTimeout(nextPoll); poll(); };
+    window.addEventListener('app:network-error', handleNetworkError);
 
     poll(); // initial check on mount
 
@@ -80,6 +86,7 @@ export function useNetworkStatus() {
       if (reconnectedTimer.current) clearTimeout(reconnectedTimer.current);
       window.removeEventListener('online',  handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('app:network-error', handleNetworkError);
       sock?.off('disconnect', handleSocketDisconnect);
       sock?.off('connect',    handleSocketConnect);
     };
