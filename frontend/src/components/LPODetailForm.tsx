@@ -1121,8 +1121,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       setFormData(prev => ({ ...prev, lpoNo: nextLpoNo }));
     } catch (error) {
       console.error('Error fetching next LPO number:', error);
-      // If error or no data, start from a default number
-      setFormData(prev => ({ ...prev, lpoNo: '2445' }));
     } finally {
       setIsLoadingLpoNumber(false);
     }
