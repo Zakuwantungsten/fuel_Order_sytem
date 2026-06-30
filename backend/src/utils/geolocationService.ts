@@ -24,6 +24,11 @@ class GeolocationService {
   private ipGeoCache: Map<string, { data: GeoLocation | null; expires: number }> = new Map();
   private apiProvider: 'ipapi' | 'ipinfo' | 'maxmind' = 'ipapi';
   private apiKey: string | null = null;
+  // Hard count ceilings. The hourly cleanup + per-entry TTL bound these by TIME;
+  // these bound them by COUNT so a flood of unique IPs/usernames can't grow them
+  // unbounded between sweeps. Both sit far above realistic active-user counts.
+  private readonly IP_GEO_CACHE_MAX = 10_000;
+  private readonly USER_LOCATION_MAX = 10_000;
 
   constructor() {
     this.initializeGeolocation();
@@ -179,6 +184,7 @@ class GeolocationService {
       // Cache the result (10 minute TTL)
       if (result) {
         this.ipGeoCache.set(ipAddress, { data: result, expires: Date.now() + 10 * 60 * 1000 });
+        this.capIpGeoCache();
       }
       return result;
     } catch (error: any) {
@@ -187,6 +193,7 @@ class GeolocationService {
         logger.warn(`Geolocation API rate limited for IP ${ipAddress} — skipping`);
         // Cache null for 5 minutes to avoid hammering the API
         this.ipGeoCache.set(ipAddress, { data: null, expires: Date.now() + 5 * 60 * 1000 });
+        this.capIpGeoCache();
       } else {
         logger.warn(`Failed to get geolocation for IP ${ipAddress}: ${error.message}`);
       }
@@ -221,6 +228,8 @@ class GeolocationService {
           locationHistory: [geoLocation],
           lastUpdate: new Date(),
         });
+        // Enforce the count cap on the only path that grows this map.
+        this.capUserLocationCache();
         return { isNewCountry: false }; // Can't detect new if no history
       }
 
@@ -342,6 +351,55 @@ class GeolocationService {
   getLastLocation(username: string): GeoLocation | undefined {
     const history = this.userLocationCache.get(username);
     return history?.lastLocation;
+  }
+
+  /**
+   * Enforce the count cap on ipGeoCache. No-op until over IP_GEO_CACHE_MAX.
+   * Drops already-expired entries first, then evicts soonest-to-expire (oldest)
+   * entries until back under the cap.
+   */
+  private capIpGeoCache(): void {
+    if (this.ipGeoCache.size <= this.IP_GEO_CACHE_MAX) return;
+
+    const now = Date.now();
+    for (const [ip, entry] of this.ipGeoCache) {
+      if (entry.expires <= now) this.ipGeoCache.delete(ip);
+    }
+
+    while (this.ipGeoCache.size > this.IP_GEO_CACHE_MAX) {
+      let oldestIp: string | null = null;
+      let oldestExpires = Infinity;
+      for (const [ip, entry] of this.ipGeoCache) {
+        if (entry.expires < oldestExpires) {
+          oldestExpires = entry.expires;
+          oldestIp = ip;
+        }
+      }
+      if (oldestIp === null) break;
+      this.ipGeoCache.delete(oldestIp);
+    }
+  }
+
+  /**
+   * Enforce the count cap on userLocationCache. No-op until over
+   * USER_LOCATION_MAX. Evicts the least-recently-updated users first.
+   */
+  private capUserLocationCache(): void {
+    if (this.userLocationCache.size <= this.USER_LOCATION_MAX) return;
+
+    while (this.userLocationCache.size > this.USER_LOCATION_MAX) {
+      let oldestUser: string | null = null;
+      let oldestTs = Infinity;
+      for (const [username, history] of this.userLocationCache) {
+        const ts = history.lastUpdate.getTime();
+        if (ts < oldestTs) {
+          oldestTs = ts;
+          oldestUser = username;
+        }
+      }
+      if (oldestUser === null) break;
+      this.userLocationCache.delete(oldestUser);
+    }
   }
 
   /**

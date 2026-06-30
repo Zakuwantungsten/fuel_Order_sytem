@@ -29,6 +29,11 @@ export interface FailedLoginPattern {
 export class AnomalyDetectionService {
   private static failedLoginCache: Map<string, FailedLoginPattern> = new Map();
   private static readonly CACHE_TTL = 60 * 60 * 1000; // 1 hour
+  // Hard ceiling on distinct username:ip keys. The 30-min sweep bounds memory by
+  // TIME; this bounds it by COUNT so a credential-stuffing flood from thousands
+  // of unique IPs can't grow the map unbounded between sweeps. Far above any
+  // realistic count of concurrent failing logins, so normal use never hits it.
+  private static readonly FAILED_LOGIN_MAX = 20_000;
 
   /**
    * Initialize cache cleanup
@@ -47,6 +52,39 @@ export class AnomalyDetectionService {
   }
 
   /**
+   * Enforce the count cap on failedLoginCache. Called only when a new key is
+   * added (the only path that grows the map). No-op until the map exceeds
+   * FAILED_LOGIN_MAX. Evicts oldest-by-lastAttempt entries — the ones least
+   * relevant to an in-progress brute-force window.
+   */
+  private static capFailedLoginCache(): void {
+    if (this.failedLoginCache.size <= this.FAILED_LOGIN_MAX) return;
+
+    // Cheap pass: drop entries already past their TTL anyway.
+    const now = Date.now();
+    for (const [key, pattern] of this.failedLoginCache) {
+      if (now - pattern.lastAttempt.getTime() > this.CACHE_TTL) {
+        this.failedLoginCache.delete(key);
+      }
+    }
+
+    // If still over the cap (active flood), evict the oldest last-seen entries.
+    while (this.failedLoginCache.size > this.FAILED_LOGIN_MAX) {
+      let oldestKey: string | null = null;
+      let oldestTs = Infinity;
+      for (const [key, pattern] of this.failedLoginCache) {
+        const ts = pattern.lastAttempt.getTime();
+        if (ts < oldestTs) {
+          oldestTs = ts;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey === null) break;
+      this.failedLoginCache.delete(oldestKey);
+    }
+  }
+
+  /**
    * Track and detect failed login anomalies
    * Returns true if anomaly detected and alert sent
    */
@@ -61,6 +99,7 @@ export class AnomalyDetectionService {
 
       // Get or create pattern entry
       let pattern = this.failedLoginCache.get(cacheKey);
+      const isNewKey = !pattern;
       if (!pattern) {
         pattern = {
           username,
@@ -89,6 +128,8 @@ export class AnomalyDetectionService {
       pattern.attemptCount++;
       pattern.lastAttempt = new Date();
       this.failedLoginCache.set(cacheKey, pattern);
+      // Enforce the count cap only when this attempt introduced a new key.
+      if (isNewKey) this.capFailedLoginCache();
 
       logger.warn(
         `[AnomalyDetection] Failed login attempt ${pattern.attemptCount} for ${username} from ${ipAddress}`

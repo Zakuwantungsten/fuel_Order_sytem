@@ -43,6 +43,38 @@ function cleanupStaleEntries(): void {
   _lastCleanup = Date.now();
 }
 
+// Hard ceiling on distinct tracked IPs. The 5-minute lazy sweep bounds memory by
+// TIME, but a scan from thousands of unique IPs can create 404 windows faster
+// than the sweep removes them. This count cap keeps the map bounded under a
+// flood (memory-exhaustion-DoS hardening). The cap sits far above any realistic
+// number of IPs legitimately hitting 404s, so normal use never reaches it.
+const WINDOWS_MAX = 50_000;
+
+function capWindows(): void {
+  if (_windows.size <= WINDOWS_MAX) return;
+
+  // Cheap pass first: the normal sweep drops fully-aged-out windows.
+  cleanupStaleEntries();
+
+  // If a real flood is still in progress, evict the IPs whose most recent 404 is
+  // the oldest (least relevant to an active attack) until back under the cap.
+  while (_windows.size > WINDOWS_MAX) {
+    let oldestIp: string | null = null;
+    let oldestTs = Infinity;
+    for (const [ip, record] of _windows) {
+      const last = record.timestamps.length
+        ? record.timestamps[record.timestamps.length - 1]
+        : 0;
+      if (last < oldestTs) {
+        oldestTs = last;
+        oldestIp = ip;
+      }
+    }
+    if (oldestIp === null) break;
+    _windows.delete(oldestIp);
+  }
+}
+
 // ─── Middleware ──────────────────────────────────────────────────────────────
 
 export function suspicious404Middleware(req: Request, res: Response, next: NextFunction): void {
@@ -70,6 +102,9 @@ export function suspicious404Middleware(req: Request, res: Response, next: NextF
     if (!record) {
       record = { timestamps: [], alerted: false };
       _windows.set(ip, record);
+      // Enforce the count cap on the only path that grows the map (a new IP).
+      // No-op until the map exceeds WINDOWS_MAX.
+      capWindows();
     }
 
     record.timestamps.push(now);

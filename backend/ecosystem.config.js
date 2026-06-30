@@ -28,6 +28,23 @@ module.exports = {
 
       watch: false,           // don't restart on file changes (production)
 
+      // ── Graceful restart (Phase 3) ──────────────────────────────────────────
+      // The app's SIGINT/SIGTERM handler drains in-flight requests for up to 15s
+      // (server.ts). PM2's DEFAULT kill_timeout is only 1600ms — so by default PM2
+      // SIGKILLs the process at 1.6s, cutting the drain short and dropping live
+      // requests on every restart. 16s gives the 15s drain room to finish first.
+      kill_timeout: 16000,
+
+      // Don't mark the new process "online" until it actually signals readiness
+      // (process.send('ready') after httpServer.listen — see server.ts). Prevents
+      // PM2 from declaring success while DB connect / seeds / backfill are still
+      // running and the app can't yet serve traffic.
+      wait_ready: true,
+      // Startup does real work before listening (DB connect, firewall seed,
+      // monthKey backfill, Redis, websocket, change streams). Give it generous
+      // headroom so a slow first-boot backfill isn't mistaken for a failed start.
+      listen_timeout: 30000,
+
       // Environment — only overrides that differ from your .env
       env_production: {
         NODE_ENV: 'production',

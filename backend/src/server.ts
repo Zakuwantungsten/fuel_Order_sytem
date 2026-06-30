@@ -402,6 +402,13 @@ const startServer = async () => {
       logger.info(`CORS origin: ${config.corsOrigin}`);
       logger.info('Archival scheduler: Active (runs monthly on 1st day at 2:00 AM)');
       logger.info('WebSocket server: Active');
+
+      // Phase 3: signal PM2 (wait_ready) that the app is fully initialised and now
+      // accepting connections. Only meaningful when launched under PM2 with an IPC
+      // channel; process.send is undefined for a bare `node` run, so guard it.
+      if (typeof process.send === 'function') {
+        process.send('ready');
+      }
     });
 
     // Graceful shutdown — handles SIGTERM (Railway, Docker, K8s) and SIGINT (Ctrl+C)

@@ -74,6 +74,41 @@ function pruneSuspiciousWindow(record: SuspiciousRecord): SuspiciousRecord {
   return record;
 }
 
+// Hard ceiling on the number of distinct IPs tracked in suspiciousIPs.
+// pruneSuspiciousWindow bounds memory by TIME, but a flood of unique IPs
+// (botnet / port-scan sweep) can create entries faster than they age out —
+// turning the firewall's own bookkeeping into a memory-exhaustion DoS on the
+// box it shares with MongoDB. This count cap makes the map bounded under attack
+// too. The cap is far above any realistic count of genuinely suspicious IPs, so
+// legitimate behaviour is never affected. Mirrors the trustedIPs size guard.
+const SUSPICIOUS_IP_MAX = 50_000;
+
+function capSuspiciousIPs(): void {
+  if (suspiciousIPs.size <= SUSPICIOUS_IP_MAX) return;
+
+  // Step 1 (cheap, non-destructive): drop entries whose sliding window has
+  // fully expired anyway. This alone almost always brings us back under the cap.
+  for (const [ip, record] of suspiciousIPs) {
+    pruneSuspiciousWindow(record);
+    if (record.count === 0) suspiciousIPs.delete(ip);
+  }
+
+  // Step 2 (only if a real flood is in progress): evict the oldest-first-seen
+  // entries until under the cap. Oldest = least relevant to an active attack.
+  while (suspiciousIPs.size > SUSPICIOUS_IP_MAX) {
+    let oldestIp: string | null = null;
+    let oldestTs = Infinity;
+    for (const [ip, record] of suspiciousIPs) {
+      if (record.firstEvent < oldestTs) {
+        oldestTs = record.firstEvent;
+        oldestIp = ip;
+      }
+    }
+    if (oldestIp === null) break;
+    suspiciousIPs.delete(oldestIp);
+  }
+}
+
 // ─── Sync from DB ────────────────────────────────────────────────────────────
 
 async function syncFromDB(): Promise<void> {
@@ -222,6 +257,9 @@ const BlocklistService = {
     if (!record) {
       record = { count: 0, events: [], firstEvent: now };
       suspiciousIPs.set(normalized, record);
+      // Enforce the count cap whenever a NEW distinct IP is added (the only
+      // path that grows the map). No-op until the map exceeds SUSPICIOUS_IP_MAX.
+      capSuspiciousIPs();
     }
 
     // Add the event

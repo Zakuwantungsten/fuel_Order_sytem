@@ -17,6 +17,14 @@ export class DatabaseMonitor extends EventEmitter {
   /** Cooldown tracker: prevents repeat emails for the same alert type within 30 min */
   private readonly _alertCooldowns = new Map<string, number>();
   private readonly ALERT_COOLDOWN_MS = 30 * 60 * 1000;
+  /**
+   * Bounded ring buffer of recent RSS samples (one per monitor tick). Used to
+   * detect SUSTAINED memory growth — the real slow-leak signature — as opposed
+   * to the instantaneous heap-limit spike already handled in checkAlertThresholds.
+   * Capped so the trend tracker can never itself become a memory leak.
+   */
+  private readonly _rssSamples: number[] = [];
+  private readonly RSS_SAMPLE_MAX = 30; // ~30 samples → 30 min at the 60s tick
 
   constructor() {
     super();
@@ -111,12 +119,91 @@ export class DatabaseMonitor extends EventEmitter {
     // Collect immediately on start, then periodically. The periodic path is the
     // ONLY place that evaluates alert thresholds — see collectMetrics() note below.
     const tick = async () => {
+      // Sample memory FIRST and unconditionally — it must run even when DB metric
+      // collection fails (e.g. DB briefly unreachable), since memory pressure is
+      // independent of database availability.
+      this.sampleMemory();
       const metrics = await this.collectMetrics();
       if (metrics) this.checkAlertThresholds(metrics);
     };
 
     void tick();
     this.metricsInterval = setInterval(() => void tick(), intervalMs);
+  }
+
+  /**
+   * Sample process memory once per tick.
+   *
+   * 2.1 — Emits a compact, parseable one-line marker at info level so the memory
+   *       trend can be graphed straight from the logs (rss, heapUsed, % of the
+   *       hard heap limit). 2.3 (below) consumes the bounded sample buffer to
+   *       detect sustained growth.
+   */
+  private sampleMemory(): void {
+    const mem = process.memoryUsage();
+    const heapLimit = v8.getHeapStatistics().heap_size_limit;
+    const rssMB = mem.rss / 1024 / 1024;
+    const heapUsedMB = mem.heapUsed / 1024 / 1024;
+    const heapPct = heapLimit > 0 ? (mem.heapUsed / heapLimit) * 100 : 0;
+
+    // Stable key=value shape so it's easy to grep/extract: `[mem] rss=… heap=… …`
+    logger.info(
+      `[mem] rss=${rssMB.toFixed(0)}MB heapUsed=${heapUsedMB.toFixed(0)}MB heapLimitPct=${heapPct.toFixed(0)}%`
+    );
+
+    // Maintain the bounded ring buffer (drop oldest once full).
+    this._rssSamples.push(mem.rss);
+    if (this._rssSamples.length > this.RSS_SAMPLE_MAX) this._rssSamples.shift();
+
+    // 2.3 sustained-growth trend check runs against this buffer.
+    this.checkMemoryTrend();
+  }
+
+  /**
+   * 2.3 — Detect SUSTAINED memory growth (slow-leak signature) and raise a
+   * rate-limited warning + email. Deliberately distinct from the instantaneous
+   * heap>=90% critical alert in checkAlertThresholds: that catches a sudden
+   * spike; this catches a slow climb that would otherwise only surface as a
+   * mysterious mid-day PM2 restart.
+   */
+  private checkMemoryTrend(): void {
+    // Need a full window before judging a trend (avoids false alarms on startup).
+    if (this._rssSamples.length < this.RSS_SAMPLE_MAX) return;
+
+    // Compare the first third vs the last third of the window. A real leak shows
+    // last-third >> first-third; ordinary GC sawtooth averages out and does not.
+    const third = Math.max(1, Math.floor(this.RSS_SAMPLE_MAX / 3));
+    const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+    const oldAvg = avg(this._rssSamples.slice(0, third));
+    const newAvg = avg(this._rssSamples.slice(-third));
+
+    const growthPct = oldAvg > 0 ? ((newAvg - oldAvg) / oldAvg) * 100 : 0;
+    // Only care once RSS is genuinely elevated (>1.5 GB) — small fluctuations at
+    // low memory are noise, not a problem worth paging anyone about.
+    const elevated = newAvg > 1.5 * 1024 * 1024 * 1024;
+
+    if (growthPct < 25 || !elevated) return;
+
+    const newAvgMB = (newAvg / 1024 / 1024).toFixed(0);
+    this.emit('alert', {
+      type: 'warning',
+      message: `RSS trending up ${growthPct.toFixed(0)}% over ${this.RSS_SAMPLE_MAX} samples (now ~${newAvgMB}MB)`,
+      timestamp: new Date(),
+    });
+
+    // Rate-limit the email via the shared cooldown map (one per 30 min).
+    const now = Date.now();
+    const last = this._alertCooldowns.get('rss_trend') ?? 0;
+    if (now - last >= this.ALERT_COOLDOWN_MS) {
+      this._alertCooldowns.set('rss_trend', now);
+      sendCriticalEmail({
+        subject: 'DB Alert: Memory Trending Upward (possible leak)',
+        message: `Resident memory (RSS) has grown roughly <strong>${growthPct.toFixed(0)}%</strong> over the last ~${this.RSS_SAMPLE_MAX} minutes (now ~${newAvgMB} MB).<br/><br/>
+                  This is the signature of a <strong>slow memory leak</strong> rather than a transient spike. The process will auto-restart at the PM2 ceiling, but if this recurs after deploys it should be investigated.<br/><br/>
+                  <strong>Action:</strong> Correlate with recent releases and check the <code>[mem]</code> trend lines in the logs.`,
+        priority: 'high',
+      }).catch(e => logger.error('Failed to send RSS trend email:', e));
+    }
   }
 
   /**
