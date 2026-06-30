@@ -1194,8 +1194,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         newEntries.map((e: EntryType) => [`${e.doNo}-${e.truckNo}`, e])
       );
 
-      logger.info(`Old entries (from DB): ${JSON.stringify([...oldEntriesMap.entries()])}`);
-      logger.info(`New entries (from request): ${JSON.stringify([...newEntriesMap.entries()])}`);
+      // debug, not info: these serialize the ENTIRE entry maps to JSON on every
+      // LPO edit. At info level (prod default) that spikes the heap and floods the
+      // logs on each save. Behaviour is unchanged — only the verbosity drops; set
+      // LOG_LEVEL=debug to see them again when diagnosing a fuel-diff issue.
+      logger.debug(`Old entries (from DB): ${JSON.stringify([...oldEntriesMap.entries()])}`);
+      logger.debug(`New entries (from request): ${JSON.stringify([...newEntriesMap.entries()])}`);
 
       // Get date info for driver account entries
       const dateObj = new Date(newData.date || existingLpo.date);
