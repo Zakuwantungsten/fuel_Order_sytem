@@ -1225,11 +1225,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
       const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
 
-      // Helper to check if a date is within a specific month
+      // Helper to check if a date is within a specific month.
+      // Uses nextMonthStart instead of monthEnd (last-day midnight) to avoid UTC vs local
+      // timezone mismatch: ISO date strings ("2026-06-30") parse as UTC midnight, but
+      // new Date(y, m+1, 0) creates local midnight, causing last-day records to be excluded.
       const isInMonth = (dateStr: string, monthStart: Date): boolean => {
         const date = new Date(dateStr);
-        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-        return date >= monthStart && date <= monthEnd;
+        const nextMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+        return date >= monthStart && date < nextMonthStart;
       };
 
       /**
