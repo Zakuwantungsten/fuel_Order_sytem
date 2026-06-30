@@ -21,6 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getRoleInfo, RESOURCES, ACTIONS } from '../utils/permissions';
 import NotificationBell from './NotificationBell';
 import DevicesSessionsPanel from './DevicesSessionsPanel';
+import NetworkStatusBanner from './NetworkStatusBanner';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -134,6 +135,7 @@ const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
+      <NetworkStatusBanner />
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
