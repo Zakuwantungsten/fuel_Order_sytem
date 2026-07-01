@@ -3407,6 +3407,7 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
 /**
  * GET /lpo-documents/entries/filters
  * Returns distinct periods and stations for filter dropdowns.
+ * Periods are always global (all months with data); dateFrom/dateTo only scope stations.
  * Replaces the removed /lpo-entries/available-filters endpoint.
  */
 export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -3445,12 +3446,10 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
       m.date.$gte = existingFrom && existingFrom > scopedDateFloor ? existingFrom : scopedDateFloor;
     };
 
+    // Period list is global (not scoped by dateFrom/dateTo) so the month picker
+    // always shows every month that has data — same pattern as DO management.
+    // dateFrom/dateTo below only narrows the station dropdown.
     const periodsMatch: any = { ...baseMatch };
-    if (dateFrom || dateTo) {
-      periodsMatch.date = {};
-      if (dateFrom) periodsMatch.date.$gte = (dateFrom as string).substring(0, 10);
-      if (dateTo) periodsMatch.date.$lte = (dateTo as string).substring(0, 10);
-    }
     applyDateFloor(periodsMatch);
 
     const periodResults = await LPOSummary.aggregate([

@@ -1664,10 +1664,19 @@ const LPOs = () => {
               setStationFilter('');
               setDateFilter('');
               setStatusFilter('all');
+              setCurrentPage(1);
+              const now = new Date();
+              const currentPeriod = { year: now.getFullYear(), month: now.getMonth() + 1 };
+              const hasCurrentMonth = availablePeriods.some(
+                p => p.year === currentPeriod.year && p.month === currentPeriod.month
+              );
+              const mostRecentPeriod = availablePeriods.length > 0
+                ? availablePeriods.reduce((best, p) =>
+                    p.year > best.year || (p.year === best.year && p.month > best.month) ? p : best
+                  )
+                : currentPeriod;
               setSelectedPeriods(
-                availablePeriods.length > 0
-                  ? [availablePeriods[0]]
-                  : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]
+                hasCurrentMonth || availablePeriods.length === 0 ? [currentPeriod] : [mostRecentPeriod]
               );
             }}
             className="col-span-2 md:col-span-1 w-full inline-flex items-center justify-center px-3 h-[34px] border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"

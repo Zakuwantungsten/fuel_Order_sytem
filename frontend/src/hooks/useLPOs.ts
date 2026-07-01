@@ -180,11 +180,12 @@ export function useLPOAvailableYears() {
 }
 
 // ---------------------------------------------------------------------------
-// Available filters (periods + stations) for the filter dropdowns
+// Available filters for the filter dropdowns.
+// Periods are global; dateRange only scopes the station list to selected period(s).
 // ---------------------------------------------------------------------------
 export function useLPOAvailableFilters(dateRange?: { dateFrom?: string; dateTo?: string }) {
   return useQuery({
-    queryKey: [...lpoKeys.availableFilters(), dateRange?.dateFrom, dateRange?.dateTo] as const,
+    queryKey: [...lpoKeys.availableFilters(), dateRange?.dateFrom ?? '', dateRange?.dateTo ?? ''] as const,
     queryFn: () => lposAPI.getAvailableFilters(dateRange),
     staleTime: 5 * 60 * 1000,
   });
