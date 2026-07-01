@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { KnownDevice } from './KnownDevice';
 
 export interface ILoginActivity extends Document {
   userId: mongoose.Types.ObjectId;
@@ -96,14 +97,9 @@ LoginActivitySchema.statics.recordLogin = async function (
 ) {
   const { browser, os, deviceType } = parseUA(userAgent);
 
-  // Determine if device is new (never seen this browser+os combination).
-  // IP is intentionally excluded: the same device on a new network / dynamic
-  // IP must not be treated as a new device.
-  const existingDevice = await this.findOne({
-    userId,
-    browser,
-    os,
-  }).lean();
+  // Use KnownDevice (persistent inventory), not prior LoginActivity rows — activity
+  // records expire after 90 days and would falsely mark old devices as "new".
+  const existingDevice = await KnownDevice.findOne({ userId, browser, os }).lean();
 
   const isNewDevice = !existingDevice;
 

@@ -627,8 +627,8 @@ export default function SystemConfigSubTab({ onMessage, onNavigate }: Props) {
                     <div className="p-4 space-y-3">
                       {[
                         { key: 'deviceTracking',      label: 'Device & Session Tracking',  sub: 'Track devices used to access the system' },
-                        { key: 'loginNotifications',  label: 'Login Notification Emails',   sub: 'Send emails on each successful login' },
-                        { key: 'newDeviceAlerts',     label: 'New Device Alerts',           sub: 'Alert when login from an unrecognised device' },
+                        { key: 'loginNotifications',  label: 'Login Notification Emails',   sub: 'Master switch for login-related security emails' },
+                        { key: 'newDeviceAlerts',     label: 'New Device Alerts',           sub: 'Email when someone signs in from an unrecognised device' },
                       ].map(f => (
                         <div key={f.key} className="flex items-center justify-between p-3 bg-[#F8F9FB] dark:bg-gray-700/50 rounded-lg border border-[#E4E7EC] dark:border-gray-600">
                           <div>

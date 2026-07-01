@@ -20,6 +20,12 @@ export interface IKnownDeviceDocument extends Document {
   updatedAt: Date;
 }
 
+export interface RecordDeviceResult {
+  device: IKnownDeviceDocument | null;
+  isNewDevice: boolean;
+  trusted: boolean;
+}
+
 const KnownDeviceSchema = new Schema<IKnownDeviceDocument>(
   {
     userId: {
@@ -52,7 +58,7 @@ KnownDeviceSchema.index({ lastSeen: -1 });
 
 // A device that has signed in successfully this many times is auto-trusted,
 // so we stop alerting on it the way professional services do.
-const AUTO_TRUST_THRESHOLD = 3;
+export const AUTO_TRUST_THRESHOLD = 3;
 
 /**
  * Upsert a device record from login data.
@@ -74,7 +80,7 @@ KnownDeviceSchema.statics.recordDevice = async function (
   os: string,
   deviceType: string,
   ip: string,
-) {
+): Promise<RecordDeviceResult> {
   const res = await this.findOneAndUpdate(
     { userId, browser, os },
     {
@@ -82,10 +88,12 @@ KnownDeviceSchema.statics.recordDevice = async function (
       $inc: { sessionCount: 1 },
       $setOnInsert: { firstSeen: new Date(), trusted: false, blocked: false },
     },
-    { upsert: true, new: true, rawResult: true },
+    // Mongoose 8: rawResult is deprecated; includeResultMetadata exposes
+    // lastErrorObject.updatedExisting so we can tell insert vs update.
+    { upsert: true, new: true, includeResultMetadata: true },
   );
 
-  const device = res.value;
+  const device = res.value as IKnownDeviceDocument | null;
   const isNewDevice = !res.lastErrorObject?.updatedExisting;
 
   // Auto-trust an established device once it has enough successful sign-ins.

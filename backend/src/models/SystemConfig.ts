@@ -183,8 +183,8 @@ export interface ISystemSettings {
     weeklyReport: boolean;
     slowQueryThreshold: number; // ms
     storageWarningThreshold: number; // percentage
-    loginNotifications: boolean; // Send email on every login
-    newDeviceAlerts: boolean; // Extra alert for new device sign-ins
+    loginNotifications: boolean; // Master switch for login-related notification emails
+    newDeviceAlerts: boolean; // Email when sign-in from an unrecognised device
     deviceTracking: boolean; // Track login devices and sessions
     sendCredentialsEmail: boolean; // Send welcome email with username/password to new users
     credentialsExpiryHours: number; // Hours before a temporary password expires (0 = never)

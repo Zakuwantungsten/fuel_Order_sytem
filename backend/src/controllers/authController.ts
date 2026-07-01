@@ -56,6 +56,57 @@ function parseUA(ua: string) {
   return { browser, os, deviceType };
 }
 
+/** Whether login-related notification emails are enabled in system settings. */
+function loginEmailNotificationsEnabled(notifSettings: any): boolean {
+  return notifSettings?.loginNotifications !== false;
+}
+
+/** Whether new-device sign-in emails should be sent (requires tracking + both toggles). */
+function newDeviceEmailAlertsEnabled(notifSettings: any): boolean {
+  const deviceTracking = notifSettings?.deviceTracking !== false;
+  return deviceTracking
+    && loginEmailNotificationsEnabled(notifSettings)
+    && notifSettings?.newDeviceAlerts !== false;
+}
+
+/**
+ * Record login activity, update KnownDevice, and optionally email on first sign-in
+ * from an untrusted browser+OS combination. Fire-and-forget — errors are logged only.
+ */
+function recordLoginActivityAndNotify(
+  user: IUserDocument,
+  req: AuthRequest,
+  sessionConfig: any,
+  loginMethod?: string,
+): void {
+  const notifSettings = sessionConfig?.systemSettings?.notifications;
+  if (notifSettings?.deviceTracking === false) return;
+
+  const sendNewDeviceEmail = newDeviceEmailAlertsEnabled(notifSettings);
+  const ua = req.get('user-agent') || '';
+  const ip = req.ip || 'unknown';
+  const parsed = parseUA(ua);
+
+  (LoginActivity as any).recordLogin(
+    user._id.toString(), user.refreshToken, ip, ua, loginMethod,
+  ).then(() =>
+    (KnownDevice as any).recordDevice(
+      user._id.toString(), user.username, parsed.browser, parsed.os, parsed.deviceType, ip,
+    ),
+  ).then((deviceResult: any) => {
+    if (sendNewDeviceEmail && deviceResult?.isNewDevice && !deviceResult?.trusted) {
+      emailService.sendLoginNotification(user.email, user.firstName || user.username, {
+        browser: parsed.browser,
+        os: parsed.os,
+        ipAddress: ip,
+        time: new Date(),
+        isNewDevice: true,
+        deviceType: parsed.deviceType,
+      }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
+    }
+  }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
+}
+
 /**
  * Options controlling how a session is issued. Defaults preserve the behavior of
  * the original inline password-login issuance.
@@ -189,29 +240,7 @@ export async function issueSession(
     refreshToken,
   };
 
-  // Record login activity & send notification email (fire-and-forget)
-  const notifSettings = sessionConfig?.systemSettings?.notifications;
-  const deviceTrackingEnabled = notifSettings?.deviceTracking !== false; // default true
-  const loginNotifsEnabled = notifSettings?.loginNotifications !== false; // default true
-  const ua = req.get('user-agent') || '';
-  const ip = req.ip || 'unknown';
-  const parsed = parseUA(ua);
-  if (deviceTrackingEnabled) {
-    (LoginActivity as any).recordLogin(
-      user._id.toString(), user.refreshToken, ip, ua, loginMethod
-    ).then(() =>
-      (KnownDevice as any).recordDevice(user._id.toString(), user.username, parsed.browser, parsed.os, parsed.deviceType, ip)
-    ).then((deviceResult: any) => {
-      // Only alert on a genuinely new, untrusted device — like professional
-      // services, we don't email on every sign-in from a known device.
-      if (loginNotifsEnabled && deviceResult?.isNewDevice && !deviceResult?.trusted) {
-        emailService.sendLoginNotification(user.email, user.firstName || user.username, {
-          browser: parsed.browser, os: parsed.os, ipAddress: ip,
-          time: new Date(), isNewDevice: true, deviceType: parsed.deviceType,
-        }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
-      }
-    }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
-  }
+  recordLoginActivityAndNotify(user, req, sessionConfig, loginMethod);
 
   // ── Remember Me: set rotating HttpOnly refresh-token cookie ──────────
   // Only for non-driver, voluntarily persistent sessions. JS cannot read this
@@ -937,27 +966,7 @@ export const verifyMFA = async (req: AuthRequest, res: Response): Promise<void> 
       refreshToken,
     };
 
-    // Record login activity & send notification (fire-and-forget)
-    const mfaNotifSettings = sessionConfig?.systemSettings?.notifications;
-    const mfaDeviceTracking = mfaNotifSettings?.deviceTracking !== false;
-    const mfaLoginNotifs = mfaNotifSettings?.loginNotifications !== false;
-    const mfaUA = req.get('user-agent') || '';
-    const mfaIP = req.ip || 'unknown';
-    const mfaParsed = parseUA(mfaUA);
-    if (mfaDeviceTracking) {
-      (LoginActivity as any).recordLogin(
-        user._id.toString(), user.refreshToken, mfaIP, mfaUA, verificationResult.methodUsed
-      ).then(() =>
-        (KnownDevice as any).recordDevice(user._id.toString(), user.username, mfaParsed.browser, mfaParsed.os, mfaParsed.deviceType, mfaIP)
-      ).then((deviceResult: any) => {
-        if (mfaLoginNotifs && deviceResult?.isNewDevice && !deviceResult?.trusted) {
-          emailService.sendLoginNotification(user.email, user.firstName || user.username, {
-            browser: mfaParsed.browser, os: mfaParsed.os, ipAddress: mfaIP,
-            time: new Date(), isNewDevice: true, deviceType: mfaParsed.deviceType,
-          }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
-        }
-      }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
-    }
+    recordLoginActivityAndNotify(user, req, sessionConfig, verificationResult.methodUsed);
 
     // ── Remember Me cookie after MFA verification ──────────────────────
     // Guard: do not persist a session for users who still must change their
@@ -1174,27 +1183,7 @@ export const setupMFAVerify = async (req: AuthRequest, res: Response): Promise<v
       refreshToken,
     };
 
-    // Record login activity & send notification (fire-and-forget)
-    const setupNotifSettings = sessionConfig?.systemSettings?.notifications;
-    const setupDeviceTracking = setupNotifSettings?.deviceTracking !== false;
-    const setupLoginNotifs = setupNotifSettings?.loginNotifications !== false;
-    const setupUA = req.get('user-agent') || '';
-    const setupIP = req.ip || 'unknown';
-    const setupParsed = parseUA(setupUA);
-    if (setupDeviceTracking) {
-      (LoginActivity as any).recordLogin(
-        user._id.toString(), user.refreshToken, setupIP, setupUA, 'totp_setup'
-      ).then(() =>
-        (KnownDevice as any).recordDevice(user._id.toString(), user.username, setupParsed.browser, setupParsed.os, setupParsed.deviceType, setupIP)
-      ).then((deviceResult: any) => {
-        if (setupLoginNotifs && deviceResult?.isNewDevice && !deviceResult?.trusted) {
-          emailService.sendLoginNotification(user.email, user.firstName || user.username, {
-            browser: setupParsed.browser, os: setupParsed.os, ipAddress: setupIP,
-            time: new Date(), isNewDevice: true, deviceType: setupParsed.deviceType,
-          }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
-        }
-      }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
-    }
+    recordLoginActivityAndNotify(user, req, sessionConfig, 'totp_setup');
 
     // ── Remember Me cookie after forced MFA setup ───────────────────────
     // Guard: do not persist a session for users who still must change their
@@ -1412,27 +1401,7 @@ export const setupMFAEmailVerify = async (req: AuthRequest, res: Response): Prom
       refreshToken,
     };
 
-    // Record login activity & send notification (fire-and-forget)
-    const emailNotifSettings = sessionConfig?.systemSettings?.notifications;
-    const emailDeviceTracking = emailNotifSettings?.deviceTracking !== false;
-    const emailLoginNotifs = emailNotifSettings?.loginNotifications !== false;
-    const emailUA = req.get('user-agent') || '';
-    const emailIP = req.ip || 'unknown';
-    const emailParsed = parseUA(emailUA);
-    if (emailDeviceTracking) {
-      (LoginActivity as any).recordLogin(
-        user._id.toString(), user.refreshToken, emailIP, emailUA, 'email_setup'
-      ).then(() =>
-        (KnownDevice as any).recordDevice(user._id.toString(), user.username, emailParsed.browser, emailParsed.os, emailParsed.deviceType, emailIP)
-      ).then((deviceResult: any) => {
-        if (emailLoginNotifs && deviceResult?.isNewDevice && !deviceResult?.trusted) {
-          emailService.sendLoginNotification(user.email, user.firstName || user.username, {
-            browser: emailParsed.browser, os: emailParsed.os, ipAddress: emailIP,
-            time: new Date(), isNewDevice: true, deviceType: emailParsed.deviceType,
-          }).catch((e: any) => logger.error('Failed to send login notification email:', e?.message));
-        }
-      }).catch((e: any) => logger.error('Failed to record login activity:', e?.message));
-    }
+    recordLoginActivityAndNotify(user, req, sessionConfig, 'email_setup');
 
     // ── Remember Me cookie after email MFA setup ───────────────────────────
     // Guard: do not persist a session for users who still must change their
